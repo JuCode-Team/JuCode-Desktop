@@ -49,6 +49,8 @@ export class ChatState {
 	pending = $state(0);
 	picker = $state<Picker>(null);
 	title = $state('New session');
+	pendingFill = $state<string | null>(null);
+	trustPrompt = $state<{ cwd: string; repoRoot: string | null } | null>(null);
 
 	#assistantIdx = -1;
 	#reasoningIdx = -1;
@@ -163,6 +165,47 @@ export class ChatState {
 				break;
 			case 'resume_view':
 				this.picker = { kind: 'resume', items: arr<ResumeItem>(ev.items) };
+				break;
+			case 'transcript': {
+				const items = arr<Record<string, unknown>>(ev.items);
+				this.messages = items
+					.map((it): Msg | null => {
+						const role = str(it.role);
+						if (role === 'user') return { kind: 'user', text: str(it.content) };
+						if (role === 'assistant') return { kind: 'assistant', text: str(it.content) };
+						if (role === 'tool')
+							return {
+								kind: 'tool',
+								callId: '',
+								name: str(it.name),
+								output: str(it.output),
+								running: false,
+								isError: false
+							};
+						if (role === 'branch') return { kind: 'system', text: `branch: ${str(it.label)}` };
+						return null;
+					})
+					.filter((m): m is Msg => m !== null);
+				this.#resetCurrent();
+				break;
+			}
+			case 'fill_input':
+				this.pendingFill = str(ev.content);
+				break;
+			case 'trust_prompt':
+				this.trustPrompt = {
+					cwd: str(ev.cwd),
+					repoRoot: typeof ev.repo_root === 'string' ? ev.repo_root : null
+				};
+				break;
+			case 'retrying':
+				this.messages.push({ kind: 'system', text: `reconnecting… (attempt ${num(ev.attempt)})` });
+				break;
+			case 'compaction_end':
+				this.messages.push({ kind: 'system', text: 'context compacted' });
+				break;
+			case 'compaction_failed':
+				this.messages.push({ kind: 'error', text: `compaction failed: ${str(ev.error)}` });
 				break;
 			case 'connecting':
 				this.engineState = 'connecting';

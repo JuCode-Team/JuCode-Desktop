@@ -5,6 +5,7 @@
 	import { Send, Square, LoaderCircle, Paperclip, X, Check, Plus } from 'lucide-svelte';
 	import { ChatState } from '$lib/chat.svelte';
 	import { sendOp, createSession, closeSession, type EventPayload } from '$lib/protocol';
+	import ToolCard from '$lib/ToolCard.svelte';
 
 	interface Session {
 		id: string;
@@ -84,6 +85,19 @@
 		activeId; // re-scroll when switching sessions
 		scrollToEnd();
 	});
+	$effect(() => {
+		// Prefill the composer when the engine asks (e.g. after /checkout).
+		if (chat?.pendingFill != null) {
+			input = chat.pendingFill;
+			chat.pendingFill = null;
+		}
+	});
+
+	function respondTrust(answer: 'yes' | 'no' | 'repo') {
+		if (!chat) return;
+		sendOp(activeId, { op: 'command', input: `/trust ${answer}` });
+		chat.trustPrompt = null;
+	}
 
 	function newSession() {
 		const id = uid();
@@ -269,14 +283,7 @@
 					{:else if m.kind === 'reasoning'}
 						<div class="msg reasoning"><div class="role">thinking</div><div class="body">{m.text}</div></div>
 					{:else if m.kind === 'tool'}
-						<div class="tool" class:err={m.isError}>
-							<div class="tool-head">
-								{#if m.running}<LoaderCircle size={13} class="spin" />{/if}
-								<span class="tool-name">{m.name}</span>
-								<span class="tool-state">{m.running ? 'running' : m.isError ? 'error' : 'done'}</span>
-							</div>
-							{#if m.output}<pre>{m.output}</pre>{/if}
-						</div>
+						<ToolCard name={m.name} output={m.output} running={m.running} isError={m.isError} />
 					{:else if m.kind === 'system'}
 						<div class="msg system">{m.text}</div>
 					{:else if m.kind === 'error'}
@@ -311,6 +318,28 @@
 			</footer>
 		{/if}
 	</div>
+
+	{#if chat?.trustPrompt}
+		<div class="overlay" role="presentation">
+			<div class="modal trust" role="dialog" tabindex="-1" aria-label="Trust project">
+				<div class="modal-head"><span>Trust this project?</span></div>
+				<div class="trust-body">
+					<p>
+						This project has local skills or hooks that can run code. Trust it to let
+						JuCode load them.
+					</p>
+					<code class="trust-path">{chat.trustPrompt.repoRoot ?? chat.trustPrompt.cwd}</code>
+				</div>
+				<div class="trust-actions">
+					<button class="btn ghost" onclick={() => respondTrust('no')}>Don't trust</button>
+					{#if chat.trustPrompt.repoRoot}
+						<button class="btn" onclick={() => respondTrust('repo')}>Trust repo</button>
+					{/if}
+					<button class="btn primary" onclick={() => respondTrust('yes')}>Trust</button>
+				</div>
+			</div>
+		</div>
+	{/if}
 
 	{#if chat?.picker}
 		<div
@@ -632,45 +661,6 @@
 		border-radius: 8px;
 	}
 
-	.tool {
-		border: 1px solid var(--border);
-		border-radius: 9px;
-		background: var(--panel);
-		overflow: hidden;
-	}
-	.tool.err {
-		border-color: color-mix(in oklch, var(--err) 40%, transparent);
-	}
-	.tool-head {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		padding: 7px 11px;
-		font-size: 12px;
-		background: var(--panel-2);
-	}
-	.tool-name {
-		font-family: var(--mono);
-		font-weight: 600;
-	}
-	.tool-state {
-		margin-left: auto;
-		color: var(--dim);
-		font-size: 11px;
-	}
-	.tool pre {
-		margin: 0;
-		padding: 10px 12px;
-		font-family: var(--mono);
-		font-size: 12px;
-		line-height: 1.5;
-		color: var(--dim);
-		max-height: 260px;
-		overflow: auto;
-		white-space: pre-wrap;
-		word-break: break-word;
-	}
-
 	footer {
 		border-top: 1px solid var(--border);
 		background: var(--panel);
@@ -873,5 +863,56 @@
 		font-size: 11px;
 		font-family: var(--mono);
 		text-align: center;
+	}
+
+	.modal.trust {
+		width: min(460px, 92vw);
+	}
+	.trust-body {
+		padding: 16px;
+		font-size: 14px;
+		line-height: 1.55;
+	}
+	.trust-body p {
+		margin: 0 0 12px;
+		color: var(--text);
+	}
+	.trust-path {
+		display: block;
+		font-family: var(--mono);
+		font-size: 12px;
+		color: var(--dim);
+		background: var(--panel-2);
+		border: 1px solid var(--border);
+		border-radius: 7px;
+		padding: 8px 10px;
+		word-break: break-all;
+	}
+	.trust-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 8px;
+		padding: 12px 16px 16px;
+	}
+	.btn {
+		font-size: 13px;
+		padding: 8px 14px;
+		border-radius: 8px;
+		border: 1px solid var(--border);
+		background: var(--panel-2);
+		color: var(--text);
+		cursor: pointer;
+	}
+	.btn:hover {
+		border-color: color-mix(in oklch, var(--accent) 45%, var(--border));
+	}
+	.btn.ghost {
+		color: var(--dim);
+	}
+	.btn.primary {
+		background: var(--accent);
+		border-color: var(--accent);
+		color: #1a1320;
+		font-weight: 600;
 	}
 </style>
