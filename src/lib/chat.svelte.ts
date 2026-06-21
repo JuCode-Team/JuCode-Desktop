@@ -48,6 +48,7 @@ export class ChatState {
 	cost = $state(0);
 	pending = $state(0);
 	picker = $state<Picker>(null);
+	title = $state('New session');
 
 	#assistantIdx = -1;
 	#reasoningIdx = -1;
@@ -86,10 +87,15 @@ export class ChatState {
 				this.engineState = str(ev.state) || this.engineState;
 				this.contextWindow = num(ev.context_window);
 				break;
-			case 'user_message':
-				this.messages.push({ kind: 'user', text: str(ev.content) });
+			case 'user_message': {
+				const text = str(ev.content);
+				this.messages.push({ kind: 'user', text });
+				if (this.title === 'New session' && text.trim()) {
+					this.title = text.trim().slice(0, 40);
+				}
 				this.#resetCurrent();
 				break;
+			}
 			case 'assistant_start':
 				this.messages.push({ kind: 'assistant', text: '' });
 				this.#assistantIdx = this.messages.length - 1;

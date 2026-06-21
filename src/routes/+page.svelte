@@ -2,39 +2,52 @@
 	import { onMount, tick } from 'svelte';
 	import { listen } from '@tauri-apps/api/event';
 	import { getCurrentWebview } from '@tauri-apps/api/webview';
-	import { Send, Square, LoaderCircle, Paperclip, X, Check } from 'lucide-svelte';
+	import { Send, Square, LoaderCircle, Paperclip, X, Check, Plus } from 'lucide-svelte';
 	import { ChatState } from '$lib/chat.svelte';
-	import { sendOp } from '$lib/protocol';
+	import { sendOp, createSession, closeSession, type EventPayload } from '$lib/protocol';
 
-	const chat = new ChatState();
+	interface Session {
+		id: string;
+		chat: ChatState;
+	}
+
+	let sessions = $state<Session[]>([]);
+	let activeId = $state('');
 	let input = $state('');
 	let attachments = $state<string[]>([]);
 	let scroller = $state<HTMLElement | null>(null);
-	let exited = $state(false);
+	let selIdx = $state(0);
 
+	const active = $derived(sessions.find((s) => s.id === activeId));
+	const chat = $derived(active?.chat);
+
+	let counter = 0;
+	const uid = () => `s${Date.now().toString(36)}-${(counter++).toString(36)}`;
 	const fmtTokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
-	const ctxPct = $derived(
-		chat.contextWindow > 0 ? Math.min(100, Math.round((chat.contextTokens / chat.contextWindow) * 100)) : 0
-	);
 	const isImage = (p: string) => /\.(png|jpe?g|gif|webp|bmp)$/i.test(p);
 	const base = (p: string) => p.split('/').pop() ?? p;
 
-	// --- picker (tree / model / resume) ---
-	let selIdx = $state(0);
+	const ctxPct = $derived(
+		chat && chat.contextWindow > 0
+			? Math.min(100, Math.round((chat.contextTokens / chat.contextWindow) * 100))
+			: 0
+	);
+
+	// --- pickers (tree / model / resume) operate on the active session ---
 	const pickerTitle = $derived(
-		chat.picker?.kind === 'tree'
+		chat?.picker?.kind === 'tree'
 			? 'Conversation tree'
-			: chat.picker?.kind === 'model'
+			: chat?.picker?.kind === 'model'
 				? 'Select model'
-				: chat.picker?.kind === 'resume'
+				: chat?.picker?.kind === 'resume'
 					? 'Resume session'
 					: ''
 	);
 	const activeModel = $derived(
-		chat.picker?.kind === 'model' ? chat.picker.models.find((m) => m.active) : undefined
+		chat?.picker?.kind === 'model' ? chat.picker.models.find((m) => m.active) : undefined
 	);
 	const pickerRows = $derived.by(() => {
-		const p = chat.picker;
+		const p = chat?.picker;
 		if (!p) return [];
 		if (p.kind === 'tree')
 			return p.nodes.map((n) => ({
@@ -62,21 +75,66 @@
 	});
 
 	$effect(() => {
-		if (chat.picker) {
+		if (chat?.picker) {
 			const i = pickerRows.findIndex((r) => r.active);
 			selIdx = i >= 0 ? i : 0;
 		}
 	});
+	$effect(() => {
+		activeId; // re-scroll when switching sessions
+		scrollToEnd();
+	});
+
+	function newSession() {
+		const id = uid();
+		sessions.push({ id, chat: new ChatState() });
+		activeId = id;
+		createSession(id).catch(() => {});
+		return id;
+	}
+	function closeTab(id: string) {
+		closeSession(id).catch(() => {});
+		const idx = sessions.findIndex((s) => s.id === id);
+		if (idx >= 0) sessions.splice(idx, 1);
+		if (activeId === id) activeId = sessions[Math.min(idx, sessions.length - 1)]?.id ?? '';
+		if (sessions.length === 0) newSession();
+	}
+
+	function submit() {
+		if (!chat) return;
+		const text = input.trim();
+		if (!text && attachments.length === 0) return;
+		if (text.startsWith('/')) {
+			sendOp(activeId, { op: 'command', input: text });
+		} else {
+			sendOp(activeId, {
+				op: 'user_message',
+				content: text,
+				images: attachments.length ? [...attachments] : undefined
+			});
+		}
+		input = '';
+		attachments = [];
+	}
+	function stop() {
+		sendOp(activeId, { op: 'interrupt' });
+	}
+	function onKey(e: KeyboardEvent) {
+		if (e.key === 'Enter' && !e.shiftKey) {
+			e.preventDefault();
+			submit();
+		}
+	}
 
 	function selectRow(command: string) {
-		sendOp({ op: 'command', input: command });
-		chat.closePicker();
+		sendOp(activeId, { op: 'command', input: command });
+		chat?.closePicker();
 	}
 	function setEffort(effort: string) {
 		if (activeModel) selectRow(`/model ${activeModel.model} ${effort}`);
 	}
 	function pickerKey(e: KeyboardEvent) {
-		if (!chat.picker) return;
+		if (!chat?.picker) return;
 		if (e.key === 'Escape') {
 			e.preventDefault();
 			chat.closePicker();
@@ -93,141 +151,179 @@
 		}
 	}
 
-	onMount(() => {
-		const unlisten = listen<string>('agent-event', (e) => {
-			try {
-				chat.handle(JSON.parse(e.payload));
-			} catch {
-				/* ignore malformed lines */
-			}
-			scrollToEnd();
-		});
-		const unexit = listen('agent-exit', () => {
-			exited = true;
-			chat.messages.push({ kind: 'error', text: 'engine process exited' });
-		});
-		const undrop = getCurrentWebview().onDragDropEvent((e) => {
-			if (e.payload.type === 'drop') {
-				for (const p of e.payload.paths) if (isImage(p) && !attachments.includes(p)) attachments.push(p);
-			}
-		});
-		return () => {
-			unlisten.then((f) => f());
-			unexit.then((f) => f());
-			undrop.then((f) => f());
-		};
-	});
-
 	async function scrollToEnd() {
 		await tick();
 		if (scroller) scroller.scrollTop = scroller.scrollHeight;
 	}
 
-	function submit() {
-		const text = input.trim();
-		if (!text && attachments.length === 0) return;
-		if (text.startsWith('/')) {
-			sendOp({ op: 'command', input: text });
-		} else {
-			sendOp({ op: 'user_message', content: text, images: attachments.length ? [...attachments] : undefined });
-		}
-		input = '';
-		attachments = [];
-	}
-
-	function stop() {
-		sendOp({ op: 'interrupt' });
-	}
-
-	function onKey(e: KeyboardEvent) {
-		if (e.key === 'Enter' && !e.shiftKey) {
-			e.preventDefault();
-			submit();
-		}
-	}
+	onMount(() => {
+		const cleanups: Array<() => void> = [];
+		let disposed = false;
+		// Register listeners BEFORE spawning the first engine so no startup event
+		// (startup / model_status / command_list) is lost to a registration race.
+		(async () => {
+			const unlisten = await listen<EventPayload>('agent-event', (e) => {
+				const s = sessions.find((x) => x.id === e.payload.session);
+				if (!s) return;
+				try {
+					s.chat.handle(JSON.parse(e.payload.data));
+				} catch {
+					/* ignore malformed lines */
+				}
+				if (s.id === activeId) scrollToEnd();
+			});
+			const unexit = await listen<string>('agent-exit', (e) => {
+				const s = sessions.find((x) => x.id === e.payload);
+				if (!s) return;
+				s.chat.engineState = 'exited';
+				s.chat.messages.push({ kind: 'error', text: 'engine process exited' });
+			});
+			const undrop = await getCurrentWebview().onDragDropEvent((e) => {
+				if (e.payload.type === 'drop') {
+					for (const p of e.payload.paths)
+						if (isImage(p) && !attachments.includes(p)) attachments.push(p);
+				}
+			});
+			cleanups.push(unlisten, unexit, undrop);
+			if (disposed) {
+				cleanups.forEach((f) => f());
+				return;
+			}
+			newSession();
+		})();
+		return () => {
+			disposed = true;
+			cleanups.forEach((f) => f());
+		};
+	});
 </script>
 
 <svelte:window onkeydown={pickerKey} />
 
 <div class="app">
-	<header>
-		<div class="brand"><span class="dot"></span> JuCode</div>
-		<div class="meta">
-			<span class="model">{chat.model || '—'}</span>
-			{#if chat.provider}<span class="sep">·</span><span class="dim">{chat.provider}</span>{/if}
-			<span class="state" class:busy={chat.busy} class:err={exited}>{exited ? 'exited' : chat.engineState}</span>
+	<aside class="sidebar">
+		<div class="side-head">
+			<span class="brand"><span class="dot"></span> JuCode</span>
+			<button class="new-btn" onclick={() => newSession()} aria-label="new session"><Plus size={16} /></button>
 		</div>
-		<div class="usage">
-			{#if chat.contextWindow > 0}
-				<span class="dim">ctx</span> {fmtTokens(chat.contextTokens)}/{fmtTokens(chat.contextWindow)}
-				<span class="bar"><span class="fill" style:width="{ctxPct}%"></span></span>
-			{/if}
-			{#if chat.cost > 0}<span class="cost">${chat.cost.toFixed(3)}</span>{/if}
+		<div class="session-list">
+			{#each sessions as s (s.id)}
+				<button class="sess" class:on={s.id === activeId} onclick={() => (activeId = s.id)}>
+					<span
+						class="sess-dot"
+						class:busy={s.chat.busy}
+						class:err={s.chat.engineState === 'exited'}
+					></span>
+					<span class="sess-title">{s.chat.title}</span>
+					{#if s.chat.busy}<LoaderCircle size={12} class="spin" />{/if}
+					{#if sessions.length > 1}
+						<span
+							class="sess-x"
+							role="button"
+							tabindex="0"
+							onclick={(e) => {
+								e.stopPropagation();
+								closeTab(s.id);
+							}}
+							onkeydown={(e) => {
+								if (e.key === 'Enter') {
+									e.stopPropagation();
+									closeTab(s.id);
+								}
+							}}
+							aria-label="close session"><X size={12} /></span
+						>
+					{/if}
+				</button>
+			{/each}
 		</div>
-	</header>
+	</aside>
 
-	<main bind:this={scroller}>
-		{#each chat.messages as m (m)}
-			{#if m.kind === 'user'}
-				<div class="msg user"><div class="role">you</div><div class="body">{m.text}</div></div>
-			{:else if m.kind === 'assistant'}
-				<div class="msg assistant"><div class="role">jucode</div><div class="body">{m.text}</div></div>
-			{:else if m.kind === 'reasoning'}
-				<div class="msg reasoning"><div class="role">thinking</div><div class="body">{m.text}</div></div>
-			{:else if m.kind === 'tool'}
-				<div class="tool" class:err={m.isError}>
-					<div class="tool-head">
-						{#if m.running}<LoaderCircle size={13} class="spin" />{/if}
-						<span class="tool-name">{m.name}</span>
-						<span class="tool-state">{m.running ? 'running' : m.isError ? 'error' : 'done'}</span>
-					</div>
-					{#if m.output}<pre>{m.output}</pre>{/if}
+	<div class="main">
+		{#if chat}
+			<header>
+				<div class="meta">
+					<span class="model">{chat.model || '—'}</span>
+					{#if chat.provider}<span class="sep">·</span><span class="dim">{chat.provider}</span>{/if}
+					<span class="state" class:busy={chat.busy} class:err={chat.engineState === 'exited'}
+						>{chat.engineState}</span
+					>
+					{#if chat.pending > 0}<span class="dim">+{chat.pending} queued</span>{/if}
 				</div>
-			{:else if m.kind === 'system'}
-				<div class="msg system">{m.text}</div>
-			{:else if m.kind === 'error'}
-				<div class="msg error">{m.text}</div>
-			{/if}
-		{/each}
-	</main>
+				<div class="usage">
+					{#if chat.contextWindow > 0}
+						<span class="dim">ctx</span>
+						{fmtTokens(chat.contextTokens)}/{fmtTokens(chat.contextWindow)}
+						<span class="bar"><span class="fill" style:width="{ctxPct}%"></span></span>
+					{/if}
+					{#if chat.cost > 0}<span class="cost">${chat.cost.toFixed(3)}</span>{/if}
+				</div>
+			</header>
 
-	<footer>
-		{#if attachments.length}
-			<div class="chips">
-				{#each attachments as p, i (p)}
-					<span class="chip"><Paperclip size={12} />{base(p)}
-						<button class="chip-x" onclick={() => attachments.splice(i, 1)} aria-label="remove"><X size={12} /></button>
-					</span>
+			<main bind:this={scroller}>
+				{#each chat.messages as m (m)}
+					{#if m.kind === 'user'}
+						<div class="msg user"><div class="role">you</div><div class="body">{m.text}</div></div>
+					{:else if m.kind === 'assistant'}
+						<div class="msg assistant"><div class="role">jucode</div><div class="body">{m.text}</div></div>
+					{:else if m.kind === 'reasoning'}
+						<div class="msg reasoning"><div class="role">thinking</div><div class="body">{m.text}</div></div>
+					{:else if m.kind === 'tool'}
+						<div class="tool" class:err={m.isError}>
+							<div class="tool-head">
+								{#if m.running}<LoaderCircle size={13} class="spin" />{/if}
+								<span class="tool-name">{m.name}</span>
+								<span class="tool-state">{m.running ? 'running' : m.isError ? 'error' : 'done'}</span>
+							</div>
+							{#if m.output}<pre>{m.output}</pre>{/if}
+						</div>
+					{:else if m.kind === 'system'}
+						<div class="msg system">{m.text}</div>
+					{:else if m.kind === 'error'}
+						<div class="msg error">{m.text}</div>
+					{/if}
 				{/each}
-			</div>
-		{/if}
-		<div class="composer">
-			<textarea
-				bind:value={input}
-				onkeydown={onKey}
-				placeholder="Message JuCode…  (drop an image to attach · / for commands · Shift+Enter for newline)"
-				rows="1"
-			></textarea>
-			{#if chat.busy}
-				<button class="act stop" onclick={stop} aria-label="stop"><Square size={16} /></button>
-			{:else}
-				<button class="act send" onclick={submit} disabled={!input.trim() && !attachments.length} aria-label="send"><Send size={16} /></button>
-			{/if}
-		</div>
-	</footer>
+			</main>
 
-	{#if chat.picker}
+			<footer>
+				{#if attachments.length}
+					<div class="chips">
+						{#each attachments as p, i (p)}
+							<span class="chip"><Paperclip size={12} />{base(p)}
+								<button class="chip-x" onclick={() => attachments.splice(i, 1)} aria-label="remove"><X size={12} /></button>
+							</span>
+						{/each}
+					</div>
+				{/if}
+				<div class="composer">
+					<textarea
+						bind:value={input}
+						onkeydown={onKey}
+						placeholder="Message JuCode…  (drop an image to attach · / for commands · Shift+Enter for newline)"
+						rows="1"
+					></textarea>
+					{#if chat.busy}
+						<button class="act stop" onclick={stop} aria-label="stop"><Square size={16} /></button>
+					{:else}
+						<button class="act send" onclick={submit} disabled={!input.trim() && !attachments.length} aria-label="send"><Send size={16} /></button>
+					{/if}
+				</div>
+			</footer>
+		{/if}
+	</div>
+
+	{#if chat?.picker}
 		<div
 			class="overlay"
 			role="presentation"
 			onclick={(e) => {
-				if (e.target === e.currentTarget) chat.closePicker();
+				if (e.target === e.currentTarget) chat?.closePicker();
 			}}
 		>
 			<div class="modal" role="dialog" tabindex="-1" aria-label={pickerTitle}>
 				<div class="modal-head">
 					<span>{pickerTitle}</span>
-					<button class="modal-x" onclick={() => chat.closePicker()} aria-label="close"><X size={15} /></button>
+					<button class="modal-x" onclick={() => chat?.closePicker()} aria-label="close"><X size={15} /></button>
 				</div>
 				{#if chat.picker.kind === 'model' && activeModel}
 					<div class="efforts">
@@ -285,24 +381,39 @@
 			transform: rotate(360deg);
 		}
 	}
+	@keyframes pulse {
+		0%,
+		100% {
+			opacity: 1;
+		}
+		50% {
+			opacity: 0.35;
+		}
+	}
 
 	.app {
 		display: flex;
-		flex-direction: column;
 		height: 100vh;
 	}
 
-	header {
+	.sidebar {
+		width: 230px;
+		flex-shrink: 0;
+		display: flex;
+		flex-direction: column;
+		background: var(--panel);
+		border-right: 1px solid var(--border);
+	}
+	.side-head {
 		display: flex;
 		align-items: center;
-		gap: 14px;
-		padding: 10px 16px;
+		justify-content: space-between;
+		padding: 12px 12px 10px 14px;
 		border-bottom: 1px solid var(--border);
-		background: var(--panel);
-		font-size: 13px;
 	}
 	.brand {
 		font-weight: 600;
+		font-size: 14px;
 		display: flex;
 		align-items: center;
 		gap: 7px;
@@ -313,6 +424,100 @@
 		border-radius: 50%;
 		background: var(--accent);
 		box-shadow: 0 0 8px var(--accent);
+	}
+	.new-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 26px;
+		height: 26px;
+		border-radius: 7px;
+		border: 1px solid var(--border);
+		background: var(--panel-2);
+		color: var(--text);
+		cursor: pointer;
+	}
+	.new-btn:hover {
+		border-color: color-mix(in oklch, var(--accent) 45%, var(--border));
+	}
+	.session-list {
+		flex: 1;
+		overflow-y: auto;
+		padding: 8px;
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+	}
+	.sess {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		width: 100%;
+		text-align: left;
+		padding: 8px 9px;
+		border: none;
+		border-radius: 8px;
+		background: none;
+		color: var(--text);
+		cursor: pointer;
+		font-size: 13px;
+	}
+	.sess:hover {
+		background: var(--panel-2);
+	}
+	.sess.on {
+		background: var(--panel-2);
+		box-shadow: inset 0 0 0 1px var(--border);
+	}
+	.sess-dot {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: var(--dim);
+		flex-shrink: 0;
+	}
+	.sess-dot.busy {
+		background: var(--accent);
+		animation: pulse 1.2s ease-in-out infinite;
+	}
+	.sess-dot.err {
+		background: var(--err);
+	}
+	.sess-title {
+		flex: 1;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.sess-x {
+		display: inline-flex;
+		align-items: center;
+		color: var(--dim);
+		opacity: 0;
+		border-radius: 4px;
+	}
+	.sess:hover .sess-x {
+		opacity: 1;
+	}
+	.sess-x:hover {
+		color: var(--text);
+	}
+
+	.main {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+	}
+
+	header {
+		display: flex;
+		align-items: center;
+		gap: 14px;
+		padding: 10px 16px;
+		border-bottom: 1px solid var(--border);
+		background: var(--panel);
+		font-size: 13px;
 	}
 	.meta {
 		display: flex;
@@ -351,7 +556,6 @@
 		gap: 8px;
 		font-family: var(--mono);
 		font-size: 12px;
-		color: var(--text);
 	}
 	.bar {
 		width: 64px;

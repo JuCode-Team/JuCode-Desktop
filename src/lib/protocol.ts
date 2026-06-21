@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 
-// Commands the GUI sends to `jucode serve` over stdin.
+// Commands the GUI sends to a session's `jucode serve` over stdin.
 export type Op =
 	| { op: 'user_message'; content: string; images?: string[] }
 	| { op: 'command'; input: string }
@@ -8,13 +8,24 @@ export type Op =
 	| { op: 'interrupt' }
 	| { op: 'shutdown' };
 
-export function sendOp(op: Op): Promise<void> {
-	return invoke('send_op', { op });
+export function createSession(session: string): Promise<void> {
+	return invoke('create_session', { session });
 }
 
-// Events the engine emits on stdout. Only the fields the GUI uses are typed;
-// `type` discriminates and unknown variants are ignored.
+export function closeSession(session: string): Promise<void> {
+	return invoke('close_session', { session });
+}
+
+export function sendOp(session: string, op: Op): Promise<void> {
+	return invoke('send_op', { session, op });
+}
+
+// Events the engine emits on stdout, tagged with the originating session.
 export interface AgentEvent {
 	type: string;
 	[key: string]: unknown;
+}
+export interface EventPayload {
+	session: string;
+	data: string;
 }
