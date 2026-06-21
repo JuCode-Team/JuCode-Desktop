@@ -130,6 +130,71 @@ fn send_op(
         .map_err(|error| error.to_string())
 }
 
+fn jucode_dir() -> PathBuf {
+    let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"));
+    PathBuf::from(home.unwrap_or_default()).join(".jucode")
+}
+
+fn read_json(path: &std::path::Path) -> serde_json::Value {
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_else(|| serde_json::json!({}))
+}
+
+fn write_json(path: &std::path::Path, value: &serde_json::Value) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let text = serde_json::to_string_pretty(value).map_err(|error| error.to_string())?;
+    std::fs::write(path, format!("{text}\n")).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn read_config() -> serde_json::Value {
+    read_json(&jucode_dir().join("config.json"))
+}
+
+/// Shallow-merges `patch`'s top-level keys into config.json. Applies to newly
+/// created sessions (the engine reads config at startup).
+#[tauri::command]
+fn write_config(patch: serde_json::Value) -> Result<(), String> {
+    let path = jucode_dir().join("config.json");
+    let mut current = read_json(&path);
+    if let (Some(cur), Some(p)) = (current.as_object_mut(), patch.as_object()) {
+        for (key, value) in p {
+            cur.insert(key.clone(), value.clone());
+        }
+    }
+    write_json(&path, &current)
+}
+
+/// Returns the provider names that have a stored API key (not the keys).
+#[tauri::command]
+fn read_auth_providers() -> Vec<String> {
+    read_json(&jucode_dir().join("auth.json"))
+        .get("providers")
+        .and_then(|v| v.as_object())
+        .map(|m| m.keys().cloned().collect())
+        .unwrap_or_default()
+}
+
+#[tauri::command]
+fn set_auth_key(provider: String, key: String) -> Result<(), String> {
+    let path = jucode_dir().join("auth.json");
+    let mut current = read_json(&path);
+    let root = current
+        .as_object_mut()
+        .ok_or_else(|| "auth.json is not an object".to_string())?;
+    let providers = root
+        .entry("providers")
+        .or_insert_with(|| serde_json::json!({}));
+    if let Some(map) = providers.as_object_mut() {
+        map.insert(provider, serde_json::Value::String(key));
+    }
+    write_json(&path, &current)
+}
+
 #[tauri::command]
 fn close_session(session: String, engines: tauri::State<Engines>) -> Result<(), String> {
     if let Some(target) = engines.sessions.lock().unwrap().remove(&session) {
@@ -148,7 +213,11 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             create_session,
             send_op,
-            close_session
+            close_session,
+            read_config,
+            write_config,
+            read_auth_providers,
+            set_auth_key
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

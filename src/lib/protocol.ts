@@ -20,6 +20,20 @@ export function sendOp(session: string, op: Op): Promise<void> {
 	return invoke('send_op', { session, op });
 }
 
+// Config / auth (read & write ~/.jucode/{config.json,auth.json} via Tauri fs).
+export function readConfig(): Promise<Record<string, unknown>> {
+	return invoke('read_config');
+}
+export function writeConfig(patch: Record<string, unknown>): Promise<void> {
+	return invoke('write_config', { patch });
+}
+export function readAuthProviders(): Promise<string[]> {
+	return invoke('read_auth_providers');
+}
+export function setAuthKey(provider: string, key: string): Promise<void> {
+	return invoke('set_auth_key', { provider, key });
+}
+
 // Events the engine emits on stdout, tagged with the originating session.
 export interface AgentEvent {
 	type: string;

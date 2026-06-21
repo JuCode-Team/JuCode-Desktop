@@ -2,10 +2,11 @@
 	import { onMount, tick } from 'svelte';
 	import { listen } from '@tauri-apps/api/event';
 	import { getCurrentWebview } from '@tauri-apps/api/webview';
-	import { Send, Square, LoaderCircle, Paperclip, X, Check, Plus } from 'lucide-svelte';
+	import { Send, Square, LoaderCircle, Paperclip, X, Check, Plus, Settings as SettingsIcon } from 'lucide-svelte';
 	import { ChatState } from '$lib/chat.svelte';
 	import { sendOp, createSession, closeSession, type EventPayload } from '$lib/protocol';
 	import ToolCard from '$lib/ToolCard.svelte';
+	import Settings from '$lib/Settings.svelte';
 
 	interface Session {
 		id: string;
@@ -18,6 +19,7 @@
 	let attachments = $state<string[]>([]);
 	let scroller = $state<HTMLElement | null>(null);
 	let selIdx = $state(0);
+	let showSettings = $state(false);
 
 	const active = $derived(sessions.find((s) => s.id === activeId));
 	const chat = $derived(active?.chat);
@@ -218,7 +220,10 @@
 	<aside class="sidebar">
 		<div class="side-head">
 			<span class="brand"><span class="dot"></span> JuCode</span>
-			<button class="new-btn" onclick={() => newSession()} aria-label="new session"><Plus size={16} /></button>
+			<div class="side-actions">
+				<button class="new-btn" onclick={() => (showSettings = true)} aria-label="settings"><SettingsIcon size={15} /></button>
+				<button class="new-btn" onclick={() => newSession()} aria-label="new session"><Plus size={16} /></button>
+			</div>
 		</div>
 		<div class="session-list">
 			{#each sessions as s (s.id)}
@@ -257,7 +262,7 @@
 		{#if chat}
 			<header>
 				<div class="meta">
-					<span class="model">{chat.model || '—'}</span>
+					<button class="model" onclick={() => sendOp(activeId, { op: 'command', input: '/model' })} title="switch model">{chat.model || '—'}</button>
 					{#if chat.provider}<span class="sep">·</span><span class="dim">{chat.provider}</span>{/if}
 					<span class="state" class:busy={chat.busy} class:err={chat.engineState === 'exited'}
 						>{chat.engineState}</span
@@ -318,6 +323,10 @@
 			</footer>
 		{/if}
 	</div>
+
+	{#if showSettings}
+		<Settings sessionId={activeId} onClose={() => (showSettings = false)} />
+	{/if}
 
 	{#if chat?.trustPrompt}
 		<div class="overlay" role="presentation">
@@ -454,6 +463,10 @@
 		background: var(--accent);
 		box-shadow: 0 0 8px var(--accent);
 	}
+	.side-actions {
+		display: flex;
+		gap: 6px;
+	}
 	.new-btn {
 		display: inline-flex;
 		align-items: center;
@@ -555,6 +568,17 @@
 	}
 	.model {
 		font-family: var(--mono);
+		background: none;
+		border: 1px solid transparent;
+		color: var(--text);
+		padding: 2px 7px;
+		border-radius: 6px;
+		cursor: pointer;
+		font-size: 13px;
+	}
+	.model:hover {
+		border-color: var(--border);
+		background: var(--panel-2);
 	}
 	.sep {
 		color: var(--dim);
