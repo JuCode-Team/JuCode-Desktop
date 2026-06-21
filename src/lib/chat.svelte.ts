@@ -33,6 +33,18 @@ export type Picker =
 	| { kind: 'resume'; items: ResumeItem[] }
 	| null;
 
+export interface Goal {
+	objective: string;
+	status: string;
+	token_budget: number | null;
+	tokens_used: number;
+	time_used_seconds: number;
+}
+export interface CommandItem {
+	command: string;
+	marker: string | null;
+}
+
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
 const num = (v: unknown) => (typeof v === 'number' ? v : 0);
 const arr = <T>(v: unknown) => (Array.isArray(v) ? (v as T[]) : []);
@@ -51,6 +63,11 @@ export class ChatState {
 	title = $state('New session');
 	pendingFill = $state<string | null>(null);
 	trustPrompt = $state<{ cwd: string; repoRoot: string | null } | null>(null);
+	goal = $state<Goal | null>(null);
+	subagents = $state<Record<string, { status: string; message: string }>>({});
+	commands = $state<CommandItem[]>([]);
+	totalIn = $state(0);
+	totalOut = $state(0);
 
 	#assistantIdx = -1;
 	#reasoningIdx = -1;
@@ -207,6 +224,21 @@ export class ChatState {
 			case 'compaction_failed':
 				this.messages.push({ kind: 'error', text: `compaction failed: ${str(ev.error)}` });
 				break;
+			case 'goal':
+				this.goal = ev.goal ? (ev.goal as unknown as Goal) : null;
+				break;
+			case 'command_list':
+				this.commands = arr<CommandItem>(ev.commands);
+				break;
+			case 'usage':
+				this.totalIn += num(ev.input_tokens);
+				this.totalOut += num(ev.output_tokens);
+				break;
+			case 'subagent_lifecycle': {
+				const path = str(ev.path);
+				if (path) this.subagents[path] = { status: str(ev.status), message: str(ev.message) };
+				break;
+			}
 			case 'connecting':
 				this.engineState = 'connecting';
 				break;

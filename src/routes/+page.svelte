@@ -20,9 +20,21 @@
 	let scroller = $state<HTMLElement | null>(null);
 	let selIdx = $state(0);
 	let showSettings = $state(false);
+	let slashIdx = $state(0);
 
 	const active = $derived(sessions.find((s) => s.id === activeId));
 	const chat = $derived(active?.chat);
+
+	const slashMatches = $derived.by(() => {
+		if (!chat) return [];
+		const t = input.trim();
+		if (!t.startsWith('/') || t.includes(' ')) return [];
+		return chat.commands.filter((c) => c.command.startsWith(t) && c.command !== t).slice(0, 8);
+	});
+	$effect(() => {
+		slashMatches;
+		slashIdx = 0;
+	});
 
 	let counter = 0;
 	const uid = () => `s${Date.now().toString(36)}-${(counter++).toString(36)}`;
@@ -136,6 +148,23 @@
 		sendOp(activeId, { op: 'interrupt' });
 	}
 	function onKey(e: KeyboardEvent) {
+		if (slashMatches.length) {
+			if (e.key === 'ArrowDown') {
+				e.preventDefault();
+				slashIdx = (slashIdx + 1) % slashMatches.length;
+				return;
+			}
+			if (e.key === 'ArrowUp') {
+				e.preventDefault();
+				slashIdx = (slashIdx - 1 + slashMatches.length) % slashMatches.length;
+				return;
+			}
+			if (e.key === 'Tab' || e.key === 'Enter') {
+				e.preventDefault();
+				input = slashMatches[slashIdx].command + ' ';
+				return;
+			}
+		}
 		if (e.key === 'Enter' && !e.shiftKey) {
 			e.preventDefault();
 			submit();
@@ -275,9 +304,28 @@
 						{fmtTokens(chat.contextTokens)}/{fmtTokens(chat.contextWindow)}
 						<span class="bar"><span class="fill" style:width="{ctxPct}%"></span></span>
 					{/if}
+					{#if chat.totalIn || chat.totalOut}<span class="dim">↑{fmtTokens(chat.totalIn)} ↓{fmtTokens(chat.totalOut)}</span>{/if}
 					{#if chat.cost > 0}<span class="cost">${chat.cost.toFixed(3)}</span>{/if}
 				</div>
 			</header>
+
+			{#if chat.goal}
+				<div class="goal">
+					<span class="goal-label">goal</span>
+					<span class="goal-obj">{chat.goal.objective}</span>
+					<span class="goal-status">{chat.goal.status}</span>
+					{#if chat.goal.token_budget}
+						<span class="goal-budget">{fmtTokens(chat.goal.tokens_used)}/{fmtTokens(chat.goal.token_budget)}</span>
+					{/if}
+				</div>
+			{/if}
+			{#if Object.keys(chat.subagents).length}
+				<div class="agents">
+					{#each Object.entries(chat.subagents) as [path, info] (path)}
+						<span class="agent"><span class="agent-dot"></span>{path} · {info.status}</span>
+					{/each}
+				</div>
+			{/if}
 
 			<main bind:this={scroller}>
 				{#each chat.messages as m (m)}
@@ -298,6 +346,21 @@
 			</main>
 
 			<footer>
+				{#if slashMatches.length}
+					<div class="slash">
+						{#each slashMatches as c, i (c.command)}
+							<button
+								class="slash-item"
+								class:sel={i === slashIdx}
+								onclick={() => (input = c.command + ' ')}
+								onmouseenter={() => (slashIdx = i)}
+							>
+								<span class="slash-cmd">{c.command}</span>
+								{#if c.marker}<span class="slash-marker">{c.marker}</span>{/if}
+							</button>
+						{/each}
+					</div>
+				{/if}
 				{#if attachments.length}
 					<div class="chips">
 						{#each attachments as p, i (p)}
@@ -683,6 +746,93 @@
 		border: 1px solid color-mix(in oklch, var(--err) 35%, transparent);
 		padding: 9px 12px;
 		border-radius: 8px;
+	}
+
+	.goal {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 7px 16px;
+		background: color-mix(in oklch, var(--accent) 8%, var(--panel));
+		border-bottom: 1px solid var(--border);
+		font-size: 12px;
+	}
+	.goal-label {
+		font-family: var(--mono);
+		font-size: 10px;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--accent);
+	}
+	.goal-obj {
+		flex: 1;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.goal-status,
+	.goal-budget {
+		font-family: var(--mono);
+		color: var(--dim);
+		font-size: 11px;
+	}
+	.agents {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		padding: 7px 16px;
+		border-bottom: 1px solid var(--border);
+		background: var(--panel);
+	}
+	.agent {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		font-family: var(--mono);
+		font-size: 11px;
+		color: var(--dim);
+	}
+	.agent-dot {
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: var(--accent);
+		animation: pulse 1.2s ease-in-out infinite;
+	}
+
+	.slash {
+		max-width: 828px;
+		margin: 0 auto 8px;
+		background: var(--panel);
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		overflow: hidden;
+	}
+	.slash-item {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		width: 100%;
+		text-align: left;
+		padding: 7px 12px;
+		border: none;
+		background: none;
+		color: var(--text);
+		cursor: pointer;
+		font-size: 13px;
+	}
+	.slash-item.sel {
+		background: var(--panel-2);
+	}
+	.slash-cmd {
+		font-family: var(--mono);
+	}
+	.slash-marker {
+		font-size: 10px;
+		color: var(--accent);
+		border: 1px solid color-mix(in oklch, var(--accent) 40%, transparent);
+		border-radius: 4px;
+		padding: 1px 5px;
 	}
 
 	footer {
