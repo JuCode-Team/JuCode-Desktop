@@ -12,7 +12,6 @@
 		Plus,
 		Settings as SettingsIcon,
 		Store,
-		Sparkles,
 		PanelRight,
 		Sun,
 		Moon,
@@ -418,7 +417,6 @@
 
 		<div class="nav">
 			<button class="navcard" onclick={() => (showMarket = true)}><Store size={14} /><span>市场</span></button>
-			<button class="navcard" onclick={() => nav('/skills')}><Sparkles size={14} /><span>技能</span></button>
 		</div>
 
 		<div class="sess-head">
