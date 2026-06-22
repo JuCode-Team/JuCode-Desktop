@@ -180,7 +180,7 @@
 				: chat?.picker?.kind === 'resume'
 					? 'Resume session'
 					: chat?.picker?.kind === 'checkpoint'
-						? '回退到检查点'
+						? '回退到历史回合'
 						: ''
 	);
 	const activeModel = $derived(
