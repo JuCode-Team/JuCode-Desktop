@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { X, Plus } from 'lucide-svelte';
 	import GoalPanel from './GoalPanel.svelte';
 	import FilesPanel from './FilesPanel.svelte';
 	import GitPanel from './GitPanel.svelte';
@@ -6,33 +7,137 @@
 	import type { Goal } from '$lib/chat.svelte';
 
 	let { goal }: { goal: Goal | null } = $props();
-	let tab = $state<'goal' | 'files' | 'git' | 'term'>('goal');
-	let termOpened = $state(false);
 
-	const tabs: Array<[typeof tab, string]> = [
-		['goal', '目标'],
-		['files', '文件'],
-		['git', 'Git'],
-		['term', '终端']
+	const PANELS = [
+		{ key: 'goal', label: '目标' },
+		{ key: 'files', label: '文件' },
+		{ key: 'git', label: 'Git' },
+		{ key: 'term', label: '终端' }
 	];
+	const labelOf = (key: string) => PANELS.find((p) => p.key === key)?.label ?? key;
+
+	function loadTabs(): string[] {
+		try {
+			const t = JSON.parse(localStorage.getItem('jucode-dock-tabs') || 'null');
+			if (Array.isArray(t)) return t.filter((k) => PANELS.some((p) => p.key === k));
+		} catch {
+			/* ignore */
+		}
+		return ['goal'];
+	}
+
+	let openTabs = $state<string[]>(loadTabs());
+	let active = $state(
+		(() => {
+			const saved = localStorage.getItem('jucode-dock-active');
+			return saved && openTabs.includes(saved) ? saved : (openTabs[0] ?? '');
+		})()
+	);
+	let addOpen = $state(false);
+	let dragKey = $state<string | null>(null);
+	let bar = $state<HTMLElement | null>(null);
+
+	const available = $derived(PANELS.filter((p) => !openTabs.includes(p.key)));
 
 	$effect(() => {
-		if (tab === 'term') termOpened = true;
+		localStorage.setItem('jucode-dock-tabs', JSON.stringify(openTabs));
+		localStorage.setItem('jucode-dock-active', active);
 	});
+
+	function openPanel(key: string) {
+		if (!openTabs.includes(key)) openTabs = [...openTabs, key];
+		active = key;
+		addOpen = false;
+	}
+	function closeTab(key: string) {
+		const idx = openTabs.indexOf(key);
+		openTabs = openTabs.filter((k) => k !== key);
+		if (active === key) active = openTabs[Math.min(idx, openTabs.length - 1)] ?? '';
+	}
+	function startDrag(e: PointerEvent, key: string) {
+		if (e.button !== 0) return;
+		dragKey = key;
+		const move = (ev: PointerEvent) => {
+			if (!bar) return;
+			const tabs = [...bar.querySelectorAll<HTMLElement>('[data-tab]')];
+			const over = tabs.find((el) => {
+				const r = el.getBoundingClientRect();
+				return ev.clientX >= r.left && ev.clientX <= r.right;
+			});
+			const overKey = over?.dataset.tab;
+			if (overKey && overKey !== dragKey) {
+				const from = openTabs.indexOf(dragKey!);
+				const to = openTabs.indexOf(overKey);
+				const arr = [...openTabs];
+				arr.splice(to, 0, arr.splice(from, 1)[0]);
+				openTabs = arr;
+			}
+		};
+		const up = () => {
+			dragKey = null;
+			window.removeEventListener('pointermove', move);
+			window.removeEventListener('pointerup', up);
+		};
+		window.addEventListener('pointermove', move);
+		window.addEventListener('pointerup', up);
+	}
 </script>
 
 <div class="dock">
-	<div class="tabbar">
-		{#each tabs as [key, label] (key)}
-			<button class="tab" class:on={tab === key} onclick={() => (tab = key)}>{label}</button>
+	<div class="tabbar" bind:this={bar}>
+		{#each openTabs as key (key)}
+			<div
+				class="tab"
+				class:on={key === active}
+				class:dragging={key === dragKey}
+				data-tab={key}
+				role="tab"
+				tabindex="0"
+				aria-selected={key === active}
+				onpointerdown={(e) => startDrag(e, key)}
+				onclick={() => (active = key)}
+				onkeydown={(e) => e.key === 'Enter' && (active = key)}
+			>
+				<span class="tdot" class:on={key === active}></span>
+				<span class="tlabel">{labelOf(key)}</span>
+				<button
+					class="tx"
+					onpointerdown={(e) => e.stopPropagation()}
+					onclick={(e) => {
+						e.stopPropagation();
+						closeTab(key);
+					}}
+					aria-label="close tab"><X size={12} /></button
+				>
+			</div>
 		{/each}
+		<div class="add">
+			<button class="addbtn" onclick={() => (addOpen = !addOpen)} aria-label="add panel" disabled={available.length === 0}><Plus size={15} /></button>
+			{#if addOpen}
+				<button class="add-backdrop" aria-label="close" onclick={() => (addOpen = false)}></button>
+				<div class="add-menu">
+					{#each available as p (p.key)}
+						<button class="add-item" onclick={() => openPanel(p.key)}>{p.label}</button>
+					{/each}
+				</div>
+			{/if}
+		</div>
 	</div>
+
 	<div class="content">
-		{#if tab === 'goal'}<GoalPanel {goal} />{/if}
-		{#if tab === 'files'}<FilesPanel />{/if}
-		{#if tab === 'git'}<GitPanel />{/if}
-		{#if termOpened}
-			<div class="termwrap" class:hidden={tab !== 'term'}><TerminalPanel /></div>
+		{#each openTabs as key (key)}
+			<div class="pane" class:hidden={key !== active}>
+				{#if key === 'goal'}<GoalPanel {goal} />
+				{:else if key === 'files'}<FilesPanel />
+				{:else if key === 'git'}<GitPanel />
+				{:else if key === 'term'}<TerminalPanel />{/if}
+			</div>
+		{/each}
+		{#if openTabs.length === 0}
+			<div class="empty">
+				<p>No panels open</p>
+				<span>Use <b>+</b> to open one</span>
+			</div>
 		{/if}
 	</div>
 </div>
@@ -46,41 +151,154 @@
 	}
 	.tabbar {
 		display: flex;
-		gap: 16px;
-		padding: 14px 16px 0;
+		align-items: center;
+		gap: 4px;
+		padding: 8px 8px 7px;
 		border-bottom: 1px solid var(--hairline);
+		overflow-x: auto;
 		flex-shrink: 0;
 	}
+	.tabbar::-webkit-scrollbar {
+		height: 0;
+	}
 	.tab {
-		background: none;
-		border: none;
+		display: flex;
+		align-items: center;
+		gap: 7px;
+		padding: 5px 6px 5px 10px;
+		border-radius: var(--r-sm);
+		font-size: 12px;
 		color: var(--dim);
-		font-family: var(--font-sans);
-		font-size: 13px;
-		font-weight: 600;
-		padding: 0 0 12px;
 		cursor: pointer;
-		border-bottom: 2px solid transparent;
+		user-select: none;
+		white-space: nowrap;
+		flex-shrink: 0;
 	}
 	.tab:hover {
+		background: var(--surface);
 		color: var(--text);
 	}
 	.tab.on {
+		background: var(--surface2);
 		color: var(--text);
-		border-bottom-color: var(--accent);
+		box-shadow: inset 0 0 0 1px var(--hairline);
+	}
+	.tab.dragging {
+		opacity: 0.6;
+	}
+	.tdot {
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: var(--dim2);
+		flex-shrink: 0;
+	}
+	.tdot.on {
+		background: var(--accent-bright);
+	}
+	.tlabel {
+		font-weight: 600;
+	}
+	.tx {
+		display: inline-flex;
+		padding: 1px;
+		border: none;
+		background: none;
+		color: var(--dim2);
+		border-radius: 4px;
+		cursor: pointer;
+	}
+	.tx:hover {
+		background: var(--surface2);
+		color: var(--text);
+	}
+	.add {
+		position: relative;
+		flex-shrink: 0;
+	}
+	.addbtn {
+		display: inline-flex;
+		padding: 6px;
+		border: none;
+		background: none;
+		color: var(--dim);
+		border-radius: var(--r-sm);
+		cursor: pointer;
+	}
+	.addbtn:hover:not(:disabled) {
+		background: var(--surface2);
+		color: var(--text);
+	}
+	.addbtn:disabled {
+		opacity: 0.3;
+	}
+	.add-backdrop {
+		position: fixed;
+		inset: 0;
+		z-index: 20;
+		border: none;
+		background: none;
+		cursor: default;
+	}
+	.add-menu {
+		position: absolute;
+		top: calc(100% + 6px);
+		right: 0;
+		z-index: 21;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		padding: 5px;
+		min-width: 120px;
+		background: var(--panel);
+		border: 1px solid var(--border);
+		border-radius: var(--r-md);
+		box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+		animation: rise 0.12s ease;
+	}
+	.add-item {
+		text-align: left;
+		padding: 7px 10px;
+		border: none;
+		background: none;
+		border-radius: var(--r-sm);
+		color: var(--text);
+		font-size: 13px;
+		cursor: pointer;
+	}
+	.add-item:hover {
+		background: var(--surface2);
 	}
 	.content {
 		flex: 1;
 		min-height: 0;
 		position: relative;
 	}
-	.content > :global(*) {
-		height: 100%;
+	.pane {
+		position: absolute;
+		inset: 0;
 	}
-	.termwrap {
-		height: 100%;
-	}
-	.hidden {
+	.pane.hidden {
 		display: none;
+	}
+	.empty {
+		height: 100%;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
+		color: var(--dim2);
+	}
+	.empty p {
+		margin: 0;
+		font-size: 14px;
+		color: var(--dim);
+	}
+	.empty span {
+		font-size: 12px;
+	}
+	.empty b {
+		color: var(--accent-bright);
 	}
 </style>
