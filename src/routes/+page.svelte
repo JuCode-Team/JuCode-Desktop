@@ -83,6 +83,13 @@
 	}
 	const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
+	const fmtDur = (ms: number) =>
+		ms < 1000
+			? `${ms}ms`
+			: ms < 60000
+				? `${(ms / 1000).toFixed(1)}s`
+				: `${Math.floor(ms / 60000)}m${Math.round((ms % 60000) / 1000)}s`;
+
 	let copiedMsg = $state<unknown>(null);
 	function copyMsg(m: { text: string }) {
 		navigator.clipboard?.writeText(m.text).catch(() => {});
@@ -459,6 +466,7 @@
 							<Markdown text={m.text} />
 							{#if m.text}
 								<div class="msg-foot">
+									{#if m.elapsed}<span class="mtok">{fmtDur(m.elapsed)}</span>{/if}
 									{#if m.tokens}<span class="mtok">{m.tokens} tokens</span>{/if}
 									<button class="mcopy" onclick={() => copyMsg(m)} aria-label="copy">
 										{#if copiedMsg === m}<Check size={13} /> 已复制{:else}<Copy size={13} /> 复制{/if}

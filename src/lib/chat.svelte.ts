@@ -2,7 +2,7 @@ import type { AgentEvent } from './protocol';
 
 export type Msg =
 	| { kind: 'user'; text: string }
-	| { kind: 'assistant'; text: string; tokens?: number }
+	| { kind: 'assistant'; text: string; tokens?: number; elapsed?: number }
 	| { kind: 'reasoning'; text: string; collapsed: boolean }
 	| { kind: 'tool'; callId: string; name: string; output: string; running: boolean; isError: boolean }
 	| { kind: 'system'; text: string }
@@ -76,6 +76,21 @@ export class ChatState {
 
 	#assistantIdx = -1;
 	#reasoningIdx = -1;
+	#turnStart: number | null = null;
+
+	/** Stamp the turn's total elapsed onto its last assistant message. */
+	#endTurn() {
+		if (this.#turnStart === null) return;
+		const elapsed = Date.now() - this.#turnStart;
+		this.#turnStart = null;
+		for (let i = this.messages.length - 1; i >= 0; i--) {
+			const m = this.messages[i];
+			if (m.kind === 'assistant') {
+				m.elapsed = elapsed;
+				break;
+			}
+		}
+	}
 
 	get busy() {
 		return ['streaming', 'connecting', 'compacting', 'steering'].includes(this.engineState);
@@ -270,6 +285,7 @@ export class ChatState {
 			}
 			case 'connecting':
 				this.engineState = 'connecting';
+				if (this.#turnStart === null) this.#turnStart = Date.now();
 				break;
 			case 'compaction_start':
 				this.engineState = 'compacting';
@@ -277,13 +293,17 @@ export class ChatState {
 				break;
 			case 'status':
 				this.engineState = str(ev.message);
-				if (!this.busy) this.#resetCurrent();
+				if (!this.busy) {
+					this.#endTurn();
+					this.#resetCurrent();
+				}
 				break;
 			case 'info':
 				this.messages.push({ kind: 'system', text: str(ev.message) });
 				break;
 			case 'error':
 				this.messages.push({ kind: 'error', text: str(ev.message) });
+				this.#endTurn();
 				this.#resetCurrent();
 				break;
 		}
