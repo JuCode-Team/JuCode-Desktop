@@ -423,6 +423,10 @@
 		input = text;
 		composerEl?.focus();
 	}
+	function renderable(m: { kind: string; text?: string; name?: string; output?: string }) {
+		if (m.kind === 'tool') return !!(m.name || m.output);
+		return !!m.text && m.text.trim().length > 0;
+	}
 
 	onMount(() => {
 		const savedW = Number(localStorage.getItem('jucode-right-width'));
@@ -585,7 +589,7 @@
 
 			<main bind:this={scroller} onscroll={onScroll}>
 				{#each chat.messages as m (m)}
-					{#if m.kind === 'user'}
+					{#if !renderable(m)}{:else if m.kind === 'user'}
 						<div class="row user">
 							<button class="uedit" onclick={() => editMessage(m.text)} aria-label="edit" title="编辑重发"><Pencil size={12} /></button>
 							<div class="bubble">{m.text}</div>
