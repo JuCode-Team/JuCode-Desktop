@@ -24,7 +24,7 @@
 	import { themeState, toggleTheme } from '$lib/theme.svelte';
 	import ToolCard from '$lib/ToolCard.svelte';
 	import Settings from '$lib/Settings.svelte';
-	import GoalPanel from '$lib/GoalPanel.svelte';
+	import RightDock from '$lib/RightDock.svelte';
 
 	interface Session {
 		id: string;
@@ -247,7 +247,6 @@
 	<!-- LEFT: navigation + sessions -->
 	<aside class="sidebar">
 		<div class="brand">
-			<span class="logo"></span>
 			<span class="word">JuCode</span>
 		</div>
 
@@ -397,7 +396,7 @@
 	<!-- RIGHT: goal progress -->
 	{#if showRight}
 		<aside class="right">
-			<GoalPanel goal={chat?.goal ?? null} />
+			<RightDock goal={chat?.goal ?? null} />
 		</aside>
 	{/if}
 
@@ -474,13 +473,6 @@
 		align-items: center;
 		gap: 9px;
 		padding: 26px 18px 14px;
-	}
-	.logo {
-		width: 26px;
-		height: 26px;
-		border-radius: 8px;
-		background: linear-gradient(145deg, var(--accent-bright), var(--accent));
-		box-shadow: 0 2px 10px var(--accent-soft);
 	}
 	.word {
 		font-family: var(--font-display);

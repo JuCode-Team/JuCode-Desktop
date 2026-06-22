@@ -21,10 +21,6 @@
 </script>
 
 <div class="panel">
-	<div class="tabs">
-		<button class="tab on">目标进度</button>
-	</div>
-
 	{#if goal}
 		<div class="body">
 			<div class="top">
@@ -53,28 +49,6 @@
 		display: flex;
 		flex-direction: column;
 		height: 100%;
-		background: var(--panel);
-	}
-	.tabs {
-		display: flex;
-		gap: 18px;
-		padding: 14px 18px 0;
-		border-bottom: 1px solid var(--hairline);
-	}
-	.tab {
-		background: none;
-		border: none;
-		color: var(--dim);
-		font-family: var(--font-sans);
-		font-size: 13px;
-		font-weight: 600;
-		padding: 0 0 12px;
-		cursor: pointer;
-		border-bottom: 2px solid transparent;
-	}
-	.tab.on {
-		color: var(--text);
-		border-bottom-color: var(--accent);
 	}
 	.body {
 		padding: 18px;

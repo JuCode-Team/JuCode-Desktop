@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -205,11 +205,194 @@ fn close_session(session: String, engines: tauri::State<Engines>) -> Result<(), 
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// IDE features (file manager / git / terminal), backed by the Tauri layer
+// operating directly on the project working directory — independent of the
+// jucode agent engine.
+// ---------------------------------------------------------------------------
+
+const MAX_TEXT_READ: u64 = 2_000_000;
+
+#[tauri::command]
+fn project_root() -> String {
+    resolve_cwd().display().to_string()
+}
+
+#[derive(Serialize)]
+struct FsEntry {
+    name: String,
+    path: String,
+    is_dir: bool,
+}
+
+/// Lists a directory (defaults to the project root), directories first.
+#[tauri::command]
+fn list_dir(path: Option<String>) -> Result<Vec<FsEntry>, String> {
+    let dir = path.map(PathBuf::from).unwrap_or_else(resolve_cwd);
+    let mut entries = Vec::new();
+    for entry in std::fs::read_dir(&dir).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with('.') && name != ".gitignore" {
+            continue;
+        }
+        let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
+        entries.push(FsEntry {
+            name,
+            path: entry.path().display().to_string(),
+            is_dir,
+        });
+    }
+    entries.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then(a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+    Ok(entries)
+}
+
+/// Reads a UTF-8 text file (size-capped). Returns an error for binary/oversized files.
+#[tauri::command]
+fn read_text(path: String) -> Result<String, String> {
+    let meta = std::fs::metadata(&path).map_err(|e| e.to_string())?;
+    if meta.len() > MAX_TEXT_READ {
+        return Err(format!("file too large to view ({} bytes)", meta.len()));
+    }
+    let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+    String::from_utf8(bytes).map_err(|_| "not a UTF-8 text file".to_string())
+}
+
+/// Runs a git command in the project root and returns stdout (or stderr on failure).
+#[tauri::command]
+fn git(args: Vec<String>, cwd: Option<String>) -> Result<String, String> {
+    let dir = cwd.map(PathBuf::from).unwrap_or_else(resolve_cwd);
+    let output = Command::new("git")
+        .args(&args)
+        .current_dir(dir)
+        .output()
+        .map_err(|e| format!("failed to run git: {e}"))?;
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).into_owned())
+    }
+}
+
+// --- terminal (real PTY) ---
+
+struct Pty {
+    writer: Mutex<Box<dyn Write + Send>>,
+    master: Mutex<Box<dyn portable_pty::MasterPty + Send>>,
+    child: Mutex<Box<dyn portable_pty::Child + Send + Sync>>,
+}
+
+#[derive(Default)]
+struct Ptys {
+    map: Mutex<HashMap<String, Arc<Pty>>>,
+}
+
+#[derive(Clone, Serialize)]
+struct PtyOutput {
+    id: String,
+    data: String,
+}
+
+/// Opens a pseudo-terminal running the user's shell in the project root. Output
+/// is streamed to the webview as `pty-output` events tagged with `id`.
+#[tauri::command]
+fn pty_open(
+    id: String,
+    cols: u16,
+    rows: u16,
+    app: AppHandle,
+    ptys: tauri::State<Ptys>,
+) -> Result<(), String> {
+    use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+    let pair = native_pty_system()
+        .openpty(PtySize {
+            rows,
+            cols,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .map_err(|e| e.to_string())?;
+
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+    let mut cmd = CommandBuilder::new(shell);
+    cmd.cwd(resolve_cwd());
+    let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
+    drop(pair.slave);
+
+    let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
+    let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
+
+    let handle = app.clone();
+    let stream_id = id.clone();
+    std::thread::spawn(move || {
+        let mut buf = [0u8; 4096];
+        loop {
+            match reader.read(&mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => {
+                    let data = String::from_utf8_lossy(&buf[..n]).into_owned();
+                    let _ = handle.emit(
+                        "pty-output",
+                        PtyOutput {
+                            id: stream_id.clone(),
+                            data,
+                        },
+                    );
+                }
+            }
+        }
+        let _ = handle.emit("pty-exit", stream_id.clone());
+    });
+
+    ptys.map.lock().unwrap().insert(
+        id,
+        Arc::new(Pty {
+            writer: Mutex::new(writer),
+            master: Mutex::new(pair.master),
+            child: Mutex::new(child),
+        }),
+    );
+    Ok(())
+}
+
+#[tauri::command]
+fn pty_write(id: String, data: String, ptys: tauri::State<Ptys>) -> Result<(), String> {
+    let pty = ptys.map.lock().unwrap().get(&id).cloned();
+    let pty = pty.ok_or_else(|| "unknown terminal".to_string())?;
+    let mut writer = pty.writer.lock().unwrap();
+    writer.write_all(data.as_bytes()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn pty_resize(id: String, cols: u16, rows: u16, ptys: tauri::State<Ptys>) -> Result<(), String> {
+    use portable_pty::PtySize;
+    let pty = ptys.map.lock().unwrap().get(&id).cloned();
+    let pty = pty.ok_or_else(|| "unknown terminal".to_string())?;
+    let master = pty.master.lock().unwrap();
+    master
+        .resize(PtySize {
+            rows,
+            cols,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn pty_close(id: String, ptys: tauri::State<Ptys>) -> Result<(), String> {
+    if let Some(pty) = ptys.map.lock().unwrap().remove(&id) {
+        let _ = pty.child.lock().unwrap().kill();
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(Engines::default())
+        .manage(Ptys::default())
         .invoke_handler(tauri::generate_handler![
             create_session,
             send_op,
@@ -217,7 +400,15 @@ pub fn run() {
             read_config,
             write_config,
             read_auth_providers,
-            set_auth_key
+            set_auth_key,
+            project_root,
+            list_dir,
+            read_text,
+            git,
+            pty_open,
+            pty_write,
+            pty_resize,
+            pty_close
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
