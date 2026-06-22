@@ -82,6 +82,14 @@
 	const allSessions = $derived(projects.flatMap((p) => p.sessions));
 	const active = $derived(allSessions.find((s) => s.id === activeId));
 	const chat = $derived(active?.chat);
+	const thinking = $derived.by(() => {
+		if (!chat?.busy) return false;
+		const last = chat.messages[chat.messages.length - 1];
+		if (!last) return true;
+		if (last.kind === 'user') return true;
+		if ((last.kind === 'assistant' || last.kind === 'reasoning') && last.text.length === 0) return true;
+		return false;
+	});
 	const activeProject = $derived(projects.find((p) => p.sessions.some((s) => s.id === activeId)));
 
 	const slashMatches = $derived.by(() => {
@@ -396,10 +404,6 @@
 					<span class="hname">{chat.title}</span>
 					<span class="hcrumb">{project}</span>
 				</div>
-				<button class="modelsel" class:gone={!chat.messages.length} onclick={() => nav('/model')} title={chat.model} aria-label="switch model">
-					<span class="mdot" class:busy={chat.busy} class:err={chat.engineState === 'exited'}></span>
-					<Vendor model={chat.model} size={17} />
-				</button>
 				<div class="hspace" data-tauri-drag-region></div>
 				{#if chat.totalIn || chat.totalOut}<span class="usage">↑{fmtTokens(chat.totalIn)} ↓{fmtTokens(chat.totalOut)}</span>{/if}
 				{#if chat.cost > 0}<span class="usage cost">${chat.cost.toFixed(3)}</span>{/if}
@@ -432,6 +436,9 @@
 						<div class="error">{m.text}</div>
 					{/if}
 				{/each}
+				{#if thinking}
+					<div class="thinking" aria-label="thinking"><span class="td"></span><span class="td"></span><span class="td"></span></div>
+				{/if}
 			</main>
 
 			<div class="composer-wrap">
@@ -829,36 +836,6 @@
 		color: var(--dim2);
 		font-family: var(--font-mono);
 	}
-	.modelsel {
-		display: inline-flex;
-		align-items: center;
-		gap: 7px;
-		padding: 5px 7px;
-		border: none;
-		border-radius: var(--r-sm);
-		background: none;
-		color: var(--text);
-		cursor: pointer;
-	}
-	.modelsel:hover {
-		background: var(--surface2);
-	}
-	.modelsel.gone {
-		display: none;
-	}
-	.mdot {
-		width: 7px;
-		height: 7px;
-		border-radius: 50%;
-		background: var(--ok);
-	}
-	.mdot.busy {
-		background: var(--accent-bright);
-		animation: pulse 1.2s ease-in-out infinite;
-	}
-	.mdot.err {
-		background: var(--err);
-	}
 	.hspace {
 		flex: 1;
 	}
@@ -963,6 +940,35 @@
 		border: 1px solid color-mix(in oklab, var(--err) 32%, transparent);
 		padding: 9px 12px;
 		border-radius: var(--r-sm);
+	}
+	.thinking {
+		display: flex;
+		gap: 5px;
+		padding: 6px 2px;
+	}
+	.td {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: var(--accent-bright);
+		animation: tdot 1s ease-in-out infinite;
+	}
+	.td:nth-child(2) {
+		animation-delay: 0.16s;
+	}
+	.td:nth-child(3) {
+		animation-delay: 0.32s;
+	}
+	@keyframes tdot {
+		0%,
+		100% {
+			opacity: 0.3;
+			transform: translateY(0);
+		}
+		50% {
+			opacity: 1;
+			transform: translateY(-3px);
+		}
 	}
 
 	/* ---------- composer ---------- */
