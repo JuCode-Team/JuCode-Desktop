@@ -16,9 +16,7 @@
 		PanelRight,
 		Sun,
 		Moon,
-		ChevronUp,
-		ListFilter,
-		Gauge
+		ListFilter
 	} from 'lucide-svelte';
 	import { ChatState } from '$lib/chat.svelte';
 	import { sendOp, createSession, closeSession, type EventPayload } from '$lib/protocol';
@@ -29,6 +27,7 @@
 	import RightDock from '$lib/RightDock.svelte';
 	import Vendor from '$lib/Vendor.svelte';
 	import ContextRing from '$lib/ContextRing.svelte';
+	import EffortSlider from '$lib/EffortSlider.svelte';
 
 	interface Session {
 		id: string;
@@ -69,8 +68,8 @@
 
 	function chooseEffort(ef: string) {
 		if (chat) sendOp(activeId, { op: 'command', input: `/model ${chat.model} ${ef}` });
-		showEffort = false;
 	}
+	const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 	const active = $derived(sessions.find((s) => s.id === activeId));
 	const chat = $derived(active?.chat);
@@ -403,20 +402,18 @@
 					<textarea bind:value={input} onkeydown={onKey} rows="1" placeholder="给 JuCode 指派一个任务…  (拖入图片可附加 · / 唤起命令)"></textarea>
 					<div class="composer-bar">
 						<button class="cbtn" aria-label="attach" title="drag an image onto the composer"><Paperclip size={16} /></button>
-						<button class="modelchip" onclick={() => nav('/model')}>
-							<Vendor model={chat.model} size={14} />{chat.model || 'model'}<ChevronUp size={13} />
+						<button class="flatbtn model" onclick={() => nav('/model')} title="switch model">
+							<Vendor model={chat.model} size={15} /><span>{chat.model || 'model'}</span>
 						</button>
 						{#if chat.efforts.length}
 								<div class="effortsel">
-									<button class="modelchip" onclick={() => (showEffort = !showEffort)} title="thinking depth">
-										<Gauge size={13} />{chat.effort || 'effort'}
+									<button class="flatbtn" onclick={() => (showEffort = !showEffort)} title="thinking effort">
+										{cap(chat.effort) || 'Effort'}
 									</button>
 									{#if showEffort}
 										<button class="pop-backdrop" aria-label="close" onclick={() => (showEffort = false)}></button>
 										<div class="effort-pop">
-											{#each chat.efforts as ef (ef)}
-												<button class="eff-opt" class:on={ef === chat.effort} onclick={() => chooseEffort(ef)}>{ef}</button>
-											{/each}
+											<EffortSlider efforts={chat.efforts} current={chat.effort} onChange={chooseEffort} />
 										</div>
 									{/if}
 								</div>
@@ -915,21 +912,25 @@
 		background: var(--surface2);
 		color: var(--text);
 	}
-	.modelchip {
+	.flatbtn {
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
-		padding: 6px 10px;
-		border: 1px solid var(--border);
-		border-radius: 999px;
-		background: var(--surface);
+		padding: 5px 8px;
+		border: none;
+		border-radius: var(--r-sm);
+		background: none;
 		color: var(--text);
-		font-size: 12px;
-		font-family: var(--font-mono);
+		font-size: 13px;
+		font-family: var(--font-sans);
 		cursor: pointer;
 	}
-	.modelchip:hover {
+	.flatbtn:hover {
 		background: var(--surface2);
+	}
+	.flatbtn.model span {
+		font-family: var(--font-mono);
+		font-size: 12px;
 	}
 	.effortsel {
 		position: relative;
@@ -945,36 +946,14 @@
 	}
 	.effort-pop {
 		position: absolute;
-		bottom: calc(100% + 6px);
+		bottom: calc(100% + 8px);
 		left: 0;
 		z-index: 21;
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		padding: 5px;
-		min-width: 120px;
 		background: var(--panel);
 		border: 1px solid var(--border);
 		border-radius: var(--r-md);
-		box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+		box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
 		animation: rise 0.12s ease;
-	}
-	.eff-opt {
-		text-align: left;
-		padding: 6px 10px;
-		border: none;
-		background: none;
-		border-radius: var(--r-sm);
-		color: var(--text);
-		font-family: var(--font-mono);
-		font-size: 12px;
-		cursor: pointer;
-	}
-	.eff-opt:hover {
-		background: var(--surface2);
-	}
-	.eff-opt.on {
-		color: var(--accent-bright);
 	}
 	.cspace {
 		flex: 1;
