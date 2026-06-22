@@ -272,8 +272,8 @@
 		</div>
 
 		<div class="nav">
-			<button class="navcard" onclick={() => nav('/skills list')}><Store size={17} /><span>市场</span></button>
-			<button class="navcard" onclick={() => nav('/skills')}><Sparkles size={17} /><span>技能</span></button>
+			<button class="navcard" onclick={() => nav('/skills list')}><Store size={14} /><span>市场</span></button>
+			<button class="navcard" onclick={() => nav('/skills')}><Sparkles size={14} /><span>技能</span></button>
 		</div>
 
 		<div class="sess-head">
@@ -505,26 +505,26 @@
 	}
 	.nav {
 		display: flex;
-		gap: 8px;
-		padding: 0 14px 14px;
+		gap: 6px;
+		padding: 0 14px 10px;
 	}
 	.navcard {
 		flex: 1;
 		display: flex;
-		flex-direction: column;
 		align-items: center;
+		justify-content: center;
 		gap: 6px;
-		padding: 12px 0;
-		border-radius: var(--r-md);
+		padding: 6px 0;
+		border-radius: var(--r-sm);
 		border: 1px solid var(--hairline);
-		background: var(--surface);
-		color: var(--text);
+		background: none;
+		color: var(--dim);
 		font-size: 12px;
 		cursor: pointer;
 	}
 	.navcard:hover {
 		background: var(--surface2);
-		border-color: var(--border);
+		color: var(--text);
 	}
 	.sess-head {
 		display: flex;
