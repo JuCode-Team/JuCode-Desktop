@@ -24,7 +24,7 @@
 		(async () => {
 			term = new Terminal({
 				fontFamily:
-					"'JetBrainsMono Nerd Font', 'MesloLGS NF', 'Hack Nerd Font', 'FiraCode Nerd Font', 'Symbols Nerd Font', 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace, 'Apple Color Emoji'",
+					"'MesloLGL Nerd Font Mono', 'MesloLGS NF', 'JetBrainsMono Nerd Font', 'Hack Nerd Font', 'FiraCode Nerd Font', 'Symbols Nerd Font', 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace, 'Apple Color Emoji'",
 				fontSize: 12.5,
 				cursorBlink: true,
 				allowProposedApi: true,
