@@ -23,9 +23,11 @@
 		let disposed = false;
 		(async () => {
 			term = new Terminal({
-				fontFamily: 'JetBrains Mono, ui-monospace, monospace',
+				fontFamily:
+					"'JetBrainsMono Nerd Font', 'MesloLGS NF', 'Hack Nerd Font', 'FiraCode Nerd Font', 'Symbols Nerd Font', 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace, 'Apple Color Emoji'",
 				fontSize: 12.5,
 				cursorBlink: true,
+				allowProposedApi: true,
 				theme: palette()
 			});
 			fit = new FitAddon();
