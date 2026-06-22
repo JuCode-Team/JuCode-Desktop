@@ -195,6 +195,33 @@ fn set_auth_key(provider: String, key: String) -> Result<(), String> {
     write_json(&path, &current)
 }
 
+/// Fetches the JuCode skills marketplace using the configured api url and the
+/// stored jucode key, returning the raw `{skills, default_skill_ids}` JSON.
+#[tauri::command]
+fn fetch_marketplace() -> Result<serde_json::Value, String> {
+    let config = read_json(&jucode_dir().join("config.json"));
+    let api_url = config
+        .get("jucode_api_url")
+        .and_then(|v| v.as_str())
+        .unwrap_or("https://api.jucode.cn")
+        .trim_end_matches('/')
+        .to_string();
+    let key = read_json(&jucode_dir().join("auth.json"))
+        .get("providers")
+        .and_then(|p| p.get("jucode"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let url = format!("{api_url}/v1/skills/marketplace");
+    let mut req = ureq::get(&url).timeout(std::time::Duration::from_secs(30));
+    if let Some(k) = key.filter(|k| !k.trim().is_empty()) {
+        req = req.set("Authorization", &format!("Bearer {k}"));
+    }
+    req.call()
+        .map_err(|e| e.to_string())?
+        .into_json::<serde_json::Value>()
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn close_session(session: String, engines: tauri::State<Engines>) -> Result<(), String> {
     if let Some(target) = engines.sessions.lock().unwrap().remove(&session) {
@@ -401,6 +428,7 @@ pub fn run() {
             write_config,
             read_auth_providers,
             set_auth_key,
+            fetch_marketplace,
             project_root,
             list_dir,
             read_text,

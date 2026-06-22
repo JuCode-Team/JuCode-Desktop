@@ -25,6 +25,7 @@
 	import { themeState, toggleTheme } from '$lib/theme.svelte';
 	import ToolCard from '$lib/ToolCard.svelte';
 	import Settings from '$lib/Settings.svelte';
+	import Marketplace from '$lib/Marketplace.svelte';
 	import RightDock from '$lib/RightDock.svelte';
 	import Vendor from '$lib/Vendor.svelte';
 	import ContextRing from '$lib/ContextRing.svelte';
@@ -42,6 +43,7 @@
 	let selIdx = $state(0);
 	let slashIdx = $state(0);
 	let showSettings = $state(false);
+	let showMarket = $state(false);
 	let showRight = $state(true);
 	let rightWidth = $state(340);
 	let resizing = $state(false);
@@ -282,7 +284,7 @@
 		</div>
 
 		<div class="nav">
-			<button class="navcard" onclick={() => nav('/skills list')}><Store size={14} /><span>市场</span></button>
+			<button class="navcard" onclick={() => (showMarket = true)}><Store size={14} /><span>市场</span></button>
 			<button class="navcard" onclick={() => nav('/skills')}><Sparkles size={14} /><span>技能</span></button>
 		</div>
 
@@ -442,6 +444,10 @@
 
 	{#if showSettings}
 		<Settings sessionId={activeId} onClose={() => (showSettings = false)} />
+	{/if}
+
+	{#if showMarket}
+		<Marketplace sessionId={activeId} onClose={() => (showMarket = false)} />
 	{/if}
 
 	{#if chat?.trustPrompt}

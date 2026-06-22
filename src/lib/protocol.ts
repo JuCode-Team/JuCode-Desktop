@@ -34,6 +34,29 @@ export function setAuthKey(provider: string, key: string): Promise<void> {
 	return invoke('set_auth_key', { provider, key });
 }
 
+// Skills marketplace (Tauri fetches it directly from the JuCode API).
+export interface MarketSkill {
+	id: string;
+	name: string;
+	description: string;
+	tags: string[];
+	isDefault: boolean;
+}
+export async function fetchMarketplace(): Promise<MarketSkill[]> {
+	const v = await invoke<{ skills?: unknown[]; default_skill_ids?: unknown[] }>('fetch_marketplace');
+	const defaults = new Set((Array.isArray(v.default_skill_ids) ? v.default_skill_ids : []).map(String));
+	return (Array.isArray(v.skills) ? v.skills : [])
+		.map((s) => s as Record<string, unknown>)
+		.filter((s) => s.enabled !== false)
+		.map((s) => ({
+			id: String(s.id ?? ''),
+			name: String(s.name ?? s.id ?? ''),
+			description: String(s.description ?? ''),
+			tags: Array.isArray(s.tags) ? (s.tags as unknown[]).map(String) : [],
+			isDefault: defaults.has(String(s.id))
+		}));
+}
+
 // IDE features (Tauri layer, operating on the project working directory).
 export function projectRoot(): Promise<string> {
 	return invoke('project_root');
