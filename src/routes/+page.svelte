@@ -25,6 +25,7 @@
 	import ToolCard from '$lib/ToolCard.svelte';
 	import Settings from '$lib/Settings.svelte';
 	import RightDock from '$lib/RightDock.svelte';
+	import Vendor from '$lib/Vendor.svelte';
 
 	interface Session {
 		id: string;
@@ -40,6 +41,23 @@
 	let slashIdx = $state(0);
 	let showSettings = $state(false);
 	let showRight = $state(true);
+	let rightWidth = $state(340);
+
+	function startResize(e: PointerEvent) {
+		e.preventDefault();
+		const startX = e.clientX;
+		const startW = rightWidth;
+		const move = (ev: PointerEvent) => {
+			rightWidth = Math.min(640, Math.max(260, startW + (startX - ev.clientX)));
+		};
+		const up = () => {
+			localStorage.setItem('jucode-right-width', String(rightWidth));
+			window.removeEventListener('pointermove', move);
+			window.removeEventListener('pointerup', up);
+		};
+		window.addEventListener('pointermove', move);
+		window.addEventListener('pointerup', up);
+	}
 
 	const active = $derived(sessions.find((s) => s.id === activeId));
 	const chat = $derived(active?.chat);
@@ -203,6 +221,8 @@
 	}
 
 	onMount(() => {
+		const savedW = Number(localStorage.getItem('jucode-right-width'));
+		if (savedW >= 260 && savedW <= 640) rightWidth = savedW;
 		const cleanups: Array<() => void> = [];
 		let disposed = false;
 		(async () => {
@@ -308,6 +328,7 @@
 				</div>
 				<button class="modelsel" onclick={() => nav('/model')}>
 					<span class="mdot" class:busy={chat.busy} class:err={chat.engineState === 'exited'}></span>
+					<Vendor model={chat.model} size={14} />
 					{chat.model || '—'}
 				</button>
 				<div class="hspace"></div>
@@ -379,7 +400,7 @@
 					<div class="composer-bar">
 						<button class="cbtn" aria-label="attach" title="drag an image onto the composer"><Paperclip size={16} /></button>
 						<button class="modelchip" onclick={() => nav('/model')}>
-							<Sparkles size={13} />{chat.model || 'model'}<ChevronUp size={13} />
+							<Vendor model={chat.model} size={14} />{chat.model || 'model'}<ChevronUp size={13} />
 						</button>
 						<div class="cspace"></div>
 						{#if chat.busy}
@@ -395,7 +416,8 @@
 
 	<!-- RIGHT: goal progress -->
 	{#if showRight}
-		<aside class="right">
+		<div class="resizer" role="separator" aria-label="resize panel" onpointerdown={startResize}></div>
+		<aside class="right" style:width="{rightWidth}px">
 			<RightDock goal={chat?.goal ?? null} />
 		</aside>
 	{/if}
@@ -439,6 +461,7 @@
 				<div class="rows">
 					{#each pickerRows as row, i (row.id)}
 						<button class="prow" class:sel={i === selIdx} onclick={() => selectRow(row.command)} onmouseenter={() => (selIdx = i)}>
+							{#if chat.picker.kind === 'model'}<Vendor model={row.id} size={15} />{/if}
 							<span class="prow-main">{row.label || '(empty)'}</span>
 							<span class="prow-detail">{row.detail}</span>
 							{#if row.active}<Check size={14} class="prow-check" />{/if}
@@ -1008,9 +1031,20 @@
 	}
 
 	/* ---------- right ---------- */
-	.right {
-		width: 340px;
+	.resizer {
+		width: 5px;
 		flex-shrink: 0;
+		cursor: col-resize;
+		background: transparent;
+		margin-left: -3px;
+		z-index: 5;
+	}
+	.resizer:hover {
+		background: var(--accent-soft);
+	}
+	.right {
+		flex-shrink: 0;
+		min-width: 0;
 		border-left: 1px solid var(--hairline);
 	}
 
