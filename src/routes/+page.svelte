@@ -16,8 +16,11 @@
 		PanelRight,
 		Sun,
 		Moon,
-		ListFilter
+		ListFilter,
+		Image as ImageIcon,
+		FileText
 	} from 'lucide-svelte';
+	import { open } from '@tauri-apps/plugin-dialog';
 	import { ChatState } from '$lib/chat.svelte';
 	import { sendOp, createSession, closeSession, type EventPayload } from '$lib/protocol';
 	import { themeState, toggleTheme } from '$lib/theme.svelte';
@@ -37,7 +40,7 @@
 	let sessions = $state<Session[]>([]);
 	let activeId = $state('');
 	let input = $state('');
-	let attachments = $state<string[]>([]);
+	let attachments = $state<{ path: string; image: boolean }[]>([]);
 	let scroller = $state<HTMLElement | null>(null);
 	let selIdx = $state(0);
 	let slashIdx = $state(0);
@@ -156,17 +159,29 @@
 		if (chat) sendOp(activeId, { op: 'command', input: command });
 	}
 
+	function addAttachment(path: string) {
+		if (path && !attachments.some((a) => a.path === path)) attachments.push({ path, image: isImage(path) });
+	}
+	async function pickFiles() {
+		const sel = await open({ multiple: true, title: 'Attach files' });
+		if (!sel) return;
+		for (const p of Array.isArray(sel) ? sel : [sel]) addAttachment(p);
+	}
+
 	function submit() {
 		if (!chat) return;
 		const text = input.trim();
 		if (!text && attachments.length === 0) return;
-		if (text.startsWith('/')) sendOp(activeId, { op: 'command', input: text });
-		else
-			sendOp(activeId, {
-				op: 'user_message',
-				content: text,
-				images: attachments.length ? [...attachments] : undefined
-			});
+		if (text.startsWith('/')) {
+			sendOp(activeId, { op: 'command', input: text });
+		} else {
+			const images = attachments.filter((a) => a.image).map((a) => a.path);
+			const files = attachments.filter((a) => !a.image).map((a) => a.path);
+			let content = text;
+			if (files.length)
+				content += `${content ? '\n\n' : ''}Attached files (read these):\n${files.join('\n')}`;
+			sendOp(activeId, { op: 'user_message', content, images: images.length ? images : undefined });
+		}
 		input = '';
 		attachments = [];
 	}
@@ -255,9 +270,7 @@
 				s.chat.messages.push({ kind: 'error', text: 'engine process exited' });
 			});
 			const undrop = await getCurrentWebview().onDragDropEvent((e) => {
-				if (e.payload.type === 'drop')
-					for (const p of e.payload.paths)
-						if (isImage(p) && !attachments.includes(p)) attachments.push(p);
+				if (e.payload.type === 'drop') for (const p of e.payload.paths) addAttachment(p);
 			});
 			cleanups.push(unlisten, unexit, undrop);
 			if (disposed) {
@@ -391,17 +404,18 @@
 				{/if}
 				{#if attachments.length}
 					<div class="chips">
-						{#each attachments as p, i (p)}
-							<span class="chip"><Paperclip size={12} />{base(p)}
+						{#each attachments as a, i (a.path)}
+							<span class="chip">
+								{#if a.image}<ImageIcon size={12} />{:else}<FileText size={12} />{/if}{base(a.path)}
 								<button class="chip-x" onclick={() => attachments.splice(i, 1)} aria-label="remove"><X size={12} /></button>
 							</span>
 						{/each}
 					</div>
 				{/if}
 				<div class="composer">
-					<textarea bind:value={input} onkeydown={onKey} rows="1" placeholder="给 JuCode 指派一个任务…  (拖入图片可附加 · / 唤起命令)"></textarea>
+					<textarea bind:value={input} onkeydown={onKey} rows="1" placeholder="给 JuCode 指派一个任务…  (拖入或点回形针附加文件 · / 唤起命令)"></textarea>
 					<div class="composer-bar">
-						<button class="cbtn" aria-label="attach" title="drag an image onto the composer"><Paperclip size={16} /></button>
+						<button class="cbtn" onclick={pickFiles} aria-label="attach" title="attach files"><Paperclip size={16} /></button>
 						<button class="flatbtn model" onclick={() => nav('/model')} title="switch model">
 							<Vendor model={chat.model} size={15} /><span>{chat.model || 'model'}</span>
 						</button>
