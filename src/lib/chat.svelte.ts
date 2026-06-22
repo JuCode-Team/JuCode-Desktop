@@ -102,7 +102,6 @@ export class ChatState {
 				this.model = str(ev.model);
 				this.cwd = str(ev.cwd);
 				this.contextWindow = num(ev.context_window);
-				this.messages.push({ kind: 'system', text: `jucode ${str(ev.version)} · ${str(ev.cwd)}` });
 				break;
 			case 'model_status':
 				this.provider = str(ev.provider);

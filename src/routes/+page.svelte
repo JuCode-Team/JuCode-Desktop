@@ -26,6 +26,7 @@
 	import Settings from '$lib/Settings.svelte';
 	import RightDock from '$lib/RightDock.svelte';
 	import Vendor from '$lib/Vendor.svelte';
+	import ContextRing from '$lib/ContextRing.svelte';
 
 	interface Session {
 		id: string;
@@ -333,8 +334,8 @@
 				</button>
 				<div class="hspace"></div>
 				{#if chat.totalIn || chat.totalOut}<span class="usage">↑{fmtTokens(chat.totalIn)} ↓{fmtTokens(chat.totalOut)}</span>{/if}
-				{#if chat.contextWindow > 0}<span class="usage">ctx {ctxPct}%</span>{/if}
 				{#if chat.cost > 0}<span class="usage cost">${chat.cost.toFixed(3)}</span>{/if}
+				{#if chat.contextWindow > 0}<ContextRing pct={ctxPct} label={`context ${fmtTokens(chat.contextTokens)} / ${fmtTokens(chat.contextWindow)}`} />{/if}
 				<button class="hicon" class:on={showRight} onclick={() => (showRight = !showRight)} aria-label="toggle panel"><PanelRight size={16} /></button>
 			</header>
 
