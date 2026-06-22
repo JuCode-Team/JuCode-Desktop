@@ -65,6 +65,26 @@
 	});
 
 	const entries = $derived(Array.isArray(parsed?.entries) ? (parsed!.entries as string[]) : []);
+	const hasEntries = $derived(Array.isArray(parsed?.entries));
+	const command = $derived(s(parsed?.command) || s(parsed?.cmd));
+	const stdout = $derived(s(parsed?.stdout));
+	const stderr = $derived(s(parsed?.stderr));
+	const content = $derived(s(parsed?.content));
+	const symbols = $derived(
+		Array.isArray(parsed?.symbols)
+			? (parsed!.symbols as Array<{ line?: number; symbol?: string }>)
+			: []
+	);
+	const truncated = $derived(parsed?.truncated === true);
+	const bytes = $derived(
+		typeof parsed?.written_bytes === 'number'
+			? (parsed!.written_bytes as number)
+			: typeof parsed?.bytes === 'number'
+				? (parsed!.bytes as number)
+				: null
+	);
+	const fmtBytes = (n: number) =>
+		n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`;
 </script>
 
 <div class="tool" class:err={isError || !!errorText}>
@@ -90,19 +110,24 @@
 				{#if output}<pre>{output}</pre>{/if}
 			{:else if kind === 'image' && typeof parsed.base64 === 'string'}
 				<img class="img" src={`data:${s(parsed.mime) || 'image/png'};base64,${s(parsed.base64)}`} alt={target} />
+			{:else if kind === 'binary'}
+				<div class="meta">二进制文件{#if bytes !== null} · {fmtBytes(bytes)}{/if}</div>
 			{:else if diffLines.length}
 				<pre class="diff">{#each diffLines as d (d)}<span class={d.cls}>{d.line}
 </span>{/each}</pre>
-			{:else if name === 'bash' || name === 'exec_command' || name === 'ripgrep'}
-				{#if typeof parsed.command === 'string'}<div class="cmd">$ {parsed.command}</div>{/if}
-				{#if s(parsed.stdout)}<pre>{s(parsed.stdout)}</pre>{/if}
-				{#if s(parsed.stderr)}<pre class="stderr">{s(parsed.stderr)}</pre>{/if}
-			{:else if name === 'ls' && entries.length}
-				<pre class="entries">{entries.join('\n')}</pre>
-			{:else if kind === 'text' && typeof parsed.content === 'string'}
-				<pre>{parsed.content}</pre>
-			{:else if output}
-				<pre>{output}</pre>
+			{:else if command || stdout || stderr || exitCode !== null}
+				{#if command}<div class="cmd">$ {command}</div>{/if}
+				{#if stdout}<pre>{stdout}</pre>{/if}
+				{#if stderr}<pre class="stderr">{stderr}</pre>{/if}
+			{:else if hasEntries}
+				{#if entries.length}<pre class="entries">{entries.join('\n')}</pre>{:else}<div class="meta">空目录</div>{/if}
+			{:else if symbols.length}
+				<pre class="entries">{#each symbols as sym (sym.line)}{sym.line}  {sym.symbol}
+{/each}</pre>
+			{:else if kind === 'text'}
+				{#if content}<pre>{content}</pre>{:else}<div class="meta">空文件</div>{/if}
+			{:else if bytes !== null || truncated}
+				<div class="meta">{[bytes !== null ? fmtBytes(bytes) : '', truncated ? '已截断' : ''].filter(Boolean).join(' · ')}</div>
 			{/if}
 		</div>
 	{/if}
@@ -196,6 +221,12 @@
 		font-size: 12px;
 		color: var(--err);
 		white-space: pre-wrap;
+	}
+	.meta {
+		padding: 9px 12px;
+		font-family: var(--font-mono);
+		font-size: 12px;
+		color: var(--dim);
 	}
 	.img {
 		display: block;
