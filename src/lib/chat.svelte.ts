@@ -57,6 +57,8 @@ export class ChatState {
 	provider = $state('');
 	model = $state('');
 	cwd = $state('');
+	effort = $state('');
+	efforts = $state<string[]>([]);
 	engineState = $state('starting');
 	contextTokens = $state(0);
 	contextWindow = $state(0);
@@ -106,6 +108,8 @@ export class ChatState {
 			case 'model_status':
 				this.provider = str(ev.provider);
 				this.model = str(ev.model);
+				this.effort = str(ev.reasoning_effort);
+				this.efforts = arr<string>(ev.reasoning_efforts);
 				this.engineState = str(ev.state) || this.engineState;
 				this.contextWindow = num(ev.context_window);
 				break;

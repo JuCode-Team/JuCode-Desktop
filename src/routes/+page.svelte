@@ -17,7 +17,8 @@
 		Sun,
 		Moon,
 		ChevronUp,
-		ListFilter
+		ListFilter,
+		Gauge
 	} from 'lucide-svelte';
 	import { ChatState } from '$lib/chat.svelte';
 	import { sendOp, createSession, closeSession, type EventPayload } from '$lib/protocol';
@@ -43,21 +44,30 @@
 	let showSettings = $state(false);
 	let showRight = $state(true);
 	let rightWidth = $state(340);
+	let resizing = $state(false);
+	let showEffort = $state(false);
 
 	function startResize(e: PointerEvent) {
 		e.preventDefault();
+		resizing = true;
 		const startX = e.clientX;
 		const startW = rightWidth;
 		const move = (ev: PointerEvent) => {
 			rightWidth = Math.min(640, Math.max(260, startW + (startX - ev.clientX)));
 		};
 		const up = () => {
+			resizing = false;
 			localStorage.setItem('jucode-right-width', String(rightWidth));
 			window.removeEventListener('pointermove', move);
 			window.removeEventListener('pointerup', up);
 		};
 		window.addEventListener('pointermove', move);
 		window.addEventListener('pointerup', up);
+	}
+
+	function chooseEffort(ef: string) {
+		if (chat) sendOp(activeId, { op: 'command', input: `/model ${chat.model} ${ef}` });
+		showEffort = false;
 	}
 
 	const active = $derived(sessions.find((s) => s.id === activeId));
@@ -267,7 +277,7 @@
 <div class="app">
 	<!-- LEFT: navigation + sessions -->
 	<aside class="sidebar">
-		<div class="brand">
+		<div class="brand" data-tauri-drag-region>
 			<span class="word">JuCode</span>
 		</div>
 
@@ -322,8 +332,8 @@
 	<!-- CENTER: chat -->
 	<div class="center">
 		{#if chat}
-			<header>
-				<div class="htitle">
+			<header data-tauri-drag-region>
+				<div class="htitle" data-tauri-drag-region>
 					<span class="hname">{chat.title}</span>
 					<span class="hcrumb">{project}</span>
 				</div>
@@ -331,10 +341,9 @@
 					<span class="mdot" class:busy={chat.busy} class:err={chat.engineState === 'exited'}></span>
 					<Vendor model={chat.model} size={17} />
 				</button>
-				<div class="hspace"></div>
+				<div class="hspace" data-tauri-drag-region></div>
 				{#if chat.totalIn || chat.totalOut}<span class="usage">↑{fmtTokens(chat.totalIn)} ↓{fmtTokens(chat.totalOut)}</span>{/if}
 				{#if chat.cost > 0}<span class="usage cost">${chat.cost.toFixed(3)}</span>{/if}
-				{#if chat.contextWindow > 0}<ContextRing pct={ctxPct} label={`context ${fmtTokens(chat.contextTokens)} / ${fmtTokens(chat.contextWindow)}`} />{/if}
 				<button class="hicon" class:on={showRight} onclick={() => (showRight = !showRight)} aria-label="toggle panel"><PanelRight size={16} /></button>
 			</header>
 
@@ -402,7 +411,23 @@
 						<button class="modelchip" onclick={() => nav('/model')}>
 							<Vendor model={chat.model} size={14} />{chat.model || 'model'}<ChevronUp size={13} />
 						</button>
-						<div class="cspace"></div>
+						{#if chat.efforts.length}
+								<div class="effortsel">
+									<button class="modelchip" onclick={() => (showEffort = !showEffort)} title="thinking depth">
+										<Gauge size={13} />{chat.effort || 'effort'}
+									</button>
+									{#if showEffort}
+										<button class="pop-backdrop" aria-label="close" onclick={() => (showEffort = false)}></button>
+										<div class="effort-pop">
+											{#each chat.efforts as ef (ef)}
+												<button class="eff-opt" class:on={ef === chat.effort} onclick={() => chooseEffort(ef)}>{ef}</button>
+											{/each}
+										</div>
+									{/if}
+								</div>
+							{/if}
+							<div class="cspace"></div>
+							{#if chat.contextWindow > 0}<ContextRing pct={ctxPct} label={`context ${fmtTokens(chat.contextTokens)} / ${fmtTokens(chat.contextWindow)}`} />{/if}
 						{#if chat.busy}
 							<button class="cact stop" onclick={stop} aria-label="stop"><Square size={15} /></button>
 						{:else}
@@ -415,12 +440,12 @@
 	</div>
 
 	<!-- RIGHT: goal progress -->
-	{#if showRight}
-		<div class="resizer" role="separator" aria-label="resize panel" onpointerdown={startResize}></div>
-		<aside class="right" style:width="{rightWidth}px">
+	<div class="resizer" class:hidden={!showRight} role="separator" aria-label="resize panel" onpointerdown={startResize}></div>
+	<aside class="right" class:closed={!showRight} class:resizing style:width={showRight ? `${rightWidth}px` : '0px'}>
+		<div class="right-inner" style:width="{rightWidth}px">
 			<RightDock goal={chat?.goal ?? null} />
-		</aside>
-	{/if}
+		</div>
+	</aside>
 
 	{#if showSettings}
 		<Settings sessionId={activeId} onClose={() => (showSettings = false)} />
@@ -922,6 +947,51 @@
 	.modelchip:hover {
 		background: var(--surface2);
 	}
+	.effortsel {
+		position: relative;
+		display: inline-flex;
+	}
+	.pop-backdrop {
+		position: fixed;
+		inset: 0;
+		background: none;
+		border: none;
+		z-index: 20;
+		cursor: default;
+	}
+	.effort-pop {
+		position: absolute;
+		bottom: calc(100% + 6px);
+		left: 0;
+		z-index: 21;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		padding: 5px;
+		min-width: 120px;
+		background: var(--panel);
+		border: 1px solid var(--border);
+		border-radius: var(--r-md);
+		box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+		animation: rise 0.12s ease;
+	}
+	.eff-opt {
+		text-align: left;
+		padding: 6px 10px;
+		border: none;
+		background: none;
+		border-radius: var(--r-sm);
+		color: var(--text);
+		font-family: var(--font-mono);
+		font-size: 12px;
+		cursor: pointer;
+	}
+	.eff-opt:hover {
+		background: var(--surface2);
+	}
+	.eff-opt.on {
+		color: var(--accent-bright);
+	}
 	.cspace {
 		flex: 1;
 	}
@@ -1043,10 +1113,24 @@
 	.resizer:hover {
 		background: var(--accent-soft);
 	}
+	.resizer.hidden {
+		display: none;
+	}
 	.right {
 		flex-shrink: 0;
 		min-width: 0;
 		border-left: 1px solid var(--hairline);
+		overflow: hidden;
+		transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+	}
+	.right.resizing {
+		transition: none;
+	}
+	.right.closed {
+		border-left: none;
+	}
+	.right-inner {
+		height: 100%;
 	}
 
 	/* ---------- modals (picker / trust) ---------- */
