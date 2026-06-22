@@ -48,6 +48,20 @@
 
 	let projects = $state<Project[]>([]);
 	let activeId = $state('');
+	let loaded = $state(false);
+	// Read the saved layout synchronously, before any effect can overwrite it.
+	const savedProjectsData: Array<{
+		id: string;
+		name: string;
+		path: string;
+		tabs?: Array<{ sid: string; title: string }>;
+	}> = (() => {
+		try {
+			return JSON.parse(localStorage.getItem('jucode-projects') || '[]');
+		} catch {
+			return [];
+		}
+	})();
 	let input = $state('');
 	let attachments = $state<{ path: string; image: boolean }[]>([]);
 	let scroller = $state<HTMLElement | null>(null);
@@ -111,6 +125,22 @@
 		return false;
 	});
 	const activeProject = $derived(projects.find((p) => p.sessions.some((s) => s.id === activeId)));
+
+	// Persist the project layout + open tabs (engine session id + title) whenever
+	// they change. Gated on `loaded` so it can't clobber the saved data before the
+	// initial restore has run.
+	$effect(() => {
+		if (!loaded) return;
+		const data = projects.map((p) => ({
+			id: p.id,
+			name: p.name,
+			path: p.path,
+			tabs: p.sessions
+				.map((s) => ({ sid: s.chat.sessionId, title: s.chat.title }))
+				.filter((t) => t.sid)
+		}));
+		localStorage.setItem('jucode-projects', JSON.stringify(data));
+	});
 
 	const slashMatches = $derived.by(() => {
 		if (!chat) return [];
@@ -176,11 +206,15 @@
 		}
 	});
 
-	function saveProjects() {
-		localStorage.setItem(
-			'jucode-projects',
-			JSON.stringify(projects.map((p) => ({ id: p.id, name: p.name, path: p.path })))
-		);
+	function restoreSession(project: Project, sid: string, title: string) {
+		const id = uid();
+		const chat = new ChatState();
+		if (title) chat.title = title;
+		project.sessions.push({ id, chat });
+		createSession(id, project.path)
+			.then(() => sendOp(id, { op: 'command', input: `/resume ${sid}` }))
+			.catch(() => {});
+		return id;
 	}
 	function addSession(project: Project) {
 		const id = uid();
@@ -194,7 +228,6 @@
 		if (!path || Array.isArray(path)) return;
 		const p: Project = { id: uid(), name: base(path), path, sessions: [] };
 		projects.push(p);
-		saveProjects();
 		addSession(p);
 	}
 	function removeSession(id: string) {
@@ -206,7 +239,6 @@
 	function removeProject(p: Project) {
 		for (const s of p.sessions) closeSession(s.id).catch(() => {});
 		projects = projects.filter((x) => x.id !== p.id);
-		saveProjects();
 		if (!allSessions.some((s) => s.id === activeId)) activeId = allSessions[0]?.id ?? '';
 	}
 	function openHistory(p: Project) {
@@ -347,20 +379,26 @@
 				cleanups.forEach((f) => f());
 				return;
 			}
-			// Load saved projects (metadata only); seed a default one on first run.
-			let saved: Array<{ id: string; name: string; path: string }> = [];
-			try {
-				saved = JSON.parse(localStorage.getItem('jucode-projects') || '[]');
-			} catch {
-				saved = [];
-			}
-			if (Array.isArray(saved) && saved.length) {
-				for (const p of saved) projects.push({ id: p.id, name: p.name, path: p.path, sessions: [] });
+			// Restore saved projects + their open conversations (resume by id), or
+			// seed a default project on first run.
+			let first = '';
+			if (savedProjectsData.length) {
+				for (const p of savedProjectsData) {
+					const proj: Project = { id: p.id, name: p.name, path: p.path, sessions: [] };
+					projects.push(proj);
+					for (const t of p.tabs ?? []) {
+						if (!t.sid) continue;
+						const id = restoreSession(proj, t.sid, t.title);
+						if (!first) first = id;
+					}
+				}
+				activeId = first || (projects[0] && addSession(projects[0])) || '';
 			} else {
 				const root = await projectRoot();
 				projects.push({ id: uid(), name: base(root), path: root, sessions: [] });
+				addSession(projects[0]);
 			}
-			addSession(projects[0]);
+			loaded = true;
 		})();
 		return () => {
 			disposed = true;

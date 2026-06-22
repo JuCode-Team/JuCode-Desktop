@@ -57,6 +57,7 @@ export class ChatState {
 	provider = $state('');
 	model = $state('');
 	cwd = $state('');
+	sessionId = $state('');
 	effort = $state('');
 	efforts = $state<string[]>([]);
 	engineState = $state('starting');
@@ -127,6 +128,7 @@ export class ChatState {
 			case 'startup':
 				this.model = str(ev.model);
 				this.cwd = str(ev.cwd);
+				if (str(ev.session_id)) this.sessionId = str(ev.session_id);
 				this.contextWindow = num(ev.context_window);
 				break;
 			case 'model_status':
@@ -291,13 +293,17 @@ export class ChatState {
 				this.engineState = 'compacting';
 				this.messages.push({ kind: 'system', text: 'compacting context…' });
 				break;
-			case 'status':
-				this.engineState = str(ev.message);
+			case 'status': {
+				const msg = str(ev.message);
+				const m = msg.match(/^(?:new|resumed) session (\S+)/);
+				if (m) this.sessionId = m[1];
+				this.engineState = msg;
 				if (!this.busy) {
 					this.#endTurn();
 					this.#resetCurrent();
 				}
 				break;
+			}
 			case 'info':
 				this.messages.push({ kind: 'system', text: str(ev.message) });
 				break;
