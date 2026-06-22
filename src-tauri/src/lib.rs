@@ -25,11 +25,21 @@ struct EventPayload {
     data: String,
 }
 
-/// Resolves the `jucode` binary: `JUCODE_BIN` override, then a sibling
-/// `JuCode-CLI` checkout, then an in-tree build, then `jucode` on PATH.
+/// Resolves the `jucode` binary: `JUCODE_BIN` override, then the bundled sidecar
+/// next to the app executable, then a sibling `JuCode-CLI` checkout / in-tree
+/// build (dev), then `jucode` on PATH.
 fn resolve_bin() -> PathBuf {
     if let Ok(path) = std::env::var("JUCODE_BIN") {
         return PathBuf::from(path);
+    }
+    // Bundled app: Tauri places the externalBin sidecar next to the main binary
+    // (Contents/MacOS/jucode on macOS).
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(sidecar) = exe.parent().map(|dir| dir.join("jucode")) {
+            if sidecar.exists() {
+                return sidecar;
+            }
+        }
     }
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR")); // <repo>/src-tauri
     let candidates = [
