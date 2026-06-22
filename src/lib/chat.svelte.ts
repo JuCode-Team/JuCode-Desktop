@@ -3,7 +3,7 @@ import type { AgentEvent } from './protocol';
 export type Msg =
 	| { kind: 'user'; text: string }
 	| { kind: 'assistant'; text: string }
-	| { kind: 'reasoning'; text: string }
+	| { kind: 'reasoning'; text: string; collapsed: boolean }
 	| { kind: 'tool'; callId: string; name: string; output: string; running: boolean; isError: boolean }
 	| { kind: 'system'; text: string }
 	| { kind: 'error'; text: string };
@@ -90,6 +90,15 @@ export class ChatState {
 		this.#reasoningIdx = -1;
 	}
 
+	/** Collapse the active reasoning block once the answer starts streaming. */
+	#collapseReasoning() {
+		if (this.#reasoningIdx >= 0) {
+			const m = this.messages[this.#reasoningIdx];
+			if (m?.kind === 'reasoning') m.collapsed = true;
+			this.#reasoningIdx = -1;
+		}
+	}
+
 	#tool(callId: string): Extract<Msg, { kind: 'tool' }> | undefined {
 		for (let i = this.messages.length - 1; i >= 0; i--) {
 			const m = this.messages[i];
@@ -123,11 +132,13 @@ export class ChatState {
 				break;
 			}
 			case 'assistant_start':
+				this.#collapseReasoning();
 				this.messages.push({ kind: 'assistant', text: '' });
 				this.#assistantIdx = this.messages.length - 1;
 				break;
 			case 'assistant_delta': {
 				if (this.#assistantIdx < 0) {
+					this.#collapseReasoning();
 					this.messages.push({ kind: 'assistant', text: '' });
 					this.#assistantIdx = this.messages.length - 1;
 				}
@@ -139,7 +150,7 @@ export class ChatState {
 				break;
 			case 'reasoning_delta': {
 				if (this.#reasoningIdx < 0) {
-					this.messages.push({ kind: 'reasoning', text: '' });
+					this.messages.push({ kind: 'reasoning', text: '', collapsed: false });
 					this.#reasoningIdx = this.messages.length - 1;
 				}
 				const m = this.messages[this.#reasoningIdx];

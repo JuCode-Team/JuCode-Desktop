@@ -16,6 +16,7 @@
 		PanelRight,
 		Sun,
 		Moon,
+		ChevronRight,
 		Image as ImageIcon,
 		FileText
 	} from 'lucide-svelte';
@@ -427,7 +428,13 @@
 					{:else if m.kind === 'assistant'}
 						<div class="text">{m.text}</div>
 					{:else if m.kind === 'reasoning'}
-						<div class="text reasoning">{m.text}</div>
+						<div class="reason" class:open={!m.collapsed}>
+							<button class="reason-head" onclick={() => (m.collapsed = !m.collapsed)}>
+								<span class="rchev"><ChevronRight size={13} /></span>
+								<span>推理</span>
+							</button>
+							{#if !m.collapsed}<div class="reason-body">{m.text}</div>{/if}
+						</div>
 					{:else if m.kind === 'tool'}
 						<ToolCard name={m.name} output={m.output} running={m.running} isError={m.isError} />
 					{:else if m.kind === 'system'}
@@ -921,10 +928,41 @@
 		word-break: break-word;
 		animation: rise 0.18s ease;
 	}
-	.text.reasoning {
+	.reason {
+		border-left: 2px solid var(--hairline);
+		padding-left: 12px;
+	}
+	.reason-head {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 2px 0;
+		border: none;
+		background: none;
+		color: var(--dim);
+		font-size: 12px;
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.reason-head:hover {
+		color: var(--text);
+	}
+	.rchev {
+		display: inline-flex;
+		color: var(--dim2);
+		transition: transform 0.12s;
+	}
+	.reason.open .rchev {
+		transform: rotate(90deg);
+	}
+	.reason-body {
+		margin-top: 4px;
 		color: var(--dim);
 		font-style: italic;
 		font-size: 13px;
+		line-height: 1.6;
+		white-space: pre-wrap;
+		word-break: break-word;
 	}
 	.system {
 		font-family: var(--font-mono);
