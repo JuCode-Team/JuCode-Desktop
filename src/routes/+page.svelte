@@ -20,10 +20,10 @@
 		History,
 		Copy,
 		Pencil,
-		Image as ImageIcon,
 		FileText
 	} from 'lucide-svelte';
 	import { open } from '@tauri-apps/plugin-dialog';
+	import { convertFileSrc } from '@tauri-apps/api/core';
 	import { ChatState } from '$lib/chat.svelte';
 	import { sendOp, createSession, closeSession, projectRoot, type EventPayload } from '$lib/protocol';
 	import { themeState, toggleTheme } from '$lib/theme.svelte';
@@ -570,8 +570,9 @@
 				{#if attachments.length}
 					<div class="chips">
 						{#each attachments as a, i (a.path)}
-							<span class="chip">
-								{#if a.image}<ImageIcon size={12} />{:else}<FileText size={12} />{/if}{base(a.path)}
+							<span class="chip" class:imgchip={a.image}>
+								{#if a.image}<img class="chip-thumb" src={convertFileSrc(a.path)} alt="" />{:else}<FileText size={12} />{/if}
+								<span class="chip-name">{base(a.path)}</span>
 								<button class="chip-x" onclick={() => attachments.splice(i, 1)} aria-label="remove"><X size={12} /></button>
 							</span>
 						{/each}
@@ -1377,6 +1378,22 @@
 		border: 1px solid var(--border);
 		border-radius: 7px;
 		padding: 3px 5px 3px 8px;
+		max-width: 200px;
+	}
+	.chip.imgchip {
+		padding: 3px 5px 3px 3px;
+	}
+	.chip-thumb {
+		width: 26px;
+		height: 26px;
+		border-radius: 4px;
+		object-fit: cover;
+		flex-shrink: 0;
+	}
+	.chip-name {
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 	.chip-x {
 		display: inline-flex;
