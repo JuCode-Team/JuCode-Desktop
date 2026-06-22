@@ -46,6 +46,10 @@ export interface CommandItem {
 	args?: string;
 	description?: string;
 }
+export interface PlanStep {
+	step: string;
+	status: string;
+}
 
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
 const num = (v: unknown) => (typeof v === 'number' ? v : 0);
@@ -70,6 +74,7 @@ export class ChatState {
 	pendingFill = $state<string | null>(null);
 	trustPrompt = $state<{ cwd: string; repoRoot: string | null } | null>(null);
 	goal = $state<Goal | null>(null);
+	plan = $state<PlanStep[]>([]);
 	subagents = $state<Record<string, { status: string; message: string }>>({});
 	commands = $state<CommandItem[]>([]);
 	totalIn = $state(0);
@@ -269,6 +274,9 @@ export class ChatState {
 				break;
 			case 'goal':
 				this.goal = ev.goal ? (ev.goal as unknown as Goal) : null;
+				break;
+			case 'plan':
+				this.plan = arr<PlanStep>(ev.plan);
 				break;
 			case 'command_list':
 				this.commands = arr<CommandItem>(ev.commands);

@@ -547,7 +547,7 @@
 	<div class="resizer" class:hidden={!showRight} role="separator" aria-label="resize panel" onpointerdown={startResize}></div>
 	<aside class="right" class:closed={!showRight} class:resizing style:width={showRight ? `${rightWidth}px` : '0px'}>
 		<div class="right-inner" style:width="{rightWidth}px">
-			<RightDock goal={chat?.goal ?? null} cwd={activeProject?.path ?? ''} />
+			<RightDock goal={chat?.goal ?? null} plan={chat?.plan ?? []} cwd={activeProject?.path ?? ''} />
 		</div>
 	</aside>
 

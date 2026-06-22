@@ -1,14 +1,16 @@
 <script lang="ts">
 	import { X, Plus } from 'lucide-svelte';
 	import GoalPanel from './GoalPanel.svelte';
+	import PlanPanel from './PlanPanel.svelte';
 	import FilesPanel from './FilesPanel.svelte';
 	import GitPanel from './GitPanel.svelte';
 	import TerminalPanel from './TerminalPanel.svelte';
-	import type { Goal } from '$lib/chat.svelte';
+	import type { Goal, PlanStep } from '$lib/chat.svelte';
 
-	let { goal, cwd = '' }: { goal: Goal | null; cwd?: string } = $props();
+	let { goal, plan = [], cwd = '' }: { goal: Goal | null; plan?: PlanStep[]; cwd?: string } = $props();
 
 	const PANELS = [
+		{ key: 'plan', label: '计划' },
 		{ key: 'goal', label: '目标' },
 		{ key: 'files', label: '文件' },
 		{ key: 'git', label: 'Git' },
@@ -129,7 +131,8 @@
 	<div class="content">
 		{#each openTabs as key (key)}
 			<div class="pane" class:hidden={key !== active}>
-				{#if key === 'goal'}<GoalPanel {goal} />
+				{#if key === 'plan'}<PlanPanel {plan} />
+				{:else if key === 'goal'}<GoalPanel {goal} />
 				{:else if key === 'files'}<FilesPanel rootDir={cwd} />
 				{:else if key === 'git'}<GitPanel {cwd} />
 				{:else if key === 'term'}<TerminalPanel {cwd} />{/if}
