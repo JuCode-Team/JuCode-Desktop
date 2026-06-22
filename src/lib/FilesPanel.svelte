@@ -3,6 +3,7 @@
 	import { Folder, FileText, ArrowUp, RefreshCw, X } from 'lucide-svelte';
 	import { projectRoot, listDir, readText, type FsEntry } from '$lib/protocol';
 
+	let { rootDir = '' }: { rootDir?: string } = $props();
 	let root = $state('');
 	let cwd = $state('');
 	let entries = $state<FsEntry[]>([]);
@@ -21,7 +22,7 @@
 		}
 	}
 	onMount(async () => {
-		root = await projectRoot();
+		root = rootDir || (await projectRoot());
 		await load(root);
 	});
 

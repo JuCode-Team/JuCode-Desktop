@@ -3,6 +3,9 @@
 	import { GitBranch, RefreshCw, X } from 'lucide-svelte';
 	import { git } from '$lib/protocol';
 
+	let { cwd = '' }: { cwd?: string } = $props();
+	const dir = () => cwd || undefined;
+
 	let branch = $state('');
 	let changes = $state<{ code: string; path: string }[]>([]);
 	let commits = $state<string[]>([]);
@@ -23,13 +26,13 @@
 	async function refresh() {
 		error = '';
 		try {
-			branch = (await git(['branch', '--show-current'])).trim();
-			const st = await git(['status', '--porcelain=v1']);
+			branch = (await git(['branch', '--show-current'], dir())).trim();
+			const st = await git(['status', '--porcelain=v1'], dir());
 			changes = st
 				.split('\n')
 				.filter(Boolean)
 				.map((l) => ({ code: l.slice(0, 2).trim() || '·', path: l.slice(3) }));
-			const log = await git(['log', '--oneline', '-n', '30', '--no-color']);
+			const log = await git(['log', '--oneline', '-n', '30', '--no-color'], dir());
 			commits = log.split('\n').filter(Boolean);
 		} catch (e) {
 			error = String(e);
@@ -39,7 +42,7 @@
 
 	async function showDiff(path: string) {
 		try {
-			const text = await git(['diff', '--no-color', '--', path]);
+			const text = await git(['diff', '--no-color', '--', path], dir());
 			diff = { path, lines: classify(text || '(no unstaged changes)') };
 		} catch (e) {
 			diff = { path, lines: classify(String(e)) };

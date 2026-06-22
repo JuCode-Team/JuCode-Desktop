@@ -8,8 +8,8 @@ export type Op =
 	| { op: 'interrupt' }
 	| { op: 'shutdown' };
 
-export function createSession(session: string): Promise<void> {
-	return invoke('create_session', { session });
+export function createSession(session: string, cwd?: string): Promise<void> {
+	return invoke('create_session', { session, cwd });
 }
 
 export function closeSession(session: string): Promise<void> {
@@ -75,8 +75,8 @@ export function readText(path: string): Promise<string> {
 export function git(args: string[], cwd?: string): Promise<string> {
 	return invoke('git', { args, cwd });
 }
-export function ptyOpen(id: string, cols: number, rows: number): Promise<void> {
-	return invoke('pty_open', { id, cols, rows });
+export function ptyOpen(id: string, cols: number, rows: number, cwd?: string): Promise<void> {
+	return invoke('pty_open', { id, cols, rows, cwd });
 }
 export function ptyWrite(id: string, data: string): Promise<void> {
 	return invoke('pty_write', { id, data });

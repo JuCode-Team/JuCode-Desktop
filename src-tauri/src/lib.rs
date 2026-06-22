@@ -61,12 +61,17 @@ fn resolve_cwd() -> PathBuf {
 #[tauri::command]
 fn create_session(
     session: String,
+    cwd: Option<String>,
     app: AppHandle,
     engines: tauri::State<Engines>,
 ) -> Result<(), String> {
+    let dir = cwd
+        .map(PathBuf::from)
+        .filter(|p| p.is_dir())
+        .unwrap_or_else(resolve_cwd);
     let mut child = Command::new(resolve_bin())
         .arg("serve")
-        .current_dir(resolve_cwd())
+        .current_dir(dir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
@@ -327,6 +332,7 @@ fn pty_open(
     id: String,
     cols: u16,
     rows: u16,
+    cwd: Option<String>,
     app: AppHandle,
     ptys: tauri::State<Ptys>,
 ) -> Result<(), String> {
@@ -340,9 +346,13 @@ fn pty_open(
         })
         .map_err(|e| e.to_string())?;
 
+    let dir = cwd
+        .map(PathBuf::from)
+        .filter(|p| p.is_dir())
+        .unwrap_or_else(resolve_cwd);
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
     let mut cmd = CommandBuilder::new(shell);
-    cmd.cwd(resolve_cwd());
+    cmd.cwd(dir);
     let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
     drop(pair.slave);
 

@@ -6,7 +6,7 @@
 	import TerminalPanel from './TerminalPanel.svelte';
 	import type { Goal } from '$lib/chat.svelte';
 
-	let { goal }: { goal: Goal | null } = $props();
+	let { goal, cwd = '' }: { goal: Goal | null; cwd?: string } = $props();
 
 	const PANELS = [
 		{ key: 'goal', label: '目标' },
@@ -130,9 +130,9 @@
 		{#each openTabs as key (key)}
 			<div class="pane" class:hidden={key !== active}>
 				{#if key === 'goal'}<GoalPanel {goal} />
-				{:else if key === 'files'}<FilesPanel />
-				{:else if key === 'git'}<GitPanel />
-				{:else if key === 'term'}<TerminalPanel />{/if}
+				{:else if key === 'files'}<FilesPanel rootDir={cwd} />
+				{:else if key === 'git'}<GitPanel {cwd} />
+				{:else if key === 'term'}<TerminalPanel {cwd} />{/if}
 			</div>
 		{/each}
 		{#if openTabs.length === 0}

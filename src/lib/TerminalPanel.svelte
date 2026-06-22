@@ -7,6 +7,7 @@
 	import { ptyOpen, ptyWrite, ptyResize, ptyClose } from '$lib/protocol';
 	import { themeState } from '$lib/theme.svelte';
 
+	let { cwd = '' }: { cwd?: string } = $props();
 	let host = $state<HTMLDivElement | null>(null);
 	let term: Terminal | undefined;
 	let fit: FitAddon | undefined;
@@ -44,7 +45,7 @@
 			cleanups.push(unOut, unExit);
 
 			term.onData((d) => ptyWrite(id, d));
-			await ptyOpen(id, term.cols, term.rows);
+			await ptyOpen(id, term.cols, term.rows, cwd || undefined);
 
 			const ro = new ResizeObserver(() => {
 				try {

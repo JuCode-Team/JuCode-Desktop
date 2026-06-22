@@ -16,13 +16,12 @@
 		PanelRight,
 		Sun,
 		Moon,
-		ListFilter,
 		Image as ImageIcon,
 		FileText
 	} from 'lucide-svelte';
 	import { open } from '@tauri-apps/plugin-dialog';
 	import { ChatState } from '$lib/chat.svelte';
-	import { sendOp, createSession, closeSession, type EventPayload } from '$lib/protocol';
+	import { sendOp, createSession, closeSession, projectRoot, type EventPayload } from '$lib/protocol';
 	import { themeState, toggleTheme } from '$lib/theme.svelte';
 	import ToolCard from '$lib/ToolCard.svelte';
 	import Settings from '$lib/Settings.svelte';
@@ -36,8 +35,14 @@
 		id: string;
 		chat: ChatState;
 	}
+	interface Project {
+		id: string;
+		name: string;
+		path: string;
+		sessions: Session[];
+	}
 
-	let sessions = $state<Session[]>([]);
+	let projects = $state<Project[]>([]);
 	let activeId = $state('');
 	let input = $state('');
 	let attachments = $state<{ path: string; image: boolean }[]>([]);
@@ -74,8 +79,10 @@
 	}
 	const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
-	const active = $derived(sessions.find((s) => s.id === activeId));
+	const allSessions = $derived(projects.flatMap((p) => p.sessions));
+	const active = $derived(allSessions.find((s) => s.id === activeId));
 	const chat = $derived(active?.chat);
+	const activeProject = $derived(projects.find((p) => p.sessions.some((s) => s.id === activeId)));
 
 	const slashMatches = $derived.by(() => {
 		if (!chat) return [];
@@ -94,7 +101,7 @@
 	const isImage = (p: string) => /\.(png|jpe?g|gif|webp|bmp)$/i.test(p);
 	const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
 
-	const project = $derived(chat?.cwd ? base(chat.cwd) : 'workspace');
+	const project = $derived(activeProject?.name ?? (chat?.cwd ? base(chat.cwd) : 'workspace'));
 	const ctxPct = $derived(
 		chat && chat.contextWindow > 0
 			? Math.min(100, Math.round((chat.contextTokens / chat.contextWindow) * 100))
@@ -141,19 +148,38 @@
 		}
 	});
 
-	function newSession() {
+	function saveProjects() {
+		localStorage.setItem(
+			'jucode-projects',
+			JSON.stringify(projects.map((p) => ({ id: p.id, name: p.name, path: p.path })))
+		);
+	}
+	function addSession(project: Project) {
 		const id = uid();
-		sessions.push({ id, chat: new ChatState() });
+		project.sessions.push({ id, chat: new ChatState() });
 		activeId = id;
-		createSession(id).catch(() => {});
+		createSession(id, project.path).catch(() => {});
 		return id;
 	}
-	function closeTab(id: string) {
+	async function addProject() {
+		const path = await open({ directory: true, title: '选择项目目录' });
+		if (!path || Array.isArray(path)) return;
+		const p: Project = { id: uid(), name: base(path), path, sessions: [] };
+		projects.push(p);
+		saveProjects();
+		addSession(p);
+	}
+	function removeSession(id: string) {
 		closeSession(id).catch(() => {});
-		const idx = sessions.findIndex((s) => s.id === id);
-		if (idx >= 0) sessions.splice(idx, 1);
-		if (activeId === id) activeId = sessions[Math.min(idx, sessions.length - 1)]?.id ?? '';
-		if (sessions.length === 0) newSession();
+		const p = projects.find((pr) => pr.sessions.some((s) => s.id === id));
+		if (p) p.sessions = p.sessions.filter((s) => s.id !== id);
+		if (activeId === id) activeId = allSessions[0]?.id ?? '';
+	}
+	function removeProject(p: Project) {
+		for (const s of p.sessions) closeSession(s.id).catch(() => {});
+		projects = projects.filter((x) => x.id !== p.id);
+		saveProjects();
+		if (!allSessions.some((s) => s.id === activeId)) activeId = allSessions[0]?.id ?? '';
 	}
 	function nav(command: string) {
 		if (chat) sendOp(activeId, { op: 'command', input: command });
@@ -254,7 +280,7 @@
 		let disposed = false;
 		(async () => {
 			const unlisten = await listen<EventPayload>('agent-event', (e) => {
-				const s = sessions.find((x) => x.id === e.payload.session);
+				const s = allSessions.find((x) => x.id === e.payload.session);
 				if (!s) return;
 				try {
 					s.chat.handle(JSON.parse(e.payload.data));
@@ -264,7 +290,7 @@
 				if (s.id === activeId) scrollToEnd();
 			});
 			const unexit = await listen<string>('agent-exit', (e) => {
-				const s = sessions.find((x) => x.id === e.payload);
+				const s = allSessions.find((x) => x.id === e.payload);
 				if (!s) return;
 				s.chat.engineState = 'exited';
 				s.chat.messages.push({ kind: 'error', text: 'engine process exited' });
@@ -277,7 +303,20 @@
 				cleanups.forEach((f) => f());
 				return;
 			}
-			newSession();
+			// Load saved projects (metadata only); seed a default one on first run.
+			let saved: Array<{ id: string; name: string; path: string }> = [];
+			try {
+				saved = JSON.parse(localStorage.getItem('jucode-projects') || '[]');
+			} catch {
+				saved = [];
+			}
+			if (Array.isArray(saved) && saved.length) {
+				for (const p of saved) projects.push({ id: p.id, name: p.name, path: p.path, sessions: [] });
+			} else {
+				const root = await projectRoot();
+				projects.push({ id: uid(), name: base(root), path: root, sessions: [] });
+			}
+			addSession(projects[0]);
 		})();
 		return () => {
 			disposed = true;
@@ -303,35 +342,41 @@
 		<div class="sess-head">
 			<span>对话 · 按项目</span>
 			<div class="sess-actions">
-				<button onclick={() => newSession()} aria-label="new session"><Plus size={15} /></button>
-				<button aria-label="filter" disabled><ListFilter size={15} /></button>
+				<button onclick={addProject} aria-label="new project" title="新建项目（选择目录）"><Plus size={15} /></button>
 			</div>
 		</div>
 
 		<div class="sess-list">
-			<div class="group">
-				<span class="group-name">{project}</span>
-				<span class="group-count">{sessions.length}</span>
-			</div>
-			{#each sessions as s (s.id)}
-				<button class="sess" class:on={s.id === activeId} onclick={() => (activeId = s.id)}>
-					<span class="sess-dot" class:busy={s.chat.busy} class:err={s.chat.engineState === 'exited'}></span>
-					<span class="sess-title">{s.chat.title}</span>
-					{#if s.chat.busy}<LoaderCircle size={12} class="spin" />{/if}
-					{#if sessions.length > 1}
+			{#each projects as p (p.id)}
+				<div class="group">
+					<span class="group-name" title={p.path}>{p.name}</span>
+					<span class="group-count">{p.sessions.length}</span>
+					<button class="group-add" onclick={() => addSession(p)} aria-label="new session" title="在此项目下新建对话"><Plus size={13} /></button>
+					{#if projects.length > 1}
+						<button class="group-x" onclick={() => removeProject(p)} aria-label="close project" title="关闭项目"><X size={12} /></button>
+					{/if}
+				</div>
+				{#each p.sessions as s (s.id)}
+					<button class="sess" class:on={s.id === activeId} onclick={() => (activeId = s.id)}>
+						<span class="sess-dot" class:busy={s.chat.busy} class:err={s.chat.engineState === 'exited'}></span>
+						<span class="sess-title">{s.chat.title}</span>
+						{#if s.chat.busy}<LoaderCircle size={12} class="spin" />{/if}
 						<span
 							class="sess-x"
 							role="button"
 							tabindex="0"
 							onclick={(e) => {
 								e.stopPropagation();
-								closeTab(s.id);
+								removeSession(s.id);
 							}}
-							onkeydown={(e) => e.key === 'Enter' && (e.stopPropagation(), closeTab(s.id))}
+							onkeydown={(e) => e.key === 'Enter' && (e.stopPropagation(), removeSession(s.id))}
 							aria-label="close"><X size={12} /></span
 						>
-					{/if}
-				</button>
+					</button>
+				{/each}
+				{#if p.sessions.length === 0}
+					<button class="sess-empty" onclick={() => addSession(p)}>+ 新建对话</button>
+				{/if}
 			{/each}
 		</div>
 
@@ -449,7 +494,7 @@
 	<div class="resizer" class:hidden={!showRight} role="separator" aria-label="resize panel" onpointerdown={startResize}></div>
 	<aside class="right" class:closed={!showRight} class:resizing style:width={showRight ? `${rightWidth}px` : '0px'}>
 		<div class="right-inner" style:width="{rightWidth}px">
-			<RightDock goal={chat?.goal ?? null} />
+			<RightDock goal={chat?.goal ?? null} cwd={activeProject?.path ?? ''} />
 		</div>
 	</aside>
 
@@ -599,13 +644,16 @@
 		display: flex;
 		align-items: center;
 		gap: 7px;
-		padding: 10px 8px 6px;
+		padding: 12px 8px 6px;
 	}
 	.group-name {
 		font-size: 12px;
 		font-weight: 600;
 		color: var(--dim);
 		font-family: var(--font-mono);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 	.group-count {
 		font-size: 10px;
@@ -613,6 +661,48 @@
 		background: var(--surface2);
 		border-radius: 999px;
 		padding: 1px 7px;
+		flex-shrink: 0;
+	}
+	.group-add,
+	.group-x {
+		display: inline-flex;
+		padding: 3px;
+		border: none;
+		background: none;
+		color: var(--dim2);
+		border-radius: 5px;
+		cursor: pointer;
+		flex-shrink: 0;
+		opacity: 0;
+	}
+	.group-add {
+		margin-left: auto;
+	}
+	.group:hover .group-add,
+	.group:hover .group-x {
+		opacity: 1;
+	}
+	.group-add:hover,
+	.group-x:hover {
+		background: var(--surface2);
+		color: var(--text);
+	}
+	.sess-empty {
+		display: block;
+		width: 100%;
+		text-align: left;
+		padding: 7px 12px;
+		margin-left: 2px;
+		border: none;
+		background: none;
+		color: var(--dim2);
+		font-size: 12px;
+		cursor: pointer;
+		border-radius: var(--r-sm);
+	}
+	.sess-empty:hover {
+		background: var(--surface);
+		color: var(--text);
 	}
 	.sess {
 		display: flex;
