@@ -26,6 +26,7 @@
 	import { sendOp, createSession, closeSession, projectRoot, type EventPayload } from '$lib/protocol';
 	import { themeState, toggleTheme } from '$lib/theme.svelte';
 	import ToolCard from '$lib/ToolCard.svelte';
+	import Markdown from '$lib/Markdown.svelte';
 	import Settings from '$lib/Settings.svelte';
 	import Marketplace from '$lib/Marketplace.svelte';
 	import RightDock from '$lib/RightDock.svelte';
@@ -444,7 +445,7 @@
 							<div class="bubble">{m.text}</div>
 						</div>
 					{:else if m.kind === 'assistant'}
-						<div class="text">{m.text}</div>
+						<div class="text"><Markdown text={m.text} /></div>
 					{:else if m.kind === 'reasoning'}
 						<div class="reason" class:open={!m.collapsed}>
 							<button class="reason-head" onclick={() => (m.collapsed = !m.collapsed)}>
