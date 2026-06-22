@@ -81,6 +81,7 @@ export class ChatState {
 
 	/** Stamp the turn's total elapsed onto its last assistant message. */
 	#endTurn() {
+		this.#collapseReasoning();
 		if (this.#turnStart === null) return;
 		const elapsed = Date.now() - this.#turnStart;
 		this.#turnStart = null;
@@ -149,9 +150,10 @@ export class ChatState {
 				break;
 			}
 			case 'assistant_start':
-				this.#collapseReasoning();
-				this.messages.push({ kind: 'assistant', text: '' });
-				this.#assistantIdx = this.messages.length - 1;
+				// The engine fires this eagerly at turn start, before reasoning. Don't
+				// create the message here — let the first delta create it, so reasoning
+				// (which streams first) is rendered above the answer.
+				this.#assistantIdx = -1;
 				break;
 			case 'assistant_delta': {
 				if (this.#assistantIdx < 0) {
