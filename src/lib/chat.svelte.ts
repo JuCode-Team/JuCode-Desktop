@@ -221,6 +221,11 @@ export class ChatState {
 						return null;
 					})
 					.filter((m): m is Msg => m !== null);
+				if (this.title === 'New session') {
+					const firstUser = this.messages.find((m) => m.kind === 'user');
+					if (firstUser && firstUser.kind === 'user' && firstUser.text.trim())
+						this.title = firstUser.text.trim().slice(0, 40);
+				}
 				this.#resetCurrent();
 				break;
 			}

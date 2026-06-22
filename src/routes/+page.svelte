@@ -17,6 +17,7 @@
 		Sun,
 		Moon,
 		ChevronRight,
+		History,
 		Image as ImageIcon,
 		FileText
 	} from 'lucide-svelte';
@@ -190,6 +191,14 @@
 		saveProjects();
 		if (!allSessions.some((s) => s.id === activeId)) activeId = allSessions[0]?.id ?? '';
 	}
+	function openHistory(p: Project) {
+		// /resume (no arg) lists persisted sessions for the project's cwd — same
+		// store the CLI uses. It's non-destructive; selecting one resumes it in a
+		// fresh session (see selectRow).
+		const id = p.sessions[0]?.id ?? addSession(p);
+		activeId = id;
+		sendOp(id, { op: 'command', input: '/resume' });
+	}
 	function nav(command: string) {
 		if (chat) sendOp(activeId, { op: 'command', input: command });
 	}
@@ -248,6 +257,14 @@
 	}
 
 	function selectRow(command: string) {
+		// Resuming a history item opens it in a fresh session so the current chat
+		// isn't replaced; everything else acts on the active session.
+		if (command.startsWith('/resume ') && activeProject) {
+			chat?.closePicker();
+			const id = addSession(activeProject);
+			sendOp(id, { op: 'command', input: command });
+			return;
+		}
 		sendOp(activeId, { op: 'command', input: command });
 		chat?.closePicker();
 	}
@@ -360,7 +377,8 @@
 				<div class="group">
 					<span class="group-name" title={p.path}>{p.name}</span>
 					<span class="group-count">{p.sessions.length}</span>
-					<button class="group-add" onclick={() => addSession(p)} aria-label="new session" title="在此项目下新建对话"><Plus size={13} /></button>
+					<button class="group-add" onclick={() => openHistory(p)} aria-label="history" title="历史对话"><History size={13} /></button>
+					<button class="group-add no-auto" onclick={() => addSession(p)} aria-label="new session" title="在此项目下新建对话"><Plus size={13} /></button>
 					{#if projects.length > 1}
 						<button class="group-x" onclick={() => removeProject(p)} aria-label="close project" title="关闭项目"><X size={12} /></button>
 					{/if}
@@ -691,6 +709,9 @@
 	}
 	.group-add {
 		margin-left: auto;
+	}
+	.group-add.no-auto {
+		margin-left: 0;
 	}
 	.group:hover .group-add,
 	.group:hover .group-x {
