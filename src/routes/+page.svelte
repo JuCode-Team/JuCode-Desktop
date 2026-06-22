@@ -359,19 +359,12 @@
 				{#each chat.messages as m (m)}
 					{#if m.kind === 'user'}
 						<div class="row user">
-							<span class="avatar you"></span>
 							<div class="bubble">{m.text}</div>
 						</div>
 					{:else if m.kind === 'assistant'}
-						<div class="row asst">
-							<span class="avatar bot"></span>
-							<div class="text">{m.text}</div>
-						</div>
+						<div class="text">{m.text}</div>
 					{:else if m.kind === 'reasoning'}
-						<div class="row asst">
-							<span class="avatar ghost"></span>
-							<div class="text reasoning">{m.text}</div>
-						</div>
+						<div class="text reasoning">{m.text}</div>
 					{:else if m.kind === 'tool'}
 						<ToolCard name={m.name} output={m.output} running={m.running} isError={m.isError} />
 					{:else if m.kind === 'system'}
@@ -823,44 +816,26 @@
 	}
 	.row {
 		display: flex;
-		gap: 11px;
 		animation: rise 0.18s ease;
 	}
-	.avatar {
-		width: 28px;
-		height: 28px;
-		border-radius: 8px;
-		flex-shrink: 0;
-		margin-top: 1px;
-	}
-	.avatar.you {
-		background: var(--surface2);
-		border: 1px solid var(--border);
-	}
-	.avatar.bot {
-		background: linear-gradient(145deg, var(--accent-bright), var(--accent));
-	}
-	.avatar.ghost {
-		background: var(--accent-soft);
-		border: 1px solid color-mix(in oklab, var(--accent) 30%, transparent);
+	.row.user {
+		justify-content: flex-end;
 	}
 	.bubble {
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
-		border-radius: 4px 14px 14px 14px;
+		border-radius: 14px 14px 4px 14px;
 		padding: 11px 14px;
 		line-height: 1.6;
 		white-space: pre-wrap;
 		word-break: break-word;
-		max-width: 100%;
+		max-width: 78%;
 	}
 	.text {
-		padding-top: 4px;
 		line-height: 1.65;
 		white-space: pre-wrap;
 		word-break: break-word;
-		flex: 1;
-		min-width: 0;
+		animation: rise 0.18s ease;
 	}
 	.text.reasoning {
 		color: var(--dim);
