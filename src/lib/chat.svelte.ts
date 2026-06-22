@@ -64,7 +64,7 @@ export class ChatState {
 	contextTokens = $state(0);
 	contextWindow = $state(0);
 	cost = $state(0);
-	pending = $state(0);
+	pendingMessages = $state<string[]>([]);
 	picker = $state<Picker>(null);
 	title = $state('New session');
 	pendingFill = $state<string | null>(null);
@@ -206,7 +206,7 @@ export class ChatState {
 				if (typeof ev.cost === 'number') this.cost = ev.cost;
 				break;
 			case 'pending_messages':
-				this.pending = Array.isArray(ev.messages) ? ev.messages.length : 0;
+				this.pendingMessages = arr<string>(ev.messages);
 				break;
 			case 'tree_view':
 				this.picker = { kind: 'tree', nodes: arr<TreeNode>(ev.nodes) };

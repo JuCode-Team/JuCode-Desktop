@@ -535,6 +535,7 @@
 				bind:el={composerEl}
 				onSubmit={submit}
 				onStop={stop}
+				onSteer={() => sendOp(activeId, { op: 'steer' })}
 				onPick={pickFiles}
 				onModel={() => nav('/model')}
 				onEffort={chooseEffort}

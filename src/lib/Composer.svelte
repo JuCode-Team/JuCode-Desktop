@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Send, Square, Paperclip, X, FileText } from 'lucide-svelte';
+	import { Send, Square, Paperclip, X, FileText, FastForward } from 'lucide-svelte';
 	import { convertFileSrc } from '@tauri-apps/api/core';
 	import Vendor from '$lib/Vendor.svelte';
 	import ContextRing from '$lib/ContextRing.svelte';
@@ -13,6 +13,7 @@
 		el = $bindable(),
 		onSubmit,
 		onStop,
+		onSteer,
 		onPick,
 		onModel,
 		onEffort
@@ -23,6 +24,7 @@
 		el: HTMLTextAreaElement | null;
 		onSubmit: () => void;
 		onStop: () => void;
+		onSteer: () => void;
 		onPick: () => void;
 		onModel: () => void;
 		onEffort: (ef: string) => void;
@@ -98,6 +100,15 @@
 			{/each}
 		</div>
 	{/if}
+	{#if chat.pendingMessages.length}
+		<div class="queued">
+			<span class="queued-label">排队 {chat.pendingMessages.length}</span>
+			{#each chat.pendingMessages as q, i (i)}
+				<span class="qchip" title={q}>{q}</span>
+			{/each}
+			<button class="qsteer" onclick={onSteer} title="打断当前回合，立即执行队首消息"><FastForward size={12} />插队执行</button>
+		</div>
+	{/if}
 	<div class="composer">
 		<textarea bind:this={el} bind:value={input} onkeydown={onKey} rows="1" placeholder="给 JuCode 指派一个任务…  (拖入或点回形针附加文件 · / 唤起命令)"></textarea>
 		<div class="composer-bar">
@@ -121,10 +132,14 @@
 			<div class="cspace"></div>
 			{#if chat.contextWindow > 0}<ContextRing pct={ctxPct} label={`context ${fmtTokens(chat.contextTokens)} / ${fmtTokens(chat.contextWindow)}`} />{/if}
 			{#if chat.busy}
-				<button class="cact stop" onclick={onStop} aria-label="stop"><Square size={15} /></button>
-			{:else}
-				<button class="cact send" onclick={onSubmit} disabled={!input.trim() && !attachments.length} aria-label="send"><Send size={16} /></button>
+				<button class="cact stop" onclick={onStop} aria-label="stop" title="停止当前回合"><Square size={15} /></button>
 			{/if}
+			<button
+				class="cact send"
+				onclick={onSubmit}
+				disabled={!input.trim() && !attachments.length}
+				aria-label="send"
+				title={chat.busy ? '排队发送（当前回合结束后执行）' : '发送'}><Send size={16} /></button>
 		</div>
 	</div>
 </div>
@@ -346,5 +361,50 @@
 	}
 	.chip-x:hover {
 		color: var(--text);
+	}
+	.queued {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 6px;
+		margin-bottom: 8px;
+	}
+	.queued-label {
+		font-size: 11px;
+		font-family: var(--font-mono);
+		color: var(--accent-bright);
+		background: var(--accent-soft);
+		border-radius: 999px;
+		padding: 2px 9px;
+		flex-shrink: 0;
+	}
+	.qchip {
+		font-size: 12px;
+		max-width: 260px;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		color: var(--dim);
+		background: var(--surface2);
+		border: 1px solid var(--border);
+		border-radius: 7px;
+		padding: 3px 9px;
+	}
+	.qsteer {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		margin-left: auto;
+		font-size: 12px;
+		color: var(--accent-bright);
+		background: none;
+		border: 1px solid color-mix(in oklab, var(--accent) 40%, transparent);
+		border-radius: 7px;
+		padding: 3px 9px;
+		cursor: pointer;
+		flex-shrink: 0;
+	}
+	.qsteer:hover {
+		background: var(--accent-soft);
 	}
 </style>
