@@ -167,6 +167,16 @@
 		if ((last.kind === 'assistant' || last.kind === 'reasoning') && last.text.length === 0) return true;
 		return false;
 	});
+	// The assistant message that's still streaming: render it as plain text and
+	// only run markdown/highlight once the turn finishes (avoids reparsing the
+	// whole message on every token).
+	const streamingMsg = $derived.by(() => {
+		if (!chat?.busy) return null;
+		for (let i = chat.messages.length - 1; i >= 0; i--) {
+			if (chat.messages[i].kind === 'assistant') return chat.messages[i];
+		}
+		return null;
+	});
 	const activeProject = $derived(projects.find((p) => p.sessions.some((s) => s.id === activeId)));
 	const loggedIn = $derived(!!chat?.provider && providers.includes(chat.provider));
 
@@ -252,6 +262,10 @@
 		}
 	});
 
+	function engineFailed(chat: ChatState, e: unknown) {
+		chat.engineState = 'exited';
+		chat.messages.push({ kind: 'error', text: `无法启动引擎：${e}` });
+	}
 	function restoreSession(project: Project, sid: string, title: string) {
 		const id = uid();
 		const chat = new ChatState();
@@ -259,14 +273,15 @@
 		project.sessions.push({ id, chat });
 		createSession(id, project.path)
 			.then(() => sendOp(id, { op: 'command', input: `/resume ${sid}` }))
-			.catch(() => {});
+			.catch((e) => engineFailed(chat, e));
 		return id;
 	}
 	function addSession(project: Project) {
 		const id = uid();
-		project.sessions.push({ id, chat: new ChatState() });
+		const chat = new ChatState();
+		project.sessions.push({ id, chat });
 		activeId = id;
-		createSession(id, project.path).catch(() => {});
+		createSession(id, project.path).catch((e) => engineFailed(chat, e));
 		return id;
 	}
 	async function addProject() {
@@ -596,8 +611,10 @@
 						</div>
 					{:else if m.kind === 'assistant'}
 						<div class="text">
-							<Markdown text={m.text} />
-							{#if m.text}
+							{#if m === streamingMsg}
+								<div class="stream">{m.text}</div>
+							{:else}
+								<Markdown text={m.text} />
 								<div class="msg-foot">
 									{#if m.elapsed}<span class="mtok">{fmtDur(m.elapsed)}</span>{/if}
 									{#if m.tokens}<span class="mtok">{m.tokens} tokens</span>{/if}
@@ -1249,6 +1266,11 @@
 		border: 1px solid color-mix(in oklab, var(--err) 32%, transparent);
 		padding: 9px 12px;
 		border-radius: var(--r-sm);
+	}
+	.stream {
+		white-space: pre-wrap;
+		word-break: break-word;
+		line-height: 1.65;
 	}
 	.msg-foot {
 		display: flex;
