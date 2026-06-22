@@ -327,10 +327,9 @@
 					<span class="hname">{chat.title}</span>
 					<span class="hcrumb">{project}</span>
 				</div>
-				<button class="modelsel" onclick={() => nav('/model')}>
+				<button class="modelsel" onclick={() => nav('/model')} title={chat.model} aria-label="switch model">
 					<span class="mdot" class:busy={chat.busy} class:err={chat.engineState === 'exited'}></span>
-					<Vendor model={chat.model} size={14} />
-					{chat.model || '—'}
+					<Vendor model={chat.model} size={17} />
 				</button>
 				<div class="hspace"></div>
 				{#if chat.totalIn || chat.totalOut}<span class="usage">↑{fmtTokens(chat.totalIn)} ↓{fmtTokens(chat.totalOut)}</span>{/if}
@@ -709,13 +708,11 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 7px;
-		padding: 6px 11px;
-		border: 1px solid var(--border);
-		border-radius: 999px;
-		background: var(--surface);
+		padding: 5px 7px;
+		border: none;
+		border-radius: var(--r-sm);
+		background: none;
 		color: var(--text);
-		font-size: 12px;
-		font-family: var(--font-mono);
 		cursor: pointer;
 	}
 	.modelsel:hover {
@@ -748,15 +745,18 @@
 	.hicon {
 		display: inline-flex;
 		padding: 7px;
-		border: 1px solid var(--border);
+		border: none;
 		border-radius: var(--r-sm);
-		background: var(--surface);
+		background: none;
 		color: var(--dim);
 		cursor: pointer;
 	}
+	.hicon:hover {
+		background: var(--surface2);
+		color: var(--text);
+	}
 	.hicon.on {
 		color: var(--accent-bright);
-		border-color: color-mix(in oklab, var(--accent) 40%, transparent);
 	}
 
 	.agents {
