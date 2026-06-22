@@ -84,8 +84,9 @@
 </script>
 
 <div class="dock">
-	<div class="tabbar" bind:this={bar}>
-		{#each openTabs as key (key)}
+	<div class="tabbar">
+		<div class="tabs" bind:this={bar}>
+			{#each openTabs as key (key)}
 			<div
 				class="tab"
 				class:on={key === active}
@@ -110,7 +111,8 @@
 					aria-label="close tab"><X size={12} /></button
 				>
 			</div>
-		{/each}
+			{/each}
+		</div>
 		<div class="add">
 			<button class="addbtn" onclick={() => (addOpen = !addOpen)} aria-label="add panel" disabled={available.length === 0}><Plus size={15} /></button>
 			{#if addOpen}
@@ -155,10 +157,17 @@
 		gap: 4px;
 		padding: 8px 8px 7px;
 		border-bottom: 1px solid var(--hairline);
-		overflow-x: auto;
 		flex-shrink: 0;
 	}
-	.tabbar::-webkit-scrollbar {
+	.tabs {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		flex: 1;
+		min-width: 0;
+		overflow-x: auto;
+	}
+	.tabs::-webkit-scrollbar {
 		height: 0;
 	}
 	.tab {
@@ -235,7 +244,7 @@
 	.add-backdrop {
 		position: fixed;
 		inset: 0;
-		z-index: 20;
+		z-index: 80;
 		border: none;
 		background: none;
 		cursor: default;
@@ -244,7 +253,7 @@
 		position: absolute;
 		top: calc(100% + 6px);
 		right: 0;
-		z-index: 21;
+		z-index: 81;
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
