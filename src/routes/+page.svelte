@@ -24,8 +24,20 @@
 	} from 'lucide-svelte';
 	import { open } from '@tauri-apps/plugin-dialog';
 	import { convertFileSrc } from '@tauri-apps/api/core';
+	import {
+		isPermissionGranted,
+		requestPermission,
+		sendNotification
+	} from '@tauri-apps/plugin-notification';
 	import { ChatState } from '$lib/chat.svelte';
-	import { sendOp, createSession, closeSession, projectRoot, type EventPayload } from '$lib/protocol';
+	import {
+		sendOp,
+		createSession,
+		closeSession,
+		projectRoot,
+		readAuthProviders,
+		type EventPayload
+	} from '$lib/protocol';
 	import { themeState, toggleTheme } from '$lib/theme.svelte';
 	import ToolCard from '$lib/ToolCard.svelte';
 	import Markdown from '$lib/Markdown.svelte';
@@ -68,14 +80,42 @@
 	let scroller = $state<HTMLElement | null>(null);
 	let composerEl = $state<HTMLTextAreaElement | null>(null);
 	let atBottom = $state(true);
+	let providers = $state<string[]>([]);
+
+	async function notifyDone(title: string) {
+		try {
+			let granted = await isPermissionGranted();
+			if (!granted) granted = (await requestPermission()) === 'granted';
+			if (granted) sendNotification({ title: 'JuCode', body: `对话完成：${title || '未命名'}` });
+		} catch {
+			/* ignore */
+		}
+	}
 	let selIdx = $state(0);
 	let slashIdx = $state(0);
 	let showSettings = $state(false);
 	let showMarket = $state(false);
 	let showRight = $state(true);
 	let rightWidth = $state(340);
+	let sidebarWidth = $state(248);
 	let resizing = $state(false);
 	let showEffort = $state(false);
+
+	function startSidebarResize(e: PointerEvent) {
+		e.preventDefault();
+		const startX = e.clientX;
+		const startW = sidebarWidth;
+		const move = (ev: PointerEvent) => {
+			sidebarWidth = Math.min(420, Math.max(190, startW + (ev.clientX - startX)));
+		};
+		const up = () => {
+			localStorage.setItem('jucode-sidebar-width', String(sidebarWidth));
+			window.removeEventListener('pointermove', move);
+			window.removeEventListener('pointerup', up);
+		};
+		window.addEventListener('pointermove', move);
+		window.addEventListener('pointerup', up);
+	}
 
 	function startResize(e: PointerEvent) {
 		e.preventDefault();
@@ -128,6 +168,7 @@
 		return false;
 	});
 	const activeProject = $derived(projects.find((p) => p.sessions.some((s) => s.id === activeId)));
+	const loggedIn = $derived(!!chat?.provider && providers.includes(chat.provider));
 
 	// Persist the project layout + open tabs (engine session id + title) whenever
 	// they change. Gated on `loaded` so it can't clobber the saved data before the
@@ -202,6 +243,7 @@
 		activeId;
 		atBottom = true;
 		scrollToEnd(true);
+		if (active) active.chat.unseen = false;
 	});
 	$effect(() => {
 		if (chat?.pendingFill != null) {
@@ -347,6 +389,21 @@
 		sendOp(activeId, { op: 'command', input: `/trust ${answer}` });
 		chat.trustPrompt = null;
 	}
+	function onWindowKey(e: KeyboardEvent) {
+		pickerKey(e);
+		const mod = e.metaKey || e.ctrlKey;
+		if (!mod) return;
+		if (e.key === 'n') {
+			e.preventDefault();
+			if (activeProject) addSession(activeProject);
+		} else if (e.key === ',') {
+			e.preventDefault();
+			showSettings = true;
+		} else if (e.key === 'b') {
+			e.preventDefault();
+			showRight = !showRight;
+		}
+	}
 
 	function onScroll() {
 		if (scroller) atBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 60;
@@ -370,16 +427,23 @@
 	onMount(() => {
 		const savedW = Number(localStorage.getItem('jucode-right-width'));
 		if (savedW >= 260 && savedW <= 640) rightWidth = savedW;
+		const savedSb = Number(localStorage.getItem('jucode-sidebar-width'));
+		if (savedSb >= 190 && savedSb <= 420) sidebarWidth = savedSb;
 		const cleanups: Array<() => void> = [];
 		let disposed = false;
 		(async () => {
 			const unlisten = await listen<EventPayload>('agent-event', (e) => {
 				const s = allSessions.find((x) => x.id === e.payload.session);
 				if (!s) return;
+				const wasBusy = s.chat.busy;
 				try {
 					s.chat.handle(JSON.parse(e.payload.data));
 				} catch {
 					/* ignore */
+				}
+				if (wasBusy && !s.chat.busy && s.id !== activeId) {
+					s.chat.unseen = true;
+					notifyDone(s.chat.title);
 				}
 				if (s.id === activeId) scrollToEnd();
 			});
@@ -417,6 +481,9 @@
 				addSession(projects[0]);
 			}
 			loaded = true;
+			readAuthProviders()
+				.then((p) => (providers = p))
+				.catch(() => {});
 		})();
 		return () => {
 			disposed = true;
@@ -425,11 +492,11 @@
 	});
 </script>
 
-<svelte:window onkeydown={pickerKey} />
+<svelte:window onkeydown={onWindowKey} />
 
 <div class="app">
 	<!-- LEFT: navigation + sessions -->
-	<aside class="sidebar">
+	<aside class="sidebar" style:width="{sidebarWidth}px">
 		<div class="brand" data-tauri-drag-region>
 			<span class="word">JuCode</span>
 		</div>
@@ -458,7 +525,7 @@
 				</div>
 				{#each p.sessions as s (s.id)}
 					<button class="sess" class:on={s.id === activeId} onclick={() => (activeId = s.id)}>
-						<span class="sess-dot" class:busy={s.chat.busy} class:err={s.chat.engineState === 'exited'}></span>
+						<span class="sess-dot" class:busy={s.chat.busy} class:err={s.chat.engineState === 'exited'} class:unseen={s.chat.unseen && !s.chat.busy}></span>
 						<span class="sess-title">{s.chat.title}</span>
 						{#if s.chat.busy}<LoaderCircle size={12} class="spin" />{/if}
 						<span
@@ -480,6 +547,11 @@
 			{/each}
 		</div>
 
+		<button class="account" onclick={() => (showSettings = true)} title="账户设置">
+			<span class="acc-dot" class:on={loggedIn}></span>
+			<span class="acc-name">{loggedIn ? chat?.provider : '未登录'}</span>
+			<span class="acc-go">设置</span>
+		</button>
 		<div class="side-foot">
 			<button class="foot-btn" onclick={() => (showSettings = true)}><SettingsIcon size={15} /><span>设置</span></button>
 			<button class="foot-icon" onclick={toggleTheme} aria-label="toggle theme">
@@ -487,6 +559,7 @@
 			</button>
 		</div>
 	</aside>
+	<div class="resizer side" role="separator" aria-label="resize sidebar" onpointerdown={startSidebarResize}></div>
 
 	<!-- CENTER: chat -->
 	<div class="center">
@@ -685,12 +758,50 @@
 
 	/* ---------- sidebar ---------- */
 	.sidebar {
-		width: 248px;
 		flex-shrink: 0;
 		display: flex;
 		flex-direction: column;
 		background: var(--sidebar);
 		border-right: 1px solid var(--hairline);
+		min-width: 0;
+	}
+	.account {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin: 0 8px;
+		padding: 8px 10px;
+		border: none;
+		border-radius: var(--r-sm);
+		background: var(--surface);
+		color: var(--text);
+		cursor: pointer;
+		font-size: 12px;
+	}
+	.account:hover {
+		background: var(--surface2);
+	}
+	.acc-dot {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: var(--dim2);
+		flex-shrink: 0;
+	}
+	.acc-dot.on {
+		background: var(--ok);
+	}
+	.acc-name {
+		flex: 1;
+		font-family: var(--font-mono);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		text-align: left;
+	}
+	.acc-go {
+		color: var(--dim2);
+		font-size: 11px;
 	}
 	.brand {
 		display: flex;
@@ -862,6 +973,10 @@
 	}
 	.sess-dot.err {
 		background: var(--err);
+	}
+	.sess-dot.unseen {
+		background: var(--accent-bright);
+		box-shadow: 0 0 0 3px var(--accent-soft);
 	}
 	.sess-title {
 		flex: 1;
@@ -1418,6 +1533,10 @@
 	}
 	.resizer:hover {
 		background: var(--accent-soft);
+	}
+	.resizer.side {
+		margin-left: -3px;
+		margin-right: -2px;
 	}
 	.resizer.hidden {
 		display: none;

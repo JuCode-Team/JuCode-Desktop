@@ -74,6 +74,7 @@ export class ChatState {
 	commands = $state<CommandItem[]>([]);
 	totalIn = $state(0);
 	totalOut = $state(0);
+	unseen = $state(false);
 
 	#assistantIdx = -1;
 	#reasoningIdx = -1;
