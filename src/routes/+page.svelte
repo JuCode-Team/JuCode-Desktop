@@ -179,7 +179,9 @@
 				? 'Select model'
 				: chat?.picker?.kind === 'resume'
 					? 'Resume session'
-					: ''
+					: chat?.picker?.kind === 'checkpoint'
+						? '回退到检查点'
+						: ''
 	);
 	const activeModel = $derived(
 		chat?.picker?.kind === 'model' ? chat.picker.models.find((m) => m.active) : undefined
@@ -191,6 +193,8 @@
 			return p.nodes.map((n) => ({ id: n.id, label: n.label, detail: n.id, active: n.active, command: `/checkout ${n.id}` }));
 		if (p.kind === 'resume')
 			return p.items.map((it) => ({ id: it.id, label: it.label, detail: it.detail, active: it.active, command: `/resume ${it.id}` }));
+		if (p.kind === 'checkpoint')
+			return p.items.map((it) => ({ id: it.id, label: it.label, detail: it.detail, active: it.active, command: `/rewind ${it.id}` }));
 		return p.models.map((m) => ({ id: m.model, label: m.model, detail: `${fmtTokens(m.context_window)} ctx`, active: m.active, command: `/model ${m.model}` }));
 	});
 

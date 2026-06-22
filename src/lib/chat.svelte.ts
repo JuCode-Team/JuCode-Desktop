@@ -31,6 +31,7 @@ export type Picker =
 	| { kind: 'tree'; nodes: TreeNode[] }
 	| { kind: 'model'; models: ModelOption[]; activeEffort: string }
 	| { kind: 'resume'; items: ResumeItem[] }
+	| { kind: 'checkpoint'; items: ResumeItem[] }
 	| null;
 
 export interface Goal {
@@ -225,6 +226,9 @@ export class ChatState {
 				break;
 			case 'resume_view':
 				this.picker = { kind: 'resume', items: arr<ResumeItem>(ev.items) };
+				break;
+			case 'checkpoint_view':
+				this.picker = { kind: 'checkpoint', items: arr<ResumeItem>(ev.items) };
 				break;
 			case 'transcript': {
 				const items = arr<Record<string, unknown>>(ev.items);
