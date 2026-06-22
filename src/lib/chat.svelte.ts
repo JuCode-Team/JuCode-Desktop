@@ -2,7 +2,7 @@ import type { AgentEvent } from './protocol';
 
 export type Msg =
 	| { kind: 'user'; text: string }
-	| { kind: 'assistant'; text: string }
+	| { kind: 'assistant'; text: string; tokens?: number }
 	| { kind: 'reasoning'; text: string; collapsed: boolean }
 	| { kind: 'tool'; callId: string; name: string; output: string; running: boolean; isError: boolean }
 	| { kind: 'system'; text: string }
@@ -253,10 +253,16 @@ export class ChatState {
 			case 'command_list':
 				this.commands = arr<CommandItem>(ev.commands);
 				break;
-			case 'usage':
+			case 'usage': {
+				const out = num(ev.output_tokens);
 				this.totalIn += num(ev.input_tokens);
-				this.totalOut += num(ev.output_tokens);
+				this.totalOut += out;
+				if (this.#assistantIdx >= 0) {
+					const m = this.messages[this.#assistantIdx];
+					if (m?.kind === 'assistant') m.tokens = (m.tokens ?? 0) + out;
+				}
 				break;
+			}
 			case 'subagent_lifecycle': {
 				const path = str(ev.path);
 				if (path) this.subagents[path] = { status: str(ev.status), message: str(ev.message) };

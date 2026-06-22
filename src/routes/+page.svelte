@@ -18,6 +18,7 @@
 		Moon,
 		ChevronRight,
 		History,
+		Copy,
 		Image as ImageIcon,
 		FileText
 	} from 'lucide-svelte';
@@ -81,6 +82,15 @@
 		if (chat) sendOp(activeId, { op: 'command', input: `/model ${chat.model} ${ef}` });
 	}
 	const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+
+	let copiedMsg = $state<unknown>(null);
+	function copyMsg(m: { text: string }) {
+		navigator.clipboard?.writeText(m.text).catch(() => {});
+		copiedMsg = m;
+		setTimeout(() => {
+			if (copiedMsg === m) copiedMsg = null;
+		}, 1500);
+	}
 
 	const allSessions = $derived(projects.flatMap((p) => p.sessions));
 	const active = $derived(allSessions.find((s) => s.id === activeId));
@@ -445,7 +455,17 @@
 							<div class="bubble">{m.text}</div>
 						</div>
 					{:else if m.kind === 'assistant'}
-						<div class="text"><Markdown text={m.text} /></div>
+						<div class="text">
+							<Markdown text={m.text} />
+							{#if m.text}
+								<div class="msg-foot">
+									{#if m.tokens}<span class="mtok">{m.tokens} tokens</span>{/if}
+									<button class="mcopy" onclick={() => copyMsg(m)} aria-label="copy">
+										{#if copiedMsg === m}<Check size={13} /> 已复制{:else}<Copy size={13} /> 复制{/if}
+									</button>
+								</div>
+							{/if}
+						</div>
 					{:else if m.kind === 'reasoning'}
 						<div class="reason" class:open={!m.collapsed}>
 							<button class="reason-head" onclick={() => (m.collapsed = !m.collapsed)}>
@@ -1000,6 +1020,33 @@
 		border: 1px solid color-mix(in oklab, var(--err) 32%, transparent);
 		padding: 9px 12px;
 		border-radius: var(--r-sm);
+	}
+	.msg-foot {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		margin-top: 8px;
+		font-size: 11px;
+		color: var(--dim2);
+	}
+	.mtok {
+		font-family: var(--font-mono);
+	}
+	.mcopy {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		border: none;
+		background: none;
+		color: var(--dim2);
+		cursor: pointer;
+		padding: 2px 4px;
+		border-radius: 5px;
+		font-size: 11px;
+	}
+	.mcopy:hover {
+		background: var(--surface2);
+		color: var(--text);
 	}
 	.thinking {
 		display: flex;
