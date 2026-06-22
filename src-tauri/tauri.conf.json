@@ -13,8 +13,12 @@
     "windows": [
       {
         "title": "JuCode",
-        "width": 1000,
-        "height": 720
+        "width": 1080,
+        "height": 740,
+        "minWidth": 820,
+        "minHeight": 560,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       }
     ],
     "security": {

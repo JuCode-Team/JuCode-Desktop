@@ -1,0 +1,115 @@
+/* JuCode design system — extracted tokens (dark default + light). */
+:root {
+	--accent: #6d3bd7;
+	--accent-bright: color-mix(in oklab, var(--accent) 48%, #ffffff);
+	--accent-soft: color-mix(in oklab, var(--accent) 16%, transparent);
+	--on-accent: #ffffff;
+
+	--bg: #131314;
+	--sidebar: #0e0e0f;
+	--panel: #1c1c1e;
+	--surface: rgba(255, 255, 255, 0.025);
+	--surface2: rgba(255, 255, 255, 0.05);
+	--hairline: rgba(255, 255, 255, 0.07);
+	--border: rgba(255, 255, 255, 0.1);
+
+	--text: #e5e2e3;
+	--dim: #a3a0a8;
+	--dim2: #6f6c74;
+
+	--ok: #4fdbc8;
+	--info: #89ceff;
+	--err: #ffb4ab;
+	--warn: #e8c15a;
+
+	--font-display: 'Hanken Grotesk', system-ui, sans-serif;
+	--font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+	--font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+	--r-sm: 8px;
+	--r-md: 12px;
+	--r-lg: 16px;
+}
+
+[data-theme='light'] {
+	--accent: #6d3bd7;
+	--accent-bright: color-mix(in oklab, var(--accent) 32%, #000000);
+	--accent-soft: color-mix(in oklab, var(--accent) 12%, transparent);
+	--on-accent: #ffffff;
+
+	--bg: #f5f5f7;
+	--sidebar: #eceaf0;
+	--panel: #ffffff;
+	--surface: rgba(0, 0, 0, 0.02);
+	--surface2: rgba(0, 0, 0, 0.045);
+	--hairline: rgba(0, 0, 0, 0.07);
+	--border: rgba(0, 0, 0, 0.11);
+
+	--text: #1b1a1f;
+	--dim: #6b6870;
+	--dim2: #9b98a1;
+
+	--ok: #0d9488;
+	--info: #2563eb;
+	--err: #dc2626;
+	--warn: #b45309;
+}
+
+* {
+	box-sizing: border-box;
+}
+html,
+body {
+	margin: 0;
+	height: 100%;
+}
+body {
+	background: var(--bg);
+	color: var(--text);
+	font-family: var(--font-sans);
+	font-size: 14px;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+}
+::-webkit-scrollbar-thumb {
+	background: var(--border);
+	border-radius: 999px;
+	border: 3px solid transparent;
+	background-clip: content-box;
+}
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+@keyframes pulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.4;
+	}
+}
+@keyframes rise {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+.spin {
+	animation: spin 0.8s linear infinite;
+}

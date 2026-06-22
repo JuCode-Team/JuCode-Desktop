@@ -56,6 +56,7 @@ export class ChatState {
 	messages = $state<Msg[]>([]);
 	provider = $state('');
 	model = $state('');
+	cwd = $state('');
 	engineState = $state('starting');
 	contextTokens = $state(0);
 	contextWindow = $state(0);
@@ -99,6 +100,7 @@ export class ChatState {
 		switch (ev.type) {
 			case 'startup':
 				this.model = str(ev.model);
+				this.cwd = str(ev.cwd);
 				this.contextWindow = num(ev.context_window);
 				this.messages.push({ kind: 'system', text: `jucode ${str(ev.version)} · ${str(ev.cwd)}` });
 				break;

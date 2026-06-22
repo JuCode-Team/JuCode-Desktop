@@ -218,19 +218,19 @@
 	}
 	select,
 	input {
-		background: var(--panel-2);
+		background: var(--surface2);
 		border: 1px solid var(--border);
 		border-radius: 8px;
 		color: var(--text);
 		padding: 7px 10px;
 		font-size: 13px;
-		font-family: var(--sans);
+		font-family: var(--font-sans);
 		min-width: 200px;
 		outline: none;
 	}
 	input[type='number'] {
 		min-width: 110px;
-		font-family: var(--mono);
+		font-family: var(--font-mono);
 	}
 	input[type='checkbox'] {
 		min-width: auto;
@@ -246,17 +246,17 @@
 		flex-wrap: wrap;
 	}
 	.chip {
-		font-family: var(--mono);
+		font-family: var(--font-mono);
 		font-size: 12px;
 		padding: 4px 11px;
 		border-radius: 999px;
 		border: 1px solid var(--border);
-		background: var(--panel-2);
+		background: var(--surface2);
 		color: var(--dim);
 		cursor: pointer;
 	}
 	.chip.on {
-		color: #1a1320;
+		color: var(--on-accent);
 		background: var(--accent);
 		border-color: var(--accent);
 	}
@@ -268,7 +268,7 @@
 		padding: 8px 14px;
 		border-radius: 8px;
 		border: 1px solid var(--border);
-		background: var(--panel-2);
+		background: var(--surface2);
 		color: var(--text);
 		cursor: pointer;
 	}
@@ -282,7 +282,7 @@
 	.btn.primary {
 		background: var(--accent);
 		border-color: var(--accent);
-		color: #1a1320;
+		color: var(--on-accent);
 		font-weight: 600;
 	}
 	.btn.wide {

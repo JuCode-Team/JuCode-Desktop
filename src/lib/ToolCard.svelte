@@ -126,7 +126,7 @@
 		text-align: left;
 		padding: 7px 11px;
 		font-size: 12px;
-		background: var(--panel-2);
+		background: var(--surface2);
 		border: none;
 		color: var(--text);
 		cursor: pointer;
@@ -144,14 +144,14 @@
 		font-weight: 600;
 	}
 	.target {
-		font-family: var(--mono);
+		font-family: var(--font-mono);
 		color: var(--dim);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
 	.exit {
-		font-family: var(--mono);
+		font-family: var(--font-mono);
 		font-size: 11px;
 		color: var(--dim);
 	}
@@ -167,7 +167,7 @@
 	.body pre {
 		margin: 0;
 		padding: 10px 12px;
-		font-family: var(--mono);
+		font-family: var(--font-mono);
 		font-size: 12px;
 		line-height: 1.5;
 		color: var(--dim);
@@ -178,7 +178,7 @@
 	}
 	.cmd {
 		padding: 9px 12px 0;
-		font-family: var(--mono);
+		font-family: var(--font-mono);
 		font-size: 12px;
 		color: var(--text);
 		white-space: pre-wrap;
@@ -192,7 +192,7 @@
 	}
 	.err-text {
 		padding: 10px 12px;
-		font-family: var(--mono);
+		font-family: var(--font-mono);
 		font-size: 12px;
 		color: var(--err);
 		white-space: pre-wrap;
@@ -209,8 +209,8 @@
 		color: var(--text) !important;
 	}
 	.diff .add {
-		color: #7ee787;
-		background: color-mix(in oklch, #7ee787 10%, transparent);
+		color: var(--ok);
+		background: color-mix(in oklch, var(--ok) 10%, transparent);
 		display: block;
 	}
 	.diff .del {

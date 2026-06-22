@@ -2,11 +2,29 @@
 	import { onMount, tick } from 'svelte';
 	import { listen } from '@tauri-apps/api/event';
 	import { getCurrentWebview } from '@tauri-apps/api/webview';
-	import { Send, Square, LoaderCircle, Paperclip, X, Check, Plus, Settings as SettingsIcon } from 'lucide-svelte';
+	import {
+		Send,
+		Square,
+		LoaderCircle,
+		Paperclip,
+		X,
+		Check,
+		Plus,
+		Settings as SettingsIcon,
+		Store,
+		Sparkles,
+		PanelRight,
+		Sun,
+		Moon,
+		ChevronUp,
+		ListFilter
+	} from 'lucide-svelte';
 	import { ChatState } from '$lib/chat.svelte';
 	import { sendOp, createSession, closeSession, type EventPayload } from '$lib/protocol';
+	import { themeState, toggleTheme } from '$lib/theme.svelte';
 	import ToolCard from '$lib/ToolCard.svelte';
 	import Settings from '$lib/Settings.svelte';
+	import GoalPanel from '$lib/GoalPanel.svelte';
 
 	interface Session {
 		id: string;
@@ -19,8 +37,9 @@
 	let attachments = $state<string[]>([]);
 	let scroller = $state<HTMLElement | null>(null);
 	let selIdx = $state(0);
-	let showSettings = $state(false);
 	let slashIdx = $state(0);
+	let showSettings = $state(false);
+	let showRight = $state(true);
 
 	const active = $derived(sessions.find((s) => s.id === activeId));
 	const chat = $derived(active?.chat);
@@ -40,15 +59,16 @@
 	const uid = () => `s${Date.now().toString(36)}-${(counter++).toString(36)}`;
 	const fmtTokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
 	const isImage = (p: string) => /\.(png|jpe?g|gif|webp|bmp)$/i.test(p);
-	const base = (p: string) => p.split('/').pop() ?? p;
+	const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
 
+	const project = $derived(chat?.cwd ? base(chat.cwd) : 'workspace');
 	const ctxPct = $derived(
 		chat && chat.contextWindow > 0
 			? Math.min(100, Math.round((chat.contextTokens / chat.contextWindow) * 100))
 			: 0
 	);
 
-	// --- pickers (tree / model / resume) operate on the active session ---
+	// pickers (tree / model / resume) — active session
 	const pickerTitle = $derived(
 		chat?.picker?.kind === 'tree'
 			? 'Conversation tree'
@@ -65,28 +85,10 @@
 		const p = chat?.picker;
 		if (!p) return [];
 		if (p.kind === 'tree')
-			return p.nodes.map((n) => ({
-				id: n.id,
-				label: n.label,
-				detail: n.id,
-				active: n.active,
-				command: `/checkout ${n.id}`
-			}));
+			return p.nodes.map((n) => ({ id: n.id, label: n.label, detail: n.id, active: n.active, command: `/checkout ${n.id}` }));
 		if (p.kind === 'resume')
-			return p.items.map((it) => ({
-				id: it.id,
-				label: it.label,
-				detail: it.detail,
-				active: it.active,
-				command: `/resume ${it.id}`
-			}));
-		return p.models.map((m) => ({
-			id: m.model,
-			label: m.model,
-			detail: `${fmtTokens(m.context_window)} ctx`,
-			active: m.active,
-			command: `/model ${m.model}`
-		}));
+			return p.items.map((it) => ({ id: it.id, label: it.label, detail: it.detail, active: it.active, command: `/resume ${it.id}` }));
+		return p.models.map((m) => ({ id: m.model, label: m.model, detail: `${fmtTokens(m.context_window)} ctx`, active: m.active, command: `/model ${m.model}` }));
 	});
 
 	$effect(() => {
@@ -96,22 +98,15 @@
 		}
 	});
 	$effect(() => {
-		activeId; // re-scroll when switching sessions
+		activeId;
 		scrollToEnd();
 	});
 	$effect(() => {
-		// Prefill the composer when the engine asks (e.g. after /checkout).
 		if (chat?.pendingFill != null) {
 			input = chat.pendingFill;
 			chat.pendingFill = null;
 		}
 	});
-
-	function respondTrust(answer: 'yes' | 'no' | 'repo') {
-		if (!chat) return;
-		sendOp(activeId, { op: 'command', input: `/trust ${answer}` });
-		chat.trustPrompt = null;
-	}
 
 	function newSession() {
 		const id = uid();
@@ -127,20 +122,21 @@
 		if (activeId === id) activeId = sessions[Math.min(idx, sessions.length - 1)]?.id ?? '';
 		if (sessions.length === 0) newSession();
 	}
+	function nav(command: string) {
+		if (chat) sendOp(activeId, { op: 'command', input: command });
+	}
 
 	function submit() {
 		if (!chat) return;
 		const text = input.trim();
 		if (!text && attachments.length === 0) return;
-		if (text.startsWith('/')) {
-			sendOp(activeId, { op: 'command', input: text });
-		} else {
+		if (text.startsWith('/')) sendOp(activeId, { op: 'command', input: text });
+		else
 			sendOp(activeId, {
 				op: 'user_message',
 				content: text,
 				images: attachments.length ? [...attachments] : undefined
 			});
-		}
 		input = '';
 		attachments = [];
 	}
@@ -195,6 +191,11 @@
 			if (r) selectRow(r.command);
 		}
 	}
+	function respondTrust(answer: 'yes' | 'no' | 'repo') {
+		if (!chat) return;
+		sendOp(activeId, { op: 'command', input: `/trust ${answer}` });
+		chat.trustPrompt = null;
+	}
 
 	async function scrollToEnd() {
 		await tick();
@@ -204,8 +205,6 @@
 	onMount(() => {
 		const cleanups: Array<() => void> = [];
 		let disposed = false;
-		// Register listeners BEFORE spawning the first engine so no startup event
-		// (startup / model_status / command_list) is lost to a registration race.
 		(async () => {
 			const unlisten = await listen<EventPayload>('agent-event', (e) => {
 				const s = sessions.find((x) => x.id === e.payload.session);
@@ -213,7 +212,7 @@
 				try {
 					s.chat.handle(JSON.parse(e.payload.data));
 				} catch {
-					/* ignore malformed lines */
+					/* ignore */
 				}
 				if (s.id === activeId) scrollToEnd();
 			});
@@ -224,10 +223,9 @@
 				s.chat.messages.push({ kind: 'error', text: 'engine process exited' });
 			});
 			const undrop = await getCurrentWebview().onDragDropEvent((e) => {
-				if (e.payload.type === 'drop') {
+				if (e.payload.type === 'drop')
 					for (const p of e.payload.paths)
 						if (isImage(p) && !attachments.includes(p)) attachments.push(p);
-				}
 			});
 			cleanups.push(unlisten, unexit, undrop);
 			if (disposed) {
@@ -246,22 +244,34 @@
 <svelte:window onkeydown={pickerKey} />
 
 <div class="app">
+	<!-- LEFT: navigation + sessions -->
 	<aside class="sidebar">
-		<div class="side-head">
-			<span class="brand"><span class="dot"></span> JuCode</span>
-			<div class="side-actions">
-				<button class="new-btn" onclick={() => (showSettings = true)} aria-label="settings"><SettingsIcon size={15} /></button>
-				<button class="new-btn" onclick={() => newSession()} aria-label="new session"><Plus size={16} /></button>
+		<div class="brand">
+			<span class="logo"></span>
+			<span class="word">JuCode</span>
+		</div>
+
+		<div class="nav">
+			<button class="navcard" onclick={() => nav('/skills list')}><Store size={17} /><span>市场</span></button>
+			<button class="navcard" onclick={() => nav('/skills')}><Sparkles size={17} /><span>技能</span></button>
+		</div>
+
+		<div class="sess-head">
+			<span>对话 · 按项目</span>
+			<div class="sess-actions">
+				<button onclick={() => newSession()} aria-label="new session"><Plus size={15} /></button>
+				<button aria-label="filter" disabled><ListFilter size={15} /></button>
 			</div>
 		</div>
-		<div class="session-list">
+
+		<div class="sess-list">
+			<div class="group">
+				<span class="group-name">{project}</span>
+				<span class="group-count">{sessions.length}</span>
+			</div>
 			{#each sessions as s (s.id)}
 				<button class="sess" class:on={s.id === activeId} onclick={() => (activeId = s.id)}>
-					<span
-						class="sess-dot"
-						class:busy={s.chat.busy}
-						class:err={s.chat.engineState === 'exited'}
-					></span>
+					<span class="sess-dot" class:busy={s.chat.busy} class:err={s.chat.engineState === 'exited'}></span>
 					<span class="sess-title">{s.chat.title}</span>
 					{#if s.chat.busy}<LoaderCircle size={12} class="spin" />{/if}
 					{#if sessions.length > 1}
@@ -273,52 +283,41 @@
 								e.stopPropagation();
 								closeTab(s.id);
 							}}
-							onkeydown={(e) => {
-								if (e.key === 'Enter') {
-									e.stopPropagation();
-									closeTab(s.id);
-								}
-							}}
-							aria-label="close session"><X size={12} /></span
+							onkeydown={(e) => e.key === 'Enter' && (e.stopPropagation(), closeTab(s.id))}
+							aria-label="close"><X size={12} /></span
 						>
 					{/if}
 				</button>
 			{/each}
 		</div>
+
+		<div class="side-foot">
+			<button class="foot-btn" onclick={() => (showSettings = true)}><SettingsIcon size={15} /><span>设置</span></button>
+			<button class="foot-icon" onclick={toggleTheme} aria-label="toggle theme">
+				{#if themeState.value === 'dark'}<Moon size={15} />{:else}<Sun size={15} />{/if}
+			</button>
+		</div>
 	</aside>
 
-	<div class="main">
+	<!-- CENTER: chat -->
+	<div class="center">
 		{#if chat}
 			<header>
-				<div class="meta">
-					<button class="model" onclick={() => sendOp(activeId, { op: 'command', input: '/model' })} title="switch model">{chat.model || '—'}</button>
-					{#if chat.provider}<span class="sep">·</span><span class="dim">{chat.provider}</span>{/if}
-					<span class="state" class:busy={chat.busy} class:err={chat.engineState === 'exited'}
-						>{chat.engineState}</span
-					>
-					{#if chat.pending > 0}<span class="dim">+{chat.pending} queued</span>{/if}
+				<div class="htitle">
+					<span class="hname">{chat.title}</span>
+					<span class="hcrumb">{project}</span>
 				</div>
-				<div class="usage">
-					{#if chat.contextWindow > 0}
-						<span class="dim">ctx</span>
-						{fmtTokens(chat.contextTokens)}/{fmtTokens(chat.contextWindow)}
-						<span class="bar"><span class="fill" style:width="{ctxPct}%"></span></span>
-					{/if}
-					{#if chat.totalIn || chat.totalOut}<span class="dim">↑{fmtTokens(chat.totalIn)} ↓{fmtTokens(chat.totalOut)}</span>{/if}
-					{#if chat.cost > 0}<span class="cost">${chat.cost.toFixed(3)}</span>{/if}
-				</div>
+				<button class="modelsel" onclick={() => nav('/model')}>
+					<span class="mdot" class:busy={chat.busy} class:err={chat.engineState === 'exited'}></span>
+					{chat.model || '—'}
+				</button>
+				<div class="hspace"></div>
+				{#if chat.totalIn || chat.totalOut}<span class="usage">↑{fmtTokens(chat.totalIn)} ↓{fmtTokens(chat.totalOut)}</span>{/if}
+				{#if chat.contextWindow > 0}<span class="usage">ctx {ctxPct}%</span>{/if}
+				{#if chat.cost > 0}<span class="usage cost">${chat.cost.toFixed(3)}</span>{/if}
+				<button class="hicon" class:on={showRight} onclick={() => (showRight = !showRight)} aria-label="toggle panel"><PanelRight size={16} /></button>
 			</header>
 
-			{#if chat.goal}
-				<div class="goal">
-					<span class="goal-label">goal</span>
-					<span class="goal-obj">{chat.goal.objective}</span>
-					<span class="goal-status">{chat.goal.status}</span>
-					{#if chat.goal.token_budget}
-						<span class="goal-budget">{fmtTokens(chat.goal.tokens_used)}/{fmtTokens(chat.goal.token_budget)}</span>
-					{/if}
-				</div>
-			{/if}
 			{#if Object.keys(chat.subagents).length}
 				<div class="agents">
 					{#each Object.entries(chat.subagents) as [path, info] (path)}
@@ -330,31 +329,35 @@
 			<main bind:this={scroller}>
 				{#each chat.messages as m (m)}
 					{#if m.kind === 'user'}
-						<div class="msg user"><div class="role">you</div><div class="body">{m.text}</div></div>
+						<div class="row user">
+							<span class="avatar you"></span>
+							<div class="bubble">{m.text}</div>
+						</div>
 					{:else if m.kind === 'assistant'}
-						<div class="msg assistant"><div class="role">jucode</div><div class="body">{m.text}</div></div>
+						<div class="row asst">
+							<span class="avatar bot"></span>
+							<div class="text">{m.text}</div>
+						</div>
 					{:else if m.kind === 'reasoning'}
-						<div class="msg reasoning"><div class="role">thinking</div><div class="body">{m.text}</div></div>
+						<div class="row asst">
+							<span class="avatar ghost"></span>
+							<div class="text reasoning">{m.text}</div>
+						</div>
 					{:else if m.kind === 'tool'}
 						<ToolCard name={m.name} output={m.output} running={m.running} isError={m.isError} />
 					{:else if m.kind === 'system'}
-						<div class="msg system">{m.text}</div>
+						<div class="system">{m.text}</div>
 					{:else if m.kind === 'error'}
-						<div class="msg error">{m.text}</div>
+						<div class="error">{m.text}</div>
 					{/if}
 				{/each}
 			</main>
 
-			<footer>
+			<div class="composer-wrap">
 				{#if slashMatches.length}
 					<div class="slash">
 						{#each slashMatches as c, i (c.command)}
-							<button
-								class="slash-item"
-								class:sel={i === slashIdx}
-								onclick={() => (input = c.command + ' ')}
-								onmouseenter={() => (slashIdx = i)}
-							>
+							<button class="slash-item" class:sel={i === slashIdx} onclick={() => (input = c.command + ' ')} onmouseenter={() => (slashIdx = i)}>
 								<span class="slash-cmd">{c.command}</span>
 								{#if c.args}<span class="slash-args">{c.args}</span>{/if}
 								{#if c.description}<span class="slash-desc">{c.description}</span>{/if}
@@ -373,21 +376,30 @@
 					</div>
 				{/if}
 				<div class="composer">
-					<textarea
-						bind:value={input}
-						onkeydown={onKey}
-						placeholder="Message JuCode…  (drop an image to attach · / for commands · Shift+Enter for newline)"
-						rows="1"
-					></textarea>
-					{#if chat.busy}
-						<button class="act stop" onclick={stop} aria-label="stop"><Square size={16} /></button>
-					{:else}
-						<button class="act send" onclick={submit} disabled={!input.trim() && !attachments.length} aria-label="send"><Send size={16} /></button>
-					{/if}
+					<textarea bind:value={input} onkeydown={onKey} rows="1" placeholder="给 JuCode 指派一个任务…  (拖入图片可附加 · / 唤起命令)"></textarea>
+					<div class="composer-bar">
+						<button class="cbtn" aria-label="attach" title="drag an image onto the composer"><Paperclip size={16} /></button>
+						<button class="modelchip" onclick={() => nav('/model')}>
+							<Sparkles size={13} />{chat.model || 'model'}<ChevronUp size={13} />
+						</button>
+						<div class="cspace"></div>
+						{#if chat.busy}
+							<button class="cact stop" onclick={stop} aria-label="stop"><Square size={15} /></button>
+						{:else}
+							<button class="cact send" onclick={submit} disabled={!input.trim() && !attachments.length} aria-label="send"><Send size={16} /></button>
+						{/if}
+					</div>
 				</div>
-			</footer>
+			</div>
 		{/if}
 	</div>
+
+	<!-- RIGHT: goal progress -->
+	{#if showRight}
+		<aside class="right">
+			<GoalPanel goal={chat?.goal ?? null} />
+		</aside>
+	{/if}
 
 	{#if showSettings}
 		<Settings sessionId={activeId} onClose={() => (showSettings = false)} />
@@ -398,17 +410,12 @@
 			<div class="modal trust" role="dialog" tabindex="-1" aria-label="Trust project">
 				<div class="modal-head"><span>Trust this project?</span></div>
 				<div class="trust-body">
-					<p>
-						This project has local skills or hooks that can run code. Trust it to let
-						JuCode load them.
-					</p>
+					<p>This project has local skills or hooks that can run code. Trust it to let JuCode load them.</p>
 					<code class="trust-path">{chat.trustPrompt.repoRoot ?? chat.trustPrompt.cwd}</code>
 				</div>
 				<div class="trust-actions">
 					<button class="btn ghost" onclick={() => respondTrust('no')}>Don't trust</button>
-					{#if chat.trustPrompt.repoRoot}
-						<button class="btn" onclick={() => respondTrust('repo')}>Trust repo</button>
-					{/if}
+					{#if chat.trustPrompt.repoRoot}<button class="btn" onclick={() => respondTrust('repo')}>Trust repo</button>{/if}
 					<button class="btn primary" onclick={() => respondTrust('yes')}>Trust</button>
 				</div>
 			</div>
@@ -416,13 +423,7 @@
 	{/if}
 
 	{#if chat?.picker}
-		<div
-			class="overlay"
-			role="presentation"
-			onclick={(e) => {
-				if (e.target === e.currentTarget) chat?.closePicker();
-			}}
-		>
+		<div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && chat?.closePicker()}>
 			<div class="modal" role="dialog" tabindex="-1" aria-label={pickerTitle}>
 				<div class="modal-head">
 					<span>{pickerTitle}</span>
@@ -438,12 +439,7 @@
 				{/if}
 				<div class="rows">
 					{#each pickerRows as row, i (row.id)}
-						<button
-							class="prow"
-							class:sel={i === selIdx}
-							onclick={() => selectRow(row.command)}
-							onmouseenter={() => (selIdx = i)}
-						>
+						<button class="prow" class:sel={i === selIdx} onclick={() => selectRow(row.command)} onmouseenter={() => (selIdx = i)}>
 							<span class="prow-main">{row.label || '(empty)'}</span>
 							<span class="prow-detail">{row.detail}</span>
 							{#if row.active}<Check size={14} class="prow-check" />{/if}
@@ -458,133 +454,146 @@
 </div>
 
 <style>
-	:global(:root) {
-		--bg: #0e0e11;
-		--panel: #16161b;
-		--panel-2: #1c1c22;
-		--border: #2a2a32;
-		--text: #e8e4ee;
-		--dim: #8a8794;
-		--accent: #bea0ff;
-		--err: #ff6b6b;
-		--mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
-		--sans: -apple-system, system-ui, 'Inter', sans-serif;
-	}
-	:global(body) {
-		margin: 0;
-		background: var(--bg);
-		color: var(--text);
-		font-family: var(--sans);
-	}
-	:global(.spin) {
-		animation: spin 0.8s linear infinite;
-	}
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
-	}
-	@keyframes pulse {
-		0%,
-		100% {
-			opacity: 1;
-		}
-		50% {
-			opacity: 0.35;
-		}
-	}
-
 	.app {
 		display: flex;
 		height: 100vh;
+		overflow: hidden;
 	}
 
+	/* ---------- sidebar ---------- */
 	.sidebar {
-		width: 230px;
+		width: 248px;
 		flex-shrink: 0;
 		display: flex;
 		flex-direction: column;
-		background: var(--panel);
-		border-right: 1px solid var(--border);
+		background: var(--sidebar);
+		border-right: 1px solid var(--hairline);
 	}
-	.side-head {
+	.brand {
+		display: flex;
+		align-items: center;
+		gap: 9px;
+		padding: 26px 18px 14px;
+	}
+	.logo {
+		width: 26px;
+		height: 26px;
+		border-radius: 8px;
+		background: linear-gradient(145deg, var(--accent-bright), var(--accent));
+		box-shadow: 0 2px 10px var(--accent-soft);
+	}
+	.word {
+		font-family: var(--font-display);
+		font-weight: 800;
+		font-size: 17px;
+		letter-spacing: -0.01em;
+	}
+	.nav {
+		display: flex;
+		gap: 8px;
+		padding: 0 14px 14px;
+	}
+	.navcard {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 6px;
+		padding: 12px 0;
+		border-radius: var(--r-md);
+		border: 1px solid var(--hairline);
+		background: var(--surface);
+		color: var(--text);
+		font-size: 12px;
+		cursor: pointer;
+	}
+	.navcard:hover {
+		background: var(--surface2);
+		border-color: var(--border);
+	}
+	.sess-head {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 12px 12px 10px 14px;
-		border-bottom: 1px solid var(--border);
+		padding: 6px 16px 8px;
+		font-size: 11px;
+		color: var(--dim2);
+		font-family: var(--font-mono);
 	}
-	.brand {
-		font-weight: 600;
-		font-size: 14px;
+	.sess-actions {
+		display: flex;
+		gap: 4px;
+	}
+	.sess-actions button {
+		display: inline-flex;
+		padding: 4px;
+		border: none;
+		background: none;
+		color: var(--dim);
+		border-radius: 6px;
+		cursor: pointer;
+	}
+	.sess-actions button:hover:not(:disabled) {
+		background: var(--surface2);
+		color: var(--text);
+	}
+	.sess-actions button:disabled {
+		opacity: 0.35;
+	}
+	.sess-list {
+		flex: 1;
+		overflow-y: auto;
+		padding: 0 8px;
+	}
+	.group {
 		display: flex;
 		align-items: center;
 		gap: 7px;
+		padding: 10px 8px 6px;
 	}
-	.dot {
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		background: var(--accent);
-		box-shadow: 0 0 8px var(--accent);
+	.group-name {
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--dim);
+		font-family: var(--font-mono);
 	}
-	.side-actions {
-		display: flex;
-		gap: 6px;
-	}
-	.new-btn {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 26px;
-		height: 26px;
-		border-radius: 7px;
-		border: 1px solid var(--border);
-		background: var(--panel-2);
-		color: var(--text);
-		cursor: pointer;
-	}
-	.new-btn:hover {
-		border-color: color-mix(in oklch, var(--accent) 45%, var(--border));
-	}
-	.session-list {
-		flex: 1;
-		overflow-y: auto;
-		padding: 8px;
-		display: flex;
-		flex-direction: column;
-		gap: 3px;
+	.group-count {
+		font-size: 10px;
+		color: var(--dim2);
+		background: var(--surface2);
+		border-radius: 999px;
+		padding: 1px 7px;
 	}
 	.sess {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: 9px;
 		width: 100%;
 		text-align: left;
 		padding: 8px 9px;
 		border: none;
-		border-radius: 8px;
+		border-radius: var(--r-sm);
 		background: none;
 		color: var(--text);
 		cursor: pointer;
 		font-size: 13px;
 	}
 	.sess:hover {
-		background: var(--panel-2);
+		background: var(--surface);
 	}
 	.sess.on {
-		background: var(--panel-2);
-		box-shadow: inset 0 0 0 1px var(--border);
+		background: var(--surface2);
+		box-shadow: inset 0 0 0 1px var(--hairline);
 	}
 	.sess-dot {
 		width: 7px;
 		height: 7px;
 		border-radius: 50%;
-		background: var(--dim);
+		background: var(--dim2);
 		flex-shrink: 0;
 	}
 	.sess-dot.busy {
-		background: var(--accent);
+		background: var(--accent-bright);
 		animation: pulse 1.2s ease-in-out infinite;
 	}
 	.sess-dot.err {
@@ -598,8 +607,7 @@
 	}
 	.sess-x {
 		display: inline-flex;
-		align-items: center;
-		color: var(--dim);
+		color: var(--dim2);
 		opacity: 0;
 		border-radius: 4px;
 	}
@@ -609,188 +617,144 @@
 	.sess-x:hover {
 		color: var(--text);
 	}
+	.side-foot {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 10px 12px;
+		border-top: 1px solid var(--hairline);
+	}
+	.foot-btn {
+		flex: 1;
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 8px 10px;
+		border: none;
+		background: none;
+		color: var(--dim);
+		border-radius: var(--r-sm);
+		cursor: pointer;
+		font-size: 13px;
+	}
+	.foot-btn:hover {
+		background: var(--surface2);
+		color: var(--text);
+	}
+	.foot-icon {
+		display: inline-flex;
+		padding: 8px;
+		border: none;
+		background: none;
+		color: var(--dim);
+		border-radius: var(--r-sm);
+		cursor: pointer;
+	}
+	.foot-icon:hover {
+		background: var(--surface2);
+		color: var(--text);
+	}
 
-	.main {
+	/* ---------- center ---------- */
+	.center {
 		flex: 1;
 		display: flex;
 		flex-direction: column;
 		min-width: 0;
+		background: var(--bg);
 	}
-
 	header {
 		display: flex;
 		align-items: center;
-		gap: 14px;
-		padding: 10px 16px;
-		border-bottom: 1px solid var(--border);
-		background: var(--panel);
-		font-size: 13px;
+		gap: 12px;
+		padding: 14px 18px;
+		border-bottom: 1px solid var(--hairline);
 	}
-	.meta {
-		display: flex;
-		align-items: center;
-		gap: 7px;
-	}
-	.model {
-		font-family: var(--mono);
-		background: none;
-		border: 1px solid transparent;
-		color: var(--text);
-		padding: 2px 7px;
-		border-radius: 6px;
-		cursor: pointer;
-		font-size: 13px;
-	}
-	.model:hover {
-		border-color: var(--border);
-		background: var(--panel-2);
-	}
-	.sep {
-		color: var(--dim);
-	}
-	.dim {
-		color: var(--dim);
-	}
-	.state {
-		font-family: var(--mono);
-		font-size: 11px;
-		padding: 2px 8px;
-		border-radius: 999px;
-		background: var(--panel-2);
-		color: var(--dim);
-		border: 1px solid var(--border);
-	}
-	.state.busy {
-		color: var(--accent);
-		border-color: color-mix(in oklch, var(--accent) 40%, transparent);
-	}
-	.state.err {
-		color: var(--err);
-	}
-	.usage {
-		margin-left: auto;
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		font-family: var(--mono);
-		font-size: 12px;
-	}
-	.bar {
-		width: 64px;
-		height: 5px;
-		border-radius: 3px;
-		background: var(--panel-2);
-		overflow: hidden;
-		display: inline-block;
-	}
-	.fill {
-		display: block;
-		height: 100%;
-		background: var(--accent);
-	}
-	.cost {
-		color: var(--accent);
-	}
-
-	main {
-		flex: 1;
-		overflow-y: auto;
-		padding: 20px 16px 28px;
+	.htitle {
 		display: flex;
 		flex-direction: column;
-		gap: 14px;
-		max-width: 860px;
-		width: 100%;
-		margin: 0 auto;
-		box-sizing: border-box;
+		min-width: 0;
 	}
-
-	.msg .role {
-		font-size: 11px;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--dim);
-		margin-bottom: 4px;
-	}
-	.msg .body {
-		white-space: pre-wrap;
-		word-break: break-word;
-		line-height: 1.55;
-	}
-	.msg.user .body {
-		background: var(--panel-2);
-		border: 1px solid var(--border);
-		padding: 10px 13px;
-		border-radius: 10px;
-	}
-	.msg.assistant .role {
-		color: var(--accent);
-	}
-	.msg.reasoning {
-		opacity: 0.7;
-		font-size: 13px;
-	}
-	.msg.reasoning .body {
-		color: var(--dim);
-		font-style: italic;
-	}
-	.msg.system {
-		font-family: var(--mono);
-		font-size: 12px;
-		color: var(--dim);
-		text-align: center;
-	}
-	.msg.error {
-		font-family: var(--mono);
-		font-size: 13px;
-		color: var(--err);
-		background: color-mix(in oklch, var(--err) 12%, transparent);
-		border: 1px solid color-mix(in oklch, var(--err) 35%, transparent);
-		padding: 9px 12px;
-		border-radius: 8px;
-	}
-
-	.goal {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		padding: 7px 16px;
-		background: color-mix(in oklch, var(--accent) 8%, var(--panel));
-		border-bottom: 1px solid var(--border);
-		font-size: 12px;
-	}
-	.goal-label {
-		font-family: var(--mono);
-		font-size: 10px;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--accent);
-	}
-	.goal-obj {
-		flex: 1;
+	.hname {
+		font-family: var(--font-display);
+		font-weight: 700;
+		font-size: 14px;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+		max-width: 240px;
 	}
-	.goal-status,
-	.goal-budget {
-		font-family: var(--mono);
-		color: var(--dim);
+	.hcrumb {
 		font-size: 11px;
+		color: var(--dim2);
+		font-family: var(--font-mono);
 	}
+	.modelsel {
+		display: inline-flex;
+		align-items: center;
+		gap: 7px;
+		padding: 6px 11px;
+		border: 1px solid var(--border);
+		border-radius: 999px;
+		background: var(--surface);
+		color: var(--text);
+		font-size: 12px;
+		font-family: var(--font-mono);
+		cursor: pointer;
+	}
+	.modelsel:hover {
+		background: var(--surface2);
+	}
+	.mdot {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: var(--ok);
+	}
+	.mdot.busy {
+		background: var(--accent-bright);
+		animation: pulse 1.2s ease-in-out infinite;
+	}
+	.mdot.err {
+		background: var(--err);
+	}
+	.hspace {
+		flex: 1;
+	}
+	.usage {
+		font-family: var(--font-mono);
+		font-size: 12px;
+		color: var(--dim);
+	}
+	.usage.cost {
+		color: var(--accent-bright);
+	}
+	.hicon {
+		display: inline-flex;
+		padding: 7px;
+		border: 1px solid var(--border);
+		border-radius: var(--r-sm);
+		background: var(--surface);
+		color: var(--dim);
+		cursor: pointer;
+	}
+	.hicon.on {
+		color: var(--accent-bright);
+		border-color: color-mix(in oklab, var(--accent) 40%, transparent);
+	}
+
 	.agents {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 8px;
-		padding: 7px 16px;
-		border-bottom: 1px solid var(--border);
-		background: var(--panel);
+		padding: 8px 18px;
+		border-bottom: 1px solid var(--hairline);
 	}
 	.agent {
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
-		font-family: var(--mono);
+		font-family: var(--font-mono);
 		font-size: 11px;
 		color: var(--dim);
 	}
@@ -798,17 +762,187 @@
 		width: 6px;
 		height: 6px;
 		border-radius: 50%;
-		background: var(--accent);
+		background: var(--accent-bright);
 		animation: pulse 1.2s ease-in-out infinite;
 	}
 
-	.slash {
-		max-width: 828px;
-		margin: 0 auto 8px;
+	main {
+		flex: 1;
+		overflow-y: auto;
+		padding: 22px 18px 26px;
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+		max-width: 880px;
+		width: 100%;
+		margin: 0 auto;
+	}
+	.row {
+		display: flex;
+		gap: 11px;
+		animation: rise 0.18s ease;
+	}
+	.avatar {
+		width: 28px;
+		height: 28px;
+		border-radius: 8px;
+		flex-shrink: 0;
+		margin-top: 1px;
+	}
+	.avatar.you {
+		background: var(--surface2);
+		border: 1px solid var(--border);
+	}
+	.avatar.bot {
+		background: linear-gradient(145deg, var(--accent-bright), var(--accent));
+	}
+	.avatar.ghost {
+		background: var(--accent-soft);
+		border: 1px solid color-mix(in oklab, var(--accent) 30%, transparent);
+	}
+	.bubble {
+		background: var(--surface2);
+		border: 1px solid var(--hairline);
+		border-radius: 4px 14px 14px 14px;
+		padding: 11px 14px;
+		line-height: 1.6;
+		white-space: pre-wrap;
+		word-break: break-word;
+		max-width: 100%;
+	}
+	.text {
+		padding-top: 4px;
+		line-height: 1.65;
+		white-space: pre-wrap;
+		word-break: break-word;
+		flex: 1;
+		min-width: 0;
+	}
+	.text.reasoning {
+		color: var(--dim);
+		font-style: italic;
+		font-size: 13px;
+	}
+	.system {
+		font-family: var(--font-mono);
+		font-size: 12px;
+		color: var(--dim2);
+		text-align: center;
+	}
+	.error {
+		font-family: var(--font-mono);
+		font-size: 13px;
+		color: var(--err);
+		background: color-mix(in oklab, var(--err) 12%, transparent);
+		border: 1px solid color-mix(in oklab, var(--err) 32%, transparent);
+		padding: 9px 12px;
+		border-radius: var(--r-sm);
+	}
+
+	/* ---------- composer ---------- */
+	.composer-wrap {
+		padding: 0 18px 18px;
+		max-width: 880px;
+		width: 100%;
+		margin: 0 auto;
+	}
+	.composer {
 		background: var(--panel);
 		border: 1px solid var(--border);
-		border-radius: 10px;
+		border-radius: var(--r-lg);
+		padding: 12px 14px 10px;
+		box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+	}
+	.composer:focus-within {
+		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
+	}
+	textarea {
+		width: 100%;
+		resize: none;
+		border: none;
+		outline: none;
+		background: transparent;
+		color: var(--text);
+		font-family: var(--font-sans);
+		font-size: 14px;
+		line-height: 1.55;
+		max-height: 180px;
+		padding: 2px 0 8px;
+	}
+	textarea::placeholder {
+		color: var(--dim2);
+	}
+	.composer-bar {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+	.cbtn {
+		display: inline-flex;
+		padding: 7px;
+		border: none;
+		background: none;
+		color: var(--dim);
+		border-radius: var(--r-sm);
+		cursor: pointer;
+	}
+	.cbtn:hover {
+		background: var(--surface2);
+		color: var(--text);
+	}
+	.modelchip {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 6px 10px;
+		border: 1px solid var(--border);
+		border-radius: 999px;
+		background: var(--surface);
+		color: var(--text);
+		font-size: 12px;
+		font-family: var(--font-mono);
+		cursor: pointer;
+	}
+	.modelchip:hover {
+		background: var(--surface2);
+	}
+	.cspace {
+		flex: 1;
+	}
+	.cact {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 38px;
+		height: 38px;
+		border-radius: var(--r-md);
+		border: none;
+		cursor: pointer;
+		flex-shrink: 0;
+	}
+	.cact.send {
+		background: linear-gradient(145deg, var(--accent-bright), var(--accent));
+		color: var(--on-accent);
+		box-shadow: 0 4px 14px var(--accent-soft);
+	}
+	.cact.send:disabled {
+		opacity: 0.4;
+		box-shadow: none;
+		cursor: default;
+	}
+	.cact.stop {
+		background: var(--surface2);
+		border: 1px solid var(--border);
+		color: var(--err);
+	}
+
+	.slash {
+		margin-bottom: 8px;
+		background: var(--panel);
+		border: 1px solid var(--border);
+		border-radius: var(--r-md);
 		overflow: hidden;
+		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
 	}
 	.slash-item {
 		display: flex;
@@ -816,7 +950,7 @@
 		gap: 8px;
 		width: 100%;
 		text-align: left;
-		padding: 7px 12px;
+		padding: 8px 12px;
 		border: none;
 		background: none;
 		color: var(--text);
@@ -824,16 +958,16 @@
 		font-size: 13px;
 	}
 	.slash-item.sel {
-		background: var(--panel-2);
+		background: var(--surface2);
 	}
 	.slash-cmd {
-		font-family: var(--mono);
+		font-family: var(--font-mono);
 		flex-shrink: 0;
 	}
 	.slash-args {
-		font-family: var(--mono);
+		font-family: var(--font-mono);
 		font-size: 11px;
-		color: var(--dim);
+		color: var(--dim2);
 		flex-shrink: 0;
 	}
 	.slash-desc {
@@ -847,35 +981,27 @@
 	.slash-marker {
 		flex-shrink: 0;
 		font-size: 10px;
-		color: var(--accent);
-		border: 1px solid color-mix(in oklch, var(--accent) 40%, transparent);
+		color: var(--accent-bright);
+		border: 1px solid color-mix(in oklab, var(--accent) 40%, transparent);
 		border-radius: 4px;
 		padding: 1px 5px;
-	}
-
-	footer {
-		border-top: 1px solid var(--border);
-		background: var(--panel);
-		padding: 12px 16px 16px;
 	}
 	.chips {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 6px;
-		max-width: 828px;
-		margin: 0 auto 8px;
+		margin-bottom: 8px;
 	}
 	.chip {
 		display: inline-flex;
 		align-items: center;
 		gap: 5px;
 		font-size: 12px;
-		font-family: var(--mono);
-		background: var(--panel-2);
+		font-family: var(--font-mono);
+		background: var(--surface2);
 		border: 1px solid var(--border);
 		border-radius: 7px;
 		padding: 3px 5px 3px 8px;
-		color: var(--text);
 	}
 	.chip-x {
 		display: inline-flex;
@@ -888,65 +1014,19 @@
 	.chip-x:hover {
 		color: var(--text);
 	}
-	.composer {
-		display: flex;
-		align-items: flex-end;
-		gap: 10px;
-		max-width: 828px;
-		margin: 0 auto;
-		background: var(--panel-2);
-		border: 1px solid var(--border);
-		border-radius: 12px;
-		padding: 8px 8px 8px 14px;
-	}
-	.composer:focus-within {
-		border-color: color-mix(in oklch, var(--accent) 45%, var(--border));
-	}
-	textarea {
-		flex: 1;
-		resize: none;
-		border: none;
-		outline: none;
-		background: transparent;
-		color: var(--text);
-		font-family: var(--sans);
-		font-size: 14px;
-		line-height: 1.5;
-		max-height: 180px;
-		padding: 6px 0;
-	}
-	textarea::placeholder {
-		color: var(--dim);
-	}
-	.act {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 36px;
-		height: 36px;
-		border-radius: 9px;
-		border: none;
-		cursor: pointer;
+
+	/* ---------- right ---------- */
+	.right {
+		width: 340px;
 		flex-shrink: 0;
-	}
-	.act.send {
-		background: var(--accent);
-		color: #1a1320;
-	}
-	.act.send:disabled {
-		opacity: 0.4;
-		cursor: default;
-	}
-	.act.stop {
-		background: var(--panel);
-		border: 1px solid var(--border);
-		color: var(--err);
+		border-left: 1px solid var(--hairline);
 	}
 
+	/* ---------- modals (picker / trust) ---------- */
 	.overlay {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.55);
+		background: rgba(0, 0, 0, 0.5);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -959,7 +1039,7 @@
 		flex-direction: column;
 		background: var(--panel);
 		border: 1px solid var(--border);
-		border-radius: 14px;
+		border-radius: var(--r-lg);
 		box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
 		overflow: hidden;
 	}
@@ -970,7 +1050,7 @@
 		padding: 13px 16px;
 		font-weight: 600;
 		font-size: 14px;
-		border-bottom: 1px solid var(--border);
+		border-bottom: 1px solid var(--hairline);
 	}
 	.modal-x {
 		display: inline-flex;
@@ -987,21 +1067,24 @@
 		align-items: center;
 		gap: 6px;
 		padding: 10px 16px;
-		border-bottom: 1px solid var(--border);
+		border-bottom: 1px solid var(--hairline);
 		font-size: 12px;
 	}
+	.dim {
+		color: var(--dim);
+	}
 	.eff {
-		font-family: var(--mono);
+		font-family: var(--font-mono);
 		font-size: 12px;
 		padding: 3px 10px;
 		border-radius: 999px;
 		border: 1px solid var(--border);
-		background: var(--panel-2);
+		background: var(--surface2);
 		color: var(--dim);
 		cursor: pointer;
 	}
 	.eff.on {
-		color: #1a1320;
+		color: var(--on-accent);
 		background: var(--accent);
 		border-color: var(--accent);
 	}
@@ -1017,18 +1100,18 @@
 		text-align: left;
 		padding: 9px 11px;
 		border: none;
-		border-radius: 8px;
+		border-radius: var(--r-sm);
 		background: none;
 		color: var(--text);
 		cursor: pointer;
 		font-size: 13px;
 	}
 	.prow.sel {
-		background: var(--panel-2);
+		background: var(--surface2);
 	}
 	.prow-main {
 		flex: 1;
-		font-family: var(--mono);
+		font-family: var(--font-mono);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -1036,11 +1119,11 @@
 	.prow-detail {
 		color: var(--dim);
 		font-size: 12px;
-		font-family: var(--mono);
+		font-family: var(--font-mono);
 		flex-shrink: 0;
 	}
 	:global(.prow-check) {
-		color: var(--accent);
+		color: var(--accent-bright);
 		flex-shrink: 0;
 	}
 	.pempty {
@@ -1051,12 +1134,11 @@
 	}
 	.modal-foot {
 		padding: 9px 16px;
-		border-top: 1px solid var(--border);
+		border-top: 1px solid var(--hairline);
 		font-size: 11px;
-		font-family: var(--mono);
+		font-family: var(--font-mono);
 		text-align: center;
 	}
-
 	.modal.trust {
 		width: min(460px, 92vw);
 	}
@@ -1067,14 +1149,13 @@
 	}
 	.trust-body p {
 		margin: 0 0 12px;
-		color: var(--text);
 	}
 	.trust-path {
 		display: block;
-		font-family: var(--mono);
+		font-family: var(--font-mono);
 		font-size: 12px;
 		color: var(--dim);
-		background: var(--panel-2);
+		background: var(--surface2);
 		border: 1px solid var(--border);
 		border-radius: 7px;
 		padding: 8px 10px;
@@ -1089,14 +1170,14 @@
 	.btn {
 		font-size: 13px;
 		padding: 8px 14px;
-		border-radius: 8px;
+		border-radius: var(--r-sm);
 		border: 1px solid var(--border);
-		background: var(--panel-2);
+		background: var(--surface2);
 		color: var(--text);
 		cursor: pointer;
 	}
 	.btn:hover {
-		border-color: color-mix(in oklch, var(--accent) 45%, var(--border));
+		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
 	}
 	.btn.ghost {
 		color: var(--dim);
@@ -1104,7 +1185,7 @@
 	.btn.primary {
 		background: var(--accent);
 		border-color: var(--accent);
-		color: #1a1320;
+		color: var(--on-accent);
 		font-weight: 600;
 	}
 </style>
