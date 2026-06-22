@@ -16,8 +16,10 @@
 		Sun,
 		Moon,
 		ChevronRight,
+		ChevronDown,
 		History,
 		Copy,
+		Pencil,
 		Image as ImageIcon,
 		FileText
 	} from 'lucide-svelte';
@@ -64,6 +66,8 @@
 	let input = $state('');
 	let attachments = $state<{ path: string; image: boolean }[]>([]);
 	let scroller = $state<HTMLElement | null>(null);
+	let composerEl = $state<HTMLTextAreaElement | null>(null);
+	let atBottom = $state(true);
 	let selIdx = $state(0);
 	let slashIdx = $state(0);
 	let showSettings = $state(false);
@@ -196,7 +200,8 @@
 	});
 	$effect(() => {
 		activeId;
-		scrollToEnd();
+		atBottom = true;
+		scrollToEnd(true);
 	});
 	$effect(() => {
 		if (chat?.pendingFill != null) {
@@ -343,9 +348,23 @@
 		chat.trustPrompt = null;
 	}
 
-	async function scrollToEnd() {
+	function onScroll() {
+		if (scroller) atBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 60;
+	}
+	async function scrollToEnd(force = false) {
 		await tick();
-		if (scroller) scroller.scrollTop = scroller.scrollHeight;
+		if (scroller && (atBottom || force)) {
+			scroller.scrollTop = scroller.scrollHeight;
+			atBottom = true;
+		}
+	}
+	function jumpToBottom() {
+		atBottom = true;
+		scrollToEnd(true);
+	}
+	function editMessage(text: string) {
+		input = text;
+		composerEl?.focus();
 	}
 
 	onMount(() => {
@@ -491,10 +510,11 @@
 				</div>
 			{/if}
 
-			<main bind:this={scroller}>
+			<main bind:this={scroller} onscroll={onScroll}>
 				{#each chat.messages as m (m)}
 					{#if m.kind === 'user'}
 						<div class="row user">
+							<button class="uedit" onclick={() => editMessage(m.text)} aria-label="edit" title="编辑重发"><Pencil size={12} /></button>
 							<div class="bubble">{m.text}</div>
 						</div>
 					{:else if m.kind === 'assistant'}
@@ -516,7 +536,7 @@
 								<span class="rchev"><ChevronRight size={13} /></span>
 								<span>推理</span>
 							</button>
-							{#if !m.collapsed}<div class="reason-body">{m.text}</div>{/if}
+							{#if !m.collapsed}<div class="reason-body"><Markdown text={m.text} /></div>{/if}
 						</div>
 					{:else if m.kind === 'tool'}
 						<ToolCard name={m.name} output={m.output} running={m.running} isError={m.isError} />
@@ -530,6 +550,9 @@
 					<div class="thinking" aria-label="thinking"><span class="td"></span><span class="td"></span><span class="td"></span></div>
 				{/if}
 			</main>
+			{#if !atBottom}
+				<button class="jump" onclick={jumpToBottom} aria-label="scroll to bottom"><ChevronDown size={18} /></button>
+			{/if}
 
 			<div class="composer-wrap">
 				{#if slashMatches.length}
@@ -555,7 +578,7 @@
 					</div>
 				{/if}
 				<div class="composer">
-					<textarea bind:value={input} onkeydown={onKey} rows="1" placeholder="给 JuCode 指派一个任务…  (拖入或点回形针附加文件 · / 唤起命令)"></textarea>
+					<textarea bind:this={composerEl} bind:value={input} onkeydown={onKey} rows="1" placeholder="给 JuCode 指派一个任务…  (拖入或点回形针附加文件 · / 唤起命令)"></textarea>
 					<div class="composer-bar">
 						<button class="cbtn" onclick={pickFiles} aria-label="attach" title="attach files"><Paperclip size={16} /></button>
 						<button class="flatbtn model" onclick={() => nav('/model')} title="switch model">
@@ -902,6 +925,28 @@
 		flex-direction: column;
 		min-width: 0;
 		background: var(--bg);
+		position: relative;
+	}
+	.jump {
+		position: absolute;
+		left: 50%;
+		bottom: 132px;
+		transform: translateX(-50%);
+		width: 34px;
+		height: 34px;
+		border-radius: 50%;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--panel);
+		border: 1px solid var(--border);
+		color: var(--text);
+		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
+		cursor: pointer;
+		z-index: 10;
+	}
+	.jump:hover {
+		background: var(--surface2);
 	}
 	header {
 		display: flex;
@@ -997,6 +1042,26 @@
 	}
 	.row.user {
 		justify-content: flex-end;
+		align-items: center;
+		gap: 6px;
+	}
+	.uedit {
+		opacity: 0;
+		display: inline-flex;
+		padding: 4px;
+		border: none;
+		background: none;
+		color: var(--dim2);
+		border-radius: 5px;
+		cursor: pointer;
+		flex-shrink: 0;
+	}
+	.row.user:hover .uedit {
+		opacity: 1;
+	}
+	.uedit:hover {
+		background: var(--surface2);
+		color: var(--text);
 	}
 	.bubble {
 		background: var(--surface2);
