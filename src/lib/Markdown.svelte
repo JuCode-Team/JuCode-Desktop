@@ -1,28 +1,11 @@
 <script lang="ts">
-	import { marked } from 'marked';
-	import { markedHighlight } from 'marked-highlight';
-	import hljs from 'highlight.js';
 	import DOMPurify from 'dompurify';
 	import { openUrl } from '@tauri-apps/plugin-opener';
+	import { renderMarkdown } from '$lib/markdown';
 
 	let { text }: { text: string } = $props();
 
-	marked.use(
-		markedHighlight({
-			langPrefix: 'hljs language-',
-			highlight(code, lang) {
-				const language = lang && hljs.getLanguage(lang) ? lang : 'plaintext';
-				try {
-					return hljs.highlight(code, { language }).value;
-				} catch {
-					return code;
-				}
-			}
-		})
-	);
-	marked.setOptions({ breaks: true, gfm: true });
-
-	const html = $derived(DOMPurify.sanitize(marked.parse(text, { async: false }) as string));
+	const html = $derived(DOMPurify.sanitize(renderMarkdown(text)));
 
 	function onClick(e: MouseEvent) {
 		const a = (e.target as HTMLElement).closest('a');
