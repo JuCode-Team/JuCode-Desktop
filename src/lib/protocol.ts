@@ -72,6 +72,10 @@ export function listDir(path?: string): Promise<FsEntry[]> {
 export function readText(path: string): Promise<string> {
 	return invoke('read_text', { path });
 }
+
+export function listFiles(cwd?: string): Promise<string[]> {
+	return invoke('list_files', { cwd });
+}
 export function git(args: string[], cwd?: string): Promise<string> {
 	return invoke('git', { args, cwd });
 }

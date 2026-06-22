@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use serde::Serialize;
@@ -289,6 +289,59 @@ fn list_dir(path: Option<String>) -> Result<Vec<FsEntry>, String> {
     Ok(entries)
 }
 
+/// Flat list of project files (relative paths) for @-mention completion.
+/// Prefers `git ls-files` (fast, .gitignore-aware), falling back to a bounded walk.
+#[tauri::command]
+fn list_files(cwd: Option<String>) -> Result<Vec<String>, String> {
+    let dir = cwd.map(PathBuf::from).unwrap_or_else(resolve_cwd);
+    if let Ok(out) = Command::new("git")
+        .arg("-C")
+        .arg(&dir)
+        .args(["ls-files", "--cached", "--others", "--exclude-standard"])
+        .output()
+    {
+        if out.status.success() {
+            let files: Vec<String> = String::from_utf8_lossy(&out.stdout)
+                .lines()
+                .filter(|l| !l.is_empty())
+                .map(|l| l.to_string())
+                .collect();
+            if !files.is_empty() {
+                return Ok(files);
+            }
+        }
+    }
+    let mut files = Vec::new();
+    walk_files(&dir, &dir, &mut files);
+    Ok(files)
+}
+
+const SKIP_DIRS: [&str; 6] = ["node_modules", "target", "dist", "build", ".git", ".svelte-kit"];
+
+fn walk_files(root: &Path, dir: &Path, out: &mut Vec<String>) {
+    if out.len() >= 5000 {
+        return;
+    }
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with('.') {
+            continue;
+        }
+        let path = entry.path();
+        if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+            if SKIP_DIRS.contains(&name.as_str()) {
+                continue;
+            }
+            walk_files(root, &path, out);
+        } else if let Ok(rel) = path.strip_prefix(root) {
+            out.push(rel.display().to_string());
+        }
+    }
+}
+
 /// Reads a UTF-8 text file (size-capped). Returns an error for binary/oversized files.
 #[tauri::command]
 fn read_text(path: String) -> Result<String, String> {
@@ -454,6 +507,7 @@ pub fn run() {
             fetch_marketplace,
             project_root,
             list_dir,
+            list_files,
             read_text,
             git,
             pty_open,

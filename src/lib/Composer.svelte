@@ -1,9 +1,10 @@
 <script lang="ts">
-	import { Send, Square, Paperclip, X, FileText, FastForward } from 'lucide-svelte';
+	import { Send, Square, Paperclip, X, FileText, FastForward, File } from 'lucide-svelte';
 	import { convertFileSrc } from '@tauri-apps/api/core';
 	import Vendor from '$lib/Vendor.svelte';
 	import ContextRing from '$lib/ContextRing.svelte';
 	import EffortSlider from '$lib/EffortSlider.svelte';
+	import { listFiles } from '$lib/protocol';
 	import type { ChatState } from '$lib/chat.svelte';
 
 	let {
@@ -47,6 +48,46 @@
 		slashIdx = 0;
 	});
 
+	// @-mention file completion. Lazily loads the project file list (cached per cwd)
+	// the first time an @-token is typed.
+	let atFiles = $state<string[]>([]);
+	let atCwd = $state('');
+	let atIdx = $state(0);
+
+	const atQuery = $derived.by(() => {
+		const m = input.match(/(?:^|\s)@([^\s@]*)$/);
+		return m ? m[1] : null;
+	});
+	$effect(() => {
+		if (atQuery === null) return;
+		if (atCwd !== chat.cwd) {
+			atCwd = chat.cwd;
+			atFiles = [];
+			listFiles(chat.cwd || undefined)
+				.then((f) => {
+					if (atCwd === chat.cwd) atFiles = f;
+				})
+				.catch(() => {});
+		}
+	});
+	const atMatches = $derived.by(() => {
+		if (atQuery === null) return [];
+		const q = atQuery.toLowerCase();
+		const hits = q ? atFiles.filter((f) => f.toLowerCase().includes(q)) : atFiles;
+		return hits.slice(0, 8);
+	});
+	$effect(() => {
+		atMatches;
+		atIdx = 0;
+	});
+
+	function applyAt(path: string) {
+		input = input.replace(/(?:^|\s)@([^\s@]*)$/, (full) => {
+			const lead = /^\s/.test(full) ? full[0] : '';
+			return `${lead}@${path} `;
+		});
+	}
+
 	const ctxPct = $derived(
 		chat.contextWindow > 0 ? Math.min(100, Math.round((chat.contextTokens / chat.contextWindow) * 100)) : 0
 	);
@@ -69,6 +110,28 @@
 				return;
 			}
 		}
+		if (atMatches.length) {
+			if (e.key === 'ArrowDown') {
+				e.preventDefault();
+				atIdx = (atIdx + 1) % atMatches.length;
+				return;
+			}
+			if (e.key === 'ArrowUp') {
+				e.preventDefault();
+				atIdx = (atIdx - 1 + atMatches.length) % atMatches.length;
+				return;
+			}
+			if (e.key === 'Tab' || e.key === 'Enter') {
+				e.preventDefault();
+				applyAt(atMatches[atIdx]);
+				return;
+			}
+			if (e.key === 'Escape') {
+				e.preventDefault();
+				input += ' ';
+				return;
+			}
+		}
 		if (e.key === 'Enter' && !e.shiftKey) {
 			e.preventDefault();
 			onSubmit();
@@ -85,6 +148,17 @@
 					{#if c.args}<span class="slash-args">{c.args}</span>{/if}
 					{#if c.description}<span class="slash-desc">{c.description}</span>{/if}
 					{#if c.marker}<span class="slash-marker">{c.marker}</span>{/if}
+				</button>
+			{/each}
+		</div>
+	{/if}
+	{#if atMatches.length}
+		<div class="slash">
+			{#each atMatches as f, i (f)}
+				<button class="slash-item" class:sel={i === atIdx} onclick={() => applyAt(f)} onmouseenter={() => (atIdx = i)}>
+					<File size={13} />
+					<span class="at-name">{base(f)}</span>
+					<span class="at-path">{f}</span>
 				</button>
 			{/each}
 		</div>
@@ -317,6 +391,19 @@
 		border: 1px solid color-mix(in oklab, var(--accent) 40%, transparent);
 		border-radius: 4px;
 		padding: 1px 5px;
+	}
+	.at-name {
+		font-family: var(--font-mono);
+		flex-shrink: 0;
+	}
+	.at-path {
+		flex: 1;
+		color: var(--dim2);
+		font-size: 12px;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		text-align: right;
 	}
 	.chips {
 		display: flex;
