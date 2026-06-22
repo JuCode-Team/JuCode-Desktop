@@ -43,6 +43,8 @@ export interface Goal {
 export interface CommandItem {
 	command: string;
 	marker: string | null;
+	args?: string;
+	description?: string;
 }
 
 const str = (v: unknown) => (typeof v === 'string' ? v : '');

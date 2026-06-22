@@ -356,6 +356,8 @@
 								onmouseenter={() => (slashIdx = i)}
 							>
 								<span class="slash-cmd">{c.command}</span>
+								{#if c.args}<span class="slash-args">{c.args}</span>{/if}
+								{#if c.description}<span class="slash-desc">{c.description}</span>{/if}
 								{#if c.marker}<span class="slash-marker">{c.marker}</span>{/if}
 							</button>
 						{/each}
@@ -826,8 +828,24 @@
 	}
 	.slash-cmd {
 		font-family: var(--mono);
+		flex-shrink: 0;
+	}
+	.slash-args {
+		font-family: var(--mono);
+		font-size: 11px;
+		color: var(--dim);
+		flex-shrink: 0;
+	}
+	.slash-desc {
+		flex: 1;
+		color: var(--dim);
+		font-size: 12px;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 	.slash-marker {
+		flex-shrink: 0;
 		font-size: 10px;
 		color: var(--accent);
 		border: 1px solid color-mix(in oklch, var(--accent) 40%, transparent);
