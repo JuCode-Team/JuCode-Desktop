@@ -2,7 +2,7 @@
 	import { onMount, tick } from 'svelte';
 	import { listen } from '@tauri-apps/api/event';
 	import { getCurrentWebview } from '@tauri-apps/api/webview';
-	import { X, Check, PanelRight, ChevronRight, ChevronDown, Copy, Pencil } from 'lucide-svelte';
+	import { X, Check, PanelRight, ChevronRight, ChevronDown, Copy, Pencil, ShieldAlert } from 'lucide-svelte';
 	import { open } from '@tauri-apps/plugin-dialog';
 	import {
 		isPermissionGranted,
@@ -298,6 +298,12 @@
 	function stop() {
 		sendOp(activeId, { op: 'interrupt' });
 	}
+	function respondApproval(decision: string) {
+		const a = chat?.pendingApproval;
+		if (!a) return;
+		sendOp(activeId, { op: 'command', input: `/approve ${a.callId} ${decision}` });
+		if (chat) chat.pendingApproval = null;
+	}
 
 	function selectRow(command: string) {
 		// Resuming a history item opens it in a fresh session so the current chat
@@ -532,6 +538,23 @@
 				<button class="jump" onclick={jumpToBottom} aria-label="scroll to bottom"><ChevronDown size={18} /></button>
 			{/if}
 
+			{#if chat.pendingApproval}
+				<div class="approval">
+					<div class="approval-head">
+						<ShieldAlert size={15} />
+						<span>允许运行 <b>{chat.pendingApproval.name}</b>？</span>
+					</div>
+					{#if chat.pendingApproval.summary}
+						<pre class="approval-sum">{chat.pendingApproval.summary}</pre>
+					{/if}
+					<div class="approval-actions">
+						<button class="ap allow" onclick={() => respondApproval('allow once')}>允许一次</button>
+						<button class="ap" onclick={() => respondApproval('allow always')}>本会话始终允许</button>
+						<button class="ap deny" onclick={() => respondApproval('deny')}>拒绝</button>
+					</div>
+				</div>
+			{/if}
+
 			<Composer
 				{chat}
 				bind:input
@@ -648,6 +671,65 @@
 	}
 	.jump:hover {
 		background: var(--surface2);
+	}
+	.approval {
+		max-width: 880px;
+		width: 100%;
+		margin: 0 auto;
+		padding: 12px 14px;
+		background: color-mix(in oklab, var(--warn) 9%, var(--panel));
+		border: 1px solid color-mix(in oklab, var(--warn) 38%, transparent);
+		border-radius: var(--r-md);
+	}
+	.approval-head {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		font-size: 13px;
+		color: var(--warn);
+	}
+	.approval-head b {
+		font-family: var(--font-mono);
+		color: var(--text);
+	}
+	.approval-sum {
+		margin: 8px 0 0;
+		padding: 8px 10px;
+		background: var(--sidebar);
+		border: 1px solid var(--hairline);
+		border-radius: var(--r-sm);
+		font-family: var(--font-mono);
+		font-size: 12px;
+		white-space: pre-wrap;
+		word-break: break-word;
+		max-height: 120px;
+		overflow-y: auto;
+	}
+	.approval-actions {
+		display: flex;
+		gap: 8px;
+		margin-top: 10px;
+	}
+	.ap {
+		padding: 6px 12px;
+		border-radius: var(--r-sm);
+		border: 1px solid var(--border);
+		background: var(--surface2);
+		color: var(--text);
+		font-size: 12px;
+		cursor: pointer;
+	}
+	.ap:hover {
+		background: var(--surface);
+	}
+	.ap.allow {
+		background: var(--accent);
+		border-color: transparent;
+		color: var(--on-accent);
+	}
+	.ap.deny {
+		margin-left: auto;
+		color: var(--err);
 	}
 	header {
 		display: flex;

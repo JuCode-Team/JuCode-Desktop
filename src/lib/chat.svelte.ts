@@ -76,6 +76,7 @@ export class ChatState {
 	trustPrompt = $state<{ cwd: string; repoRoot: string | null } | null>(null);
 	goal = $state<Goal | null>(null);
 	plan = $state<PlanStep[]>([]);
+	pendingApproval = $state<{ callId: string; name: string; summary: string } | null>(null);
 	subagents = $state<Record<string, { status: string; message: string }>>({});
 	commands = $state<CommandItem[]>([]);
 	totalIn = $state(0);
@@ -282,6 +283,13 @@ export class ChatState {
 			case 'plan':
 				this.plan = arr<PlanStep>(ev.plan);
 				break;
+			case 'approval_request':
+				this.pendingApproval = {
+					callId: str(ev.call_id),
+					name: str(ev.name),
+					summary: str(ev.summary)
+				};
+				break;
 			case 'command_list':
 				this.commands = arr<CommandItem>(ev.commands);
 				break;
@@ -316,6 +324,7 @@ export class ChatState {
 				if (!this.busy) {
 					this.#endTurn();
 					this.#resetCurrent();
+					this.pendingApproval = null;
 				}
 				break;
 			}
@@ -323,6 +332,7 @@ export class ChatState {
 				this.messages.push({ kind: 'system', text: str(ev.message) });
 				break;
 			case 'error':
+				this.pendingApproval = null;
 				this.messages.push({ kind: 'error', text: str(ev.message) });
 				this.#endTurn();
 				this.#resetCurrent();
