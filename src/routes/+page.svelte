@@ -337,7 +337,7 @@
 					<span class="hname">{chat.title}</span>
 					<span class="hcrumb">{project}</span>
 				</div>
-				<button class="modelsel" onclick={() => nav('/model')} title={chat.model} aria-label="switch model">
+				<button class="modelsel" class:gone={!chat.messages.length} onclick={() => nav('/model')} title={chat.model} aria-label="switch model">
 					<span class="mdot" class:busy={chat.busy} class:err={chat.engineState === 'exited'}></span>
 					<Vendor model={chat.model} size={17} />
 				</button>
@@ -742,6 +742,9 @@
 	}
 	.modelsel:hover {
 		background: var(--surface2);
+	}
+	.modelsel.gone {
+		display: none;
 	}
 	.mdot {
 		width: 7px;
