@@ -76,6 +76,15 @@ export function readText(path: string): Promise<string> {
 export function listFiles(cwd?: string): Promise<string[]> {
 	return invoke('list_files', { cwd });
 }
+
+export interface ProviderInfo {
+	id: string;
+	base_url: string;
+	models: { name: string; context_window?: number; max_output_tokens?: number; reasoning_efforts?: string[] }[];
+}
+export function listProviders(): Promise<ProviderInfo[]> {
+	return invoke('list_providers');
+}
 export function git(args: string[], cwd?: string): Promise<string> {
 	return invoke('git', { args, cwd });
 }

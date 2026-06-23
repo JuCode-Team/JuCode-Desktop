@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { X, LogIn, Check, Cpu, KeyRound, SlidersHorizontal } from 'lucide-svelte';
-	import { readConfig, writeConfig, readAuthProviders, setAuthKey, sendOp } from '$lib/protocol';
+	import { readConfig, writeConfig, readAuthProviders, setAuthKey, listProviders, sendOp } from '$lib/protocol';
 	import Vendor from '$lib/Vendor.svelte';
 	import EffortSlider from '$lib/EffortSlider.svelte';
 
@@ -14,6 +14,7 @@
 	}
 	let cfg = $state<Record<string, any>>({});
 	let providers = $state<string[]>([]);
+	let builtinProviders = $state<{ id: string; base_url: string; models: ModelCfg[] }[]>([]);
 	let newProvider = $state('');
 	let newKey = $state('');
 	let saved = $state(false);
@@ -33,8 +34,26 @@
 	onMount(async () => {
 		cfg = await readConfig();
 		providers = await readAuthProviders();
+		builtinProviders = await listProviders().catch(() => []);
 		newProvider = String(cfg.provider ?? 'jucode');
 	});
+
+	// Switching the active provider swaps in its default base_url and model table,
+	// so the engine doesn't keep using the previous provider's models.
+	function switchProvider(id: string) {
+		const p = builtinProviders.find((x) => x.id === id);
+		if (!p) return;
+		cfg.provider = id;
+		cfg.base_url = p.base_url;
+		cfg.models = p.models;
+		newProvider = id;
+		const first = p.models[0];
+		if (first) {
+			cfg.model = first.name;
+			const efs = first.reasoning_efforts ?? [];
+			cfg.reasoning_effort = efs.includes('high') ? 'high' : (efs[Math.floor(efs.length / 2)] ?? '');
+		}
+	}
 
 	function pickModel(name: string) {
 		cfg.model = name;
@@ -45,6 +64,9 @@
 
 	async function save() {
 		await writeConfig({
+			provider: cfg.provider,
+			base_url: cfg.base_url,
+			models: cfg.models,
 			model: cfg.model,
 			reasoning_effort: cfg.reasoning_effort,
 			compact_model: cfg.compact_model,
@@ -112,7 +134,20 @@
 						{#each models as m (m.name)}<option value={m.name}>{m.name}</option>{/each}
 					</select>
 				{:else if section === 'account'}
-					<h3>账户</h3>
+					<h3>Provider</h3>
+					<p class="hint">切换后下方"默认模型"会变成该 provider 的模型；记得为它配置 API key。</p>
+					<div class="prov-grid">
+						{#each builtinProviders as p (p.id)}
+							<button class="prov" class:on={cfg.provider === p.id} onclick={() => switchProvider(p.id)}>
+								<Vendor model={p.models[0]?.name ?? p.id} size={18} />
+								<span class="prov-id">{p.id}</span>
+								<span class="prov-url">{p.base_url}</span>
+								{#if cfg.provider === p.id}<Check size={15} class="mcheck" />{/if}
+							</button>
+						{/each}
+					</div>
+
+					<h3 class="mt">账户</h3>
 					<button class="btn primary wide" onclick={login}><LogIn size={15} /> 登录 JuCode（OAuth）</button>
 					<div class="providers">
 						<span class="plabel">已保存密钥</span>
@@ -264,6 +299,45 @@
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
+	}
+	.prov-grid {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		margin-bottom: 4px;
+	}
+	.prov {
+		display: flex;
+		align-items: center;
+		gap: 11px;
+		padding: 9px 12px;
+		border: 1px solid var(--hairline);
+		border-radius: var(--r-md);
+		background: var(--surface);
+		color: var(--text);
+		cursor: pointer;
+		text-align: left;
+	}
+	.prov:hover {
+		background: var(--surface2);
+	}
+	.prov.on {
+		border-color: color-mix(in oklab, var(--accent) 50%, transparent);
+		background: var(--accent-soft);
+	}
+	.prov-id {
+		font-weight: 600;
+		text-transform: capitalize;
+	}
+	.prov-url {
+		flex: 1;
+		font-family: var(--font-mono);
+		font-size: 11px;
+		color: var(--dim2);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		text-align: right;
 	}
 	.mrow {
 		display: flex;

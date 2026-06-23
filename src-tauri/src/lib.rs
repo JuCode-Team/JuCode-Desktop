@@ -289,6 +289,19 @@ fn list_dir(path: Option<String>) -> Result<Vec<FsEntry>, String> {
     Ok(entries)
 }
 
+/// Built-in providers (id + default base_url) from the engine, for the settings picker.
+#[tauri::command]
+fn list_providers() -> Result<serde_json::Value, String> {
+    let out = Command::new(resolve_bin())
+        .arg("providers")
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !out.status.success() {
+        return Err(String::from_utf8_lossy(&out.stderr).to_string());
+    }
+    serde_json::from_slice(&out.stdout).map_err(|e| e.to_string())
+}
+
 /// Flat list of project files (relative paths) for @-mention completion.
 /// Prefers `git ls-files` (fast, .gitignore-aware), falling back to a bounded walk.
 #[tauri::command]
@@ -506,6 +519,7 @@ pub fn run() {
             set_auth_key,
             fetch_marketplace,
             project_root,
+            list_providers,
             list_dir,
             list_files,
             read_text,
