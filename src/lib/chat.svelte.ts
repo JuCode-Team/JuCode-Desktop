@@ -113,11 +113,12 @@ export class ChatState {
 		if (!this.busy) return null;
 		const last = this.messages[this.messages.length - 1];
 		if (last?.kind === 'tool') return last.running ? 'tool' : 'waiting';
+		// Content is the source of truth: if the tail message has streamed text we're
+		// generating, regardless of a stale 'connecting' engine state.
+		if ((last?.kind === 'assistant' || last?.kind === 'reasoning') && last.text.length > 0)
+			return 'generating';
 		if (this.engineState === 'connecting') return 'connecting';
-		if (!last || last.kind === 'user') return 'waiting';
-		if ((last.kind === 'assistant' || last.kind === 'reasoning') && last.text.length === 0)
-			return 'waiting';
-		return 'generating';
+		return 'waiting';
 	}
 
 	closePicker() {

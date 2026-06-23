@@ -112,22 +112,20 @@
 	// The assistant message that's still streaming: render it as plain text and
 	// only run markdown/highlight once the turn finishes (avoids reparsing the
 	// whole message on every token).
+	// The streaming block is the LAST message (deltas append to the tail). Scanning
+	// backwards would wrongly latch onto a previous turn's reply before this turn's
+	// message exists, re-animating it on send.
 	const streamingMsg = $derived.by(() => {
 		if (!chat?.busy) return null;
-		for (let i = chat.messages.length - 1; i >= 0; i--) {
-			if (chat.messages[i].kind === 'assistant') return chat.messages[i];
-		}
-		return null;
+		const last = chat.messages[chat.messages.length - 1];
+		return last?.kind === 'assistant' ? last : null;
 	});
 	// The reasoning block currently receiving deltas — rendered with the
 	// line-by-line streaming animation (others render as static markdown).
 	const streamingReasoning = $derived.by(() => {
 		if (!chat?.busy) return null;
-		for (let i = chat.messages.length - 1; i >= 0; i--) {
-			const m = chat.messages[i];
-			if (m.kind === 'reasoning') return m.collapsed ? null : m;
-		}
-		return null;
+		const last = chat.messages[chat.messages.length - 1];
+		return last?.kind === 'reasoning' && !last.collapsed ? last : null;
 	});
 	const activeProject = $derived(projects.find((p) => p.sessions.some((s) => s.id === activeId)));
 	const loggedIn = $derived(!!chat?.provider && providers.includes(chat.provider));
@@ -346,6 +344,18 @@
 	function onScroll() {
 		if (scroller) atBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 60;
 	}
+	// Stick to the bottom as content grows (streaming text, tool output, new cards).
+	// The smoothed reveal changes height every frame, which a scroll-event listener
+	// can't see, so observe the content's size directly.
+	let contentEl = $state<HTMLElement | null>(null);
+	$effect(() => {
+		if (!contentEl || !scroller) return;
+		const ro = new ResizeObserver(() => {
+			if (atBottom && scroller) scroller.scrollTop = scroller.scrollHeight;
+		});
+		ro.observe(contentEl);
+		return () => ro.disconnect();
+	});
 	async function scrollToEnd(force = false) {
 		await tick();
 		if (scroller && (atBottom || force)) {
@@ -474,7 +484,9 @@
 			{/if}
 
 			<main bind:this={scroller} onscroll={onScroll}>
-				<MessageList messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} compactionTokens={chat.compactionTokens} onEdit={editMessage} />
+				<div bind:this={contentEl}>
+					<MessageList messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} compactionTokens={chat.compactionTokens} onEdit={editMessage} />
+				</div>
 			</main>
 			{#if !atBottom}
 				<button class="jump" onclick={jumpToBottom} aria-label="scroll to bottom"><ChevronDown size={18} /></button>
