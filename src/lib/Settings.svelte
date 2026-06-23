@@ -4,6 +4,7 @@
 	import { readConfig, writeConfig, readAuthProviders, setAuthKey, listProviders, sendOp } from '$lib/protocol';
 	import Vendor from '$lib/Vendor.svelte';
 	import Button from '$lib/ui/Button.svelte';
+	import IconButton from '$lib/ui/IconButton.svelte';
 	import TextField from '$lib/ui/TextField.svelte';
 	import Select from '$lib/ui/Select.svelte';
 	import Switch from '$lib/ui/Switch.svelte';
@@ -232,7 +233,7 @@
 										{/if}
 										{#if cfg.provider === p.id}<CircleCheck size={17} class="curchk" />{/if}
 									</button>
-									<button class="prow-edit" onclick={() => toggleEdit(p.id)} aria-label="edit"><Pencil size={14} /></button>
+									<IconButton onclick={() => toggleEdit(p.id)} label="edit"><Pencil size={14} /></IconButton>
 								</div>
 
 								{#if editing === p.id}
@@ -268,7 +269,7 @@
 								<div class="np-models">
 									<span class="np-mlabel">模型列表</span>
 									{#each form.models as m (m.name)}
-										<span class="mchip">{m.name} · {fmt(m.context_window)}<button class="mchip-x" onclick={() => (form.models = form.models.filter((x) => x !== m))} aria-label="remove"><X size={11} /></button></span>
+										<span class="mchip">{m.name} · {fmt(m.context_window)}<IconButton size="xs" onclick={() => (form.models = form.models.filter((x) => x !== m))} label="remove"><X size={11} /></IconButton></span>
 									{/each}
 									<div class="np-addm">
 										<TextField bind:value={mName} mono placeholder="模型名" />
@@ -597,20 +598,6 @@
 		color: var(--accent-bright);
 		flex-shrink: 0;
 	}
-	.prow-edit {
-		display: inline-flex;
-		padding: 8px;
-		border: none;
-		background: none;
-		color: var(--dim);
-		border-radius: var(--r-sm);
-		cursor: pointer;
-		flex-shrink: 0;
-	}
-	.prow-edit:hover {
-		background: var(--surface2);
-		color: var(--text);
-	}
 	.peditor {
 		margin: -2px 0 2px;
 		padding: 12px;
@@ -715,17 +702,6 @@
 		border-radius: 7px;
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
-	}
-	.mchip-x {
-		display: inline-flex;
-		border: none;
-		background: none;
-		color: var(--dim);
-		cursor: pointer;
-		padding: 1px;
-	}
-	.mchip-x:hover {
-		color: var(--text);
 	}
 	.np-addm {
 		display: flex;
