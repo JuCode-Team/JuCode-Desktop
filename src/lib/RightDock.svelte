@@ -5,14 +5,22 @@
 	import PlanPanel from './PlanPanel.svelte';
 	import FilesPanel from './FilesPanel.svelte';
 	import GitPanel from './GitPanel.svelte';
+	import ChangesPanel from './ChangesPanel.svelte';
 	import TerminalPanel from './TerminalPanel.svelte';
 	import type { Goal, PlanStep } from '$lib/chat.svelte';
 
-	let { goal, plan = [], cwd = '' }: { goal: Goal | null; plan?: PlanStep[]; cwd?: string } = $props();
+	let {
+		goal,
+		plan = [],
+		cwd = '',
+		changed = [],
+		onRevertFile
+	}: { goal: Goal | null; plan?: PlanStep[]; cwd?: string; changed?: string[]; onRevertFile?: (p: string) => void } = $props();
 
 	const PANELS = [
 		{ key: 'plan', label: '计划' },
 		{ key: 'goal', label: '目标' },
+		{ key: 'changes', label: '改动' },
 		{ key: 'files', label: '文件' },
 		{ key: 'git', label: 'Git' },
 		{ key: 'term', label: '终端' }
@@ -133,6 +141,7 @@
 			<div class="pane" class:hidden={key !== active}>
 				{#if key === 'plan'}<PlanPanel {plan} />
 				{:else if key === 'goal'}<GoalPanel {goal} />
+				{:else if key === 'changes'}<ChangesPanel {cwd} files={changed} onRevert={onRevertFile} />
 				{:else if key === 'files'}<FilesPanel rootDir={cwd} />
 				{:else if key === 'git'}<GitPanel {cwd} />
 				{:else if key === 'term'}<TerminalPanel {cwd} />{/if}

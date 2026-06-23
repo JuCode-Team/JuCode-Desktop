@@ -1,4 +1,5 @@
 import type { AgentEvent } from './protocol';
+import { EDIT_TOOLS } from './approval';
 
 export type Msg =
 	| { kind: 'user'; text: string }
@@ -84,6 +85,8 @@ export class ChatState {
 	totalOut = $state(0);
 	unseen = $state(false);
 	compactionTokens = $state(0);
+	// Files the agent edited this session (drives the Changes panel).
+	changedFiles = $state<string[]>([]);
 	// Approval policy applied client-side: 'ask' surfaces every gated tool,
 	// 'edits' auto-allows file mutations (still asks for shell), 'all' allows
 	// everything. The page reads this to auto-respond to approval_request.
@@ -104,8 +107,12 @@ export class ChatState {
 	#pendingUserEcho: string | null = null;
 
 	constructor() {
-		const saved = localStorage.getItem('jucode-approval-mode');
-		if (saved === 'edits' || saved === 'all') this.approvalMode = saved;
+		try {
+			const saved = localStorage.getItem('jucode-approval-mode');
+			if (saved === 'edits' || saved === 'all') this.approvalMode = saved;
+		} catch {
+			/* no localStorage (e.g. tests) */
+		}
 	}
 
 	/** Show a just-sent user message immediately, before the engine echoes it.
@@ -261,6 +268,18 @@ export class ChatState {
 					t.output = str(ev.output);
 					t.running = false;
 					t.isError = ev.is_error === true;
+				}
+				// Record files touched by a successful edit tool for the Changes panel.
+				if (ev.is_error !== true && EDIT_TOOLS.includes(str(ev.name))) {
+					try {
+						const out = JSON.parse(str(ev.output)) as Record<string, unknown>;
+						const paths = [out.path, ...(Array.isArray(out.paths) ? out.paths : [])];
+						for (const p of paths) {
+							if (typeof p === 'string' && p && !this.changedFiles.includes(p)) this.changedFiles.push(p);
+						}
+					} catch {
+						/* non-JSON output */
+					}
 				}
 				break;
 			}

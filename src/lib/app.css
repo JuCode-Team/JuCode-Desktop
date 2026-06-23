@@ -64,6 +64,18 @@
 * {
 	box-sizing: border-box;
 }
+
+/* Keyboard focus ring (mouse clicks don't trigger :focus-visible). Inputs keep
+   their own border-based focus indication to avoid a doubled outline. */
+:focus-visible {
+	outline: 2px solid var(--accent-bright);
+	outline-offset: 2px;
+	border-radius: 4px;
+}
+input:focus-visible,
+textarea:focus-visible {
+	outline: none;
+}
 html,
 body {
 	margin: 0;

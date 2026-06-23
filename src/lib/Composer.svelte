@@ -6,6 +6,7 @@
 	import ContextRing from '$lib/ContextRing.svelte';
 	import Segmented from '$lib/ui/Segmented.svelte';
 	import { listFiles, saveTempImage } from '$lib/protocol';
+	import { buildEntries, mentionMatches, type AtEntry } from '$lib/mention';
 	import type { ChatState } from '$lib/chat.svelte';
 
 	let {
@@ -63,8 +64,8 @@
 	});
 
 	// @-mention completion (files + folders). Lazily loads the project file list
-	// (cached per cwd) the first time an @-token is typed.
-	type AtEntry = { path: string; dir: boolean };
+	// (cached per cwd) the first time an @-token is typed. Matching logic lives in
+	// $lib/mention (pure + unit-tested).
 	let atFiles = $state<string[]>([]);
 	let atCwd = $state('');
 	let atIdx = $state(0);
@@ -86,69 +87,24 @@
 		}
 	});
 
-	// Files plus every parent folder derived from their paths (deduped). Empty
-	// folders (none in git) won't appear — acceptable for @-mention.
-	const atEntries = $derived.by<AtEntry[]>(() => {
-		const dirs = new Set<string>();
-		for (const f of atFiles) {
-			const parts = f.split('/');
-			let acc = '';
-			for (let i = 0; i < parts.length - 1; i++) {
-				acc = acc ? `${acc}/${parts[i]}` : parts[i];
-				dirs.add(acc);
-			}
-		}
-		const entries: AtEntry[] = atFiles.map((p) => ({ path: p, dir: false }));
-		for (const d of dirs) entries.push({ path: d, dir: true });
-		return entries;
-	});
+	const atEntries = $derived(buildEntries(atFiles));
 
-	// fzf-lite subsequence scorer: 0 = no match; higher = better. Rewards matches
-	// at word/segment boundaries (/._- ) and consecutive runs.
-	function fuzzyScore(text: string, q: string): number {
-		const t = text.toLowerCase();
-		let ti = 0;
-		let score = 0;
-		let prev = -2;
-		for (let qi = 0; qi < q.length; qi++) {
-			const at = t.indexOf(q[qi], ti);
-			if (at < 0) return 0;
-			let b = 1;
-			if (at === prev + 1) b += 5;
-			const before = t[at - 1];
-			if (at === 0 || before === '/' || before === '.' || before === '_' || before === '-') b += 6;
-			score += b;
-			prev = at;
-			ti = at + 1;
-		}
-		return score;
-	}
-	const dirFirst = (a: AtEntry, b: AtEntry) =>
-		a.dir === b.dir ? a.path.localeCompare(b.path) : a.dir ? -1 : 1;
-
-	const atMatches = $derived.by<AtEntry[]>(() => {
-		if (atQuery === null) return [];
-		const q = atQuery.toLowerCase();
+	// Matches are debounced only for large entry sets, so small repos stay instant
+	// while big monorepos coalesce rapid keystrokes. Top-K selection in
+	// mentionMatches bounds the per-keystroke cost regardless.
+	let atMatches = $state<AtEntry[]>([]);
+	$effect(() => {
+		const q = atQuery;
 		const entries = atEntries;
-		// Just `@`: show root-level entries, folders first.
-		if (q === '') {
-			return entries.filter((e) => !e.path.includes('/')).sort(dirFirst).slice(0, 10);
+		if (q === null) {
+			atMatches = [];
+			return;
 		}
-		// Trailing slash: drill into that folder — its direct children only.
-		if (q.endsWith('/')) {
-			return entries
-				.filter((e) => e.path.toLowerCase().startsWith(q) && e.path.length > q.length && !e.path.slice(q.length).includes('/'))
-				.sort(dirFirst)
-				.slice(0, 10);
+		if (entries.length > 3000) {
+			const t = setTimeout(() => (atMatches = mentionMatches(entries, q)), 40);
+			return () => clearTimeout(t);
 		}
-		// Otherwise fuzzy-rank by basename (weighted) and full path.
-		const scored: { e: AtEntry; s: number }[] = [];
-		for (const e of entries) {
-			const s = Math.max(fuzzyScore(e.path, q), fuzzyScore(base(e.path), q) * 2);
-			if (s > 0) scored.push({ e, s });
-		}
-		scored.sort((a, b) => b.s - a.s || a.e.path.length - b.e.path.length);
-		return scored.slice(0, 10).map((x) => x.e);
+		atMatches = mentionMatches(entries, q);
 	});
 	$effect(() => {
 		atMatches;

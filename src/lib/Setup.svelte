@@ -94,7 +94,7 @@
 </script>
 
 <div class="overlay" role="presentation">
-	<div class="wiz" role="dialog" tabindex="-1" aria-label="安装向导">
+	<div class="wiz" role="dialog" aria-modal="true" tabindex="-1" aria-label="安装向导">
 		<button class="skip" onclick={finish} aria-label="skip" title="跳过"><X size={18} /></button>
 
 		<div class="brand">JuCode</div>

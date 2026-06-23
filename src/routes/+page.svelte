@@ -11,6 +11,8 @@
 		sendNotification
 	} from '@tauri-apps/plugin-notification';
 	import { ChatState } from '$lib/chat.svelte';
+	import { treeRows } from '$lib/tree';
+	import { shouldAutoApprove } from '$lib/approval';
 	import {
 		sendOp,
 		createSession,
@@ -245,27 +247,6 @@
 	const activeModel = $derived(
 		chat?.picker?.kind === 'model' ? chat.picker.models.find((m) => m.active) : undefined
 	);
-	// Order the conversation tree into DFS pre-order with a depth per node so the
-	// flat picker list reads as a real branch tree (indentation conveys hierarchy).
-	function treeRows(nodes: { id: string; parent_id: string | null; label: string; active: boolean }[]) {
-		const ids = new Set(nodes.map((n) => n.id));
-		const kids = new Map<string | null, typeof nodes>();
-		for (const n of nodes) {
-			const key = n.parent_id && ids.has(n.parent_id) ? n.parent_id : null;
-			const arr = kids.get(key);
-			if (arr) arr.push(n);
-			else kids.set(key, [n]);
-		}
-		const out: { node: (typeof nodes)[number]; depth: number }[] = [];
-		const walk = (key: string | null, depth: number) => {
-			for (const n of kids.get(key) ?? []) {
-				out.push({ node: n, depth });
-				walk(n.id, depth + 1);
-			}
-		};
-		walk(null, 0);
-		return out;
-	}
 	const pickerRows = $derived.by(() => {
 		const p = chat?.picker;
 		const nil = undefined as number | undefined;
@@ -432,13 +413,9 @@
 		sendOp(activeId, { op: 'command', input: `/approve ${a.callId} ${decision}` });
 		if (chat) chat.pendingApproval = null;
 	}
-	// Gated tools the engine asks about; the 'edits' mode auto-allows mutations.
-	const EDIT_TOOLS = ['write', 'edit', 'str_replace', 'hashline_edit', 'apply_patch'];
 	function autoApprove(c: ChatState, sid: string) {
 		const a = c.pendingApproval;
-		if (!a) return;
-		const ok = c.approvalMode === 'all' || (c.approvalMode === 'edits' && EDIT_TOOLS.includes(a.name));
-		if (!ok) return;
+		if (!a || !shouldAutoApprove(c.approvalMode, a.name)) return;
 		sendOp(sid, { op: 'command', input: `/approve ${a.callId} allow` });
 		c.pendingApproval = null;
 	}
@@ -788,7 +765,13 @@
 	<div class="resizer" class:hidden={!showRight} role="separator" aria-label="resize panel" onpointerdown={startResize}></div>
 	<aside class="right" class:closed={!showRight} class:resizing style:width={showRight ? `${rightWidth}px` : '0px'}>
 		<div class="right-inner" style:width="{rightWidth}px">
-			<RightDock goal={chat?.goal ?? null} plan={chat?.plan ?? []} cwd={activeProject?.path ?? ''} />
+			<RightDock
+				goal={chat?.goal ?? null}
+				plan={chat?.plan ?? []}
+				cwd={activeProject?.path ?? ''}
+				changed={chat?.changedFiles ?? []}
+				onRevertFile={(p) => chat && (chat.changedFiles = chat.changedFiles.filter((x) => x !== p))}
+			/>
 		</div>
 	</aside>
 
@@ -817,7 +800,7 @@
 
 	{#if chat?.trustPrompt}
 		<div class="overlay" role="presentation">
-			<div class="modal trust" role="dialog" tabindex="-1" aria-label="信任项目">
+			<div class="modal trust" role="dialog" aria-modal="true" tabindex="-1" aria-label="信任项目">
 				<div class="modal-head"><span>信任此项目？</span></div>
 				<div class="trust-body">
 					<p>该项目包含可执行代码的本地技能或 hooks。信任后 JuCode 才会加载它们。</p>
@@ -834,7 +817,7 @@
 
 	{#if chat?.picker}
 		<div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && chat?.closePicker()}>
-			<div class="modal" role="dialog" tabindex="-1" aria-label={pickerTitle}>
+			<div class="modal" role="dialog" aria-modal="true" tabindex="-1" aria-label={pickerTitle}>
 				<div class="modal-head">
 					<span>{pickerTitle}</span>
 					<IconButton onclick={() => chat?.closePicker()} label="close"><X size={15} /></IconButton>
@@ -873,7 +856,7 @@
 
 	{#if chat?.pendingRewind}
 		<div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && chat && (chat.pendingRewind = null)}>
-			<div class="modal trust" role="dialog" tabindex="-1" aria-label="回退确认">
+			<div class="modal trust" role="dialog" aria-modal="true" tabindex="-1" aria-label="回退确认">
 				<div class="modal-head"><span>回退到这一轮并重写？</span></div>
 				<div class="trust-body">
 					<p>对话会回退到这条消息发出前，<b>此后的文件改动也会一并还原</b>。原消息已填入输入框，可修改后重新发送。此操作不可撤销。</p>

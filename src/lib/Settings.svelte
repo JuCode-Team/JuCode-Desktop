@@ -177,8 +177,9 @@
 	}
 </script>
 
+<svelte:window onkeydown={(e) => e.key === 'Escape' && onClose()} />
 <div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && onClose()}>
-	<div class="sheet" role="dialog" tabindex="-1" aria-label="Settings">
+	<div class="sheet" role="dialog" aria-modal="true" tabindex="-1" aria-label="设置">
 		<aside class="nav">
 			<div class="brand">JuCode</div>
 			<div class="nav-list">
