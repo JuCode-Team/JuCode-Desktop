@@ -80,6 +80,7 @@ export function listFiles(cwd?: string): Promise<string[]> {
 export interface ProviderInfo {
 	id: string;
 	base_url: string;
+	protocol: string;
 	models: { name: string; context_window?: number; max_output_tokens?: number; reasoning_efforts?: string[] }[];
 }
 export function listProviders(): Promise<ProviderInfo[]> {

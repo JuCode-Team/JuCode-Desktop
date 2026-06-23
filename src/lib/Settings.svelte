@@ -33,7 +33,7 @@
 
 	let cfg = $state<Record<string, any>>({});
 	let keyed = $state<string[]>([]);
-	let builtin = $state<{ id: string; base_url: string; models: ModelCfg[] }[]>([]);
+	let builtin = $state<{ id: string; base_url: string; protocol: string; models: ModelCfg[] }[]>([]);
 	let custom = $state<Provider[]>([]);
 	let saved = $state(false);
 	let section = $state<'model' | 'account' | 'behavior'>('model');
@@ -58,7 +58,7 @@
 	const meta = $derived(NAV.find((n) => n.key === section)!);
 
 	const allProviders = $derived<Provider[]>([
-		...builtin.map((b) => ({ id: b.id, base_url: b.base_url, models: b.models, format: 'responses', builtin: true })),
+		...builtin.map((b) => ({ id: b.id, base_url: b.base_url, models: b.models, format: b.protocol, builtin: true })),
 		...custom
 	]);
 	const modelOpts = $derived(models.map((m) => ({ value: m.name, ...m })));
@@ -85,6 +85,7 @@
 	function selectProvider(p: Provider) {
 		cfg.provider = p.id;
 		cfg.base_url = p.base_url;
+		cfg.protocol = p.format;
 		cfg.models = p.models;
 		const first = p.models[0];
 		if (first) cfg.model = first.name;
@@ -137,6 +138,7 @@
 		await writeConfig({
 			provider: cfg.provider,
 			base_url: cfg.base_url,
+			protocol: cfg.protocol ?? '',
 			models: cfg.models,
 			model: cfg.model,
 			reasoning_effort: cfg.reasoning_effort,
