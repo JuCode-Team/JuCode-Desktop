@@ -8,7 +8,19 @@
 	const html = $derived(DOMPurify.sanitize(renderMarkdown(text)));
 
 	function onClick(e: MouseEvent) {
-		const a = (e.target as HTMLElement).closest('a');
+		const el = e.target as HTMLElement;
+		const copy = el.closest('.cb-copy');
+		if (copy) {
+			e.preventDefault();
+			const pre = copy.closest('.codeblock')?.querySelector('pre');
+			const code = pre?.textContent ?? '';
+			navigator.clipboard?.writeText(code).catch(() => {});
+			const btn = copy as HTMLButtonElement;
+			btn.textContent = '已复制';
+			setTimeout(() => (btn.textContent = '复制'), 1400);
+			return;
+		}
+		const a = el.closest('a');
 		if (a && a.getAttribute('href')) {
 			e.preventDefault();
 			openUrl(a.getAttribute('href')!).catch(() => {});
@@ -99,6 +111,45 @@
 		padding: 0;
 		font-size: 12.5px;
 		line-height: 1.55;
+	}
+	.md :global(.codeblock) {
+		margin: 0 0 12px;
+		border: 1px solid var(--hairline);
+		border-radius: var(--r-md);
+		overflow: hidden;
+		background: var(--sidebar);
+	}
+	.md :global(.codeblock pre) {
+		margin: 0;
+		border: none;
+		border-radius: 0;
+		background: none;
+	}
+	.md :global(.cb-head) {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 4px 8px 4px 12px;
+		border-bottom: 1px solid var(--hairline);
+		background: var(--surface2);
+	}
+	.md :global(.cb-lang) {
+		font-family: var(--font-mono);
+		font-size: 11px;
+		color: var(--dim2);
+	}
+	.md :global(.cb-copy) {
+		border: none;
+		background: none;
+		color: var(--dim);
+		font-size: 11px;
+		cursor: pointer;
+		padding: 2px 7px;
+		border-radius: 5px;
+	}
+	.md :global(.cb-copy:hover) {
+		background: var(--panel);
+		color: var(--text);
 	}
 	.md :global(table) {
 		border-collapse: collapse;

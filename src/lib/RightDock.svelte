@@ -140,8 +140,8 @@
 		{/each}
 		{#if openTabs.length === 0}
 			<div class="empty">
-				<p>No panels open</p>
-				<span>Use <b>+</b> to open one</span>
+				<p>没有打开的面板</p>
+				<span>点 <b>+</b> 打开一个</span>
 			</div>
 		{/if}
 	</div>
@@ -195,6 +195,15 @@
 		color: var(--text);
 		box-shadow: inset 0 0 0 1px var(--hairline);
 	}
+	/* keep the tab's close button quiet until the tab is hovered or active */
+	.tab :global(.ib) {
+		opacity: 0;
+		transition: opacity 0.12s;
+	}
+	.tab:hover :global(.ib),
+	.tab.on :global(.ib) {
+		opacity: 1;
+	}
 	.tab.dragging {
 		opacity: 0.6;
 	}
@@ -236,7 +245,7 @@
 		background: var(--panel);
 		border: 1px solid var(--border);
 		border-radius: var(--r-md);
-		box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+		box-shadow: var(--shadow-pop);
 		animation: rise 0.12s ease;
 	}
 	.add-item {

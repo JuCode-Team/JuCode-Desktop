@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Pencil, Copy, Check, ChevronRight } from 'lucide-svelte';
+	import { Pencil, Copy, Check, ChevronRight, RotateCcw } from 'lucide-svelte';
 	import { slide } from 'svelte/transition';
 	import Markdown from '$lib/Markdown.svelte';
 	import ToolCard from '$lib/ToolCard.svelte';
@@ -12,7 +12,8 @@
 		streamingReasoning,
 		phase,
 		compactionTokens = 0,
-		onEdit
+		onEdit,
+		onRewind
 	}: {
 		messages: Msg[];
 		streamingMsg: Msg | null;
@@ -20,7 +21,17 @@
 		phase: string | null;
 		compactionTokens?: number;
 		onEdit: (text: string) => void;
+		onRewind: (text: string, userIndex: number) => void;
 	} = $props();
+
+	// Map each user message to its 0-based ordinal so a rewind can target the
+	// matching engine turn (the engine lists user turns in the same order).
+	const userOrdinal = $derived.by(() => {
+		const map = new Map<Msg, number>();
+		let n = 0;
+		for (const m of messages) if (m.kind === 'user') map.set(m, n++);
+		return map;
+	});
 
 	let copied = $state<unknown>(null);
 	function copy(text: string, m: unknown) {
@@ -109,7 +120,8 @@
 			<!-- empty placeholder -->
 		{:else if m.kind === 'user'}
 			<div class="row user">
-				<button class="uedit" onclick={() => onEdit(m.text)} aria-label="edit" title="编辑重发"><Pencil size={12} /></button>
+				<button class="uedit" onclick={() => onRewind(m.text, userOrdinal.get(m) ?? 0)} aria-label="rewind" title="回退到此轮并重写（会还原文件改动）"><RotateCcw size={12} /></button>
+				<button class="uedit" onclick={() => onEdit(m.text)} aria-label="quote" title="引用到输入框"><Pencil size={12} /></button>
 				<div class="bubble">{m.text}</div>
 			</div>
 		{:else if m.kind === 'assistant'}

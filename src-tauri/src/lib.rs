@@ -367,6 +367,27 @@ fn walk_files(root: &Path, dir: &Path, out: &mut Vec<String>) {
     }
 }
 
+/// Writes pasted image bytes to a temp file and returns its path, so the composer
+/// can attach it the same way as a dragged/picked file (the protocol only accepts
+/// local paths, not inline data).
+#[tauri::command]
+fn save_temp_image(data: Vec<u8>, ext: String) -> Result<String, String> {
+    let dir = std::env::temp_dir().join("jucode-paste");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let safe_ext = if !ext.is_empty() && ext.chars().all(|c| c.is_ascii_alphanumeric()) {
+        ext.to_lowercase()
+    } else {
+        "png".to_string()
+    };
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let path = dir.join(format!("paste-{stamp}.{safe_ext}"));
+    std::fs::write(&path, &data).map_err(|e| e.to_string())?;
+    Ok(path.display().to_string())
+}
+
 /// Reads a UTF-8 text file (size-capped). Returns an error for binary/oversized files.
 #[tauri::command]
 fn read_text(path: String) -> Result<String, String> {
@@ -535,6 +556,7 @@ pub fn run() {
             list_dir,
             list_files,
             read_text,
+            save_temp_image,
             git,
             pty_open,
             pty_write,

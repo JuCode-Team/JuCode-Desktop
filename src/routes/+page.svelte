@@ -1,9 +1,10 @@
 <script lang="ts">
-	import { onMount, tick } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import { listen } from '@tauri-apps/api/event';
 	import { getCurrentWebview } from '@tauri-apps/api/webview';
 	import { X, Check, PanelRight, ChevronDown, ShieldAlert } from 'lucide-svelte';
-	import { open } from '@tauri-apps/plugin-dialog';
+	import { open, ask } from '@tauri-apps/plugin-dialog';
+	import { toggleTheme } from '$lib/theme.svelte';
 	import {
 		isPermissionGranted,
 		requestPermission,
@@ -26,6 +27,7 @@
 	import MessageList from '$lib/MessageList.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
+	import CommandPalette from '$lib/CommandPalette.svelte';
 	import type { Project } from '$lib/types';
 	import Vendor from '$lib/Vendor.svelte';
 
@@ -50,6 +52,7 @@
 	let attachments = $state<{ path: string; image: boolean }[]>([]);
 	let scroller = $state<HTMLElement | null>(null);
 	let composerEl = $state<HTMLTextAreaElement | null>(null);
+	let bottomH = $state(120);
 	let atBottom = $state(true);
 	let providers = $state<string[]>([]);
 
@@ -65,10 +68,36 @@
 	let selIdx = $state(0);
 	let showSettings = $state(false);
 	let showMarket = $state(false);
+	let showPalette = $state(false);
 	let showRight = $state(true);
 	let rightWidth = $state(340);
 	let sidebarWidth = $state(248);
 	let resizing = $state(false);
+	let winW = $state(1200);
+
+	// Auto-collapse the right dock when the window gets too narrow for a comfortable
+	// chat column, and restore it when there's room again. Keyed only on width
+	// (via untrack) so it never fights a manual toggle.
+	const NARROW = 960;
+	let autoCollapsedRight = false;
+	$effect(() => {
+		const narrow = winW < NARROW;
+		untrack(() => {
+			if (narrow && showRight) {
+				showRight = false;
+				autoCollapsedRight = true;
+			} else if (!narrow && autoCollapsedRight && !showRight) {
+				showRight = true;
+				autoCollapsedRight = false;
+			}
+		});
+	});
+	// A manual toggle is authoritative — clear the auto-collapse intent so the
+	// responsive effect won't later override the user's choice.
+	function toggleRight() {
+		showRight = !showRight;
+		autoCollapsedRight = false;
+	}
 
 	function startSidebarResize(e: PointerEvent) {
 		e.preventDefault();
@@ -153,17 +182,27 @@
 	const fmtTokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
 	const isImage = (p: string) => /\.(png|jpe?g|gif|webp|bmp)$/i.test(p);
 	const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
+	// Engine subagent lifecycle status → Chinese (falls back to the raw value).
+	const AGENT_STATUS: Record<string, string> = {
+		started: '已启动',
+		running: '运行中',
+		completed: '已完成',
+		done: '已完成',
+		interrupted: '已中断',
+		closed: '已关闭'
+	};
+	const agentStatus = (s: string) => AGENT_STATUS[s] ?? s;
 
 	const project = $derived(activeProject?.name ?? (chat?.cwd ? base(chat.cwd) : 'workspace'));
 
 	// pickers (tree / model / resume) — active session
 	const pickerTitle = $derived(
 		chat?.picker?.kind === 'tree'
-			? 'Conversation tree'
+			? '对话分支树'
 			: chat?.picker?.kind === 'model'
-				? 'Select model'
+				? '选择模型'
 				: chat?.picker?.kind === 'resume'
-					? 'Resume session'
+					? '恢复历史会话'
 					: chat?.picker?.kind === 'checkpoint'
 						? '回退到历史回合'
 						: ''
@@ -237,7 +276,14 @@
 		if (p) p.sessions = p.sessions.filter((s) => s.id !== id);
 		if (activeId === id) activeId = allSessions[0]?.id ?? '';
 	}
-	function removeProject(p: Project) {
+	async function removeProject(p: Project) {
+		if (p.sessions.length) {
+			const ok = await ask(`关闭「${p.name}」会结束其下 ${p.sessions.length} 个对话，确定吗？`, {
+				title: '关闭项目',
+				kind: 'warning'
+			});
+			if (!ok) return;
+		}
 		for (const s of p.sessions) closeSession(s.id).catch(() => {});
 		projects = projects.filter((x) => x.id !== p.id);
 		if (!allSessions.some((s) => s.id === activeId)) activeId = allSessions[0]?.id ?? '';
@@ -275,6 +321,9 @@
 			let content = text;
 			if (files.length)
 				content += `${content ? '\n\n' : ''}Attached files (read these):\n${files.join('\n')}`;
+			// Echo the message instantly when it starts a turn now (a busy session
+			// queues it instead, shown in the composer's queue strip).
+			if (chat && !chat.busy) chat.optimisticUser(content);
 			sendOp(activeId, { op: 'user_message', content, images: images.length ? images : undefined });
 		}
 		input = '';
@@ -288,6 +337,16 @@
 		if (!a) return;
 		sendOp(activeId, { op: 'command', input: `/approve ${a.callId} ${decision}` });
 		if (chat) chat.pendingApproval = null;
+	}
+	// Gated tools the engine asks about; the 'edits' mode auto-allows mutations.
+	const EDIT_TOOLS = ['write', 'edit', 'str_replace', 'hashline_edit', 'apply_patch'];
+	function autoApprove(c: ChatState, sid: string) {
+		const a = c.pendingApproval;
+		if (!a) return;
+		const ok = c.approvalMode === 'all' || (c.approvalMode === 'edits' && EDIT_TOOLS.includes(a.name));
+		if (!ok) return;
+		sendOp(sid, { op: 'command', input: `/approve ${a.callId} allow` });
+		c.pendingApproval = null;
 	}
 
 	function selectRow(command: string) {
@@ -330,6 +389,11 @@
 	function onWindowKey(e: KeyboardEvent) {
 		pickerKey(e);
 		const mod = e.metaKey || e.ctrlKey;
+		if (mod && e.key === 'k') {
+			e.preventDefault();
+			showPalette = !showPalette;
+			return;
+		}
 		if (!mod) return;
 		if (e.key === 'n') {
 			e.preventDefault();
@@ -339,7 +403,7 @@
 			showSettings = true;
 		} else if (e.key === 'b') {
 			e.preventDefault();
-			showRight = !showRight;
+			toggleRight();
 		}
 	}
 
@@ -373,6 +437,22 @@
 		input = text;
 		composerEl?.focus();
 	}
+	// Real edit-and-resend: rewind the conversation (and files) to the turn that
+	// produced this user message, then drop its text back into the composer. The
+	// engine lists user turns in order, so the i-th turn matches the i-th message.
+	function rewindToMessage(text: string, userIndex: number) {
+		if (!chat) return;
+		chat.rewindIntent = { userIndex, text };
+		sendOp(activeId, { op: 'command', input: '/rewind' });
+	}
+	function confirmRewind() {
+		const pr = chat?.pendingRewind;
+		if (!pr || !chat) return;
+		sendOp(activeId, { op: 'command', input: `/rewind ${pr.id}` });
+		input = pr.text;
+		chat.pendingRewind = null;
+		composerEl?.focus();
+	}
 
 	onMount(() => {
 		const savedW = Number(localStorage.getItem('jucode-right-width'));
@@ -391,6 +471,7 @@
 				} catch {
 					/* ignore */
 				}
+				autoApprove(s.chat, s.id);
 				if (wasBusy && !s.chat.busy && s.id !== activeId) {
 					s.chat.unseen = true;
 					notifyDone(s.chat.title);
@@ -442,7 +523,7 @@
 	});
 </script>
 
-<svelte:window onkeydown={onWindowKey} />
+<svelte:window onkeydown={onWindowKey} bind:innerWidth={winW} />
 
 <div class="app">
 	<!-- LEFT: navigation + sessions -->
@@ -460,6 +541,7 @@
 		onHistory={openHistory}
 		onSettings={() => (showSettings = true)}
 		onMarket={() => (showMarket = true)}
+		onCommandPalette={() => (showPalette = true)}
 	/>
 	<div class="resizer side" role="separator" aria-label="resize sidebar" onpointerdown={startSidebarResize}></div>
 
@@ -472,39 +554,55 @@
 					<span class="hcrumb">{project}</span>
 				</div>
 				<div class="hspace" data-tauri-drag-region></div>
-				<button class="hicon" class:on={showRight} onclick={() => (showRight = !showRight)} aria-label="toggle panel"><PanelRight size={16} /></button>
+				<button class="hicon" class:on={showRight} onclick={toggleRight} aria-label="toggle panel" title="侧边面板 · ⌘B"><PanelRight size={16} /></button>
 			</header>
 
 			{#if Object.keys(chat.subagents).length}
 				<div class="agents">
 					{#each Object.entries(chat.subagents) as [path, info] (path)}
-						<span class="agent"><span class="agent-dot"></span>{path} · {info.status}</span>
+						<span class="agent"><span class="agent-dot"></span>{path} · {agentStatus(info.status)}</span>
 					{/each}
 				</div>
 			{/if}
 
 			<main bind:this={scroller} onscroll={onScroll}>
 				<div bind:this={contentEl}>
-					<MessageList messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} compactionTokens={chat.compactionTokens} onEdit={editMessage} />
+					<MessageList messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} compactionTokens={chat.compactionTokens} onEdit={editMessage} onRewind={rewindToMessage} />
 				</div>
+				{#if chat.messages.length === 0 && !chat.busy}
+					<div class="welcome">
+						<span class="welcome-mark">JuCode</span>
+						<p class="welcome-tip">给 JuCode 指派一个任务，开始新对话</p>
+						<div class="welcome-hints">
+							<span><kbd>/</kbd> 命令</span>
+							<span><kbd>@</kbd> 引用文件</span>
+							<span><kbd>⌘K</kbd> 命令面板</span>
+							<span>拖入 / 粘贴图片</span>
+						</div>
+					</div>
+				{/if}
 			</main>
 			{#if !atBottom}
-				<button class="jump" onclick={jumpToBottom} aria-label="scroll to bottom"><ChevronDown size={18} /></button>
+				<button class="jump" style:bottom="{bottomH + 14}px" onclick={jumpToBottom} aria-label="scroll to bottom"><ChevronDown size={18} /></button>
 			{/if}
 
+			<div class="bottom" bind:clientHeight={bottomH}>
 			{#if chat.pendingApproval}
-				<div class="approval">
-					<div class="approval-head">
-						<ShieldAlert size={15} />
-						<span>允许运行 <b>{chat.pendingApproval.name}</b>？</span>
-					</div>
-					{#if chat.pendingApproval.summary}
-						<pre class="approval-sum">{chat.pendingApproval.summary}</pre>
-					{/if}
-					<div class="approval-actions">
-						<Button variant="primary" size="sm" onclick={() => respondApproval('allow once')}>允许一次</Button>
-						<Button variant="secondary" size="sm" onclick={() => respondApproval('allow always')}>本会话始终允许</Button>
-						<Button variant="danger" size="sm" onclick={() => respondApproval('deny')}>拒绝</Button>
+				{@const isShell = ['bash', 'execute', 'exec_command', 'shell_command'].includes(chat.pendingApproval.name)}
+				<div class="approval-wrap">
+					<div class="approval">
+						<div class="approval-head">
+							<ShieldAlert size={15} />
+							<span>{isShell ? '允许执行命令' : '允许修改文件'} · <b>{chat.pendingApproval.name}</b></span>
+						</div>
+						{#if chat.pendingApproval.summary}
+							<pre class="approval-sum" class:cmd={isShell}>{isShell ? `$ ${chat.pendingApproval.summary}` : chat.pendingApproval.summary}</pre>
+						{/if}
+						<div class="approval-actions">
+							<Button variant="primary" size="sm" onclick={() => respondApproval('allow once')}>允许一次</Button>
+							<Button variant="secondary" size="sm" onclick={() => respondApproval('allow always')}>本会话始终允许</Button>
+							<Button variant="danger" size="sm" onclick={() => respondApproval('deny')}>拒绝</Button>
+						</div>
 					</div>
 				</div>
 			{/if}
@@ -521,6 +619,13 @@
 				onModel={() => nav('/model')}
 				onEffort={chooseEffort}
 			/>
+			</div>
+		{:else}
+			<div class="nochat" data-tauri-drag-region>
+				<span class="welcome-mark">JuCode</span>
+				<p class="welcome-tip">没有打开的对话</p>
+				<Button variant="primary" size="sm" onclick={addProject}>选择项目，开始对话</Button>
+			</div>
 		{/if}
 	</div>
 
@@ -542,16 +647,16 @@
 
 	{#if chat?.trustPrompt}
 		<div class="overlay" role="presentation">
-			<div class="modal trust" role="dialog" tabindex="-1" aria-label="Trust project">
-				<div class="modal-head"><span>Trust this project?</span></div>
+			<div class="modal trust" role="dialog" tabindex="-1" aria-label="信任项目">
+				<div class="modal-head"><span>信任此项目？</span></div>
 				<div class="trust-body">
-					<p>This project has local skills or hooks that can run code. Trust it to let JuCode load them.</p>
+					<p>该项目包含可执行代码的本地技能或 hooks。信任后 JuCode 才会加载它们。</p>
 					<code class="trust-path">{chat.trustPrompt.repoRoot ?? chat.trustPrompt.cwd}</code>
 				</div>
 				<div class="trust-actions">
-					<button class="btn ghost" onclick={() => respondTrust('no')}>Don't trust</button>
-					{#if chat.trustPrompt.repoRoot}<button class="btn" onclick={() => respondTrust('repo')}>Trust repo</button>{/if}
-					<button class="btn primary" onclick={() => respondTrust('yes')}>Trust</button>
+					<button class="btn ghost" onclick={() => respondTrust('no')}>不信任</button>
+					{#if chat.trustPrompt.repoRoot}<button class="btn" onclick={() => respondTrust('repo')}>信任整个仓库</button>{/if}
+					<button class="btn primary" onclick={() => respondTrust('yes')}>信任</button>
 				</div>
 			</div>
 		</div>
@@ -581,11 +686,42 @@
 							{#if row.active}<Check size={14} class="prow-check" />{/if}
 						</button>
 					{/each}
-					{#if pickerRows.length === 0}<div class="pempty">nothing here</div>{/if}
+					{#if pickerRows.length === 0}<div class="pempty">暂无可选项</div>{/if}
 				</div>
-				<div class="modal-foot dim">↑↓ navigate · Enter select · Esc close</div>
+				<div class="modal-foot dim">↑↓ 选择 · Enter 确认 · Esc 关闭</div>
 			</div>
 		</div>
+	{/if}
+
+	{#if chat?.pendingRewind}
+		<div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && chat && (chat.pendingRewind = null)}>
+			<div class="modal trust" role="dialog" tabindex="-1" aria-label="回退确认">
+				<div class="modal-head"><span>回退到这一轮并重写？</span></div>
+				<div class="trust-body">
+					<p>对话会回退到这条消息发出前，<b>此后的文件改动也会一并还原</b>。原消息已填入输入框，可修改后重新发送。此操作不可撤销。</p>
+					<code class="trust-path">{chat.pendingRewind.text.slice(0, 120)}</code>
+				</div>
+				<div class="trust-actions">
+					<button class="btn ghost" onclick={() => chat && (chat.pendingRewind = null)}>取消</button>
+					<button class="btn primary" onclick={confirmRewind}>回退并重写</button>
+				</div>
+			</div>
+		</div>
+	{/if}
+
+	{#if showPalette}
+		<CommandPalette
+			{chat}
+			hasProject={!!activeProject}
+			onClose={() => (showPalette = false)}
+			onRun={(cmd) => nav(cmd)}
+			onNewSession={() => activeProject && addSession(activeProject)}
+			onNewProject={addProject}
+			onSettings={() => (showSettings = true)}
+			onMarket={() => (showMarket = true)}
+			onTogglePanel={toggleRight}
+			onToggleTheme={toggleTheme}
+		/>
 	{/if}
 </div>
 
@@ -608,7 +744,7 @@
 	.jump {
 		position: absolute;
 		left: 50%;
-		bottom: 132px;
+		bottom: 132px; /* overridden inline to sit just above the composer */
 		transform: translateX(-50%);
 		width: 34px;
 		height: 34px;
@@ -626,10 +762,15 @@
 	.jump:hover {
 		background: var(--surface2);
 	}
-	.approval {
+	/* Match the composer's outer frame (max-width 880, 18px side padding) so the
+	   approval box lines up flush with the input box. */
+	.approval-wrap {
 		max-width: 880px;
 		width: 100%;
 		margin: 0 auto;
+		padding: 0 18px 10px;
+	}
+	.approval {
 		padding: 12px 14px;
 		background: color-mix(in oklab, var(--warn) 9%, var(--panel));
 		border: 1px solid color-mix(in oklab, var(--warn) 38%, transparent);
@@ -658,6 +799,10 @@
 		word-break: break-word;
 		max-height: 120px;
 		overflow-y: auto;
+	}
+	.approval-sum.cmd {
+		color: var(--text);
+		border-left: 2px solid var(--warn);
 	}
 	.approval-actions {
 		display: flex;
@@ -744,6 +889,60 @@
 		width: 100%;
 		margin: 0 auto;
 	}
+	.welcome {
+		margin: auto;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 10px;
+		padding: 24px;
+		text-align: center;
+		animation: rise 0.3s ease both;
+	}
+	.welcome-mark {
+		font-family: var(--font-display);
+		font-weight: 800;
+		font-size: 30px;
+		letter-spacing: -0.02em;
+		color: var(--text);
+		opacity: 0.16;
+	}
+	.welcome-tip {
+		margin: 0;
+		font-size: 14px;
+		color: var(--dim);
+	}
+	.welcome-hints {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 8px 16px;
+		margin-top: 6px;
+		font-size: 12px;
+		color: var(--dim2);
+	}
+	.welcome-hints span {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+	}
+	.welcome-hints kbd {
+		font-family: var(--font-mono);
+		font-size: 11px;
+		color: var(--dim);
+		background: var(--surface2);
+		border: 1px solid var(--hairline);
+		border-radius: 5px;
+		padding: 1px 6px;
+	}
+	.nochat {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 12px;
+	}
 	/* ---------- right ---------- */
 	.resizer {
 		width: 5px;
@@ -798,7 +997,7 @@
 		background: var(--panel);
 		border: 1px solid var(--border);
 		border-radius: var(--r-lg);
-		box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+		box-shadow: var(--shadow-modal);
 		overflow: hidden;
 	}
 	.modal-head {

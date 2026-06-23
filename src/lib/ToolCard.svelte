@@ -101,6 +101,8 @@
 			<LoaderCircle size={13} class="spin" />
 		{:else if !isRead}
 			<span class="chev" class:open={!collapsed}><ChevronRight size={13} /></span>
+		{:else}
+			<span class="chev-spacer"></span>
 		{/if}
 		<span class="verb">{verb}</span>
 		{#if target}<span class="target">{target}</span>{/if}
@@ -175,6 +177,10 @@
 	}
 	.chev.open {
 		transform: rotate(90deg);
+	}
+	.chev-spacer {
+		width: 13px;
+		flex-shrink: 0;
 	}
 	.verb {
 		font-weight: 600;

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { X, Search, Download, Check, LoaderCircle, RefreshCw } from 'lucide-svelte';
+	import { X, Search, Download, LoaderCircle, RefreshCw } from 'lucide-svelte';
 	import { fetchMarketplace, sendOp, type MarketSkill } from '$lib/protocol';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -60,7 +60,7 @@
 				<Search size={15} />
 				<input bind:value={query} placeholder="搜索扩展…" />
 			</div>
-			<Button variant="secondary" size="icon" onclick={load} title="refresh"><RefreshCw size={14} /></Button>
+			<Button variant="secondary" size="icon" onclick={load} title="刷新"><RefreshCw size={14} /></Button>
 		</div>
 
 		{#if tags.length}
@@ -92,8 +92,8 @@
 								<div class="tagrow">
 									{#each s.tags.slice(0, 3) as t (t)}<span class="t">{t}</span>{/each}
 								</div>
-								<Button variant={installing[s.id] ? 'success' : 'primary'} size="sm" disabled={installing[s.id]} onclick={() => install(s)}>
-									{#if installing[s.id]}<Check size={14} /> 已安装{:else}<Download size={14} /> 安装{/if}
+								<Button variant="primary" size="sm" disabled={installing[s.id]} onclick={() => install(s)}>
+									{#if installing[s.id]}<LoaderCircle size={14} class="spin" /> 安装中{:else}<Download size={14} /> 安装{/if}
 								</Button>
 							</div>
 						</div>
@@ -122,7 +122,7 @@
 		background: var(--panel);
 		border: 1px solid var(--border);
 		border-radius: var(--r-lg);
-		box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+		box-shadow: var(--shadow-modal);
 		overflow: hidden;
 	}
 	.head {

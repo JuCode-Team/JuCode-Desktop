@@ -73,6 +73,11 @@ export function readText(path: string): Promise<string> {
 	return invoke('read_text', { path });
 }
 
+// Persists pasted image bytes to a temp file; returns the path to attach.
+export function saveTempImage(data: Uint8Array, ext: string): Promise<string> {
+	return invoke('save_temp_image', { data: Array.from(data), ext });
+}
+
 export function listFiles(cwd?: string): Promise<string[]> {
 	return invoke('list_files', { cwd });
 }

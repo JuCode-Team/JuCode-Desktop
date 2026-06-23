@@ -60,7 +60,7 @@
 					<span class="ename">{e.name}</span>
 				</button>
 			{/each}
-			{#if entries.length === 0}<div class="empty">empty</div>{/if}
+			{#if entries.length === 0}<div class="empty">空目录</div>{/if}
 		</div>
 	{/if}
 </div>
@@ -159,7 +159,7 @@
 		background: var(--panel);
 		border: 1px solid var(--border);
 		border-radius: var(--r-lg);
-		box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+		box-shadow: var(--shadow-modal);
 		overflow: hidden;
 	}
 	.sheet-head {

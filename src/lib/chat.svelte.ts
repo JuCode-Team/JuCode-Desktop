@@ -84,10 +84,34 @@ export class ChatState {
 	totalOut = $state(0);
 	unseen = $state(false);
 	compactionTokens = $state(0);
+	// Approval policy applied client-side: 'ask' surfaces every gated tool,
+	// 'edits' auto-allows file mutations (still asks for shell), 'all' allows
+	// everything. The page reads this to auto-respond to approval_request.
+	approvalMode = $state<'ask' | 'edits' | 'all'>('ask');
+	// A rewind targeted at a specific rendered user message: the page sets this
+	// before sending `/rewind`, and the checkpoint_view handler resolves it to a
+	// concrete turn id (positional: the i-th user turn matches the i-th user message).
+	rewindIntent: { userIndex: number; text: string } | null = null;
+	pendingRewind = $state<{ id: string; text: string } | null>(null);
 
 	#assistantIdx = -1;
 	#reasoningIdx = -1;
 	#turnStart: number | null = null;
+	#pendingUserEcho: string | null = null;
+
+	constructor() {
+		const saved = localStorage.getItem('jucode-approval-mode');
+		if (saved === 'edits' || saved === 'all') this.approvalMode = saved;
+	}
+
+	/** Show a just-sent user message immediately, before the engine echoes it.
+	 *  The echo is de-duplicated in the `user_message` handler. */
+	optimisticUser(content: string) {
+		this.messages.push({ kind: 'user', text: content });
+		this.#pendingUserEcho = content;
+		if (this.title === 'New session' && content.trim()) this.title = content.trim().slice(0, 40);
+		this.#resetCurrent();
+	}
 
 	/** Stamp the turn's total elapsed onto its last assistant message. */
 	#endTurn() {
@@ -167,6 +191,14 @@ export class ChatState {
 				break;
 			case 'user_message': {
 				const text = str(ev.content);
+				// Skip the echo of a message we already showed optimistically.
+				const last = this.messages[this.messages.length - 1];
+				if (this.#pendingUserEcho === text && last?.kind === 'user' && last.text === text) {
+					this.#pendingUserEcho = null;
+					this.#resetCurrent();
+					break;
+				}
+				this.#pendingUserEcho = null;
 				this.messages.push({ kind: 'user', text });
 				if (this.title === 'New session' && text.trim()) {
 					this.title = text.trim().slice(0, 40);
@@ -248,9 +280,22 @@ export class ChatState {
 			case 'resume_view':
 				this.picker = { kind: 'resume', items: arr<ResumeItem>(ev.items) };
 				break;
-			case 'checkpoint_view':
-				this.picker = { kind: 'checkpoint', items: arr<ResumeItem>(ev.items) };
+			case 'checkpoint_view': {
+				const items = arr<ResumeItem>(ev.items);
+				// A pencil-driven rewind targets a specific user message by position;
+				// resolve it to a turn id and confirm instead of opening the picker.
+				if (this.rewindIntent) {
+					const target = items[this.rewindIntent.userIndex];
+					const text = this.rewindIntent.text;
+					this.rewindIntent = null;
+					if (target) {
+						this.pendingRewind = { id: target.id, text };
+						break;
+					}
+				}
+				this.picker = { kind: 'checkpoint', items };
 				break;
+			}
 			case 'transcript': {
 				const items = arr<Record<string, unknown>>(ev.items);
 				this.messages = items

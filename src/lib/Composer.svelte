@@ -1,11 +1,11 @@
 <script lang="ts">
-	import { Send, Square, Paperclip, X, FileText, FastForward, File } from 'lucide-svelte';
+	import { Send, Square, Paperclip, X, FileText, FastForward, File, ShieldCheck } from 'lucide-svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import { convertFileSrc } from '@tauri-apps/api/core';
 	import Vendor from '$lib/Vendor.svelte';
 	import ContextRing from '$lib/ContextRing.svelte';
 	import Segmented from '$lib/ui/Segmented.svelte';
-	import { listFiles } from '$lib/protocol';
+	import { listFiles, saveTempImage } from '$lib/protocol';
 	import type { ChatState } from '$lib/chat.svelte';
 
 	let {
@@ -34,6 +34,19 @@
 
 	let slashIdx = $state(0);
 	let showEffort = $state(false);
+	let showApproval = $state(false);
+
+	const APPROVAL = [
+		{ value: 'ask', label: '谨慎' },
+		{ value: 'edits', label: '自动改文件' },
+		{ value: 'all', label: '全自动' }
+	];
+	const approvalLabel = $derived(APPROVAL.find((a) => a.value === chat.approvalMode)?.label ?? '谨慎');
+	function setApproval(m: string) {
+		chat.approvalMode = m as 'ask' | 'edits' | 'all';
+		localStorage.setItem('jucode-approval-mode', m);
+		showApproval = false;
+	}
 
 	const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 	const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
@@ -144,6 +157,36 @@
 			onSubmit();
 		}
 	}
+
+	// Paste an image straight from the clipboard: write it to a temp file and
+	// attach the path (screenshots, copied images — no need to save to disk first).
+	async function onPaste(e: ClipboardEvent) {
+		const items = e.clipboardData?.items;
+		if (!items) return;
+		for (const it of items) {
+			if (it.kind !== 'file' || !it.type.startsWith('image/')) continue;
+			const file = it.getAsFile();
+			if (!file) continue;
+			e.preventDefault();
+			const ext = (it.type.split('/')[1] || 'png').replace(/[^a-z0-9]/gi, '') || 'png';
+			try {
+				const buf = new Uint8Array(await file.arrayBuffer());
+				const path = await saveTempImage(buf, ext);
+				if (!attachments.some((a) => a.path === path)) attachments.push({ path, image: true });
+			} catch {
+				/* ignore */
+			}
+		}
+	}
+
+	// Grow the textarea with its content (up to the CSS max-height, then scroll).
+	// Tracks `input` so it also resizes on programmatic fills (slash/@/edit/rewind).
+	$effect(() => {
+		input;
+		if (!el) return;
+		el.style.height = 'auto';
+		el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
+	});
 </script>
 
 <div class="composer-wrap">
@@ -191,15 +234,15 @@
 		</div>
 	{/if}
 	<div class="composer">
-		<textarea bind:this={el} bind:value={input} onkeydown={onKey} rows="1" placeholder="给 JuCode 指派一个任务…  (拖入或点回形针附加文件 · / 唤起命令)"></textarea>
+		<textarea bind:this={el} bind:value={input} onkeydown={onKey} onpaste={onPaste} rows="1" placeholder="给 JuCode 指派一个任务…  (拖入/粘贴图片 · 回形针附加文件 · / 唤起命令)"></textarea>
 		<div class="composer-bar">
-			<IconButton onclick={onPick} label="attach" title="attach files"><Paperclip size={16} /></IconButton>
-			<button class="flatbtn model" onclick={onModel} title="switch model">
+			<IconButton onclick={onPick} label="attach" title="附加文件"><Paperclip size={16} /></IconButton>
+			<button class="flatbtn model" onclick={onModel} title="切换模型">
 				<Vendor model={chat.model} size={15} /><span>{chat.model || 'model'}</span>
 			</button>
 			{#if chat.efforts.length}
 				<div class="effortsel">
-					<button class="flatbtn" onclick={() => (showEffort = !showEffort)} title="thinking effort">
+					<button class="flatbtn" onclick={() => (showEffort = !showEffort)} title="思考强度">
 						{cap(chat.effort) || 'Effort'}
 					</button>
 					{#if showEffort}
@@ -210,6 +253,17 @@
 					{/if}
 				</div>
 			{/if}
+			<div class="effortsel">
+				<button class="flatbtn appr" class:auto={chat.approvalMode !== 'ask'} onclick={() => (showApproval = !showApproval)} title="工具审批模式">
+					<ShieldCheck size={14} /><span>{approvalLabel}</span>
+				</button>
+				{#if showApproval}
+					<button class="pop-backdrop" aria-label="close" onclick={() => (showApproval = false)}></button>
+					<div class="effort-pop">
+						<Segmented value={chat.approvalMode} options={APPROVAL} onChange={setApproval} />
+					</div>
+				{/if}
+			</div>
 			<div class="cspace"></div>
 			{#if ctxLimit > 0}
 				<div class="ctxwrap">
@@ -290,6 +344,12 @@
 		font-family: var(--font-mono);
 		font-size: 12px;
 	}
+	.flatbtn.appr span {
+		font-size: 12px;
+	}
+	.flatbtn.appr.auto {
+		color: var(--warn);
+	}
 	.effortsel {
 		position: relative;
 		display: inline-flex;
@@ -311,7 +371,7 @@
 		background: var(--panel);
 		border: 1px solid var(--border);
 		border-radius: var(--r-md);
-		box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+		box-shadow: var(--shadow-pop);
 		animation: rise 0.12s ease;
 	}
 	.ctxwrap {
@@ -328,7 +388,7 @@
 		background: var(--panel);
 		border: 1px solid var(--border);
 		border-radius: var(--r-md);
-		box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+		box-shadow: var(--shadow-pop);
 		opacity: 0;
 		transform: translateY(4px);
 		pointer-events: none;
@@ -409,7 +469,7 @@
 		border: 1px solid var(--border);
 		border-radius: var(--r-md);
 		overflow: hidden;
-		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+		box-shadow: var(--shadow-pop);
 	}
 	.slash-item {
 		display: flex;

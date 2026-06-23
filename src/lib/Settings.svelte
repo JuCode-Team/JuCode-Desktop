@@ -347,7 +347,7 @@
 		background: var(--panel);
 		border: 1px solid var(--border);
 		border-radius: var(--r-lg);
-		box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+		box-shadow: var(--shadow-modal);
 		overflow: hidden;
 		animation: pop 0.16s cubic-bezier(0.2, 0.9, 0.3, 1);
 	}

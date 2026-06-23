@@ -112,7 +112,7 @@
 		background: var(--panel);
 		border: 1px solid var(--border);
 		border-radius: var(--r-md);
-		box-shadow: 0 14px 36px rgba(0, 0, 0, 0.3);
+		box-shadow: var(--shadow-pop);
 		animation: rise 0.12s ease;
 	}
 	.opt {

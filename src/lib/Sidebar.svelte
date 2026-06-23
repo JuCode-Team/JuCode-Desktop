@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Store, Plus, History, X, LoaderCircle, Settings as SettingsIcon, Moon, Sun } from 'lucide-svelte';
+	import { Store, Plus, History, X, LoaderCircle, Command, Moon, Sun } from 'lucide-svelte';
 	import { themeState, toggleTheme } from '$lib/theme.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import type { Project } from '$lib/types';
@@ -17,7 +17,8 @@
 		onCloseProject,
 		onHistory,
 		onSettings,
-		onMarket
+		onMarket,
+		onCommandPalette
 	}: {
 		projects: Project[];
 		activeId: string;
@@ -32,6 +33,7 @@
 		onHistory: (p: Project) => void;
 		onSettings: () => void;
 		onMarket: () => void;
+		onCommandPalette: () => void;
 	} = $props();
 </script>
 
@@ -64,7 +66,7 @@
 			</div>
 			{#each p.sessions as s (s.id)}
 				<button class="sess" class:on={s.id === activeId} onclick={() => onSelect(s.id)}>
-					<span class="sess-dot" class:busy={s.chat.busy} class:err={s.chat.engineState === 'exited'} class:unseen={s.chat.unseen && !s.chat.busy}></span>
+					<span class="sess-dot" class:busy={s.chat.busy} class:err={s.chat.engineState === 'exited'} class:unseen={s.chat.unseen && !s.chat.busy} class:attn={!!(s.chat.pendingApproval || s.chat.trustPrompt)} title={s.chat.pendingApproval || s.chat.trustPrompt ? '等待你的确认' : ''}></span>
 					<span class="sess-title">{s.chat.title}</span>
 					{#if s.chat.busy}<LoaderCircle size={12} class="spin" />{/if}
 					<span
@@ -86,14 +88,16 @@
 		{/each}
 	</div>
 
-	<button class="account" onclick={onSettings} title="账户设置">
+	<button class="account" onclick={onSettings} title="账户与设置">
 		<span class="acc-dot" class:on={loggedIn}></span>
 		<span class="acc-name">{loggedIn ? providerName : '未登录'}</span>
 		<span class="acc-go">设置</span>
 	</button>
 	<div class="side-foot">
-		<button class="foot-btn" onclick={onSettings}><SettingsIcon size={15} /><span>设置</span></button>
-		<IconButton onclick={toggleTheme} label="toggle theme">
+		<button class="foot-btn" onclick={onCommandPalette} title="命令面板">
+			<Command size={15} /><span>命令面板</span><kbd class="foot-kbd">⌘K</kbd>
+		</button>
+		<IconButton onclick={toggleTheme} label="切换主题" title="切换主题">
 			{#if themeState.value === 'dark'}<Moon size={15} />{:else}<Sun size={15} />{/if}
 		</IconButton>
 	</div>
@@ -150,7 +154,8 @@
 		display: flex;
 		align-items: center;
 		gap: 9px;
-		padding: 26px 18px 14px;
+		/* extra top inset clears the macOS traffic lights (overlay title bar) */
+		padding: 32px 18px 14px;
 	}
 	.word {
 		font-family: var(--font-display);
@@ -318,6 +323,12 @@
 		background: var(--accent-bright);
 		box-shadow: 0 0 0 3px var(--accent-soft);
 	}
+	/* Defined last so a pending approval/trust wins over busy/unseen. */
+	.sess-dot.attn {
+		background: var(--warn);
+		box-shadow: 0 0 0 3px color-mix(in oklab, var(--warn) 24%, transparent);
+		animation: none;
+	}
 	.sess-title {
 		flex: 1;
 		white-space: nowrap;
@@ -359,5 +370,15 @@
 	.foot-btn:hover {
 		background: var(--surface2);
 		color: var(--text);
+	}
+	.foot-kbd {
+		margin-left: auto;
+		font-family: var(--font-mono);
+		font-size: 10.5px;
+		color: var(--dim2);
+		background: var(--surface2);
+		border: 1px solid var(--hairline);
+		border-radius: 5px;
+		padding: 1px 5px;
 	}
 </style>
