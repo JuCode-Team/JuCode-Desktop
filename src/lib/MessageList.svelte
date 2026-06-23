@@ -35,6 +35,53 @@
 				? `${(ms / 1000).toFixed(1)}s`
 				: `${Math.floor(ms / 60000)}m${Math.round((ms % 60000) / 1000)}s`;
 
+	// Smoothing buffer: SSE deltas arrive in big bursts every few seconds, which
+	// reads as jerky chunk-by-chunk output. Reveal the received text at an adaptive
+	// pace so it flows continuously. `shown` chases the active message's length with
+	// a proportional controller (speed grows with backlog, floored so it never
+	// stalls while content is pending), integrated over real time.
+	const REVEAL_TAU = 1.2; // s — backlog time constant (higher = smoother, more lag)
+	const MIN_CPS = 24; // chars/s floor while streaming
+	let shownChars = $state(0);
+	let smoothing: Msg | null = null;
+	const active = $derived<Msg | null>(streamingMsg ?? streamingReasoning);
+	const textOf = (m: Msg | null) => (m && 'text' in m ? m.text : '');
+
+	$effect(() => {
+		if (!active) {
+			shownChars = 0;
+			smoothing = null;
+			return;
+		}
+		let raf = 0;
+		let last = performance.now();
+		const tick = (now: number) => {
+			const cur = streamingMsg ?? streamingReasoning;
+			if (!cur) return;
+			if (cur !== smoothing) {
+				smoothing = cur;
+				shownChars = 0;
+				last = now;
+			}
+			const len = textOf(cur).length;
+			const dt = Math.min(0.1, (now - last) / 1000);
+			last = now;
+			const pending = len - shownChars;
+			if (pending > 0) {
+				const cps = Math.max(MIN_CPS, pending / REVEAL_TAU);
+				shownChars = Math.min(len, shownChars + cps * dt);
+			}
+			raf = requestAnimationFrame(tick);
+		};
+		raf = requestAnimationFrame(tick);
+		return () => cancelAnimationFrame(raf);
+	});
+
+	// Text to show for a message — smoothed slice for the one currently streaming.
+	function revealed(m: Msg): string {
+		return m === active ? textOf(m).slice(0, Math.floor(shownChars)) : textOf(m);
+	}
+
 	// Incremental streaming markdown: render completed blocks as markdown (memoized
 	// by the slice, so it only re-parses when a block finalizes) and the in-progress
 	// tail block as plain text. Per-token cost tracks the current block, not the
@@ -65,9 +112,10 @@
 		{:else if m.kind === 'assistant'}
 			<div class="answer">
 				{#if m === streamingMsg}
-					{@const i = splitIdx(m.text)}
-					{#if i > 0}<Markdown text={m.text.slice(0, i)} />{/if}
-					<div class="stream">{m.text.slice(i)}</div>
+					{@const t = revealed(m)}
+					{@const i = splitIdx(t)}
+					{#if i > 0}<Markdown text={t.slice(0, i)} />{/if}
+					<div class="stream">{t.slice(i)}</div>
 				{:else}
 					<Markdown text={m.text} />
 					<div class="foot">
@@ -88,7 +136,7 @@
 				{#if !m.collapsed}
 					<div class="reason-body" transition:slide={{ duration: 180 }}>
 						{#if m === streamingReasoning}
-							{#each m.text.split('\n') as line, i (i)}
+							{#each revealed(m).split('\n') as line, i (i)}
 								<div class="rline">{line || ' '}</div>
 							{/each}
 						{:else}
