@@ -68,6 +68,7 @@ export class ChatState {
 	engineState = $state('starting');
 	contextTokens = $state(0);
 	contextWindow = $state(0);
+	contextLimit = $state(0);
 	cost = $state(0);
 	pendingMessages = $state<string[]>([]);
 	picker = $state<Picker>(null);
@@ -162,6 +163,7 @@ export class ChatState {
 				this.efforts = arr<string>(ev.reasoning_efforts);
 				this.engineState = str(ev.state) || this.engineState;
 				this.contextWindow = num(ev.context_window);
+				this.contextLimit = num(ev.context_limit);
 				break;
 			case 'user_message': {
 				const text = str(ev.content);

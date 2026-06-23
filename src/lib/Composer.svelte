@@ -88,8 +88,11 @@
 		});
 	}
 
+	// Gauge against the auto-compaction limit, so a full ring means "about to
+	// compact" (falls back to the window if the engine didn't send a limit).
+	const ctxLimit = $derived(chat.contextLimit || chat.contextWindow);
 	const ctxPct = $derived(
-		chat.contextWindow > 0 ? Math.min(100, Math.round((chat.contextTokens / chat.contextWindow) * 100)) : 0
+		ctxLimit > 0 ? Math.min(100, Math.round((chat.contextTokens / ctxLimit) * 100)) : 0
 	);
 
 	function onKey(e: KeyboardEvent) {
@@ -204,7 +207,7 @@
 				</div>
 			{/if}
 			<div class="cspace"></div>
-			{#if chat.contextWindow > 0}<ContextRing pct={ctxPct} label={`context ${fmtTokens(chat.contextTokens)} / ${fmtTokens(chat.contextWindow)}`} />{/if}
+			{#if ctxLimit > 0}<ContextRing pct={ctxPct} label={`context ${fmtTokens(chat.contextTokens)} / ${fmtTokens(ctxLimit)} (压缩点)`} />{/if}
 			{#if chat.busy}
 				<button class="cact stop" onclick={onStop} aria-label="stop" title="停止"><Square size={15} /></button>
 			{:else}
