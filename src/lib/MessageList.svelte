@@ -12,6 +12,7 @@
 		streamingReasoning,
 		phase,
 		compactionTokens = 0,
+		findActive = null,
 		onEdit,
 		onRewind
 	}: {
@@ -20,9 +21,17 @@
 		streamingReasoning: Msg | null;
 		phase: string | null;
 		compactionTokens?: number;
+		findActive?: number | null;
 		onEdit: (text: string) => void;
 		onRewind: (text: string, userIndex: number) => void;
 	} = $props();
+
+	// Scroll the current find hit into view (highlight is applied via the .hit class).
+	let rowEls: HTMLElement[] = [];
+	$effect(() => {
+		if (findActive == null) return;
+		rowEls[findActive]?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+	});
 
 	// Map each user message to its 0-based ordinal so a rewind can target the
 	// matching engine turn (the engine lists user turns in the same order).
@@ -115,10 +124,10 @@
 </script>
 
 <div class="list">
-	{#each messages as m (m)}
-		{#if !shown(m)}
-			<!-- empty placeholder -->
-		{:else if m.kind === 'user'}
+	{#each messages as m, i (m)}
+		{#if shown(m)}
+			<div class="mwrap" class:hit={i === findActive} bind:this={rowEls[i]}>
+				{#if m.kind === 'user'}
 			<div class="row user">
 				<button class="uedit" onclick={() => onRewind(m.text, userOrdinal.get(m) ?? 0)} aria-label="rewind" title="回退到此轮并重写（会还原文件改动）"><RotateCcw size={12} /></button>
 				<button class="uedit" onclick={() => onEdit(m.text)} aria-label="quote" title="引用到输入框"><Pencil size={12} /></button>
@@ -166,6 +175,8 @@
 			<div class="system">{m.text}</div>
 		{:else if m.kind === 'error'}
 			<div class="error">{m.text}</div>
+				{/if}
+			</div>
 		{/if}
 	{/each}
 	<Indicator {phase} tokens={compactionTokens} />
@@ -181,6 +192,14 @@
 	   collapses tool cards into stray horizontal lines under content pressure. */
 	.list > :global(*) {
 		flex-shrink: 0;
+	}
+	.mwrap {
+		border-radius: 10px;
+		transition: background 0.3s ease, box-shadow 0.3s ease;
+	}
+	.mwrap.hit {
+		background: var(--accent-soft);
+		box-shadow: 0 0 0 6px var(--accent-soft);
 	}
 	.row {
 		display: flex;

@@ -1,8 +1,12 @@
 <script lang="ts">
-	import { Store, Plus, History, X, LoaderCircle, Command, Moon, Sun } from 'lucide-svelte';
-	import { themeState, toggleTheme } from '$lib/theme.svelte';
+	import { Store, Plus, History, X, LoaderCircle, Command, Moon, Sun, Monitor } from 'lucide-svelte';
+	import { themeState, cycleTheme } from '$lib/theme.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import type { Project } from '$lib/types';
+
+	const themeLabel = $derived(
+		themeState.pref === 'system' ? '主题：跟随系统' : themeState.pref === 'light' ? '主题：浅色' : '主题：深色'
+	);
 
 	let {
 		projects,
@@ -97,8 +101,8 @@
 		<button class="foot-btn" onclick={onCommandPalette} title="命令面板">
 			<Command size={15} /><span>命令面板</span><kbd class="foot-kbd">⌘K</kbd>
 		</button>
-		<IconButton onclick={toggleTheme} label="切换主题" title="切换主题">
-			{#if themeState.value === 'dark'}<Moon size={15} />{:else}<Sun size={15} />{/if}
+		<IconButton onclick={cycleTheme} label="切换主题" title={themeLabel}>
+			{#if themeState.pref === 'system'}<Monitor size={15} />{:else if themeState.pref === 'light'}<Sun size={15} />{:else}<Moon size={15} />{/if}
 		</IconButton>
 	</div>
 </aside>

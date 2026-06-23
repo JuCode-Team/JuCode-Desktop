@@ -2,9 +2,9 @@
 	import { onMount, tick, untrack } from 'svelte';
 	import { listen } from '@tauri-apps/api/event';
 	import { getCurrentWebview } from '@tauri-apps/api/webview';
-	import { X, Check, PanelRight, ChevronDown, ShieldAlert } from 'lucide-svelte';
+	import { X, Check, PanelRight, ChevronDown, ChevronUp, ShieldAlert, Search } from 'lucide-svelte';
 	import { open, ask } from '@tauri-apps/plugin-dialog';
-	import { toggleTheme } from '$lib/theme.svelte';
+	import { cycleTheme } from '$lib/theme.svelte';
 	import {
 		isPermissionGranted,
 		requestPermission,
@@ -56,6 +56,14 @@
 	let bottomH = $state(120);
 	let atBottom = $state(true);
 	let providers = $state<string[]>([]);
+
+	// In-conversation find (⌘F)
+	let showFind = $state(false);
+	let findQuery = $state('');
+	let findIdx = $state(0);
+	let findInputEl = $state<HTMLInputElement | null>(null);
+	// Picker filter (history / long lists)
+	let pickerQuery = $state('');
 
 	async function notifyDone(title: string) {
 		try {
@@ -170,6 +178,24 @@
 	const activeProject = $derived(projects.find((p) => p.sessions.some((s) => s.id === activeId)));
 	const loggedIn = $derived(!!chat?.provider && providers.includes(chat.provider));
 
+	// Message indices in the active chat matching the find query, and the current one.
+	const findHits = $derived.by(() => {
+		if (!showFind || !chat) return [];
+		const q = findQuery.trim().toLowerCase();
+		if (!q) return [];
+		const hits: number[] = [];
+		chat.messages.forEach((m, i) => {
+			const text = m.kind === 'tool' ? `${m.name} ${m.output}` : 'text' in m ? m.text : '';
+			if (text.toLowerCase().includes(q)) hits.push(i);
+		});
+		return hits;
+	});
+	const findActive = $derived(findHits.length ? findHits[Math.min(findIdx, findHits.length - 1)] : null);
+	$effect(() => {
+		findQuery;
+		findIdx = 0;
+	});
+
 	// Persist the project layout + open tabs (engine session id + title) whenever
 	// they change. Gated on `loaded` so it can't clobber the saved data before the
 	// initial restore has run.
@@ -219,21 +245,56 @@
 	const activeModel = $derived(
 		chat?.picker?.kind === 'model' ? chat.picker.models.find((m) => m.active) : undefined
 	);
+	// Order the conversation tree into DFS pre-order with a depth per node so the
+	// flat picker list reads as a real branch tree (indentation conveys hierarchy).
+	function treeRows(nodes: { id: string; parent_id: string | null; label: string; active: boolean }[]) {
+		const ids = new Set(nodes.map((n) => n.id));
+		const kids = new Map<string | null, typeof nodes>();
+		for (const n of nodes) {
+			const key = n.parent_id && ids.has(n.parent_id) ? n.parent_id : null;
+			const arr = kids.get(key);
+			if (arr) arr.push(n);
+			else kids.set(key, [n]);
+		}
+		const out: { node: (typeof nodes)[number]; depth: number }[] = [];
+		const walk = (key: string | null, depth: number) => {
+			for (const n of kids.get(key) ?? []) {
+				out.push({ node: n, depth });
+				walk(n.id, depth + 1);
+			}
+		};
+		walk(null, 0);
+		return out;
+	}
 	const pickerRows = $derived.by(() => {
 		const p = chat?.picker;
+		const nil = undefined as number | undefined;
 		if (!p) return [];
 		if (p.kind === 'tree')
-			return p.nodes.map((n) => ({ id: n.id, label: n.label, detail: n.id, active: n.active, command: `/checkout ${n.id}` }));
+			return treeRows(p.nodes).map((r) => ({ id: r.node.id, label: r.node.label, detail: r.node.id.slice(0, 8), active: r.node.active, command: `/checkout ${r.node.id}`, depth: r.depth as number | undefined }));
 		if (p.kind === 'resume')
-			return p.items.map((it) => ({ id: it.id, label: it.label, detail: it.detail, active: it.active, command: `/resume ${it.id}` }));
+			return p.items.map((it) => ({ id: it.id, label: it.label, detail: it.detail, active: it.active, command: `/resume ${it.id}`, depth: nil }));
 		if (p.kind === 'checkpoint')
-			return p.items.map((it) => ({ id: it.id, label: it.label, detail: it.detail, active: it.active, command: `/rewind ${it.id}` }));
-		return p.models.map((m) => ({ id: m.model, label: m.model, detail: `${fmtTokens(m.context_window)} ctx`, active: m.active, command: `/model ${m.model}` }));
+			return p.items.map((it) => ({ id: it.id, label: it.label, detail: it.detail, active: it.active, command: `/rewind ${it.id}`, depth: nil }));
+		return p.models.map((m) => ({ id: m.model, label: m.model, detail: `${fmtTokens(m.context_window)} ctx`, active: m.active, command: `/model ${m.model}`, depth: nil }));
 	});
 
+	// Whether to offer a filter box (history and other long lists).
+	const showPickerSearch = $derived(
+		pickerRows.length > 8 || chat?.picker?.kind === 'resume' || chat?.picker?.kind === 'checkpoint'
+	);
+	const filteredRows = $derived.by(() => {
+		const q = pickerQuery.trim().toLowerCase();
+		if (!q) return pickerRows;
+		return pickerRows.filter((r) => `${r.label} ${r.detail}`.toLowerCase().includes(q));
+	});
+	$effect(() => {
+		chat?.picker;
+		pickerQuery = '';
+	});
 	$effect(() => {
 		if (chat?.picker) {
-			const i = pickerRows.findIndex((r) => r.active);
+			const i = filteredRows.findIndex((r) => r.active);
 			selIdx = i >= 0 ? i : 0;
 		}
 	});
@@ -253,6 +314,30 @@
 	function engineFailed(chat: ChatState, e: unknown) {
 		chat.engineState = 'exited';
 		chat.messages.push({ kind: 'error', text: `无法启动引擎：${e}` });
+	}
+	function projectPathOf(id: string) {
+		return projects.find((p) => p.sessions.some((s) => s.id === id))?.path;
+	}
+	// Re-spawn the engine for a session that exited, resuming its conversation if it
+	// had one. Auto-restart is capped at 3 within a 30s window to avoid crash loops;
+	// `force` (the manual button) resets the window.
+	function restartSession(id: string, force = false) {
+		const s = allSessions.find((x) => x.id === id);
+		if (!s) return;
+		const now = Date.now();
+		if (force || s.chat.restartWindowStart == null || now - s.chat.restartWindowStart > 30000) {
+			s.chat.restartWindowStart = now;
+			s.chat.restarts = 0;
+		}
+		s.chat.restarts++;
+		const sid = s.chat.sessionId;
+		s.chat.engineState = 'connecting';
+		s.chat.messages.push({ kind: 'system', text: force ? '正在重启引擎…' : '引擎已退出，正在自动重启…' });
+		createSession(id, projectPathOf(id))
+			.then(() => {
+				if (sid) sendOp(id, { op: 'command', input: `/resume ${sid}` });
+			})
+			.catch((e) => engineFailed(s.chat, e));
 	}
 	function restoreSession(project: Project, sid: string, title: string) {
 		const id = uid();
@@ -380,13 +465,13 @@
 			chat.closePicker();
 		} else if (e.key === 'ArrowDown') {
 			e.preventDefault();
-			selIdx = Math.min(selIdx + 1, pickerRows.length - 1);
+			selIdx = Math.min(selIdx + 1, filteredRows.length - 1);
 		} else if (e.key === 'ArrowUp') {
 			e.preventDefault();
 			selIdx = Math.max(selIdx - 1, 0);
 		} else if (e.key === 'Enter') {
 			e.preventDefault();
-			const r = pickerRows[selIdx];
+			const r = filteredRows[selIdx];
 			if (r) selectRow(r.command);
 		}
 	}
@@ -404,6 +489,11 @@
 		if (mod && e.key === 'k') {
 			e.preventDefault();
 			showPalette = !showPalette;
+			return;
+		}
+		if (mod && e.key === 'f' && chat) {
+			e.preventDefault();
+			showFind ? closeFind() : openFind();
 			return;
 		}
 		if (!mod) return;
@@ -448,6 +538,25 @@
 	function editMessage(text: string) {
 		input = text;
 		composerEl?.focus();
+	}
+	function openFind() {
+		showFind = true;
+		tick().then(() => findInputEl?.focus());
+	}
+	function closeFind() {
+		showFind = false;
+		findQuery = '';
+	}
+	const findNext = () => findHits.length && (findIdx = (findIdx + 1) % findHits.length);
+	const findPrev = () => findHits.length && (findIdx = (findIdx - 1 + findHits.length) % findHits.length);
+	function findKey(e: KeyboardEvent) {
+		if (e.key === 'Escape') {
+			e.preventDefault();
+			closeFind();
+		} else if (e.key === 'Enter') {
+			e.preventDefault();
+			e.shiftKey ? findPrev() : findNext();
+		}
 	}
 	// Real edit-and-resend: rewind the conversation (and files) to the turn that
 	// produced this user message, then drop its text back into the composer. The
@@ -494,7 +603,14 @@
 				const s = allSessions.find((x) => x.id === e.payload);
 				if (!s) return;
 				s.chat.engineState = 'exited';
-				s.chat.messages.push({ kind: 'error', text: 'engine process exited' });
+				// Auto-restart unless we've already retried 3× in the last 30s.
+				const now = Date.now();
+				const freshWindow = s.chat.restartWindowStart == null || now - s.chat.restartWindowStart > 30000;
+				if (freshWindow || s.chat.restarts < 3) {
+					restartSession(s.id);
+				} else {
+					s.chat.messages.push({ kind: 'error', text: '引擎多次退出，已暂停自动重启。点「重启引擎」重试。' });
+				}
 			});
 			const undrop = await getCurrentWebview().onDragDropEvent((e) => {
 				if (e.payload.type === 'drop') for (const p of e.payload.paths) addAttachment(p);
@@ -585,9 +701,20 @@
 				</div>
 			{/if}
 
+			{#if showFind}
+				<div class="findbar">
+					<Search size={14} />
+					<input bind:this={findInputEl} bind:value={findQuery} onkeydown={findKey} placeholder="在对话中查找…" />
+					<span class="findcount">{findQuery.trim() ? (findHits.length ? `${Math.min(findIdx + 1, findHits.length)}/${findHits.length}` : '无结果') : ''}</span>
+					<IconButton size="sm" onclick={findPrev} label="上一个" disabled={!findHits.length}><ChevronUp size={15} /></IconButton>
+					<IconButton size="sm" onclick={findNext} label="下一个" disabled={!findHits.length}><ChevronDown size={15} /></IconButton>
+					<IconButton size="sm" onclick={closeFind} label="关闭"><X size={15} /></IconButton>
+				</div>
+			{/if}
+
 			<main bind:this={scroller} onscroll={onScroll}>
 				<div bind:this={contentEl}>
-					<MessageList messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} compactionTokens={chat.compactionTokens} onEdit={editMessage} onRewind={rewindToMessage} />
+					<MessageList messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} compactionTokens={chat.compactionTokens} {findActive} onEdit={editMessage} onRewind={rewindToMessage} />
 				</div>
 				{#if chat.messages.length === 0 && !chat.busy}
 					<div class="welcome">
@@ -607,6 +734,14 @@
 			{/if}
 
 			<div class="bottom" bind:clientHeight={bottomH}>
+			{#if chat.engineState === 'exited'}
+				<div class="approval-wrap">
+					<div class="enginedown">
+						<span class="ed-text">引擎已停止运行</span>
+						<Button variant="primary" size="sm" onclick={() => restartSession(activeId, true)}>重启引擎</Button>
+					</div>
+				</div>
+			{/if}
 			{#if chat.pendingApproval}
 				{@const isShell = ['bash', 'execute', 'exec_command', 'shell_command'].includes(chat.pendingApproval.name)}
 				<div class="approval-wrap">
@@ -712,16 +847,24 @@
 						{/each}
 					</div>
 				{/if}
+				{#if showPickerSearch}
+					<div class="psearch">
+						<Search size={14} />
+						<!-- svelte-ignore a11y_autofocus -->
+						<input bind:value={pickerQuery} placeholder="筛选…" autofocus />
+					</div>
+				{/if}
 				<div class="rows">
-					{#each pickerRows as row, i (row.id)}
-						<button class="prow" class:sel={i === selIdx} onclick={() => selectRow(row.command)} onmouseenter={() => (selIdx = i)}>
+					{#each filteredRows as row, i (row.id)}
+						<button class="prow" class:sel={i === selIdx} onclick={() => selectRow(row.command)} onmouseenter={() => (selIdx = i)} style:padding-left={row.depth != null ? `${11 + row.depth * 16}px` : null}>
 							{#if chat.picker.kind === 'model'}<Vendor model={row.id} size={15} />{/if}
+							{#if row.depth != null && row.depth > 0}<span class="twig">↳</span>{/if}
 							<span class="prow-main">{row.label || '(empty)'}</span>
 							<span class="prow-detail">{row.detail}</span>
 							{#if row.active}<Check size={14} class="prow-check" />{/if}
 						</button>
 					{/each}
-					{#if pickerRows.length === 0}<div class="pempty">暂无可选项</div>{/if}
+					{#if filteredRows.length === 0}<div class="pempty">{pickerQuery.trim() ? '无匹配' : '暂无可选项'}</div>{/if}
 				</div>
 				<div class="modal-foot dim">↑↓ 选择 · Enter 确认 · Esc 关闭</div>
 			</div>
@@ -755,7 +898,7 @@
 			onSettings={() => (showSettings = true)}
 			onMarket={() => (showMarket = true)}
 			onTogglePanel={toggleRight}
-			onToggleTheme={toggleTheme}
+			onToggleTheme={cycleTheme}
 			onSetup={() => (showSetup = true)}
 		/>
 	{/if}
@@ -811,6 +954,21 @@
 		background: color-mix(in oklab, var(--warn) 9%, var(--panel));
 		border: 1px solid color-mix(in oklab, var(--warn) 38%, transparent);
 		border-radius: var(--r-md);
+	}
+	.enginedown {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		padding: 10px 14px;
+		background: color-mix(in oklab, var(--err) 10%, var(--panel));
+		border: 1px solid color-mix(in oklab, var(--err) 38%, transparent);
+		border-radius: var(--r-md);
+	}
+	.ed-text {
+		font-size: 13px;
+		color: var(--err);
+		font-weight: 500;
 	}
 	.approval-head {
 		display: flex;
@@ -897,6 +1055,36 @@
 		gap: 8px;
 		padding: 8px 18px;
 		border-bottom: 1px solid var(--hairline);
+	}
+	.findbar {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 8px 14px;
+		border-bottom: 1px solid var(--hairline);
+		color: var(--dim);
+		background: var(--panel);
+	}
+	.findbar input {
+		flex: 1;
+		min-width: 0;
+		border: none;
+		outline: none;
+		background: none;
+		color: var(--text);
+		font-family: var(--font-sans);
+		font-size: 13.5px;
+	}
+	.findbar input::placeholder {
+		color: var(--dim2);
+	}
+	.findcount {
+		font-family: var(--font-mono);
+		font-size: 11.5px;
+		color: var(--dim2);
+		flex-shrink: 0;
+		min-width: 36px;
+		text-align: right;
 	}
 	.agent {
 		display: inline-flex;
@@ -1053,6 +1241,27 @@
 		border-bottom: 1px solid var(--hairline);
 		font-size: 12px;
 	}
+	.psearch {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 10px 16px;
+		border-bottom: 1px solid var(--hairline);
+		color: var(--dim);
+	}
+	.psearch input {
+		flex: 1;
+		min-width: 0;
+		border: none;
+		outline: none;
+		background: none;
+		color: var(--text);
+		font-family: var(--font-sans);
+		font-size: 13.5px;
+	}
+	.psearch input::placeholder {
+		color: var(--dim2);
+	}
 	.dim {
 		color: var(--dim);
 	}
@@ -1098,6 +1307,12 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+	.twig {
+		color: var(--dim2);
+		font-family: var(--font-mono);
+		margin-right: -4px;
+		flex-shrink: 0;
 	}
 	.prow-detail {
 		color: var(--dim);

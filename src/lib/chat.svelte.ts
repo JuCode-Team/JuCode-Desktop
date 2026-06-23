@@ -94,6 +94,10 @@ export class ChatState {
 	rewindIntent: { userIndex: number; text: string } | null = null;
 	pendingRewind = $state<{ id: string; text: string } | null>(null);
 
+	// Engine crash auto-restart bookkeeping (driven by the page on agent-exit).
+	restarts = 0;
+	restartWindowStart: number | null = null;
+
 	#assistantIdx = -1;
 	#reasoningIdx = -1;
 	#turnStart: number | null = null;
