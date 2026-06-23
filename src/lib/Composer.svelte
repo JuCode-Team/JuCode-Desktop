@@ -97,6 +97,9 @@
 	);
 
 	function onKey(e: KeyboardEvent) {
+		// While an IME is composing (e.g. selecting a Chinese candidate with Enter),
+		// don't treat keys as commands — Enter here confirms the candidate, not send.
+		if (e.isComposing || e.keyCode === 229) return;
 		if (slashMatches.length) {
 			if (e.key === 'ArrowDown') {
 				e.preventDefault();
