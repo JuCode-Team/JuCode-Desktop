@@ -42,6 +42,23 @@ export function fuzzyScore(text: string, q: string): number {
 	return score;
 }
 
+/** Greedy subsequence match positions of `q` in `text` (for highlighting), or
+ *  null if `q` isn't a subsequence. Empty query → no positions. */
+export function fuzzyPositions(text: string, q: string): number[] | null {
+	if (!q) return [];
+	const t = text.toLowerCase();
+	const lq = q.toLowerCase();
+	const pos: number[] = [];
+	let ti = 0;
+	for (let qi = 0; qi < lq.length; qi++) {
+		const at = t.indexOf(lq[qi], ti);
+		if (at < 0) return null;
+		pos.push(at);
+		ti = at + 1;
+	}
+	return pos;
+}
+
 const dirFirst = (a: AtEntry, b: AtEntry) =>
 	a.dir === b.dir ? a.path.localeCompare(b.path) : a.dir ? -1 : 1;
 

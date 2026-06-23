@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildEntries, fuzzyScore, mentionMatches } from './mention';
+import { buildEntries, fuzzyScore, fuzzyPositions, mentionMatches } from './mention';
 
 const FILES = [
 	'src/lib/Composer.svelte',
@@ -31,6 +31,22 @@ describe('fuzzyScore', () => {
 		expect(fuzzyScore('src/ui/button.ts', 'button')).toBeGreaterThan(
 			fuzzyScore('abuttonx.ts', 'button')
 		);
+	});
+});
+
+describe('fuzzyPositions', () => {
+	it('returns the matched indices', () => {
+		// b=0, t=2 (first t), n=5 in "button.svelte"
+		expect(fuzzyPositions('Button.svelte', 'btn')).toEqual([0, 2, 5]);
+	});
+	it('is case-insensitive', () => {
+		expect(fuzzyPositions('Composer', 'cmp')).toEqual([0, 2, 3]);
+	});
+	it('returns null when not a subsequence', () => {
+		expect(fuzzyPositions('abc', 'xyz')).toBeNull();
+	});
+	it('returns [] for an empty query', () => {
+		expect(fuzzyPositions('abc', '')).toEqual([]);
 	});
 });
 

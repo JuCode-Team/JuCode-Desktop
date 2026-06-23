@@ -8,6 +8,7 @@
 	import { sendOp, checkEnvironment, installDependency, type EnvReport } from '$lib/protocol';
 	import Button from '$lib/ui/Button.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
+	import { focusTrap } from '$lib/focusTrap';
 
 	let {
 		sessionId,
@@ -94,7 +95,7 @@
 </script>
 
 <div class="overlay" role="presentation">
-	<div class="wiz" role="dialog" aria-modal="true" tabindex="-1" aria-label="安装向导">
+	<div class="wiz" role="dialog" aria-modal="true" tabindex="-1" aria-label="安装向导" use:focusTrap>
 		<button class="skip" onclick={finish} aria-label="skip" title="跳过"><X size={18} /></button>
 
 		<div class="brand">JuCode</div>

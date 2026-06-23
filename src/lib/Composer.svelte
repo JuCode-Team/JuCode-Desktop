@@ -6,7 +6,7 @@
 	import ContextRing from '$lib/ContextRing.svelte';
 	import Segmented from '$lib/ui/Segmented.svelte';
 	import { listFiles, saveTempImage } from '$lib/protocol';
-	import { buildEntries, mentionMatches, type AtEntry } from '$lib/mention';
+	import { buildEntries, mentionMatches, fuzzyPositions, type AtEntry } from '$lib/mention';
 	import type { ChatState } from '$lib/chat.svelte';
 
 	let {
@@ -112,14 +112,39 @@
 	});
 
 	// Files complete the token (trailing space); folders append `/` so the menu
-	// keeps drilling into their contents.
+	// keeps drilling into their contents. Refocus the textarea so clicks don't
+	// strand focus on the menu button.
 	function applyAt(entry: AtEntry) {
 		const suffix = entry.dir ? '/' : ' ';
 		input = input.replace(/(?:^|\s)@([^\s@]*)$/, (full) => {
 			const lead = /^\s/.test(full) ? full[0] : '';
 			return `${lead}@${entry.path}${suffix}`;
 		});
+		el?.focus();
 	}
+
+	// Split a label into matched/unmatched segments for highlighting (fuzzy mode
+	// only — root/drill queries aren't a meaningful highlight).
+	function hlSegments(text: string, q: string | null) {
+		if (!q || q === '' || q.endsWith('/')) return [{ text, hit: false }];
+		const pos = fuzzyPositions(text, q);
+		if (!pos || pos.length === 0) return [{ text, hit: false }];
+		const set = new Set(pos);
+		const segs: { text: string; hit: boolean }[] = [];
+		for (let i = 0; i < text.length; i++) {
+			const hit = set.has(i);
+			const last = segs[segs.length - 1];
+			if (last && last.hit === hit) last.text += text[i];
+			else segs.push({ text: text[i], hit });
+		}
+		return segs;
+	}
+
+	// Active option id for the combobox (aria-activedescendant).
+	const activeOptionId = $derived(
+		slashMatches.length ? `cmp-opt-${slashIdx}` : atMatches.length ? `cmp-opt-${atIdx}` : undefined
+	);
+	const menuOpen = $derived(slashMatches.length > 0 || atMatches.length > 0 || atQuery !== null);
 
 	// Gauge against the auto-compaction limit, so a full ring means "about to
 	// compact" (falls back to the window if the engine didn't send a limit).
@@ -210,9 +235,9 @@
 
 <div class="composer-wrap">
 	{#if slashMatches.length}
-		<div class="slash">
+		<div class="slash" id="composer-menu" role="listbox" aria-label="命令补全">
 			{#each slashMatches as c, i (c.command)}
-				<button class="slash-item" class:sel={i === slashIdx} onclick={() => (input = c.command + ' ')} onmouseenter={() => (slashIdx = i)}>
+				<button class="slash-item" id="cmp-opt-{i}" role="option" aria-selected={i === slashIdx} class:sel={i === slashIdx} onclick={() => (input = c.command + ' ')} onmouseenter={() => (slashIdx = i)}>
 					<span class="slash-cmd">{c.command}</span>
 					{#if c.args}<span class="slash-args">{c.args}</span>{/if}
 					{#if c.description}<span class="slash-desc">{c.description}</span>{/if}
@@ -220,16 +245,16 @@
 				</button>
 			{/each}
 		</div>
-	{/if}
-	{#if atMatches.length}
-		<div class="slash">
+	{:else if atQuery !== null}
+		<div class="slash" id="composer-menu" role="listbox" aria-label="文件补全">
 			{#each atMatches as e, i (e.path)}
-				<button class="slash-item" class:sel={i === atIdx} onclick={() => applyAt(e)} onmouseenter={() => (atIdx = i)}>
+				<button class="slash-item" id="cmp-opt-{i}" role="option" aria-selected={i === atIdx} class:sel={i === atIdx} onclick={() => applyAt(e)} onmouseenter={() => (atIdx = i)}>
 					{#if e.dir}<Folder size={13} class="atfolder" />{:else}<File size={13} />{/if}
-					<span class="at-name">{base(e.path)}{#if e.dir}/{/if}</span>
+					<span class="at-name">{#each hlSegments(base(e.path), atQuery) as seg}{#if seg.hit}<b class="hl">{seg.text}</b>{:else}{seg.text}{/if}{/each}{#if e.dir}/{/if}</span>
 					<span class="at-path">{e.path}</span>
 				</button>
 			{/each}
+			{#if atMatches.length === 0 && atQuery}<div class="slash-empty">无匹配文件</div>{/if}
 		</div>
 	{/if}
 	{#if attachments.length}
@@ -253,7 +278,19 @@
 		</div>
 	{/if}
 	<div class="composer">
-		<textarea bind:this={el} bind:value={input} onkeydown={onKey} onpaste={onPaste} rows="1" placeholder="给 JuCode 指派一个任务…  (拖入/粘贴图片 · 回形针附加文件 · / 唤起命令)"></textarea>
+		<textarea
+			bind:this={el}
+			bind:value={input}
+			onkeydown={onKey}
+			onpaste={onPaste}
+			rows="1"
+			placeholder="给 JuCode 指派一个任务…  (拖入/粘贴图片 · 回形针附加文件 · / 唤起命令)"
+			role="combobox"
+			aria-expanded={menuOpen}
+			aria-controls="composer-menu"
+			aria-autocomplete="list"
+			aria-activedescendant={activeOptionId}
+		></textarea>
 		<div class="composer-bar">
 			<IconButton onclick={onPick} label="attach" title="附加文件"><Paperclip size={16} /></IconButton>
 			<button class="flatbtn model" onclick={onModel} title="切换模型">
@@ -535,6 +572,15 @@
 	.at-name {
 		font-family: var(--font-mono);
 		flex-shrink: 0;
+	}
+	.at-name .hl {
+		color: var(--accent-bright);
+		font-weight: 700;
+	}
+	.slash-empty {
+		padding: 10px 12px;
+		font-size: 12.5px;
+		color: var(--dim2);
 	}
 	:global(.atfolder) {
 		color: var(--accent-bright);

@@ -13,6 +13,7 @@
 	import { ChatState } from '$lib/chat.svelte';
 	import { treeRows } from '$lib/tree';
 	import { shouldAutoApprove } from '$lib/approval';
+	import { focusTrap } from '$lib/focusTrap';
 	import {
 		sendOp,
 		createSession,
@@ -800,7 +801,7 @@
 
 	{#if chat?.trustPrompt}
 		<div class="overlay" role="presentation">
-			<div class="modal trust" role="dialog" aria-modal="true" tabindex="-1" aria-label="信任项目">
+			<div class="modal trust" role="dialog" aria-modal="true" tabindex="-1" aria-label="信任项目" use:focusTrap>
 				<div class="modal-head"><span>信任此项目？</span></div>
 				<div class="trust-body">
 					<p>该项目包含可执行代码的本地技能或 hooks。信任后 JuCode 才会加载它们。</p>
@@ -817,7 +818,7 @@
 
 	{#if chat?.picker}
 		<div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && chat?.closePicker()}>
-			<div class="modal" role="dialog" aria-modal="true" tabindex="-1" aria-label={pickerTitle}>
+			<div class="modal" role="dialog" aria-modal="true" tabindex="-1" aria-label={pickerTitle} use:focusTrap>
 				<div class="modal-head">
 					<span>{pickerTitle}</span>
 					<IconButton onclick={() => chat?.closePicker()} label="close"><X size={15} /></IconButton>
@@ -856,7 +857,7 @@
 
 	{#if chat?.pendingRewind}
 		<div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && chat && (chat.pendingRewind = null)}>
-			<div class="modal trust" role="dialog" aria-modal="true" tabindex="-1" aria-label="回退确认">
+			<div class="modal trust" role="dialog" aria-modal="true" tabindex="-1" aria-label="回退确认" use:focusTrap>
 				<div class="modal-head"><span>回退到这一轮并重写？</span></div>
 				<div class="trust-body">
 					<p>对话会回退到这条消息发出前，<b>此后的文件改动也会一并还原</b>。原消息已填入输入框，可修改后重新发送。此操作不可撤销。</p>

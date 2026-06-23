@@ -6,6 +6,7 @@
 		PanelRight, SunMoon, ChevronRight, Wrench
 	} from 'lucide-svelte';
 	import type { ChatState } from '$lib/chat.svelte';
+	import { focusTrap } from '$lib/focusTrap';
 
 	let {
 		chat,
@@ -124,7 +125,7 @@
 </script>
 
 <div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && onClose()}>
-	<div class="palette" role="dialog" aria-modal="true" tabindex="-1" aria-label="命令面板">
+	<div class="palette" role="dialog" aria-modal="true" tabindex="-1" aria-label="命令面板" use:focusTrap>
 		<div class="search">
 			<Search size={16} />
 			<input bind:this={inputEl} bind:value={query} onkeydown={onKey} placeholder="搜索命令或操作…" />

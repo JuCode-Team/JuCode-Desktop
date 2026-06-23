@@ -9,6 +9,7 @@
 	import Select from '$lib/ui/Select.svelte';
 	import Switch from '$lib/ui/Switch.svelte';
 	import Segmented from '$lib/ui/Segmented.svelte';
+	import { focusTrap } from '$lib/focusTrap';
 
 	let {
 		sessionId,
@@ -179,7 +180,7 @@
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && onClose()} />
 <div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && onClose()}>
-	<div class="sheet" role="dialog" aria-modal="true" tabindex="-1" aria-label="设置">
+	<div class="sheet" role="dialog" aria-modal="true" tabindex="-1" aria-label="设置" use:focusTrap>
 		<aside class="nav">
 			<div class="brand">JuCode</div>
 			<div class="nav-list">
