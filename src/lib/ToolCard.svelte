@@ -85,13 +85,16 @@
 	);
 	const fmtBytes = (n: number) =>
 		n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`;
+
+	// Read cards stay a single line — the header names the file; the contents add noise.
+	const isRead = $derived(name === 'read' && !errorText);
 </script>
 
 <div class="tool" class:err={isError || !!errorText}>
-	<button class="head" onclick={() => (collapsed = !collapsed)}>
+	<button class="head" class:static={isRead} onclick={() => !isRead && (collapsed = !collapsed)}>
 		{#if running}
 			<LoaderCircle size={13} class="spin" />
-		{:else}
+		{:else if !isRead}
 			<span class="chev" class:open={!collapsed}><ChevronRight size={13} /></span>
 		{/if}
 		<span class="verb">{verb}</span>
@@ -102,7 +105,7 @@
 		<span class="state">{running ? 'running' : isError || errorText ? 'error' : 'done'}</span>
 	</button>
 
-	{#if !collapsed}
+	{#if !collapsed && !isRead}
 		<div class="body">
 			{#if errorText}
 				<div class="err-text">{errorText}</div>
@@ -146,15 +149,18 @@
 	.head {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: 7px;
 		width: 100%;
 		text-align: left;
-		padding: 7px 11px;
-		font-size: 12px;
+		padding: 5px 10px;
+		font-size: 11.5px;
 		background: var(--surface2);
 		border: none;
 		color: var(--text);
 		cursor: pointer;
+	}
+	.head.static {
+		cursor: default;
 	}
 	.chev {
 		display: inline-flex;
@@ -191,20 +197,20 @@
 	}
 	.body pre {
 		margin: 0;
-		padding: 10px 12px;
+		padding: 7px 10px;
 		font-family: var(--font-mono);
-		font-size: 12px;
-		line-height: 1.5;
+		font-size: 11px;
+		line-height: 1.45;
 		color: var(--dim);
-		max-height: 280px;
+		max-height: 200px;
 		overflow: auto;
 		white-space: pre-wrap;
 		word-break: break-word;
 	}
 	.cmd {
-		padding: 9px 12px 0;
+		padding: 7px 10px 0;
 		font-family: var(--font-mono);
-		font-size: 12px;
+		font-size: 11.5px;
 		color: var(--text);
 		white-space: pre-wrap;
 		word-break: break-word;
@@ -216,16 +222,16 @@
 		color: var(--text) !important;
 	}
 	.err-text {
-		padding: 10px 12px;
+		padding: 7px 10px;
 		font-family: var(--font-mono);
-		font-size: 12px;
+		font-size: 11.5px;
 		color: var(--err);
 		white-space: pre-wrap;
 	}
 	.meta {
-		padding: 9px 12px;
+		padding: 6px 10px;
 		font-family: var(--font-mono);
-		font-size: 12px;
+		font-size: 11.5px;
 		color: var(--dim);
 	}
 	.img {
