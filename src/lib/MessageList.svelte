@@ -35,6 +35,17 @@
 				? `${(ms / 1000).toFixed(1)}s`
 				: `${Math.floor(ms / 60000)}m${Math.round((ms % 60000) / 1000)}s`;
 
+	// Incremental streaming markdown: render completed blocks as markdown (memoized
+	// by the slice, so it only re-parses when a block finalizes) and the in-progress
+	// tail block as plain text. Per-token cost tracks the current block, not the
+	// whole message. The split never lands inside an open ``` code fence.
+	function splitIdx(text: string): number {
+		const fences = (text.match(/```/g) || []).length;
+		if (fences % 2 === 1) return text.lastIndexOf('```');
+		const i = text.lastIndexOf('\n\n');
+		return i < 0 ? 0 : i + 2;
+	}
+
 	// Skip empty placeholders (e.g. an assistant message before its first delta).
 	function shown(m: Msg): boolean {
 		if (m.kind === 'tool') return !!(m.name || m.output);
@@ -54,7 +65,9 @@
 		{:else if m.kind === 'assistant'}
 			<div class="answer">
 				{#if m === streamingMsg}
-					<div class="stream">{m.text}</div>
+					{@const i = splitIdx(m.text)}
+					{#if i > 0}<Markdown text={m.text.slice(0, i)} />{/if}
+					<div class="stream">{m.text.slice(i)}</div>
 				{:else}
 					<Markdown text={m.text} />
 					<div class="foot">
