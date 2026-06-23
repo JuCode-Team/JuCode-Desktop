@@ -32,15 +32,19 @@ fn resolve_bin() -> PathBuf {
     if let Ok(path) = std::env::var("JUCODE_BIN") {
         return PathBuf::from(path);
     }
-    // Bundled app: Tauri places the externalBin sidecar next to the main binary
-    // (Contents/MacOS/jucode on macOS).
+    // Packaged macOS app: use the externalBin sidecar next to the main binary.
+    // Only a real .app bundle — never in dev, where target/<profile>/jucode may be
+    // a stale externalBin copy that would shadow the freshly-built engine.
     if let Ok(exe) = std::env::current_exe() {
-        if let Some(sidecar) = exe.parent().map(|dir| dir.join("jucode")) {
-            if sidecar.exists() {
-                return sidecar;
+        if exe.to_string_lossy().contains(".app/Contents/MacOS") {
+            if let Some(sidecar) = exe.parent().map(|dir| dir.join("jucode")) {
+                if sidecar.exists() {
+                    return sidecar;
+                }
             }
         }
     }
+    // Dev: the freshly-built engine from the sibling checkout.
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR")); // <repo>/src-tauri
     let candidates = [
         "../../JuCode-CLI/target/debug/jucode",
@@ -52,6 +56,14 @@ fn resolve_bin() -> PathBuf {
         let candidate = manifest.join(rel);
         if candidate.exists() {
             return candidate;
+        }
+    }
+    // Other packaging (Linux/Windows): sidecar next to the executable.
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(sidecar) = exe.parent().map(|dir| dir.join("jucode")) {
+            if sidecar.exists() {
+                return sidecar;
+            }
         }
     }
     PathBuf::from("jucode")
