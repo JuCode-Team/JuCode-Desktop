@@ -115,7 +115,7 @@ export class ChatState {
 		this.#reasoningIdx = -1;
 	}
 
-	/** Collapse the active reasoning block once the answer starts streaming. */
+	/** Collapse the active reasoning block once its tool call or the answer starts. */
 	#collapseReasoning() {
 		if (this.#reasoningIdx >= 0) {
 			const m = this.messages[this.#reasoningIdx];
@@ -185,6 +185,9 @@ export class ChatState {
 				break;
 			}
 			case 'tool_start':
+				// One reasoning block per round: collapse this round's reasoning once
+				// its tool call appears, so the next round starts a fresh block.
+				this.#collapseReasoning();
 				this.messages.push({
 					kind: 'tool',
 					callId: str(ev.call_id),

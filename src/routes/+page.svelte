@@ -127,6 +127,16 @@
 		}
 		return null;
 	});
+	// The reasoning block currently receiving deltas — rendered with the
+	// line-by-line streaming animation (others render as static markdown).
+	const streamingReasoning = $derived.by(() => {
+		if (!chat?.busy) return null;
+		for (let i = chat.messages.length - 1; i >= 0; i--) {
+			const m = chat.messages[i];
+			if (m.kind === 'reasoning') return m.collapsed ? null : m;
+		}
+		return null;
+	});
 	const activeProject = $derived(projects.find((p) => p.sessions.some((s) => s.id === activeId)));
 	const loggedIn = $derived(!!chat?.provider && providers.includes(chat.provider));
 
@@ -472,7 +482,7 @@
 			{/if}
 
 			<main bind:this={scroller} onscroll={onScroll}>
-				<MessageList messages={chat.messages} {streamingMsg} {thinking} onEdit={editMessage} />
+				<MessageList messages={chat.messages} {streamingMsg} {streamingReasoning} {thinking} onEdit={editMessage} />
 			</main>
 			{#if !atBottom}
 				<button class="jump" onclick={jumpToBottom} aria-label="scroll to bottom"><ChevronDown size={18} /></button>

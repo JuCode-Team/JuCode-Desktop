@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Pencil, Copy, Check, ChevronRight } from 'lucide-svelte';
+	import { slide } from 'svelte/transition';
 	import Markdown from '$lib/Markdown.svelte';
 	import ToolCard from '$lib/ToolCard.svelte';
 	import type { Msg } from '$lib/chat.svelte';
@@ -7,11 +8,13 @@
 	let {
 		messages,
 		streamingMsg,
+		streamingReasoning,
 		thinking,
 		onEdit
 	}: {
 		messages: Msg[];
 		streamingMsg: Msg | null;
+		streamingReasoning: Msg | null;
 		thinking: boolean;
 		onEdit: (text: string) => void;
 	} = $props();
@@ -69,7 +72,17 @@
 					<span class="rchev"><ChevronRight size={13} /></span>
 					<span>推理</span>
 				</button>
-				{#if !m.collapsed}<div class="reason-body"><Markdown text={m.text} /></div>{/if}
+				{#if !m.collapsed}
+					<div class="reason-body" transition:slide={{ duration: 180 }}>
+						{#if m === streamingReasoning}
+							{#each m.text.split('\n') as line, i (i)}
+								<div class="rline">{line || ' '}</div>
+							{/each}
+						{:else}
+							<Markdown text={m.text} />
+						{/if}
+					</div>
+				{/if}
 			</div>
 		{:else if m.kind === 'tool'}
 			<ToolCard name={m.name} output={m.output} running={m.running} isError={m.isError} />
@@ -201,6 +214,20 @@
 		font-size: 13px;
 		line-height: 1.6;
 		word-break: break-word;
+	}
+	.rline {
+		white-space: pre-wrap;
+		animation: rline-in 0.26s ease both;
+	}
+	@keyframes rline-in {
+		from {
+			opacity: 0;
+			transform: translateY(4px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
 	}
 	.system {
 		font-family: var(--font-mono);
