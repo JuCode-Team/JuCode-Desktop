@@ -173,7 +173,7 @@
 				<span class="chip" class:imgchip={a.image}>
 					{#if a.image}<img class="chip-thumb" src={convertFileSrc(a.path)} alt="" />{:else}<FileText size={12} />{/if}
 					<span class="chip-name">{base(a.path)}</span>
-					<button class="chip-x" onclick={() => attachments.splice(i, 1)} aria-label="remove"><X size={12} /></button>
+					<IconButton size="xs" onclick={() => attachments.splice(i, 1)} label="remove"><X size={12} /></IconButton>
 				</span>
 			{/each}
 		</div>
@@ -424,17 +424,6 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
-	}
-	.chip-x {
-		display: inline-flex;
-		background: none;
-		border: none;
-		color: var(--dim);
-		cursor: pointer;
-		padding: 1px;
-	}
-	.chip-x:hover {
-		color: var(--text);
 	}
 	.queued {
 		display: flex;

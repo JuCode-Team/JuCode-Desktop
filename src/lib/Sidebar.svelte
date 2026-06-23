@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Store, Plus, History, X, LoaderCircle, Settings as SettingsIcon, Moon, Sun } from 'lucide-svelte';
 	import { themeState, toggleTheme } from '$lib/theme.svelte';
+	import IconButton from '$lib/ui/IconButton.svelte';
 	import type { Project } from '$lib/types';
 
 	let {
@@ -92,9 +93,9 @@
 	</button>
 	<div class="side-foot">
 		<button class="foot-btn" onclick={onSettings}><SettingsIcon size={15} /><span>设置</span></button>
-		<button class="foot-icon" onclick={toggleTheme} aria-label="toggle theme">
+		<IconButton onclick={toggleTheme} label="toggle theme">
 			{#if themeState.value === 'dark'}<Moon size={15} />{:else}<Sun size={15} />{/if}
-		</button>
+		</IconButton>
 	</div>
 </aside>
 
@@ -356,19 +357,6 @@
 		font-size: 13px;
 	}
 	.foot-btn:hover {
-		background: var(--surface2);
-		color: var(--text);
-	}
-	.foot-icon {
-		display: inline-flex;
-		padding: 8px;
-		border: none;
-		background: none;
-		color: var(--dim);
-		border-radius: var(--r-sm);
-		cursor: pointer;
-	}
-	.foot-icon:hover {
 		background: var(--surface2);
 		color: var(--text);
 	}

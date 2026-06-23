@@ -8,7 +8,7 @@
 		children,
 		...rest
 	}: {
-		size?: 'sm' | 'md';
+		size?: 'xs' | 'sm' | 'md';
 		active?: boolean;
 		label?: string;
 		title?: string;
@@ -39,6 +39,10 @@
 	}
 	.sm {
 		padding: 5px;
+	}
+	.xs {
+		padding: 2px;
+		border-radius: 5px;
 	}
 	.ib:hover:not(:disabled) {
 		background: var(--surface2);
