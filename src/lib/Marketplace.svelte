@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { X, Search, Download, Check, LoaderCircle, RefreshCw } from 'lucide-svelte';
 	import { fetchMarketplace, sendOp, type MarketSkill } from '$lib/protocol';
+	import IconButton from '$lib/ui/IconButton.svelte';
 
 	let { sessionId, onClose }: { sessionId: string; onClose: () => void } = $props();
 
@@ -49,7 +50,7 @@
 				<h2>扩展市场</h2>
 				<p>为 JuCode 安装技能扩展。</p>
 			</div>
-			<button class="x" onclick={onClose} aria-label="close"><X size={18} /></button>
+			<IconButton onclick={onClose} label="close"><X size={18} /></IconButton>
 		</div>
 
 		<div class="toolbar">
@@ -139,16 +140,6 @@
 		margin: 4px 0 0;
 		font-size: 13px;
 		color: var(--dim);
-	}
-	.x {
-		display: inline-flex;
-		background: none;
-		border: none;
-		color: var(--dim);
-		cursor: pointer;
-	}
-	.x:hover {
-		color: var(--text);
 	}
 	.toolbar {
 		display: flex;

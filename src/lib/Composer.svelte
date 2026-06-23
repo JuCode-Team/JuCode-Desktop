@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Send, Square, Paperclip, X, FileText, FastForward, File } from 'lucide-svelte';
+	import IconButton from '$lib/ui/IconButton.svelte';
 	import { convertFileSrc } from '@tauri-apps/api/core';
 	import Vendor from '$lib/Vendor.svelte';
 	import ContextRing from '$lib/ContextRing.svelte';
@@ -189,7 +190,7 @@
 	<div class="composer">
 		<textarea bind:this={el} bind:value={input} onkeydown={onKey} rows="1" placeholder="给 JuCode 指派一个任务…  (拖入或点回形针附加文件 · / 唤起命令)"></textarea>
 		<div class="composer-bar">
-			<button class="cbtn" onclick={onPick} aria-label="attach" title="attach files"><Paperclip size={16} /></button>
+			<IconButton onclick={onPick} label="attach" title="attach files"><Paperclip size={16} /></IconButton>
 			<button class="flatbtn model" onclick={onModel} title="switch model">
 				<Vendor model={chat.model} size={15} /><span>{chat.model || 'model'}</span>
 			</button>
@@ -254,19 +255,6 @@
 		display: flex;
 		align-items: center;
 		gap: 8px;
-	}
-	.cbtn {
-		display: inline-flex;
-		padding: 7px;
-		border: none;
-		background: none;
-		color: var(--dim);
-		border-radius: var(--r-sm);
-		cursor: pointer;
-	}
-	.cbtn:hover {
-		background: var(--surface2);
-		color: var(--text);
 	}
 	.flatbtn {
 		display: inline-flex;
