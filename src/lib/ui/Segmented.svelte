@@ -1,13 +1,19 @@
 <script lang="ts">
 	let {
 		value = $bindable(),
-		options
-	}: { value: string; options: { value: string; label?: string }[] } = $props();
+		options,
+		onChange
+	}: { value: string; options: { value: string; label?: string }[]; onChange?: (v: string) => void } = $props();
+
+	function pick(v: string) {
+		value = v;
+		onChange?.(v);
+	}
 </script>
 
 <div class="seg">
 	{#each options as o (o.value)}
-		<button class="opt" class:on={o.value === value} onclick={() => (value = o.value)}>{o.label ?? o.value}</button>
+		<button class="opt" class:on={o.value === value} onclick={() => pick(o.value)}>{o.label ?? o.value}</button>
 	{/each}
 </div>
 

@@ -4,7 +4,7 @@
 	import { convertFileSrc } from '@tauri-apps/api/core';
 	import Vendor from '$lib/Vendor.svelte';
 	import ContextRing from '$lib/ContextRing.svelte';
-	import EffortSlider from '$lib/EffortSlider.svelte';
+	import Segmented from '$lib/ui/Segmented.svelte';
 	import { listFiles } from '$lib/protocol';
 	import type { ChatState } from '$lib/chat.svelte';
 
@@ -202,13 +202,24 @@
 					{#if showEffort}
 						<button class="pop-backdrop" aria-label="close" onclick={() => (showEffort = false)}></button>
 						<div class="effort-pop">
-							<EffortSlider efforts={chat.efforts} current={chat.effort} onChange={onEffort} />
+							<Segmented value={chat.effort} options={chat.efforts.map((e) => ({ value: e, label: cap(e) }))} onChange={(e) => { onEffort(e); showEffort = false; }} />
 						</div>
 					{/if}
 				</div>
 			{/if}
 			<div class="cspace"></div>
-			{#if ctxLimit > 0}<ContextRing pct={ctxPct} label={`context ${fmtTokens(chat.contextTokens)} / ${fmtTokens(ctxLimit)} (压缩点)`} />{/if}
+			{#if ctxLimit > 0}
+				<div class="ctxwrap">
+					<ContextRing pct={ctxPct} label="" />
+					<div class="ctx-pop">
+						<div class="ctx-row"><span>上下文</span><span class="ctx-val">{fmtTokens(chat.contextTokens)} / {fmtTokens(ctxLimit)}</span></div>
+						<div class="ctx-bar"><span class="ctx-fill" class:warn={ctxPct >= 85} style:width="{ctxPct}%"></span></div>
+						<div class="ctx-sub">{ctxPct}% · 到压缩点</div>
+						{#if chat.totalIn || chat.totalOut}<div class="ctx-row mt"><span>本会话用量</span><span class="ctx-val">↑{fmtTokens(chat.totalIn)} ↓{fmtTokens(chat.totalOut)}</span></div>{/if}
+						{#if chat.cost > 0}<div class="ctx-row"><span>成本</span><span class="ctx-val">${chat.cost.toFixed(3)}</span></div>{/if}
+					</div>
+				</div>
+			{/if}
 			{#if chat.busy}
 				<button class="cact stop" onclick={onStop} aria-label="stop" title="停止"><Square size={15} /></button>
 			{:else}
@@ -293,11 +304,71 @@
 		bottom: calc(100% + 8px);
 		left: 0;
 		z-index: 21;
+		padding: 6px;
 		background: var(--panel);
 		border: 1px solid var(--border);
 		border-radius: var(--r-md);
 		box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
 		animation: rise 0.12s ease;
+	}
+	.ctxwrap {
+		position: relative;
+		display: inline-flex;
+	}
+	.ctx-pop {
+		position: absolute;
+		bottom: calc(100% + 10px);
+		right: 0;
+		z-index: 21;
+		width: 200px;
+		padding: 11px 12px;
+		background: var(--panel);
+		border: 1px solid var(--border);
+		border-radius: var(--r-md);
+		box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+		opacity: 0;
+		transform: translateY(4px);
+		pointer-events: none;
+		transition: opacity 0.13s, transform 0.13s;
+	}
+	.ctxwrap:hover .ctx-pop {
+		opacity: 1;
+		transform: translateY(0);
+	}
+	.ctx-row {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 10px;
+		font-size: 12px;
+		color: var(--dim);
+	}
+	.ctx-row.mt {
+		margin-top: 9px;
+	}
+	.ctx-val {
+		font-family: var(--font-mono);
+		color: var(--text);
+	}
+	.ctx-bar {
+		height: 5px;
+		border-radius: 999px;
+		background: var(--surface2);
+		overflow: hidden;
+		margin: 7px 0 4px;
+	}
+	.ctx-fill {
+		display: block;
+		height: 100%;
+		border-radius: 999px;
+		background: var(--accent);
+	}
+	.ctx-fill.warn {
+		background: var(--warn);
+	}
+	.ctx-sub {
+		font-size: 11px;
+		color: var(--dim2);
 	}
 	.cspace {
 		flex: 1;

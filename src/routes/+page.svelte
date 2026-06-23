@@ -472,8 +472,6 @@
 					<span class="hcrumb">{project}</span>
 				</div>
 				<div class="hspace" data-tauri-drag-region></div>
-				{#if chat.totalIn || chat.totalOut}<span class="usage">↑{fmtTokens(chat.totalIn)} ↓{fmtTokens(chat.totalOut)}</span>{/if}
-				{#if chat.cost > 0}<span class="usage cost">${chat.cost.toFixed(3)}</span>{/if}
 				<button class="hicon" class:on={showRight} onclick={() => (showRight = !showRight)} aria-label="toggle panel"><PanelRight size={16} /></button>
 			</header>
 
@@ -694,14 +692,6 @@
 	}
 	.hspace {
 		flex: 1;
-	}
-	.usage {
-		font-family: var(--font-mono);
-		font-size: 12px;
-		color: var(--dim);
-	}
-	.usage.cost {
-		color: var(--accent-bright);
 	}
 	.hicon {
 		display: inline-flex;
