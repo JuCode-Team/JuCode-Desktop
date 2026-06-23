@@ -69,7 +69,7 @@
 					<span class="rchev"><ChevronRight size={13} /></span>
 					<span>推理</span>
 				</button>
-				{#if !m.collapsed}<div class="reason-body">{m.text}</div>{/if}
+				{#if !m.collapsed}<div class="reason-body"><Markdown text={m.text} /></div>{/if}
 			</div>
 		{:else if m.kind === 'tool'}
 			<ToolCard name={m.name} output={m.output} running={m.running} isError={m.isError} />
@@ -89,6 +89,11 @@
 		display: flex;
 		flex-direction: column;
 		gap: 16px;
+	}
+	/* Never let a flex column squeeze an item below its content height — that
+	   collapses tool cards into stray horizontal lines under content pressure. */
+	.list > :global(*) {
+		flex-shrink: 0;
 	}
 	.row {
 		display: flex;
@@ -192,9 +197,9 @@
 	.reason-body {
 		margin-top: 4px;
 		color: var(--dim);
+		font-style: italic;
 		font-size: 13px;
 		line-height: 1.6;
-		white-space: pre-wrap;
 		word-break: break-word;
 	}
 	.system {
