@@ -3,23 +3,21 @@
 	let {
 		size = 'md',
 		active = false,
-		disabled = false,
-		title,
 		label,
-		onclick,
-		children
+		title,
+		children,
+		...rest
 	}: {
 		size?: 'sm' | 'md';
 		active?: boolean;
-		disabled?: boolean;
-		title?: string;
 		label?: string;
-		onclick?: (e: MouseEvent) => void;
+		title?: string;
 		children: Snippet;
+		[key: string]: unknown;
 	} = $props();
 </script>
 
-<button class="ib {size}" class:active {disabled} {title} aria-label={label ?? title} {onclick}>
+<button class="ib {size}" class:active aria-label={label ?? title} {title} {...rest}>
 	{@render children()}
 </button>
 

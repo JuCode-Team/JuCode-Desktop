@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { Folder, FileText, ArrowUp, RefreshCw, X } from 'lucide-svelte';
 	import { projectRoot, listDir, readText, type FsEntry } from '$lib/protocol';
+	import IconButton from '$lib/ui/IconButton.svelte';
 
 	let { rootDir = '' }: { rootDir?: string } = $props();
 	let root = $state('');
@@ -45,9 +46,9 @@
 
 <div class="files">
 	<div class="bar">
-		<button class="ico" onclick={up} disabled={cwd === root} aria-label="up"><ArrowUp size={14} /></button>
+		<IconButton size="sm" onclick={up} disabled={cwd === root} label="up"><ArrowUp size={14} /></IconButton>
 		<span class="crumb" title={cwd}>{rel}</span>
-		<button class="ico" onclick={() => load(cwd)} aria-label="refresh"><RefreshCw size={13} /></button>
+		<IconButton size="sm" onclick={() => load(cwd)} label="refresh"><RefreshCw size={13} /></IconButton>
 	</div>
 	{#if error}
 		<div class="err">{error}</div>
@@ -69,7 +70,7 @@
 		<div class="sheet" role="dialog" tabindex="-1" aria-label={viewer.name}>
 			<div class="sheet-head">
 				<span class="sheet-name">{viewer.name}</span>
-				<button class="ico" onclick={() => (viewer = null)} aria-label="close"><X size={15} /></button>
+				<IconButton onclick={() => (viewer = null)} label="close"><X size={15} /></IconButton>
 			</div>
 			<pre class="code">{viewer.content}</pre>
 		</div>
@@ -99,22 +100,6 @@
 		text-overflow: ellipsis;
 		direction: rtl;
 		text-align: left;
-	}
-	.ico {
-		display: inline-flex;
-		padding: 5px;
-		border: none;
-		background: none;
-		color: var(--dim);
-		border-radius: 6px;
-		cursor: pointer;
-	}
-	.ico:hover:not(:disabled) {
-		background: var(--surface2);
-		color: var(--text);
-	}
-	.ico:disabled {
-		opacity: 0.3;
 	}
 	.list {
 		flex: 1;

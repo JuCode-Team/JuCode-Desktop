@@ -3,6 +3,8 @@
 	import { X, Search, Download, Check, LoaderCircle, RefreshCw } from 'lucide-svelte';
 	import { fetchMarketplace, sendOp, type MarketSkill } from '$lib/protocol';
 	import IconButton from '$lib/ui/IconButton.svelte';
+	import Button from '$lib/ui/Button.svelte';
+	import Chip from '$lib/ui/Chip.svelte';
 
 	let { sessionId, onClose }: { sessionId: string; onClose: () => void } = $props();
 
@@ -58,14 +60,14 @@
 				<Search size={15} />
 				<input bind:value={query} placeholder="搜索扩展…" />
 			</div>
-			<button class="refresh" onclick={load} aria-label="refresh"><RefreshCw size={14} /></button>
+			<Button variant="secondary" size="icon" onclick={load} title="refresh"><RefreshCw size={14} /></Button>
 		</div>
 
 		{#if tags.length}
 			<div class="chips">
-				<button class="chip" class:on={tag === ''} onclick={() => (tag = '')}>全部</button>
+				<Chip selected={tag === ''} onclick={() => (tag = '')}>全部</Chip>
 				{#each tags as t (t)}
-					<button class="chip" class:on={tag === t} onclick={() => (tag = t)}>{t}</button>
+					<Chip selected={tag === t} onclick={() => (tag = t)}>{t}</Chip>
 				{/each}
 			</div>
 		{/if}
@@ -90,9 +92,9 @@
 								<div class="tagrow">
 									{#each s.tags.slice(0, 3) as t (t)}<span class="t">{t}</span>{/each}
 								</div>
-								<button class="install" disabled={installing[s.id]} onclick={() => install(s)}>
+								<Button variant={installing[s.id] ? 'success' : 'primary'} size="sm" disabled={installing[s.id]} onclick={() => install(s)}>
 									{#if installing[s.id]}<Check size={14} /> 已安装{:else}<Download size={14} /> 安装{/if}
-								</button>
+								</Button>
 							</div>
 						</div>
 					{/each}
@@ -170,39 +172,11 @@
 	.search input::placeholder {
 		color: var(--dim2);
 	}
-	.refresh {
-		display: inline-flex;
-		align-items: center;
-		padding: 0 11px;
-		border: 1px solid var(--border);
-		border-radius: var(--r-md);
-		background: var(--surface);
-		color: var(--dim);
-		cursor: pointer;
-	}
-	.refresh:hover {
-		color: var(--text);
-		background: var(--surface2);
-	}
 	.chips {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 6px;
 		padding: 4px 20px 10px;
-	}
-	.chip {
-		font-size: 12px;
-		padding: 4px 12px;
-		border-radius: 999px;
-		border: 1px solid var(--border);
-		background: var(--surface);
-		color: var(--dim);
-		cursor: pointer;
-	}
-	.chip.on {
-		color: var(--on-accent);
-		background: var(--accent);
-		border-color: var(--accent);
 	}
 	.body {
 		flex: 1;
@@ -274,27 +248,6 @@
 		background: var(--surface2);
 		border-radius: 4px;
 		padding: 1px 6px;
-	}
-	.install {
-		display: inline-flex;
-		align-items: center;
-		gap: 5px;
-		font-size: 12px;
-		padding: 6px 11px;
-		border-radius: var(--r-sm);
-		border: 1px solid var(--border);
-		background: var(--accent);
-		border-color: var(--accent);
-		color: var(--on-accent);
-		font-weight: 600;
-		cursor: pointer;
-		flex-shrink: 0;
-	}
-	.install:disabled {
-		background: var(--surface2);
-		border-color: var(--border);
-		color: var(--ok);
-		cursor: default;
 	}
 	.state {
 		display: flex;

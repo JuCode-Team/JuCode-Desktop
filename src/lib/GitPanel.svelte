@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { GitBranch, RefreshCw, X } from 'lucide-svelte';
+	import IconButton from '$lib/ui/IconButton.svelte';
 	import { git } from '$lib/protocol';
 
 	let { cwd = '' }: { cwd?: string } = $props();
@@ -57,7 +58,7 @@
 		<div class="bar">
 			<GitBranch size={14} class="bcol" />
 			<span class="branch">{branch || 'detached'}</span>
-			<button class="ico" onclick={refresh} aria-label="refresh"><RefreshCw size={13} /></button>
+			<IconButton size="sm" onclick={refresh} label="refresh"><RefreshCw size={13} /></IconButton>
 		</div>
 		<div class="scroll">
 			<div class="sec">Changes <span class="count">{changes.length}</span></div>
@@ -85,7 +86,7 @@
 		<div class="sheet" role="dialog" tabindex="-1" aria-label={diff.path}>
 			<div class="sheet-head">
 				<span class="sheet-name">{diff.path}</span>
-				<button class="ico" onclick={() => (diff = null)} aria-label="close"><X size={15} /></button>
+				<IconButton onclick={() => (diff = null)} label="close"><X size={15} /></IconButton>
 			</div>
 			<pre class="diff">{#each diff.lines as d (d)}<span class={d.cls}>{d.line}
 </span>{/each}</pre>

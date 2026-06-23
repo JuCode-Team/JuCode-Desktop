@@ -24,6 +24,8 @@
 	import Sidebar from '$lib/Sidebar.svelte';
 	import Composer from '$lib/Composer.svelte';
 	import MessageList from '$lib/MessageList.svelte';
+	import Button from '$lib/ui/Button.svelte';
+	import IconButton from '$lib/ui/IconButton.svelte';
 	import type { Project } from '$lib/types';
 	import Vendor from '$lib/Vendor.svelte';
 
@@ -502,9 +504,9 @@
 						<pre class="approval-sum">{chat.pendingApproval.summary}</pre>
 					{/if}
 					<div class="approval-actions">
-						<button class="ap allow" onclick={() => respondApproval('allow once')}>允许一次</button>
-						<button class="ap" onclick={() => respondApproval('allow always')}>本会话始终允许</button>
-						<button class="ap deny" onclick={() => respondApproval('deny')}>拒绝</button>
+						<Button variant="primary" size="sm" onclick={() => respondApproval('allow once')}>允许一次</Button>
+						<Button variant="secondary" size="sm" onclick={() => respondApproval('allow always')}>本会话始终允许</Button>
+						<Button variant="danger" size="sm" onclick={() => respondApproval('deny')}>拒绝</Button>
 					</div>
 				</div>
 			{/if}
@@ -562,7 +564,7 @@
 			<div class="modal" role="dialog" tabindex="-1" aria-label={pickerTitle}>
 				<div class="modal-head">
 					<span>{pickerTitle}</span>
-					<button class="modal-x" onclick={() => chat?.closePicker()} aria-label="close"><X size={15} /></button>
+					<IconButton onclick={() => chat?.closePicker()} label="close"><X size={15} /></IconButton>
 				</div>
 				{#if chat.picker.kind === 'model' && activeModel}
 					<div class="efforts">
@@ -663,27 +665,6 @@
 		display: flex;
 		gap: 8px;
 		margin-top: 10px;
-	}
-	.ap {
-		padding: 6px 12px;
-		border-radius: var(--r-sm);
-		border: 1px solid var(--border);
-		background: var(--surface2);
-		color: var(--text);
-		font-size: 12px;
-		cursor: pointer;
-	}
-	.ap:hover {
-		background: var(--surface);
-	}
-	.ap.allow {
-		background: var(--accent);
-		border-color: transparent;
-		color: var(--on-accent);
-	}
-	.ap.deny {
-		margin-left: auto;
-		color: var(--err);
 	}
 	header {
 		display: flex;
@@ -838,16 +819,6 @@
 		font-weight: 600;
 		font-size: 14px;
 		border-bottom: 1px solid var(--hairline);
-	}
-	.modal-x {
-		display: inline-flex;
-		background: none;
-		border: none;
-		color: var(--dim);
-		cursor: pointer;
-	}
-	.modal-x:hover {
-		color: var(--text);
 	}
 	.efforts {
 		display: flex;

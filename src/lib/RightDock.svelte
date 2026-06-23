@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { X, Plus } from 'lucide-svelte';
+	import IconButton from '$lib/ui/IconButton.svelte';
 	import GoalPanel from './GoalPanel.svelte';
 	import PlanPanel from './PlanPanel.svelte';
 	import FilesPanel from './FilesPanel.svelte';
@@ -103,20 +104,19 @@
 			>
 				<span class="tdot" class:on={key === active}></span>
 				<span class="tlabel">{labelOf(key)}</span>
-				<button
-					class="tx"
-					onpointerdown={(e) => e.stopPropagation()}
-					onclick={(e) => {
+				<IconButton
+					size="sm"
+					label="close tab"
+					onpointerdown={(e: PointerEvent) => e.stopPropagation()}
+					onclick={(e: MouseEvent) => {
 						e.stopPropagation();
 						closeTab(key);
-					}}
-					aria-label="close tab"><X size={12} /></button
-				>
+					}}><X size={12} /></IconButton>
 			</div>
 			{/each}
 		</div>
 		<div class="add">
-			<button class="addbtn" onclick={() => (addOpen = !addOpen)} aria-label="add panel" disabled={available.length === 0}><Plus size={15} /></button>
+			<IconButton onclick={() => (addOpen = !addOpen)} label="add panel" disabled={available.length === 0}><Plus size={15} /></IconButton>
 			{#if addOpen}
 				<button class="add-backdrop" aria-label="close" onclick={() => (addOpen = false)}></button>
 				<div class="add-menu">
@@ -211,38 +211,9 @@
 	.tlabel {
 		font-weight: 600;
 	}
-	.tx {
-		display: inline-flex;
-		padding: 1px;
-		border: none;
-		background: none;
-		color: var(--dim2);
-		border-radius: 4px;
-		cursor: pointer;
-	}
-	.tx:hover {
-		background: var(--surface2);
-		color: var(--text);
-	}
 	.add {
 		position: relative;
 		flex-shrink: 0;
-	}
-	.addbtn {
-		display: inline-flex;
-		padding: 6px;
-		border: none;
-		background: none;
-		color: var(--dim);
-		border-radius: var(--r-sm);
-		cursor: pointer;
-	}
-	.addbtn:hover:not(:disabled) {
-		background: var(--surface2);
-		color: var(--text);
-	}
-	.addbtn:disabled {
-		opacity: 0.3;
 	}
 	.add-backdrop {
 		position: fixed;

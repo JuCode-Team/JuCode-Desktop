@@ -3,23 +3,19 @@
 	let {
 		variant = 'secondary',
 		size = 'md',
-		disabled = false,
 		full = false,
-		title,
-		onclick,
-		children
+		children,
+		...rest
 	}: {
-		variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
-		size?: 'sm' | 'md';
-		disabled?: boolean;
+		variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'success';
+		size?: 'sm' | 'md' | 'icon';
 		full?: boolean;
-		title?: string;
-		onclick?: (e: MouseEvent) => void;
 		children: Snippet;
+		[key: string]: unknown;
 	} = $props();
 </script>
 
-<button class="b {variant} {size}" class:full {disabled} {title} {onclick}>{@render children()}</button>
+<button class="b {variant} {size}" class:full {...rest}>{@render children()}</button>
 
 <style>
 	.b {
@@ -43,6 +39,9 @@
 	.sm {
 		font-size: 12px;
 		padding: 6px 10px;
+	}
+	.icon {
+		padding: 8px;
 	}
 	.full {
 		width: 100%;
@@ -74,6 +73,14 @@
 		background: var(--surface2);
 		color: var(--text);
 		border-color: transparent;
+	}
+	.success {
+		background: color-mix(in oklab, var(--ok) 14%, transparent);
+		border-color: color-mix(in oklab, var(--ok) 35%, transparent);
+		color: var(--ok);
+	}
+	.success:disabled {
+		opacity: 1;
 	}
 	.danger {
 		background: none;
