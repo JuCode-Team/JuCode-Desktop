@@ -18,6 +18,8 @@
 	let builtinProviders = $state<{ id: string; base_url: string; models: ModelCfg[] }[]>([]);
 	let newProvider = $state('');
 	let newKey = $state('');
+	let customModel = $state('');
+	let customCtx = $state<number | undefined>();
 	let saved = $state(false);
 	let section = $state<'model' | 'account' | 'behavior'>('model');
 
@@ -36,6 +38,7 @@
 
 	onMount(async () => {
 		cfg = await readConfig();
+		if (cfg.compaction_threshold_percent == null) cfg.compaction_threshold_percent = 75;
 		providers = await readAuthProviders();
 		builtinProviders = await listProviders().catch(() => []);
 		newProvider = String(cfg.provider ?? 'jucode');
@@ -58,6 +61,31 @@
 		}
 	}
 
+	const isCustomProvider = $derived(!builtinProviders.some((p) => p.id === cfg.provider));
+
+	function startCustomProvider() {
+		cfg.provider = '';
+		cfg.base_url = '';
+		cfg.models = [];
+		cfg.model = '';
+		newProvider = '';
+	}
+
+	function addCustomModel() {
+		const name = customModel.trim();
+		if (!name) return;
+		const m = {
+			name,
+			context_window: Number(customCtx) || 272000,
+			max_output_tokens: 128000,
+			reasoning_efforts: [] as string[]
+		};
+		cfg.models = [...(Array.isArray(cfg.models) ? cfg.models : []), m];
+		cfg.model = name;
+		customModel = '';
+		customCtx = undefined;
+	}
+
 	function pickModel(name: string) {
 		cfg.model = name;
 		const efs = models.find((m) => m.name === name)?.reasoning_efforts ?? [];
@@ -73,7 +101,7 @@
 			model: cfg.model,
 			reasoning_effort: cfg.reasoning_effort,
 			compact_model: cfg.compact_model,
-			compaction_threshold_tokens: Number(cfg.compaction_threshold_tokens) || 0,
+			compaction_threshold_percent: Number(cfg.compaction_threshold_percent) || 75,
 			retry_attempts: Number(cfg.retry_attempts) || 0,
 			connect_timeout_seconds: Number(cfg.connect_timeout_seconds) || 0,
 			read_timeout_seconds: Number(cfg.read_timeout_seconds) || 0,
@@ -158,7 +186,7 @@
 				{:else if section === 'account'}
 					<div class="group">
 						<div class="glabel">Provider</div>
-						<p class="hint">切换后默认模型会换成该 Provider 的模型,记得为它配置密钥。</p>
+						<p class="hint">选内置或自定义；Base URL 可指向任意 OpenAI 兼容端点。</p>
 						<div class="cards">
 							{#each builtinProviders as p (p.id)}
 								<button class="card-row prov" class:on={cfg.provider === p.id} onclick={() => switchProvider(p.id)}>
@@ -173,12 +201,33 @@
 									<span class="radio" class:on={cfg.provider === p.id}>{#if cfg.provider === p.id}<Check size={13} />{/if}</span>
 								</button>
 							{/each}
+							<button class="card-row prov" class:on={isCustomProvider} onclick={startCustomProvider}>
+								<span class="tile"><Plus size={18} /></span>
+								<span class="prov-txt">
+									<span class="prov-id">自定义</span>
+									<span class="prov-url">手动填写 Provider 与端点</span>
+								</span>
+								<span class="radio" class:on={isCustomProvider}>{#if isCustomProvider}<Check size={13} />{/if}</span>
+							</button>
 						</div>
+
+						<div class="card detail">
+							<label class="drow"><span>Provider ID</span><input class="din" bind:value={cfg.provider} placeholder="deepseek" /></label>
+							<label class="drow"><span>Base URL</span><input class="din" bind:value={cfg.base_url} placeholder="https://api.deepseek.com/v1" /></label>
+						</div>
+
+						{#if models.length === 0}
+							<div class="card keyform mt8">
+								<input class="kin" bind:value={customModel} placeholder="模型名（如 deepseek-v4-pro）" />
+								<input class="num" type="number" bind:value={customCtx} placeholder="窗口" />
+								<button class="btn" onclick={addCustomModel} disabled={!customModel.trim()}><Plus size={14} /> 添加模型</button>
+							</div>
+						{/if}
 					</div>
 
 					<div class="group">
 						<div class="glabel">登录</div>
-						<button class="btn primary wide" onclick={login}><LogIn size={15} /> 使用 JuCode 账号登录（OAuth）</button>
+						<button class="btn wide" onclick={login}><LogIn size={15} /> 使用 JuCode 账号登录（OAuth）</button>
 					</div>
 
 					<div class="group">
@@ -199,8 +248,8 @@
 						<div class="glabel">上下文压缩</div>
 						<div class="setlist">
 							<label class="set">
-								<span class="set-txt"><span class="set-title">压缩阈值（tokens）</span><span class="set-sub">0 表示按模型窗口的 75% 自动压缩</span></span>
-								<input class="num" type="number" bind:value={cfg.compaction_threshold_tokens} />
+								<span class="set-txt"><span class="set-title">压缩阈值</span><span class="set-sub">达到上下文窗口的该百分比时自动压缩（10–95）</span></span>
+								<span class="pct"><input class="num pctin" type="number" min="10" max="95" bind:value={cfg.compaction_threshold_percent} /><span class="pctsign">%</span></span>
 							</label>
 						</div>
 					</div>
@@ -612,6 +661,59 @@
 	.kin:focus {
 		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
 	}
+	.mt8 {
+		margin-top: 8px;
+	}
+	.detail {
+		margin-top: 8px;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+	}
+	.drow {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		padding: 10px 14px;
+	}
+	.drow + .drow {
+		border-top: 1px solid var(--hairline);
+	}
+	.drow > span {
+		width: 92px;
+		flex-shrink: 0;
+		font-size: 12.5px;
+		color: var(--dim);
+	}
+	.din {
+		flex: 1;
+		min-width: 0;
+		background: var(--surface2);
+		border: 1px solid var(--border);
+		border-radius: var(--r-sm);
+		color: var(--text);
+		padding: 8px 10px;
+		font-size: 13px;
+		font-family: var(--font-mono);
+		outline: none;
+	}
+	.din:focus {
+		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
+	}
+	.pct {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		flex-shrink: 0;
+	}
+	.pctin {
+		width: 72px;
+	}
+	.pctsign {
+		font-family: var(--font-mono);
+		font-size: 13px;
+		color: var(--dim);
+	}
 
 	.setlist {
 		display: flex;
@@ -682,11 +784,14 @@
 		cursor: default;
 	}
 	.btn.primary {
-		background: linear-gradient(145deg, var(--accent-bright), var(--accent));
-		border-color: transparent;
+		background: var(--accent);
+		border-color: var(--accent);
 		color: var(--on-accent);
 		font-weight: 600;
-		box-shadow: 0 4px 14px var(--accent-soft);
+	}
+	.btn.primary:hover:not(:disabled) {
+		background: color-mix(in oklab, var(--accent) 88%, #fff);
+		border-color: transparent;
 	}
 	.btn.wide {
 		width: 100%;
