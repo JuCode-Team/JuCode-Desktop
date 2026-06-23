@@ -33,6 +33,9 @@ export function readAuthProviders(): Promise<string[]> {
 export function setAuthKey(provider: string, key: string): Promise<void> {
 	return invoke('set_auth_key', { provider, key });
 }
+export function removeAuthKey(provider: string): Promise<void> {
+	return invoke('remove_auth_key', { provider });
+}
 
 // Skills marketplace (Tauri fetches it directly from the JuCode API).
 export interface MarketSkill {
@@ -76,6 +79,24 @@ export function readText(path: string): Promise<string> {
 // Persists pasted image bytes to a temp file; returns the path to attach.
 export function saveTempImage(data: Uint8Array, ext: string): Promise<string> {
 	return invoke('save_temp_image', { data: Array.from(data), ext });
+}
+
+// First-run environment check + best-effort dependency install (setup wizard).
+export interface DepStatus {
+	present: boolean;
+	detail: string;
+}
+export interface EnvReport {
+	os: string;
+	arch: string;
+	git: DepStatus;
+	engine: DepStatus;
+}
+export function checkEnvironment(): Promise<EnvReport> {
+	return invoke('check_environment');
+}
+export function installDependency(name: string): Promise<string> {
+	return invoke('install_dependency', { name });
 }
 
 export function listFiles(cwd?: string): Promise<string[]> {

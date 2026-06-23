@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { X, LogIn, Cpu, KeyRound, SlidersHorizontal, Plus, Pencil, Trash2, Zap, CircleCheck } from 'lucide-svelte';
-	import { readConfig, writeConfig, readAuthProviders, setAuthKey, listProviders, sendOp } from '$lib/protocol';
+	import { onMount, untrack } from 'svelte';
+	import { X, LogIn, LogOut, Cpu, KeyRound, SlidersHorizontal, Plus, Pencil, Trash2, Zap, CircleCheck } from 'lucide-svelte';
+	import { readConfig, writeConfig, readAuthProviders, setAuthKey, removeAuthKey, listProviders, sendOp } from '$lib/protocol';
 	import Vendor from '$lib/Vendor.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
@@ -10,7 +10,17 @@
 	import Switch from '$lib/ui/Switch.svelte';
 	import Segmented from '$lib/ui/Segmented.svelte';
 
-	let { sessionId, onClose }: { sessionId: string; onClose: () => void } = $props();
+	let {
+		sessionId,
+		initialSection = 'model',
+		onClose,
+		onAuthChange
+	}: {
+		sessionId: string;
+		initialSection?: 'model' | 'account' | 'behavior';
+		onClose: () => void;
+		onAuthChange?: () => void;
+	} = $props();
 
 	interface ModelCfg {
 		name: string;
@@ -36,7 +46,8 @@
 	let builtin = $state<{ id: string; base_url: string; protocol: string; models: ModelCfg[] }[]>([]);
 	let custom = $state<Provider[]>([]);
 	let saved = $state(false);
-	let section = $state<'model' | 'account' | 'behavior'>('model');
+	// Capture the opening section once; the prop doesn't change during the modal's life.
+	let section = $state<'model' | 'account' | 'behavior'>(untrack(() => initialSection));
 
 	// inline editor state
 	let editing = $state<string | null>(null); // provider id, or '__new__'
@@ -110,6 +121,13 @@
 		keyed = await readAuthProviders();
 		keyInput = '';
 		editing = null;
+		onAuthChange?.();
+	}
+	// Logout (jucode) / clear stored key (other providers).
+	async function logout(id: string) {
+		await removeAuthKey(id);
+		keyed = await readAuthProviders();
+		onAuthChange?.();
 	}
 	function addFormModel() {
 		if (!mName.trim()) return;
@@ -125,6 +143,7 @@
 		if (form.key.trim()) {
 			await setAuthKey(id, form.key.trim());
 			keyed = await readAuthProviders();
+			onAuthChange?.();
 		}
 		editing = null;
 	}
@@ -243,16 +262,26 @@
 										{#if p.id === 'jucode'}
 											<div class="erow">
 												<span class="ehint">JuCode 使用账号登录(OAuth)。</span>
-												<Button variant="primary" size="sm" onclick={login}><LogIn size={14} /> {keyed.includes('jucode') ? '重新登录' : '登录'}</Button>
+												<div class="ebtns">
+													{#if keyed.includes('jucode')}
+														<Button variant="danger" size="sm" onclick={() => logout('jucode')}><LogOut size={14} /> 退出登录</Button>
+													{/if}
+													<Button variant="primary" size="sm" onclick={login}><LogIn size={14} /> {keyed.includes('jucode') ? '重新登录' : '登录'}</Button>
+												</div>
 											</div>
 										{:else}
 											<div class="ekey">
 												<TextField bind:value={keyInput} type="password" placeholder={`${p.id} API key · sk-…`} mono />
 												<Button variant="primary" size="sm" onclick={() => saveKey(p.id)}>保存密钥</Button>
 											</div>
-											{#if !p.builtin}
-												<div class="erow end"><Button variant="danger" size="sm" onclick={() => deleteProvider(p.id)}><Trash2 size={13} /> 删除</Button></div>
-											{/if}
+											<div class="erow end">
+												{#if keyed.includes(p.id)}
+													<Button variant="ghost" size="sm" onclick={() => logout(p.id)}><LogOut size={13} /> 清除密钥</Button>
+												{/if}
+												{#if !p.builtin}
+													<Button variant="danger" size="sm" onclick={() => deleteProvider(p.id)}><Trash2 size={13} /> 删除</Button>
+												{/if}
+											</div>
 										{/if}
 									</div>
 								{/if}
@@ -619,6 +648,12 @@
 	}
 	.erow.end {
 		justify-content: flex-end;
+		gap: 8px;
+	}
+	.ebtns {
+		display: flex;
+		gap: 8px;
+		flex-shrink: 0;
 	}
 	.ehint {
 		font-size: 12px;

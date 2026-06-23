@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Send, Square, Paperclip, X, FileText, FastForward, File, ShieldCheck } from 'lucide-svelte';
+	import { Send, Square, Paperclip, X, FileText, FastForward, File, Folder, ShieldCheck } from 'lucide-svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import { convertFileSrc } from '@tauri-apps/api/core';
 	import Vendor from '$lib/Vendor.svelte';
@@ -62,8 +62,9 @@
 		slashIdx = 0;
 	});
 
-	// @-mention file completion. Lazily loads the project file list (cached per cwd)
-	// the first time an @-token is typed.
+	// @-mention completion (files + folders). Lazily loads the project file list
+	// (cached per cwd) the first time an @-token is typed.
+	type AtEntry = { path: string; dir: boolean };
 	let atFiles = $state<string[]>([]);
 	let atCwd = $state('');
 	let atIdx = $state(0);
@@ -84,21 +85,83 @@
 				.catch(() => {});
 		}
 	});
-	const atMatches = $derived.by(() => {
+
+	// Files plus every parent folder derived from their paths (deduped). Empty
+	// folders (none in git) won't appear — acceptable for @-mention.
+	const atEntries = $derived.by<AtEntry[]>(() => {
+		const dirs = new Set<string>();
+		for (const f of atFiles) {
+			const parts = f.split('/');
+			let acc = '';
+			for (let i = 0; i < parts.length - 1; i++) {
+				acc = acc ? `${acc}/${parts[i]}` : parts[i];
+				dirs.add(acc);
+			}
+		}
+		const entries: AtEntry[] = atFiles.map((p) => ({ path: p, dir: false }));
+		for (const d of dirs) entries.push({ path: d, dir: true });
+		return entries;
+	});
+
+	// fzf-lite subsequence scorer: 0 = no match; higher = better. Rewards matches
+	// at word/segment boundaries (/._- ) and consecutive runs.
+	function fuzzyScore(text: string, q: string): number {
+		const t = text.toLowerCase();
+		let ti = 0;
+		let score = 0;
+		let prev = -2;
+		for (let qi = 0; qi < q.length; qi++) {
+			const at = t.indexOf(q[qi], ti);
+			if (at < 0) return 0;
+			let b = 1;
+			if (at === prev + 1) b += 5;
+			const before = t[at - 1];
+			if (at === 0 || before === '/' || before === '.' || before === '_' || before === '-') b += 6;
+			score += b;
+			prev = at;
+			ti = at + 1;
+		}
+		return score;
+	}
+	const dirFirst = (a: AtEntry, b: AtEntry) =>
+		a.dir === b.dir ? a.path.localeCompare(b.path) : a.dir ? -1 : 1;
+
+	const atMatches = $derived.by<AtEntry[]>(() => {
 		if (atQuery === null) return [];
 		const q = atQuery.toLowerCase();
-		const hits = q ? atFiles.filter((f) => f.toLowerCase().includes(q)) : atFiles;
-		return hits.slice(0, 8);
+		const entries = atEntries;
+		// Just `@`: show root-level entries, folders first.
+		if (q === '') {
+			return entries.filter((e) => !e.path.includes('/')).sort(dirFirst).slice(0, 10);
+		}
+		// Trailing slash: drill into that folder — its direct children only.
+		if (q.endsWith('/')) {
+			return entries
+				.filter((e) => e.path.toLowerCase().startsWith(q) && e.path.length > q.length && !e.path.slice(q.length).includes('/'))
+				.sort(dirFirst)
+				.slice(0, 10);
+		}
+		// Otherwise fuzzy-rank by basename (weighted) and full path.
+		const scored: { e: AtEntry; s: number }[] = [];
+		for (const e of entries) {
+			const s = Math.max(fuzzyScore(e.path, q), fuzzyScore(base(e.path), q) * 2);
+			if (s > 0) scored.push({ e, s });
+		}
+		scored.sort((a, b) => b.s - a.s || a.e.path.length - b.e.path.length);
+		return scored.slice(0, 10).map((x) => x.e);
 	});
 	$effect(() => {
 		atMatches;
 		atIdx = 0;
 	});
 
-	function applyAt(path: string) {
+	// Files complete the token (trailing space); folders append `/` so the menu
+	// keeps drilling into their contents.
+	function applyAt(entry: AtEntry) {
+		const suffix = entry.dir ? '/' : ' ';
 		input = input.replace(/(?:^|\s)@([^\s@]*)$/, (full) => {
 			const lead = /^\s/.test(full) ? full[0] : '';
-			return `${lead}@${path} `;
+			return `${lead}@${entry.path}${suffix}`;
 		});
 	}
 
@@ -204,11 +267,11 @@
 	{/if}
 	{#if atMatches.length}
 		<div class="slash">
-			{#each atMatches as f, i (f)}
-				<button class="slash-item" class:sel={i === atIdx} onclick={() => applyAt(f)} onmouseenter={() => (atIdx = i)}>
-					<File size={13} />
-					<span class="at-name">{base(f)}</span>
-					<span class="at-path">{f}</span>
+			{#each atMatches as e, i (e.path)}
+				<button class="slash-item" class:sel={i === atIdx} onclick={() => applyAt(e)} onmouseenter={() => (atIdx = i)}>
+					{#if e.dir}<Folder size={13} class="atfolder" />{:else}<File size={13} />{/if}
+					<span class="at-name">{base(e.path)}{#if e.dir}/{/if}</span>
+					<span class="at-path">{e.path}</span>
 				</button>
 			{/each}
 		</div>
@@ -515,6 +578,10 @@
 	}
 	.at-name {
 		font-family: var(--font-mono);
+		flex-shrink: 0;
+	}
+	:global(.atfolder) {
+		color: var(--accent-bright);
 		flex-shrink: 0;
 	}
 	.at-path {

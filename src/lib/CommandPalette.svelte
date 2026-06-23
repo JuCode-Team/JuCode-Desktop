@@ -3,7 +3,7 @@
 	import {
 		Search, Plus, FolderPlus, Cpu, RotateCcw, History, Layers,
 		Gauge, Activity, Stethoscope, GitBranch, Store, Settings as SettingsIcon,
-		PanelRight, SunMoon, ChevronRight
+		PanelRight, SunMoon, ChevronRight, Wrench
 	} from 'lucide-svelte';
 	import type { ChatState } from '$lib/chat.svelte';
 
@@ -17,7 +17,8 @@
 		onSettings,
 		onMarket,
 		onTogglePanel,
-		onToggleTheme
+		onToggleTheme,
+		onSetup
 	}: {
 		chat: ChatState | undefined;
 		hasProject: boolean;
@@ -29,6 +30,7 @@
 		onMarket: () => void;
 		onTogglePanel: () => void;
 		onToggleTheme: () => void;
+		onSetup: () => void;
 	} = $props();
 
 	type Action = {
@@ -67,6 +69,7 @@
 			{ id: 'doctor', label: '环境诊断', icon: Stethoscope, keywords: 'doctor 诊断', run: wrap(() => onRun('/doctor')) },
 			{ id: 'market', label: '扩展市场', icon: Store, keywords: 'market skills 市场 技能 扩展', run: wrap(onMarket) },
 			{ id: 'settings', label: '设置', keys: '⌘,', icon: SettingsIcon, keywords: 'settings 设置 provider', run: wrap(onSettings) },
+			{ id: 'setup', label: '安装向导 / 环境检查', hint: 'git、登录', icon: Wrench, keywords: 'setup wizard env git login 安装 向导 环境 登录', run: wrap(onSetup) },
 			{ id: 'panel', label: '切换右侧面板', keys: '⌘B', icon: PanelRight, keywords: 'panel dock 面板', run: wrap(onTogglePanel) },
 			{ id: 'theme', label: '切换主题', icon: SunMoon, keywords: 'theme dark light 主题', run: wrap(onToggleTheme) }
 		];

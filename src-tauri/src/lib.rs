@@ -222,6 +222,20 @@ fn set_auth_key(provider: String, key: String) -> Result<(), String> {
     write_json(&path, &current)
 }
 
+/// Removes a provider's stored credential — logout (jucode) / clear key (others).
+#[tauri::command]
+fn remove_auth_key(provider: String) -> Result<(), String> {
+    let path = jucode_dir().join("auth.json");
+    let mut current = read_json(&path);
+    if let Some(map) = current
+        .get_mut("providers")
+        .and_then(|v| v.as_object_mut())
+    {
+        map.remove(&provider);
+    }
+    write_json(&path, &current)
+}
+
 /// Fetches the JuCode skills marketplace using the configured api url and the
 /// stored jucode key, returning the raw `{skills, default_skill_ids}` JSON.
 #[tauri::command]
@@ -272,6 +286,97 @@ fn project_root() -> String {
     resolve_cwd().display().to_string()
 }
 
+/// Scans PATH for an executable named `cmd`, returning its full path.
+fn which(cmd: &str) -> Option<PathBuf> {
+    let path = std::env::var_os("PATH")?;
+    for dir in std::env::split_paths(&path) {
+        let candidate = dir.join(cmd);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+        #[cfg(windows)]
+        {
+            let exe = dir.join(format!("{cmd}.exe"));
+            if exe.is_file() {
+                return Some(exe);
+            }
+        }
+    }
+    None
+}
+
+#[derive(Serialize)]
+struct DepStatus {
+    present: bool,
+    detail: String,
+}
+
+#[derive(Serialize)]
+struct EnvReport {
+    os: String,
+    arch: String,
+    git: DepStatus,
+    engine: DepStatus,
+}
+
+/// First-run environment check: is `git` available, and can the `jucode` engine
+/// binary be resolved? Drives the setup wizard.
+#[tauri::command]
+fn check_environment() -> EnvReport {
+    let git = match Command::new("git").arg("--version").output() {
+        Ok(out) if out.status.success() => DepStatus {
+            present: true,
+            detail: String::from_utf8_lossy(&out.stdout).trim().to_string(),
+        },
+        _ => DepStatus {
+            present: false,
+            detail: String::new(),
+        },
+    };
+
+    let bin = resolve_bin();
+    // resolve_bin() returns a bare "jucode" as its last fallback; treat that as a
+    // PATH lookup rather than a relative-to-cwd path.
+    let engine_path = if bin.components().count() == 1 {
+        which(&bin.to_string_lossy())
+    } else if bin.exists() {
+        Some(bin)
+    } else {
+        None
+    };
+    let engine = DepStatus {
+        present: engine_path.is_some(),
+        detail: engine_path.map(|p| p.display().to_string()).unwrap_or_default(),
+    };
+
+    EnvReport {
+        os: std::env::consts::OS.to_string(),
+        arch: std::env::consts::ARCH.to_string(),
+        git,
+        engine,
+    }
+}
+
+/// Best-effort dependency install. On macOS this triggers Apple's Command Line
+/// Tools installer (which provides git) via a native dialog — no sudo, returns
+/// immediately. Other platforms are guided (the UI shows a copyable command), so
+/// this returns an error there.
+#[tauri::command]
+fn install_dependency(name: String) -> Result<String, String> {
+    if name != "git" {
+        return Err(format!("unsupported dependency: {name}"));
+    }
+    if std::env::consts::OS != "macos" {
+        return Err("auto-install is only supported on macOS".to_string());
+    }
+    // Exit code 1 means "already installed" — not a failure for our purposes.
+    Command::new("xcode-select")
+        .arg("--install")
+        .output()
+        .map_err(|e| e.to_string())?;
+    Ok("已触发 macOS 命令行工具安装。请在弹出的系统对话框中点「安装」完成，然后点「重新检查」。".to_string())
+}
+
 #[derive(Serialize)]
 struct FsEntry {
     name: String,
@@ -314,37 +419,52 @@ fn list_providers() -> Result<serde_json::Value, String> {
     serde_json::from_slice(&out.stdout).map_err(|e| e.to_string())
 }
 
-/// Flat list of project files (relative paths) for @-mention completion.
-/// Prefers `git ls-files` (fast, .gitignore-aware), falling back to a bounded walk.
+/// Flat list of project files (relative paths) for @-mention completion. Walks the
+/// filesystem directly — no git dependency — so non-git directories and untracked /
+/// gitignored files are all referenceable; only heavy dependency/build/cache dirs
+/// are pruned by name (see SKIP_DIRS), bounded by MAX_LIST_FILES.
 #[tauri::command]
 fn list_files(cwd: Option<String>) -> Result<Vec<String>, String> {
     let dir = cwd.map(PathBuf::from).unwrap_or_else(resolve_cwd);
-    if let Ok(out) = Command::new("git")
-        .arg("-C")
-        .arg(&dir)
-        .args(["ls-files", "--cached", "--others", "--exclude-standard"])
-        .output()
-    {
-        if out.status.success() {
-            let files: Vec<String> = String::from_utf8_lossy(&out.stdout)
-                .lines()
-                .filter(|l| !l.is_empty())
-                .map(|l| l.to_string())
-                .collect();
-            if !files.is_empty() {
-                return Ok(files);
-            }
-        }
-    }
     let mut files = Vec::new();
     walk_files(&dir, &dir, &mut files);
+    files.sort();
     Ok(files)
 }
 
-const SKIP_DIRS: [&str; 6] = ["node_modules", "target", "dist", "build", ".git", ".svelte-kit"];
+const MAX_LIST_FILES: usize = 20_000;
+
+/// Directory names skipped while walking — heavy dependency/build/cache dirs and
+/// tooling metadata (including the `.git` store). Other dotfiles (.env, .github,
+/// .gitignore…) are kept so they stay referenceable.
+const SKIP_DIRS: &[&str] = &[
+    ".git",
+    ".svelte-kit",
+    ".next",
+    ".nuxt",
+    ".cache",
+    ".gradle",
+    ".idea",
+    ".vscode",
+    ".venv",
+    ".turbo",
+    ".pytest_cache",
+    ".mypy_cache",
+    "node_modules",
+    "target",
+    "dist",
+    "build",
+    "out",
+    "coverage",
+    "vendor",
+    "venv",
+    "__pycache__",
+    "Pods",
+    "bower_components",
+];
 
 fn walk_files(root: &Path, dir: &Path, out: &mut Vec<String>) {
-    if out.len() >= 5000 {
+    if out.len() >= MAX_LIST_FILES {
         return;
     }
     let Ok(entries) = std::fs::read_dir(dir) else {
@@ -352,17 +472,16 @@ fn walk_files(root: &Path, dir: &Path, out: &mut Vec<String>) {
     };
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
-        if name.starts_with('.') {
-            continue;
-        }
         let path = entry.path();
         if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
             if SKIP_DIRS.contains(&name.as_str()) {
                 continue;
             }
             walk_files(root, &path, out);
-        } else if let Ok(rel) = path.strip_prefix(root) {
-            out.push(rel.display().to_string());
+        } else if name != ".DS_Store" {
+            if let Ok(rel) = path.strip_prefix(root) {
+                out.push(rel.display().to_string());
+            }
         }
     }
 }
@@ -550,6 +669,7 @@ pub fn run() {
             write_config,
             read_auth_providers,
             set_auth_key,
+            remove_auth_key,
             fetch_marketplace,
             project_root,
             list_providers,
@@ -557,6 +677,8 @@ pub fn run() {
             list_files,
             read_text,
             save_temp_image,
+            check_environment,
+            install_dependency,
             git,
             pty_open,
             pty_write,

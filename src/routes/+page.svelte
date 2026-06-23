@@ -20,6 +20,7 @@
 		type EventPayload
 	} from '$lib/protocol';
 	import Settings from '$lib/Settings.svelte';
+	import Setup from '$lib/Setup.svelte';
 	import Marketplace from '$lib/Marketplace.svelte';
 	import RightDock from '$lib/RightDock.svelte';
 	import Sidebar from '$lib/Sidebar.svelte';
@@ -67,8 +68,16 @@
 	}
 	let selIdx = $state(0);
 	let showSettings = $state(false);
+	let settingsInitial = $state<'model' | 'account' | 'behavior'>('model');
 	let showMarket = $state(false);
+	let showSetup = $state(false);
 	let showPalette = $state(false);
+
+	function refreshAuth() {
+		readAuthProviders()
+			.then((p) => (providers = p))
+			.catch(() => {});
+	}
 	let showRight = $state(true);
 	let rightWidth = $state(340);
 	let sidebarWidth = $state(248);
@@ -388,6 +397,9 @@
 	}
 	function onWindowKey(e: KeyboardEvent) {
 		pickerKey(e);
+		// The setup wizard is a blocking first-run modal — don't fire app shortcuts
+		// under it (e.g. Cmd+K opening the palette behind it).
+		if (showSetup) return;
 		const mod = e.metaKey || e.ctrlKey;
 		if (mod && e.key === 'k') {
 			e.preventDefault();
@@ -513,7 +525,15 @@
 			}
 			loaded = true;
 			readAuthProviders()
-				.then((p) => (providers = p))
+				.then((p) => {
+					providers = p;
+					// First run: show the setup wizard only when nothing is configured yet
+					// (a genuinely fresh machine). Pre-configured users skip it silently.
+					if (!localStorage.getItem('jucode-setup-done')) {
+						if (p.length > 0) localStorage.setItem('jucode-setup-done', '1');
+						else showSetup = true;
+					}
+				})
 				.catch(() => {});
 		})();
 		return () => {
@@ -638,11 +658,26 @@
 	</aside>
 
 	{#if showSettings}
-		<Settings sessionId={activeId} onClose={() => (showSettings = false)} />
+		<Settings sessionId={activeId} initialSection={settingsInitial} onAuthChange={refreshAuth} onClose={() => { showSettings = false; settingsInitial = 'model'; }} />
 	{/if}
 
 	{#if showMarket}
 		<Marketplace sessionId={activeId} onClose={() => (showMarket = false)} />
+	{/if}
+
+	{#if showSetup && activeId}
+		<Setup
+			sessionId={activeId}
+			{loggedIn}
+			onRefreshAuth={refreshAuth}
+			onOpenSettings={() => {
+				localStorage.setItem('jucode-setup-done', '1');
+				showSetup = false;
+				settingsInitial = 'account';
+				showSettings = true;
+			}}
+			onClose={() => (showSetup = false)}
+		/>
 	{/if}
 
 	{#if chat?.trustPrompt}
@@ -721,6 +756,7 @@
 			onMarket={() => (showMarket = true)}
 			onTogglePanel={toggleRight}
 			onToggleTheme={toggleTheme}
+			onSetup={() => (showSetup = true)}
 		/>
 	{/if}
 </div>
