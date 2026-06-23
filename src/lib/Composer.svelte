@@ -206,14 +206,10 @@
 			<div class="cspace"></div>
 			{#if chat.contextWindow > 0}<ContextRing pct={ctxPct} label={`context ${fmtTokens(chat.contextTokens)} / ${fmtTokens(chat.contextWindow)}`} />{/if}
 			{#if chat.busy}
-				<button class="cact stop" onclick={onStop} aria-label="stop" title="停止当前回合"><Square size={15} /></button>
+				<button class="cact stop" onclick={onStop} aria-label="stop" title="停止"><Square size={15} /></button>
+			{:else}
+				<button class="cact send" onclick={onSubmit} disabled={!input.trim() && !attachments.length} aria-label="send" title="发送"><Send size={16} /></button>
 			{/if}
-			<button
-				class="cact send"
-				onclick={onSubmit}
-				disabled={!input.trim() && !attachments.length}
-				aria-label="send"
-				title={chat.busy ? '排队发送（当前回合结束后执行）' : '发送'}><Send size={16} /></button>
 		</div>
 	</div>
 </div>

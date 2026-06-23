@@ -5,6 +5,11 @@
 		$props();
 
 	let collapsed = $state(false);
+	// Auto-expand while the tool runs, auto-collapse once it finishes. Re-runs only
+	// when `running` flips, so a manual toggle on a finished card still sticks.
+	$effect(() => {
+		collapsed = !running;
+	});
 
 	const parsed = $derived.by<Record<string, unknown> | null>(() => {
 		try {

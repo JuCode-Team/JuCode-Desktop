@@ -82,6 +82,7 @@ export class ChatState {
 	totalIn = $state(0);
 	totalOut = $state(0);
 	unseen = $state(false);
+	compactionTokens = $state(0);
 
 	#assistantIdx = -1;
 	#reasoningIdx = -1;
@@ -104,6 +105,19 @@ export class ChatState {
 
 	get busy() {
 		return ['streaming', 'connecting', 'compacting', 'steering'].includes(this.engineState);
+	}
+
+	/** The activity phase shown by the bottom indicator. O(1) — checks the last message. */
+	get phase(): 'connecting' | 'waiting' | 'generating' | 'tool' | 'compacting' | null {
+		if (this.engineState === 'compacting') return 'compacting';
+		if (!this.busy) return null;
+		const last = this.messages[this.messages.length - 1];
+		if (last?.kind === 'tool') return last.running ? 'tool' : 'waiting';
+		if (this.engineState === 'connecting') return 'connecting';
+		if (!last || last.kind === 'user') return 'waiting';
+		if ((last.kind === 'assistant' || last.kind === 'reasoning') && last.text.length === 0)
+			return 'waiting';
+		return 'generating';
 	}
 
 	closePicker() {
@@ -274,7 +288,11 @@ export class ChatState {
 			case 'retrying':
 				this.messages.push({ kind: 'system', text: `reconnecting… (attempt ${num(ev.attempt)})` });
 				break;
+			case 'compaction_progress':
+				this.compactionTokens = num(ev.output_tokens);
+				break;
 			case 'compaction_end':
+				this.compactionTokens = 0;
 				this.messages.push({ kind: 'system', text: 'context compacted' });
 				break;
 			case 'compaction_failed':
@@ -317,7 +335,7 @@ export class ChatState {
 				break;
 			case 'compaction_start':
 				this.engineState = 'compacting';
-				this.messages.push({ kind: 'system', text: 'compacting context…' });
+				this.compactionTokens = 0;
 				break;
 			case 'status': {
 				const msg = str(ev.message);

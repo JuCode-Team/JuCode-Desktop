@@ -109,14 +109,6 @@
 	const allSessions = $derived(projects.flatMap((p) => p.sessions));
 	const active = $derived(allSessions.find((s) => s.id === activeId));
 	const chat = $derived(active?.chat);
-	const thinking = $derived.by(() => {
-		if (!chat?.busy) return false;
-		const last = chat.messages[chat.messages.length - 1];
-		if (!last) return true;
-		if (last.kind === 'user') return true;
-		if ((last.kind === 'assistant' || last.kind === 'reasoning') && last.text.length === 0) return true;
-		return false;
-	});
 	// The assistant message that's still streaming: render it as plain text and
 	// only run markdown/highlight once the turn finishes (avoids reparsing the
 	// whole message on every token).
@@ -482,7 +474,7 @@
 			{/if}
 
 			<main bind:this={scroller} onscroll={onScroll}>
-				<MessageList messages={chat.messages} {streamingMsg} {streamingReasoning} {thinking} onEdit={editMessage} />
+				<MessageList messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} compactionTokens={chat.compactionTokens} onEdit={editMessage} />
 			</main>
 			{#if !atBottom}
 				<button class="jump" onclick={jumpToBottom} aria-label="scroll to bottom"><ChevronDown size={18} /></button>

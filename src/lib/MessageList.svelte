@@ -3,19 +3,22 @@
 	import { slide } from 'svelte/transition';
 	import Markdown from '$lib/Markdown.svelte';
 	import ToolCard from '$lib/ToolCard.svelte';
+	import Indicator from '$lib/Indicator.svelte';
 	import type { Msg } from '$lib/chat.svelte';
 
 	let {
 		messages,
 		streamingMsg,
 		streamingReasoning,
-		thinking,
+		phase,
+		compactionTokens = 0,
 		onEdit
 	}: {
 		messages: Msg[];
 		streamingMsg: Msg | null;
 		streamingReasoning: Msg | null;
-		thinking: boolean;
+		phase: string | null;
+		compactionTokens?: number;
 		onEdit: (text: string) => void;
 	} = $props();
 
@@ -153,9 +156,7 @@
 			<div class="error">{m.text}</div>
 		{/if}
 	{/each}
-	{#if thinking}
-		<div class="thinking" aria-label="thinking"><span class="td"></span><span class="td"></span><span class="td"></span></div>
-	{/if}
+	<Indicator {phase} tokens={compactionTokens} />
 </div>
 
 <style>
@@ -304,34 +305,5 @@
 		border: 1px solid color-mix(in oklab, var(--err) 32%, transparent);
 		padding: 9px 12px;
 		border-radius: var(--r-sm);
-	}
-	.thinking {
-		display: flex;
-		gap: 5px;
-		padding: 6px 2px;
-	}
-	.td {
-		width: 7px;
-		height: 7px;
-		border-radius: 50%;
-		background: var(--accent-bright);
-		animation: tdot 1s ease-in-out infinite;
-	}
-	.td:nth-child(2) {
-		animation-delay: 0.16s;
-	}
-	.td:nth-child(3) {
-		animation-delay: 0.32s;
-	}
-	@keyframes tdot {
-		0%,
-		100% {
-			opacity: 0.3;
-			transform: translateY(0);
-		}
-		50% {
-			opacity: 1;
-			transform: translateY(-3px);
-		}
 	}
 </style>
