@@ -47,5 +47,12 @@ jobs:
       # generate_context!() embeds the frontend, so build it before compiling Rust.
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+      # tauri-build validates externalBin exists; the real sidecar needs the
+      # JuCode-CLI checkout, so stub it for the compile/test (it isn't executed).
+      - name: Stub engine sidecar
+        run: |
+          mkdir -p src-tauri/binaries
+          printf '#!/bin/sh\nexit 0\n' > src-tauri/binaries/jucode-x86_64-unknown-linux-gnu
+          chmod +x src-tauri/binaries/jucode-x86_64-unknown-linux-gnu
       - run: cargo test --manifest-path src-tauri/Cargo.toml
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
