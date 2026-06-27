@@ -1,0 +1,71 @@
+name: Release
+
+# Build and publish a GitHub Release with installers for macOS, Linux and
+# Windows whenever a version tag (e.g. v0.1.0a) is pushed.
+on:
+  push:
+    tags:
+      - 'v*'
+      - '[0-9]*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest # Apple Silicon (arm64)
+          - os: macos-13 # Intel (x86_64)
+          - os: ubuntu-22.04 # Linux x86_64
+          - os: windows-latest # Windows x86_64
+    runs-on: ${{ matrix.os }}
+    env:
+      # The engine sidecar is built from the JuCode-CLI checkout below.
+      JUCODE_CLI_DIR: ${{ github.workspace }}/_engine
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout engine (JuCode-CLI)
+        uses: actions/checkout@v4
+        with:
+          repository: JuCode-Team/JuCode-CLI
+          path: _engine
+
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev libxdo-dev \
+            build-essential file libssl-dev
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            src-tauri
+            _engine
+
+      - run: pnpm install --frozen-lockfile
+
+      # tauri-action runs beforeBuildCommand (pnpm bundle:engine && pnpm build),
+      # which builds the engine sidecar from JUCODE_CLI_DIR, then bundles the app
+      # and uploads the installers to a release named after the tag.
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: ${{ github.ref_name }}
+          releaseDraft: false
+          prerelease: true
+          releaseBody: |
+            Automated build. macOS builds are unsigned — on first launch use
+            right-click → Open, or run `xattr -cr /Applications/JuCode.app`.
