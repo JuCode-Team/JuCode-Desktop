@@ -1,5 +1,5 @@
 import { ChatState } from './chat.svelte';
-import { sendOp, createSession, closeSession, projectRoot } from './protocol';
+import { sendOp, createSession, closeSession, projectRoot, writeConfig } from './protocol';
 import type { Project } from './types';
 
 // The persisted shape of a project + its open tabs (engine session id + title).
@@ -94,11 +94,12 @@ export class SessionStore {
 		}
 		s.chat.restarts++;
 		const sid = s.chat.sessionId;
+		const canResume = s.chat.resumable;
 		s.chat.engineState = 'connecting';
 		s.chat.messages.push({ kind: 'system', text: force ? '正在重启引擎…' : '引擎已退出，正在自动重启…' });
 		createSession(id, this.projectPathOf(id))
 			.then(() => {
-				if (sid) sendOp(id, { op: 'command', input: `/resume ${sid}` });
+				if (sid && canResume) sendOp(id, { op: 'command', input: `/resume ${sid}` });
 			})
 			.catch((e) => this.#engineFailed(s.chat, e));
 	}
@@ -108,6 +109,12 @@ export class SessionStore {
 	handleExit(id: string) {
 		const s = this.allSessions.find((x) => x.id === id);
 		if (!s) return;
+		// Intentional close for a provider switch — switchProvider re-creates the
+		// engine itself, so don't treat this exit as a crash.
+		if (s.chat.switching) {
+			s.chat.switching = false;
+			return;
+		}
 		s.chat.engineState = 'exited';
 		const now = Date.now();
 		const freshWindow = s.chat.restartWindowStart == null || now - s.chat.restartWindowStart > 30000;
@@ -115,6 +122,49 @@ export class SessionStore {
 			this.restartSession(id);
 		} else {
 			s.chat.messages.push({ kind: 'error', text: '引擎多次退出，已暂停自动重启。点「重启引擎」重试。' });
+		}
+	}
+
+	/**
+	 * Switch a running session to a different provider's model. The engine has one
+	 * active provider per session and can't change it at runtime, so we rewrite the
+	 * global config and restart the engine, resuming the conversation. (Switching a
+	 * model *within* the current provider uses /model instead — instant, no restart.)
+	 */
+	async switchProvider(
+		id: string,
+		provider: { id: string; base_url: string; format: string; models: { name: string; reasoning_efforts?: string[] }[] },
+		model: string
+	) {
+		const s = this.allSessions.find((x) => x.id === id);
+		if (!s) return;
+		const efforts = provider.models.find((m) => m.name === model)?.reasoning_efforts ?? [];
+		const patch: Record<string, unknown> = {
+			provider: provider.id,
+			base_url: provider.base_url,
+			protocol: provider.format,
+			models: provider.models,
+			model
+		};
+		if (efforts.length) patch.reasoning_effort = efforts.includes('medium') ? 'medium' : efforts[0];
+		try {
+			await writeConfig(patch);
+		} catch (e) {
+			this.#engineFailed(s.chat, e);
+			return;
+		}
+		const sid = s.chat.sessionId;
+		const canResume = s.chat.resumable;
+		s.chat.switching = true;
+		s.chat.engineState = 'connecting';
+		s.chat.messages.push({ kind: 'system', text: `正在切换到 ${provider.id} · ${model}…` });
+		try {
+			await closeSession(id);
+			await createSession(id, this.projectPathOf(id));
+			if (sid && canResume) sendOp(id, { op: 'command', input: `/resume ${sid}` });
+		} catch (e) {
+			s.chat.switching = false;
+			this.#engineFailed(s.chat, e);
 		}
 	}
 
@@ -146,8 +196,8 @@ export class SessionStore {
 			name: p.name,
 			path: p.path,
 			tabs: p.sessions
+				.filter((s) => s.chat.resumable)
 				.map((s) => ({ sid: s.chat.sessionId, title: s.chat.title }))
-				.filter((t) => t.sid)
 		}));
 	}
 

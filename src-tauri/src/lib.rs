@@ -402,6 +402,26 @@ fn fetch_usage_logs() -> Result<serde_json::Value, String> {
     jucode_get("/v1/oauth/usage-logs?limit=10")
 }
 
+/// DeepSeek account balance (https://api.deepseek.com/user/balance), using the
+/// API key stored under providers.deepseek in auth.json.
+#[tauri::command(async)]
+fn fetch_deepseek_balance() -> Result<serde_json::Value, String> {
+    let key = read_json(&jucode_dir().join("auth.json"))
+        .get("providers")
+        .and_then(|p| p.get("deepseek"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|k| !k.is_empty())
+        .ok_or_else(|| "未配置 DeepSeek API key".to_string())?;
+    ureq::get("https://api.deepseek.com/user/balance")
+        .timeout(std::time::Duration::from_secs(30))
+        .set("Authorization", &format!("Bearer {key}"))
+        .call()
+        .map_err(|e| e.to_string())?
+        .into_json::<serde_json::Value>()
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn close_session(session: String, engines: tauri::State<Engines>) -> Result<(), String> {
     if let Some(target) = engines.sessions.lock().unwrap().remove(&session) {
@@ -830,6 +850,7 @@ pub fn run() {
             fetch_account_info,
             fetch_usage,
             fetch_usage_logs,
+            fetch_deepseek_balance,
             project_root,
             list_providers,
             list_dir,

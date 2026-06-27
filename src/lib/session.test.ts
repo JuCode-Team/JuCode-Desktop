@@ -63,7 +63,7 @@ describe('SessionStore lifecycle', () => {
 		expect(msgs[msgs.length - 1]).toMatchObject({ kind: 'error', text: expect.stringContaining('已暂停自动重启') });
 	});
 
-	it('serialize keeps only tabs that have an engine session id', () => {
+	it('serialize keeps only resumable tabs (session id + a real turn)', () => {
 		const store = new SessionStore();
 		const p = proj();
 		store.projects.push(p);
@@ -71,7 +71,10 @@ describe('SessionStore lifecycle', () => {
 		store.addSession(p);
 		p.sessions[0].chat.sessionId = 'sid-0';
 		p.sessions[0].chat.title = 'first';
-		// second session has no sessionId yet → dropped
+		p.sessions[0].chat.messages.push({ kind: 'user', text: 'hi' });
+		// second session has an id but no user turn → never persisted by the engine,
+		// so it's dropped (resuming it would fail with "No such file").
+		p.sessions[1].chat.sessionId = 'sid-1';
 		const snap = store.serialize();
 		expect(snap).toEqual([
 			{ id: 'p1', name: 'p1', path: '/tmp/p1', tabs: [{ sid: 'sid-0', title: 'first' }] }

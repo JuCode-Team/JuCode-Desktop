@@ -100,6 +100,9 @@ export class ChatState {
 	// Engine crash auto-restart bookkeeping (driven by the page on agent-exit).
 	restarts = 0;
 	restartWindowStart: number | null = null;
+	// Set while an intentional provider-switch restart is in flight, so the exit it
+	// causes isn't treated as a crash to auto-restart.
+	switching = false;
 
 	#assistantIdx = -1;
 	#reasoningIdx = -1;
@@ -141,6 +144,14 @@ export class ChatState {
 
 	get busy() {
 		return ['streaming', 'connecting', 'compacting', 'steering'].includes(this.engineState);
+	}
+
+	/** Whether this session has something the engine actually persisted to resume.
+	 *  A fresh session (id assigned at startup but no user turn yet) was never saved,
+	 *  so `/resume <id>` would fail with "No such file". Gates restart/switch resume
+	 *  and which tabs get persisted. */
+	get resumable() {
+		return this.sessionId !== '' && this.messages.some((m) => m.kind === 'user');
 	}
 
 	/** The activity phase shown by the bottom indicator. O(1) — checks the last message. */

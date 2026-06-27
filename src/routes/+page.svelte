@@ -14,7 +14,7 @@
 	import { treeRows } from '$lib/tree';
 	import { shouldAutoApprove } from '$lib/approval';
 	import { focusTrap } from '$lib/focusTrap';
-	import { sendOp, readAuthProviders, type EventPayload } from '$lib/protocol';
+	import { sendOp, readAuthProviders, listProviders, type EventPayload } from '$lib/protocol';
 	import { SessionStore } from '$lib/session.svelte';
 	import Settings from '$lib/Settings.svelte';
 	import Setup from '$lib/Setup.svelte';
@@ -87,6 +87,28 @@
 	function refreshAuth() {
 		readAuthProviders()
 			.then((p) => (providers = p))
+			.catch(() => {});
+	}
+
+	// All configured providers (builtin + custom) with their models, so the in-chat
+	// model picker can list every provider's models — not just the active one's.
+	let providersList = $state<
+		{ id: string; base_url: string; format: string; models: { name: string; context_window?: number; reasoning_efforts?: string[] }[] }[]
+	>([]);
+	function loadProviders() {
+		listProviders()
+			.then((bs) => {
+				let custom: typeof providersList = [];
+				try {
+					custom = JSON.parse(localStorage.getItem('jucode-custom-providers') || '[]');
+				} catch {
+					custom = [];
+				}
+				providersList = [
+					...bs.map((b) => ({ id: b.id, base_url: b.base_url, format: b.protocol, models: b.models })),
+					...custom
+				];
+			})
 			.catch(() => {});
 	}
 	let showRight = $state(true);
@@ -244,7 +266,38 @@
 			return p.items.map((it) => ({ id: it.id, label: it.label, detail: it.detail, active: it.active, command: `/resume ${it.id}`, depth: nil }));
 		if (p.kind === 'checkpoint')
 			return p.items.map((it) => ({ id: it.id, label: it.label, detail: it.detail, active: it.active, command: `/rewind ${it.id}`, depth: nil }));
-		return p.models.map((m) => ({ id: m.model, label: m.model, detail: `${fmtTokens(m.context_window)} ctx`, active: m.active, command: `/model ${m.model}`, depth: nil }));
+		// Model picker. The active provider's rows come from the engine's model_view
+		// (already filtered — e.g. jucode hides unsupported models — and flagged with
+		// the active one); other providers come from the client-side config list so
+		// you can switch to any of them. Same-provider picks use /model (instant);
+		// cross-provider picks switch via @switch (config rewrite + engine restart).
+		const cur = chat?.provider ?? '';
+		// Mirror the engine's jucode allow-list so we don't offer a model it rejects.
+		const jucodeOk = (n: string) =>
+			['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex', 'gpt-5.2'].includes(n) || n.startsWith('claude-');
+		const activeRows = p.models.map((m) => ({
+			id: `${cur}::${m.model}`,
+			label: m.model,
+			detail: `${cur} · ${fmtTokens(m.context_window)}`,
+			active: m.active,
+			command: `/model ${m.model}`,
+			depth: nil
+		}));
+		const otherRows = providersList
+			.filter((pv) => pv.id !== cur)
+			.flatMap((pv) =>
+				pv.models
+					.filter((m) => pv.id !== 'jucode' || jucodeOk(m.name))
+					.map((m) => ({
+						id: `${pv.id}::${m.name}`,
+						label: m.name,
+						detail: `${pv.id}${providers.includes(pv.id) ? '' : ' · 未配置'} · ${fmtTokens(m.context_window ?? 0)}`,
+						active: false,
+						command: `@switch ${pv.id} ${m.name}`,
+						depth: nil
+					}))
+			);
+		return [...activeRows, ...otherRows];
 	});
 
 	// Whether to offer a filter box (history and other long lists).
@@ -344,6 +397,18 @@
 	}
 
 	function selectRow(command: string) {
+		// Cross-provider model pick: rewrite config + restart this session (resumes
+		// the conversation) since the engine can't change provider at runtime.
+		if (command.startsWith('@switch ')) {
+			const rest = command.slice('@switch '.length);
+			const sp = rest.indexOf(' ');
+			const pid = rest.slice(0, sp);
+			const name = rest.slice(sp + 1);
+			const pv = providersList.find((x) => x.id === pid);
+			chat?.closePicker();
+			if (pv) store.switchProvider(activeId, pv, name);
+			return;
+		}
 		// Resuming a history item opens it in a fresh session so the current chat
 		// isn't replaced; everything else acts on the active session.
 		if (command.startsWith('/resume ') && activeProject) {
@@ -511,6 +576,7 @@
 			// Restore saved projects + their open conversations (resume by id), or
 			// seed a default project on first run.
 			await store.restore(savedProjectsData);
+			loadProviders();
 			readAuthProviders()
 				.then((p) => {
 					providers = p;
@@ -670,7 +736,7 @@
 	</aside>
 
 	{#if showSettings}
-		<Settings sessionId={activeId} initialSection={settingsInitial} onAuthChange={refreshAuth} onClose={() => { showSettings = false; settingsInitial = 'model'; }} />
+		<Settings sessionId={activeId} initialSection={settingsInitial} onAuthChange={refreshAuth} onClose={() => { showSettings = false; settingsInitial = 'model'; loadProviders(); }} />
 	{/if}
 
 	{#if showMarket}
@@ -734,7 +800,7 @@
 				<div class="rows">
 					{#each filteredRows as row, i (row.id)}
 						<button class="prow" class:sel={i === selIdx} onclick={() => selectRow(row.command)} onmouseenter={() => (selIdx = i)} style:padding-left={row.depth != null ? `${11 + row.depth * 16}px` : null}>
-							{#if chat.picker.kind === 'model'}<Vendor model={row.id} size={15} />{/if}
+							{#if chat.picker.kind === 'model'}<Vendor model={row.label} size={15} />{/if}
 							{#if row.depth != null && row.depth > 0}<span class="twig">↳</span>{/if}
 							<span class="prow-main">{row.label || '(empty)'}</span>
 							<span class="prow-detail">{row.detail}</span>

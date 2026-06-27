@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
-	import { X, LogIn, LogOut, Cpu, KeyRound, SlidersHorizontal, Plus, Pencil, Trash2, Zap, CircleCheck } from 'lucide-svelte';
-	import { readConfig, writeConfig, readAuthProviders, setAuthKey, removeAuthKey, listProviders, sendOp } from '$lib/protocol';
+	import { X, LogIn, LogOut, Cpu, KeyRound, SlidersHorizontal, Plus, Trash2, Zap, CircleCheck, ChevronDown, Wallet } from 'lucide-svelte';
+	import { readConfig, writeConfig, readAuthProviders, setAuthKey, removeAuthKey, listProviders, sendOp, fetchAccountInfo, fetchDeepseekBalance, type AccountInfo, type DeepseekBalance } from '$lib/protocol';
 	import Vendor from '$lib/Vendor.svelte';
 	import AccountPanel from '$lib/AccountPanel.svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -74,13 +74,40 @@
 		...builtin.map((b) => ({ id: b.id, base_url: b.base_url, models: b.models, format: b.protocol, builtin: true })),
 		...custom
 	]);
-	const modelOpts = $derived(models.map((m) => ({ value: m.name, ...m })));
+	const modelOpts = $derived(models.map((m) => ({ value: m.name, label: m.name, ...m })));
 	const effortOpts = $derived(efforts.map((e) => ({ value: e, label: cap(e) })));
+	// All providers' models in one list (provider-qualified), so the default-model
+	// picker isn't limited to whichever provider is currently the default.
+	const allModelOpts = $derived(
+		allProviders.flatMap((p) =>
+			p.models.map((m) => ({
+				value: `${p.id}::${m.name}`,
+				label: m.name,
+				provider: p.id,
+				context_window: m.context_window,
+				authed: keyed.includes(p.id)
+			}))
+		)
+	);
+	// Bridge the composite picker value (provider::model) to cfg.provider + cfg.model.
+	let modelKey = $state('');
+	$effect(() => {
+		modelKey = `${cfg.provider ?? ''}::${cfg.model ?? ''}`;
+	});
+	function applyModel(key: string) {
+		const i = key.indexOf('::');
+		if (i < 0) return;
+		const p = allProviders.find((x) => x.id === key.slice(0, i));
+		if (!p) return;
+		selectProvider(p);
+		cfg.model = key.slice(i + 2);
+	}
 
 	onMount(async () => {
 		cfg = await readConfig();
 		if (cfg.compaction_threshold_percent == null) cfg.compaction_threshold_percent = 75;
 		keyed = await readAuthProviders();
+		loadBalances();
 		builtin = await listProviders().catch(() => []);
 		try {
 			custom = JSON.parse(localStorage.getItem(CUSTOM_KEY) || '[]');
@@ -121,6 +148,7 @@
 		if (!keyInput.trim()) return;
 		await setAuthKey(id, keyInput.trim());
 		keyed = await readAuthProviders();
+		loadBalances();
 		keyInput = '';
 		editing = null;
 		onAuthChange?.();
@@ -129,6 +157,7 @@
 	async function logout(id: string) {
 		await removeAuthKey(id);
 		keyed = await readAuthProviders();
+		loadBalances();
 		onAuthChange?.();
 	}
 	function addFormModel() {
@@ -173,9 +202,55 @@
 		saved = true;
 		setTimeout(() => (saved = false), 1500);
 	}
+	let loggingIn = $state(false);
 	function login() {
 		sendOp(sessionId, { op: 'command', input: '/login' });
-		onClose();
+		loggingIn = true;
+	}
+	// While a login is in flight, poll auth state so the modal flips to
+	// 已登录 (and reveals the account panel) the moment the browser flow
+	// completes — without making the user close and reopen Settings.
+	$effect(() => {
+		if (!loggingIn) return;
+		if (keyed.includes('jucode')) {
+			loggingIn = false;
+			return;
+		}
+		const t = setInterval(async () => {
+			keyed = await readAuthProviders();
+			if (keyed.includes('jucode')) {
+				loggingIn = false;
+				loadBalances();
+				onAuthChange?.();
+			}
+		}, 2000);
+		return () => clearInterval(t);
+	});
+
+	// Per-provider balances shown on the cards — independent of which provider is
+	// the default, so several can be logged in and show balances at once.
+	let jucodeBal = $state<AccountInfo | null>(null);
+	let deepseekBal = $state<DeepseekBalance | null>(null);
+	const deepseekTotal = $derived(deepseekBal?.balance_infos?.[0] ?? null);
+	function loadBalances() {
+		if (keyed.includes('jucode')) fetchAccountInfo().then((a) => (jucodeBal = a)).catch(() => (jucodeBal = null));
+		else jucodeBal = null;
+		if (keyed.includes('deepseek')) fetchDeepseekBalance().then((b) => (deepseekBal = b)).catch(() => (deepseekBal = null));
+		else deepseekBal = null;
+	}
+
+	// Card click: not-logged-in jucode kicks off OAuth directly (no expand); other
+	// (key-based) providers expand to reveal the key input. Logged-in cards expand
+	// to show details.
+	function cardClick(p: Provider, authed: boolean) {
+		if (p.id === 'jucode' && !authed) {
+			if (!loggingIn) login();
+			return;
+		}
+		toggleEdit(p.id);
+	}
+	function setDefault(p: Provider) {
+		selectProvider(p);
 	}
 </script>
 
@@ -210,14 +285,16 @@
 				{#if section === 'model'}
 					<div class="group">
 						<div class="glabel">默认模型</div>
-						<Select bind:value={cfg.model} options={modelOpts} placeholder="选择模型">
+						<Select bind:value={modelKey} onChange={applyModel} options={allModelOpts} placeholder="选择模型">
 							{#snippet item(o)}
-								<span class="tile sm"><Vendor model={o.value} size={15} /></span>
-								<span class="mono ell">{o.value}</span>
+								<span class="tile sm"><Vendor model={o.label ?? ''} size={15} /></span>
+								<span class="mono ell">{o.label}</span>
+								<span class="optprov">{o.provider as string}</span>
 								{#if o.context_window}<span class="pill">{fmt(o.context_window as number)}</span>{/if}
+								{#if !o.authed}<span class="optlock">未配置</span>{/if}
 							{/snippet}
 						</Select>
-						{#if models.length === 0}<p class="hint mt">未配置模型 · 先在「账户」选择或登录 Provider。</p>{/if}
+						{#if allModelOpts.length === 0}<p class="hint mt">暂无模型 · 先在「账户」登录或配置 Provider。</p>{/if}
 					</div>
 
 					{#if effortOpts.length}
@@ -232,65 +309,86 @@
 						<p class="hint">上下文压缩时生成摘要使用的模型。</p>
 						<Select bind:value={cfg.compact_model} options={modelOpts} placeholder="选择模型">
 							{#snippet item(o)}
-								<span class="tile sm"><Vendor model={o.value} size={15} /></span>
-								<span class="mono ell">{o.value}</span>
+								<span class="tile sm"><Vendor model={o.label ?? ''} size={15} /></span>
+								<span class="mono ell">{o.label}</span>
 							{/snippet}
 						</Select>
 					</div>
 				{:else if section === 'account'}
-					{#if keyed.includes('jucode')}
-						<AccountPanel />
-					{/if}
 					<div class="group">
-						<div class="glabel">Provider</div>
-						<p class="hint">点选切换当前 Provider,「编辑」管理登录或密钥。</p>
+						<div class="glabel">登录与 Provider</div>
+						<p class="hint">各 Provider 独立登录、可同时使用。点卡片登录或查看详情;展开后可设为新会话默认。</p>
 						<div class="plist">
 							{#each allProviders as p (p.id)}
-								<div class="prow" class:active={cfg.provider === p.id}>
-									<button class="prow-main" onclick={() => selectProvider(p)}>
+								{@const authed = keyed.includes(p.id)}
+								{@const isDefault = cfg.provider === p.id}
+								{@const open = editing === p.id}
+								<div class="pcard" class:def={isDefault}>
+									<button class="pcard-main" onclick={() => cardClick(p, authed)}>
 										<span class="tile"><Vendor model={p.models[0]?.name ?? p.id} size={18} /></span>
-										<span class="prow-txt">
-											<span class="prow-id">{cap(p.id)}{#if !p.builtin}<span class="tagx">自定义</span>{/if}</span>
-											<span class="prow-url">{p.base_url}</span>
+										<span class="pcard-txt">
+											<span class="pcard-id">{cap(p.id)}
+												{#if isDefault}<span class="defbadge"><CircleCheck size={11} /> 默认</span>{/if}
+												{#if !p.builtin}<span class="tagx">自定义</span>{/if}
+											</span>
+											<span class="pcard-url">{p.base_url}</span>
 										</span>
-										{#if p.id === 'jucode'}
-											<span class="stat" class:ok={keyed.includes('jucode')}>{keyed.includes('jucode') ? '已登录' : '未登录'}</span>
-										{:else}
-											<span class="stat" class:ok={keyed.includes(p.id)}>{keyed.includes(p.id) ? '已配密钥' : '未配密钥'}</span>
-										{/if}
-										{#if cfg.provider === p.id}<CircleCheck size={17} class="curchk" />{/if}
+										<span class="pcard-right">
+											{#if p.id === 'jucode' && loggingIn && !authed}
+												<span class="bal wait"><span class="spin"></span> 授权中…</span>
+											{:else if authed && p.id === 'jucode' && jucodeBal}
+												<span class="bal"><Wallet size={12} /> {jucodeBal.balance ?? '0'} {jucodeBal.currency ?? ''}</span>
+											{:else if authed && p.id === 'deepseek' && deepseekTotal}
+												<span class="bal"><Wallet size={12} /> {deepseekTotal.total_balance} {deepseekTotal.currency}</span>
+											{:else if authed}
+												<span class="stat ok">{p.id === 'jucode' ? '已登录' : '已配密钥'}</span>
+											{:else}
+												<span class="stat">{p.id === 'jucode' ? '未登录' : '未配密钥'}</span>
+											{/if}
+											{#if p.id === 'jucode' && !authed}
+												<LogIn size={15} class="dimx" />
+											{:else}
+												<ChevronDown size={16} class="chev {open ? 'up' : ''}" />
+											{/if}
+										</span>
 									</button>
-									<IconButton onclick={() => toggleEdit(p.id)} label="edit"><Pencil size={14} /></IconButton>
-								</div>
 
-								{#if editing === p.id}
-									<div class="peditor">
-										{#if p.id === 'jucode'}
-											<div class="erow">
-												<span class="ehint">JuCode 使用账号登录(OAuth)。</span>
-												<div class="ebtns">
-													{#if keyed.includes('jucode')}
-														<Button variant="danger" size="sm" onclick={() => logout('jucode')}><LogOut size={14} /> 退出登录</Button>
-													{/if}
-													<Button variant="primary" size="sm" onclick={login}><LogIn size={14} /> {keyed.includes('jucode') ? '重新登录' : '登录'}</Button>
+									{#if open}
+										<div class="pcard-body">
+											{#if p.id === 'jucode'}
+												<AccountPanel />
+												<div class="cardact">
+													{#if !isDefault}<Button variant="secondary" size="sm" onclick={() => setDefault(p)}>设为默认</Button>{/if}
+													<Button variant="primary" size="sm" onclick={login}><LogIn size={13} /> 重新登录</Button>
+													<Button variant="danger" size="sm" onclick={() => logout('jucode')}><LogOut size={13} /> 退出登录</Button>
 												</div>
-											</div>
-										{:else}
-											<div class="ekey">
-												<TextField bind:value={keyInput} type="password" placeholder={`${p.id} API key · sk-…`} mono />
-												<Button variant="primary" size="sm" onclick={() => saveKey(p.id)}>保存密钥</Button>
-											</div>
-											<div class="erow end">
-												{#if keyed.includes(p.id)}
-													<Button variant="ghost" size="sm" onclick={() => logout(p.id)}><LogOut size={13} /> 清除密钥</Button>
+											{:else}
+												{#if p.id === 'deepseek' && authed}
+													<div class="dsbal">
+														{#if deepseekBal?.balance_infos?.length}
+															{#each deepseekBal.balance_infos as b (b.currency)}
+																<div class="dsrow"><span>总余额</span><b>{b.total_balance} {b.currency}</b></div>
+																<div class="dsrow sub"><span>赠送余额</span><span>{b.granted_balance}</span></div>
+																<div class="dsrow sub"><span>充值余额</span><span>{b.topped_up_balance}</span></div>
+															{/each}
+														{:else}
+															<p class="hint">暂无法获取余额。</p>
+														{/if}
+													</div>
 												{/if}
-												{#if !p.builtin}
-													<Button variant="danger" size="sm" onclick={() => deleteProvider(p.id)}><Trash2 size={13} /> 删除</Button>
-												{/if}
-											</div>
-										{/if}
-									</div>
-								{/if}
+												<div class="ekey">
+													<TextField bind:value={keyInput} type="password" placeholder={`${p.id} API key · sk-…`} mono />
+													<Button variant="primary" size="sm" onclick={() => saveKey(p.id)}>{authed ? '更新密钥' : '保存密钥'}</Button>
+												</div>
+												<div class="erow end">
+													{#if authed && !isDefault}<Button variant="secondary" size="sm" onclick={() => setDefault(p)}>设为默认</Button>{/if}
+													{#if authed}<Button variant="ghost" size="sm" onclick={() => logout(p.id)}><LogOut size={13} /> 清除密钥</Button>{/if}
+													{#if !p.builtin}<Button variant="danger" size="sm" onclick={() => deleteProvider(p.id)}><Trash2 size={13} /> 删除</Button>{/if}
+												</div>
+											{/if}
+										</div>
+									{/if}
+								</div>
 							{/each}
 						</div>
 
@@ -555,32 +653,41 @@
 		margin-left: auto;
 	}
 
+	.optprov {
+		font-size: 11px;
+		color: var(--dim2);
+		flex-shrink: 0;
+	}
+	.optlock {
+		font-size: 10px;
+		color: var(--warn);
+		border: 1px solid color-mix(in oklab, var(--warn) 35%, transparent);
+		border-radius: 4px;
+		padding: 0 5px;
+		flex-shrink: 0;
+	}
 	/* provider list */
 	.plist {
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
 	}
-	.prow {
-		display: flex;
-		align-items: center;
-		gap: 4px;
+	.pcard {
 		border: 1px solid var(--hairline);
 		border-radius: var(--r-md);
 		background: var(--surface);
-		padding-right: 6px;
+		overflow: hidden;
 		transition: border-color 0.12s, background 0.12s;
 	}
-	.prow.active {
-		border-color: color-mix(in oklab, var(--accent) 55%, transparent);
-		background: var(--accent-soft);
+	.pcard.def {
+		border-color: color-mix(in oklab, var(--accent) 45%, transparent);
 	}
-	.prow-main {
-		flex: 1;
+	.pcard-main {
+		width: 100%;
 		display: flex;
 		align-items: center;
 		gap: 12px;
-		padding: 10px 12px;
+		padding: 11px 12px;
 		border: none;
 		background: none;
 		color: var(--text);
@@ -588,13 +695,17 @@
 		text-align: left;
 		min-width: 0;
 	}
-	.prow-txt {
+	.pcard-main:hover {
+		background: var(--surface2);
+	}
+	.pcard-txt {
 		flex: 1;
 		display: flex;
 		flex-direction: column;
+		gap: 2px;
 		min-width: 0;
 	}
-	.prow-id {
+	.pcard-id {
 		display: flex;
 		align-items: center;
 		gap: 7px;
@@ -609,7 +720,7 @@
 		border-radius: 4px;
 		padding: 0 5px;
 	}
-	.prow-url {
+	.pcard-url {
 		font-family: var(--font-mono);
 		font-size: 11px;
 		color: var(--dim2);
@@ -631,20 +742,79 @@
 		border-color: color-mix(in oklab, var(--ok) 35%, transparent);
 		background: color-mix(in oklab, var(--ok) 12%, transparent);
 	}
-	:global(.curchk) {
-		color: var(--accent-bright);
+	.pcard-right {
+		display: flex;
+		align-items: center;
+		gap: 8px;
 		flex-shrink: 0;
 	}
-	.peditor {
-		margin: -2px 0 2px;
+	.bal {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--ok);
+		font-variant-numeric: tabular-nums;
+	}
+	.bal.wait {
+		color: var(--dim);
+		font-weight: 500;
+	}
+	.defbadge {
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
+		font-size: 10px;
+		font-weight: 600;
+		color: var(--accent-bright);
+		background: var(--accent-soft);
+		border-radius: 999px;
+		padding: 1px 7px;
+	}
+	:global(.pcard .chev) {
+		color: var(--dim2);
+		transition: transform 0.15s;
+	}
+	:global(.pcard .chev.up) {
+		transform: rotate(180deg);
+	}
+	:global(.pcard .dimx) {
+		color: var(--dim2);
+	}
+	.pcard-body {
 		padding: 12px;
-		border: 1px solid var(--hairline);
-		border-top: none;
-		border-radius: 0 0 var(--r-md) var(--r-md);
-		background: var(--surface);
+		border-top: 1px solid var(--hairline);
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: 12px;
+	}
+	.cardact {
+		display: flex;
+		justify-content: flex-end;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+	.dsbal {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		padding: 10px 12px;
+		border: 1px solid var(--hairline);
+		border-radius: 10px;
+		background: var(--surface2);
+	}
+	.dsrow {
+		display: flex;
+		justify-content: space-between;
+		font-size: 13px;
+	}
+	.dsrow b {
+		font-variant-numeric: tabular-nums;
+	}
+	.dsrow.sub {
+		font-size: 12px;
+		color: var(--dim);
 	}
 	.erow {
 		display: flex;
@@ -656,14 +826,19 @@
 		justify-content: flex-end;
 		gap: 8px;
 	}
-	.ebtns {
-		display: flex;
-		gap: 8px;
-		flex-shrink: 0;
+	.spin {
+		width: 12px;
+		height: 12px;
+		border-radius: 50%;
+		border: 2px solid var(--border);
+		border-top-color: var(--accent);
+		animation: spin 0.8s linear infinite;
+		flex: none;
 	}
-	.ehint {
-		font-size: 12px;
-		color: var(--dim);
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
 	}
 	.ekey {
 		display: flex;

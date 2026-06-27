@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { X, Plus } from 'lucide-svelte';
+	import { X, Plus, ListTodo, Target, FileDiff, FolderTree, GitBranch, Terminal } from 'lucide-svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import GoalPanel from './GoalPanel.svelte';
 	import PlanPanel from './PlanPanel.svelte';
@@ -18,56 +18,77 @@
 	}: { goal: Goal | null; plan?: PlanStep[]; cwd?: string; changed?: string[]; onRevertFile?: (p: string) => void } = $props();
 
 	const PANELS = [
-		{ key: 'plan', label: '计划' },
-		{ key: 'goal', label: '目标' },
-		{ key: 'changes', label: '改动' },
-		{ key: 'files', label: '文件' },
-		{ key: 'git', label: 'Git' },
-		{ key: 'term', label: '终端' }
+		{ key: 'plan', label: '计划', icon: ListTodo },
+		{ key: 'goal', label: '目标', icon: Target },
+		{ key: 'changes', label: '改动', icon: FileDiff },
+		{ key: 'files', label: '文件', icon: FolderTree },
+		{ key: 'git', label: 'Git', icon: GitBranch },
+		{ key: 'term', label: '终端', icon: Terminal }
 	];
 	const labelOf = (key: string) => PANELS.find((p) => p.key === key)?.label ?? key;
 
-	function loadTabs(): string[] {
+	// A tab is an *instance* of a panel, so several tabs can share a panel type
+	// (e.g. two terminals); each carries its own id.
+	type Tab = { id: string; panel: string };
+	let counter = 0;
+	const newId = () => `t${Date.now().toString(36)}-${(counter++).toString(36)}`;
+
+	function loadTabs(): Tab[] {
 		try {
-			const t = JSON.parse(localStorage.getItem('jucode-dock-tabs') || 'null');
-			if (Array.isArray(t)) return t.filter((k) => PANELS.some((p) => p.key === k));
+			const raw = JSON.parse(localStorage.getItem('jucode-dock-tabs') || 'null');
+			if (Array.isArray(raw)) {
+				const tabs = raw
+					.map((t): Tab | null => {
+						if (typeof t === 'string') return { id: newId(), panel: t }; // migrate old format
+						if (t && typeof t.id === 'string' && typeof t.panel === 'string') return { id: t.id, panel: t.panel };
+						return null;
+					})
+					.filter((t): t is Tab => t !== null && PANELS.some((p) => p.key === t.panel));
+				if (tabs.length) return tabs;
+			}
 		} catch {
 			/* ignore */
 		}
-		return ['goal'];
+		return [{ id: newId(), panel: 'goal' }];
 	}
 
-	let openTabs = $state<string[]>(loadTabs());
+	let openTabs = $state<Tab[]>(loadTabs());
 	let active = $state(
 		(() => {
 			const saved = localStorage.getItem('jucode-dock-active');
-			return saved && openTabs.includes(saved) ? saved : (openTabs[0] ?? '');
+			return saved && openTabs.some((t) => t.id === saved) ? saved : (openTabs[0]?.id ?? '');
 		})()
 	);
 	let addOpen = $state(false);
-	let dragKey = $state<string | null>(null);
+	let dragId = $state<string | null>(null);
 	let bar = $state<HTMLElement | null>(null);
 
-	const available = $derived(PANELS.filter((p) => !openTabs.includes(p.key)));
+	// Number repeated panels so duplicates are distinguishable (终端 1 / 终端 2).
+	function tabLabel(tab: Tab): string {
+		const base = labelOf(tab.panel);
+		const same = openTabs.filter((t) => t.panel === tab.panel);
+		return same.length < 2 ? base : `${base} ${same.indexOf(tab) + 1}`;
+	}
 
 	$effect(() => {
 		localStorage.setItem('jucode-dock-tabs', JSON.stringify(openTabs));
 		localStorage.setItem('jucode-dock-active', active);
 	});
 
-	function openPanel(key: string) {
-		if (!openTabs.includes(key)) openTabs = [...openTabs, key];
-		active = key;
+	function openPanel(panel: string) {
+		const id = newId();
+		openTabs = [...openTabs, { id, panel }];
+		active = id;
 		addOpen = false;
 	}
-	function closeTab(key: string) {
-		const idx = openTabs.indexOf(key);
-		openTabs = openTabs.filter((k) => k !== key);
-		if (active === key) active = openTabs[Math.min(idx, openTabs.length - 1)] ?? '';
+	function closeTab(id: string) {
+		const idx = openTabs.findIndex((t) => t.id === id);
+		openTabs = openTabs.filter((t) => t.id !== id);
+		if (active === id) active = openTabs[Math.min(idx, openTabs.length - 1)]?.id ?? '';
 	}
-	function startDrag(e: PointerEvent, key: string) {
+	function startDrag(e: PointerEvent, id: string) {
 		if (e.button !== 0) return;
-		dragKey = key;
+		dragId = id;
 		const move = (ev: PointerEvent) => {
 			if (!bar) return;
 			const tabs = [...bar.querySelectorAll<HTMLElement>('[data-tab]')];
@@ -75,17 +96,17 @@
 				const r = el.getBoundingClientRect();
 				return ev.clientX >= r.left && ev.clientX <= r.right;
 			});
-			const overKey = over?.dataset.tab;
-			if (overKey && overKey !== dragKey) {
-				const from = openTabs.indexOf(dragKey!);
-				const to = openTabs.indexOf(overKey);
+			const overId = over?.dataset.tab;
+			if (overId && overId !== dragId) {
+				const from = openTabs.findIndex((t) => t.id === dragId);
+				const to = openTabs.findIndex((t) => t.id === overId);
 				const arr = [...openTabs];
 				arr.splice(to, 0, arr.splice(from, 1)[0]);
 				openTabs = arr;
 			}
 		};
 		const up = () => {
-			dragKey = null;
+			dragId = null;
 			window.removeEventListener('pointermove', move);
 			window.removeEventListener('pointerup', up);
 		};
@@ -97,38 +118,38 @@
 <div class="dock">
 	<div class="tabbar">
 		<div class="tabs" bind:this={bar}>
-			{#each openTabs as key (key)}
+			{#each openTabs as tab (tab.id)}
 			<div
 				class="tab"
-				class:on={key === active}
-				class:dragging={key === dragKey}
-				data-tab={key}
+				class:on={tab.id === active}
+				class:dragging={tab.id === dragId}
+				data-tab={tab.id}
 				role="tab"
 				tabindex="0"
-				aria-selected={key === active}
-				onpointerdown={(e) => startDrag(e, key)}
-				onclick={() => (active = key)}
-				onkeydown={(e) => e.key === 'Enter' && (active = key)}
+				aria-selected={tab.id === active}
+				onpointerdown={(e) => startDrag(e, tab.id)}
+				onclick={() => (active = tab.id)}
+				onkeydown={(e) => e.key === 'Enter' && (active = tab.id)}
 			>
-				<span class="tdot" class:on={key === active}></span>
-				<span class="tlabel">{labelOf(key)}</span>
+				<span class="tdot" class:on={tab.id === active}></span>
+				<span class="tlabel">{tabLabel(tab)}</span>
 				<IconButton
 					size="sm"
 					label="close tab"
 					onpointerdown={(e: PointerEvent) => e.stopPropagation()}
 					onclick={(e: MouseEvent) => {
 						e.stopPropagation();
-						closeTab(key);
+						closeTab(tab.id);
 					}}><X size={12} /></IconButton>
 			</div>
 			{/each}
 		</div>
 		<div class="add">
-			<IconButton onclick={() => (addOpen = !addOpen)} label="add panel" disabled={available.length === 0}><Plus size={15} /></IconButton>
+			<IconButton onclick={() => (addOpen = !addOpen)} label="add panel"><Plus size={15} /></IconButton>
 			{#if addOpen}
 				<button class="add-backdrop" aria-label="close" onclick={() => (addOpen = false)}></button>
 				<div class="add-menu">
-					{#each available as p (p.key)}
+					{#each PANELS as p (p.key)}
 						<button class="add-item" onclick={() => openPanel(p.key)}>{p.label}</button>
 					{/each}
 				</div>
@@ -137,20 +158,28 @@
 	</div>
 
 	<div class="content">
-		{#each openTabs as key (key)}
-			<div class="pane" class:hidden={key !== active}>
-				{#if key === 'plan'}<PlanPanel {plan} />
-				{:else if key === 'goal'}<GoalPanel {goal} />
-				{:else if key === 'changes'}<ChangesPanel {cwd} files={changed} onRevert={onRevertFile} />
-				{:else if key === 'files'}<FilesPanel rootDir={cwd} />
-				{:else if key === 'git'}<GitPanel {cwd} />
-				{:else if key === 'term'}<TerminalPanel {cwd} />{/if}
+		{#each openTabs as tab (tab.id)}
+			<div class="pane" class:hidden={tab.id !== active}>
+				{#if tab.panel === 'plan'}<PlanPanel {plan} />
+				{:else if tab.panel === 'goal'}<GoalPanel {goal} />
+				{:else if tab.panel === 'changes'}<ChangesPanel {cwd} files={changed} onRevert={onRevertFile} />
+				{:else if tab.panel === 'files'}<FilesPanel rootDir={cwd} />
+				{:else if tab.panel === 'git'}<GitPanel {cwd} />
+				{:else if tab.panel === 'term'}<TerminalPanel {cwd} />{/if}
 			</div>
 		{/each}
 		{#if openTabs.length === 0}
 			<div class="empty">
 				<p>没有打开的面板</p>
-				<span>点 <b>+</b> 打开一个</span>
+				<span>选一个面板打开，或点右上角 <b>+</b></span>
+					<div class="empty-grid">
+						{#each PANELS as p (p.key)}
+							<button class="pcardbtn" onclick={() => openPanel(p.key)}>
+								<p.icon size={18} />
+								<span>{p.label}</span>
+							</button>
+						{/each}
+					</div>
 			</div>
 		{/if}
 	</div>
@@ -301,5 +330,35 @@
 	}
 	.empty b {
 		color: var(--accent-bright);
+	}
+	.empty {
+		padding: 24px 18px;
+	}
+	.empty-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 8px;
+		width: 100%;
+		max-width: 260px;
+		margin-top: 14px;
+	}
+	.pcardbtn {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 8px;
+		padding: 15px 10px;
+		border: 1px solid var(--border);
+		border-radius: var(--r-md);
+		background: var(--surface);
+		color: var(--dim);
+		font-size: 12.5px;
+		cursor: pointer;
+		transition: border-color 0.12s, color 0.12s, background 0.12s;
+	}
+	.pcardbtn:hover {
+		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
+		color: var(--text);
+		background: var(--surface2);
 	}
 </style>

@@ -35,10 +35,19 @@
 		}
 	}
 
-	function fmtTime(v?: string): string {
+	const fmtNum = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
+	function relTime(v?: string): string {
 		if (!v) return '';
-		const d = new Date(v);
-		return Number.isNaN(d.getTime()) ? '' : d.toLocaleString();
+		const t = new Date(v).getTime();
+		if (Number.isNaN(t)) return '';
+		const s = Math.max(0, Math.floor((Date.now() - t) / 1000));
+		if (s < 60) return '刚刚';
+		const m = Math.floor(s / 60);
+		if (m < 60) return `${m} 分钟前`;
+		const h = Math.floor(m / 60);
+		if (h < 24) return `${h} 小时前`;
+		const d = Math.floor(h / 24);
+		return d < 7 ? `${d} 天前` : new Date(v).toLocaleDateString();
 	}
 
 	function pct(used?: string, quota?: string): string {
@@ -100,9 +109,9 @@
 				{#each logs.slice(0, 8) as l, i (l.created_at ?? i)}
 					<div class="logrow">
 						<span class="lm">{l.model ?? '-'}</span>
-						<span class="lt">in {l.tokens_in ?? 0} · out {l.tokens_out ?? 0}</span>
+						<span class="lt">↑{fmtNum(l.tokens_in ?? 0)} ↓{fmtNum(l.tokens_out ?? 0)}</span>
 						<span class="lc">{l.cost_final ?? '0'}</span>
-						<span class="ld">{fmtTime(l.created_at)}</span>
+						<span class="ld">{relTime(l.created_at)}</span>
 					</div>
 				{/each}
 			{/if}
@@ -214,28 +223,38 @@
 	}
 	.logrow {
 		display: grid;
-		grid-template-columns: 1fr auto auto auto;
-		gap: 10px;
-		align-items: center;
-		padding: 6px 0;
+		grid-template-columns: 1fr auto;
+		gap: 1px 10px;
+		align-items: baseline;
+		padding: 7px 0;
 		border-top: 1px solid var(--border);
-		font-size: 12px;
 	}
+	/* Two rows: model + cost on top, tokens + time below (via grid order). */
 	.lm {
+		order: 0;
 		color: var(--text);
 		font-weight: 500;
+		font-size: 13px;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
-	.lt {
-		color: var(--dim);
-	}
 	.lc {
+		order: 1;
 		color: var(--accent);
+		text-align: right;
+		font-variant-numeric: tabular-nums;
+	}
+	.lt {
+		order: 2;
+		color: var(--dim);
+		font-size: 11px;
+		font-variant-numeric: tabular-nums;
 	}
 	.ld {
-		color: var(--dim);
-		font-variant-numeric: tabular-nums;
+		order: 3;
+		color: var(--dim2);
+		font-size: 11px;
+		text-align: right;
 	}
 </style>

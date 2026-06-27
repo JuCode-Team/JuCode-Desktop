@@ -7,12 +7,14 @@
 		value = $bindable(),
 		options,
 		placeholder = '选择…',
-		item
+		item,
+		onChange
 	}: {
 		value: string;
 		options: Opt[];
 		placeholder?: string;
 		item?: Snippet<[Opt]>;
+		onChange?: (value: string) => void;
 	} = $props();
 
 	let open = $state(false);
@@ -20,6 +22,7 @@
 	function pick(v: string) {
 		value = v;
 		open = false;
+		onChange?.(v);
 	}
 </script>
 

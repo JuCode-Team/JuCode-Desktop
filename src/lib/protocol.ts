@@ -91,6 +91,15 @@ export interface UsageLogRow {
 export function fetchAccountInfo(): Promise<AccountInfo> {
 	return invoke('fetch_account_info');
 }
+
+// DeepSeek balance (api.deepseek.com/user/balance), keyed by the stored API key.
+export interface DeepseekBalance {
+	is_available: boolean;
+	balance_infos: { currency: string; total_balance: string; granted_balance: string; topped_up_balance: string }[];
+}
+export function fetchDeepseekBalance(): Promise<DeepseekBalance> {
+	return invoke('fetch_deepseek_balance');
+}
 export function fetchUsage(): Promise<PlanUsage> {
 	return invoke('fetch_usage');
 }
