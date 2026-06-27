@@ -11,3 +11,6 @@ vite.config.ts.timestamp-*
 
 # staged engine sidecar (built by scripts/prepare-engine.sh)
 src-tauri/binaries/
+
+# jucode CLI runtime cache, created when the engine runs inside this repo
+.jucode/

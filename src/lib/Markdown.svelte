@@ -21,9 +21,12 @@
 			return;
 		}
 		const a = el.closest('a');
-		if (a && a.getAttribute('href')) {
+		const href = a?.getAttribute('href');
+		if (href) {
+			// Always stop the webview from navigating to a markdown link (it's
+			// LLM/file-supplied), and only hand safe schemes to the system opener.
 			e.preventDefault();
-			openUrl(a.getAttribute('href')!).catch(() => {});
+			if (/^(https?|mailto):/i.test(href)) openUrl(href).catch(() => {});
 		}
 	}
 </script>

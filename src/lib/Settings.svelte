@@ -3,6 +3,7 @@
 	import { X, LogIn, LogOut, Cpu, KeyRound, SlidersHorizontal, Plus, Pencil, Trash2, Zap, CircleCheck } from 'lucide-svelte';
 	import { readConfig, writeConfig, readAuthProviders, setAuthKey, removeAuthKey, listProviders, sendOp } from '$lib/protocol';
 	import Vendor from '$lib/Vendor.svelte';
+	import AccountPanel from '$lib/AccountPanel.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import TextField from '$lib/ui/TextField.svelte';
@@ -237,6 +238,9 @@
 						</Select>
 					</div>
 				{:else if section === 'account'}
+					{#if keyed.includes('jucode')}
+						<AccountPanel />
+					{/if}
 					<div class="group">
 						<div class="glabel">Provider</div>
 						<p class="hint">点选切换当前 Provider,「编辑」管理登录或密钥。</p>

@@ -60,6 +60,46 @@ export async function fetchMarketplace(): Promise<MarketSkill[]> {
 		}));
 }
 
+// JuCode account: plan / balance / usage / call-details, fetched via the
+// OAuth read endpoints using the stored device access token (auto-refreshed).
+export interface AccountInfo {
+	email?: string;
+	nickname?: string | null;
+	balance?: string;
+	currency?: string;
+	active_plan?: { name?: string; type?: string; expire_at?: string } | null;
+}
+export interface PlanUsage {
+	has_active_plan?: boolean;
+	plan_name?: string;
+	currency?: string;
+	quota_5h?: string;
+	used_5h?: string;
+	quota_weekly?: string;
+	used_weekly?: string;
+	quota_monthly?: string;
+	used_monthly?: string;
+}
+export interface UsageLogRow {
+	created_at?: string;
+	model?: string;
+	tokens_in?: number;
+	tokens_out?: number;
+	cost_final?: string;
+	status?: string;
+}
+export function fetchAccountInfo(): Promise<AccountInfo> {
+	return invoke('fetch_account_info');
+}
+export function fetchUsage(): Promise<PlanUsage> {
+	return invoke('fetch_usage');
+}
+export async function fetchUsageLogs(): Promise<UsageLogRow[]> {
+	const v = await invoke<{ logs?: unknown[]; items?: unknown[] }>('fetch_usage_logs');
+	const rows = Array.isArray(v.logs) ? v.logs : Array.isArray(v.items) ? v.items : [];
+	return rows.map((r) => r as UsageLogRow);
+}
+
 // IDE features (Tauri layer, operating on the project working directory).
 export function projectRoot(): Promise<string> {
 	return invoke('project_root');

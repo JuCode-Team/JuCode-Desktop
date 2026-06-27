@@ -14,14 +14,8 @@
 	import { treeRows } from '$lib/tree';
 	import { shouldAutoApprove } from '$lib/approval';
 	import { focusTrap } from '$lib/focusTrap';
-	import {
-		sendOp,
-		createSession,
-		closeSession,
-		projectRoot,
-		readAuthProviders,
-		type EventPayload
-	} from '$lib/protocol';
+	import { sendOp, readAuthProviders, type EventPayload } from '$lib/protocol';
+	import { SessionStore } from '$lib/session.svelte';
 	import Settings from '$lib/Settings.svelte';
 	import Setup from '$lib/Setup.svelte';
 	import Marketplace from '$lib/Marketplace.svelte';
@@ -36,9 +30,15 @@
 	import Vendor from '$lib/Vendor.svelte';
 
 
-	let projects = $state<Project[]>([]);
-	let activeId = $state('');
-	let loaded = $state(false);
+	// Project/session tree + lifecycle lives in the store; the page keeps thin
+	// reactive aliases so templates and handlers read it naturally.
+	const store = new SessionStore();
+	const projects = $derived(store.projects);
+	const allSessions = $derived(store.allSessions);
+	const active = $derived(store.active);
+	const chat = $derived(store.chat);
+	const activeProject = $derived(store.activeProject);
+	const activeId = $derived(store.activeId);
 	// Read the saved layout synchronously, before any effect can overwrite it.
 	const savedProjectsData: Array<{
 		id: string;
@@ -157,9 +157,6 @@
 		if (chat) sendOp(activeId, { op: 'command', input: `/model ${chat.model} ${ef}` });
 	}
 
-	const allSessions = $derived(projects.flatMap((p) => p.sessions));
-	const active = $derived(allSessions.find((s) => s.id === activeId));
-	const chat = $derived(active?.chat);
 	// The assistant message that's still streaming: render it as plain text and
 	// only run markdown/highlight once the turn finishes (avoids reparsing the
 	// whole message on every token).
@@ -178,7 +175,6 @@
 		const last = chat.messages[chat.messages.length - 1];
 		return last?.kind === 'reasoning' && !last.collapsed ? last : null;
 	});
-	const activeProject = $derived(projects.find((p) => p.sessions.some((s) => s.id === activeId)));
 	const loggedIn = $derived(!!chat?.provider && providers.includes(chat.provider));
 
 	// Message indices in the active chat matching the find query, and the current one.
@@ -203,20 +199,10 @@
 	// they change. Gated on `loaded` so it can't clobber the saved data before the
 	// initial restore has run.
 	$effect(() => {
-		if (!loaded) return;
-		const data = projects.map((p) => ({
-			id: p.id,
-			name: p.name,
-			path: p.path,
-			tabs: p.sessions
-				.map((s) => ({ sid: s.chat.sessionId, title: s.chat.title }))
-				.filter((t) => t.sid)
-		}));
-		localStorage.setItem('jucode-projects', JSON.stringify(data));
+		if (!store.loaded) return;
+		localStorage.setItem('jucode-projects', JSON.stringify(store.serialize()));
 	});
 
-	let counter = 0;
-	const uid = () => `s${Date.now().toString(36)}-${(counter++).toString(36)}`;
 	const fmtTokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
 	const isImage = (p: string) => /\.(png|jpe?g|gif|webp|bmp)$/i.test(p);
 	const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
@@ -293,64 +279,10 @@
 		}
 	});
 
-	function engineFailed(chat: ChatState, e: unknown) {
-		chat.engineState = 'exited';
-		chat.messages.push({ kind: 'error', text: `无法启动引擎：${e}` });
-	}
-	function projectPathOf(id: string) {
-		return projects.find((p) => p.sessions.some((s) => s.id === id))?.path;
-	}
-	// Re-spawn the engine for a session that exited, resuming its conversation if it
-	// had one. Auto-restart is capped at 3 within a 30s window to avoid crash loops;
-	// `force` (the manual button) resets the window.
-	function restartSession(id: string, force = false) {
-		const s = allSessions.find((x) => x.id === id);
-		if (!s) return;
-		const now = Date.now();
-		if (force || s.chat.restartWindowStart == null || now - s.chat.restartWindowStart > 30000) {
-			s.chat.restartWindowStart = now;
-			s.chat.restarts = 0;
-		}
-		s.chat.restarts++;
-		const sid = s.chat.sessionId;
-		s.chat.engineState = 'connecting';
-		s.chat.messages.push({ kind: 'system', text: force ? '正在重启引擎…' : '引擎已退出，正在自动重启…' });
-		createSession(id, projectPathOf(id))
-			.then(() => {
-				if (sid) sendOp(id, { op: 'command', input: `/resume ${sid}` });
-			})
-			.catch((e) => engineFailed(s.chat, e));
-	}
-	function restoreSession(project: Project, sid: string, title: string) {
-		const id = uid();
-		const chat = new ChatState();
-		if (title) chat.title = title;
-		project.sessions.push({ id, chat });
-		createSession(id, project.path)
-			.then(() => sendOp(id, { op: 'command', input: `/resume ${sid}` }))
-			.catch((e) => engineFailed(chat, e));
-		return id;
-	}
-	function addSession(project: Project) {
-		const id = uid();
-		const chat = new ChatState();
-		project.sessions.push({ id, chat });
-		activeId = id;
-		createSession(id, project.path).catch((e) => engineFailed(chat, e));
-		return id;
-	}
 	async function addProject() {
 		const path = await open({ directory: true, title: '选择项目目录' });
 		if (!path || Array.isArray(path)) return;
-		const p: Project = { id: uid(), name: base(path), path, sessions: [] };
-		projects.push(p);
-		addSession(p);
-	}
-	function removeSession(id: string) {
-		closeSession(id).catch(() => {});
-		const p = projects.find((pr) => pr.sessions.some((s) => s.id === id));
-		if (p) p.sessions = p.sessions.filter((s) => s.id !== id);
-		if (activeId === id) activeId = allSessions[0]?.id ?? '';
+		store.createProject(path);
 	}
 	async function removeProject(p: Project) {
 		if (p.sessions.length) {
@@ -360,17 +292,7 @@
 			});
 			if (!ok) return;
 		}
-		for (const s of p.sessions) closeSession(s.id).catch(() => {});
-		projects = projects.filter((x) => x.id !== p.id);
-		if (!allSessions.some((s) => s.id === activeId)) activeId = allSessions[0]?.id ?? '';
-	}
-	function openHistory(p: Project) {
-		// /resume (no arg) lists persisted sessions for the project's cwd — same
-		// store the CLI uses. It's non-destructive; selecting one resumes it in a
-		// fresh session (see selectRow).
-		const id = p.sessions[0]?.id ?? addSession(p);
-		activeId = id;
-		sendOp(id, { op: 'command', input: '/resume' });
+		store.removeProject(p);
 	}
 	function nav(command: string) {
 		if (chat) sendOp(activeId, { op: 'command', input: command });
@@ -426,7 +348,7 @@
 		// isn't replaced; everything else acts on the active session.
 		if (command.startsWith('/resume ') && activeProject) {
 			chat?.closePicker();
-			const id = addSession(activeProject);
+			const id = store.addSession(activeProject);
 			sendOp(id, { op: 'command', input: command });
 			return;
 		}
@@ -477,7 +399,7 @@
 		if (!mod) return;
 		if (e.key === 'n') {
 			e.preventDefault();
-			if (activeProject) addSession(activeProject);
+			if (activeProject) store.addSession(activeProject);
 		} else if (e.key === ',') {
 			e.preventDefault();
 			showSettings = true;
@@ -577,19 +499,7 @@
 				}
 				if (s.id === activeId) scrollToEnd();
 			});
-			const unexit = await listen<string>('agent-exit', (e) => {
-				const s = allSessions.find((x) => x.id === e.payload);
-				if (!s) return;
-				s.chat.engineState = 'exited';
-				// Auto-restart unless we've already retried 3× in the last 30s.
-				const now = Date.now();
-				const freshWindow = s.chat.restartWindowStart == null || now - s.chat.restartWindowStart > 30000;
-				if (freshWindow || s.chat.restarts < 3) {
-					restartSession(s.id);
-				} else {
-					s.chat.messages.push({ kind: 'error', text: '引擎多次退出，已暂停自动重启。点「重启引擎」重试。' });
-				}
-			});
+			const unexit = await listen<string>('agent-exit', (e) => store.handleExit(e.payload));
 			const undrop = await getCurrentWebview().onDragDropEvent((e) => {
 				if (e.payload.type === 'drop') for (const p of e.payload.paths) addAttachment(p);
 			});
@@ -600,24 +510,7 @@
 			}
 			// Restore saved projects + their open conversations (resume by id), or
 			// seed a default project on first run.
-			let first = '';
-			if (savedProjectsData.length) {
-				for (const p of savedProjectsData) {
-					const proj: Project = { id: p.id, name: p.name, path: p.path, sessions: [] };
-					projects.push(proj);
-					for (const t of p.tabs ?? []) {
-						if (!t.sid) continue;
-						const id = restoreSession(proj, t.sid, t.title);
-						if (!first) first = id;
-					}
-				}
-				activeId = first || (projects[0] && addSession(projects[0])) || '';
-			} else {
-				const root = await projectRoot();
-				projects.push({ id: uid(), name: base(root), path: root, sessions: [] });
-				addSession(projects[0]);
-			}
-			loaded = true;
+			await store.restore(savedProjectsData);
 			readAuthProviders()
 				.then((p) => {
 					providers = p;
@@ -647,12 +540,12 @@
 		width={sidebarWidth}
 		{loggedIn}
 		providerName={chat?.provider ?? ''}
-		onSelect={(id) => (activeId = id)}
+		onSelect={(id) => (store.activeId = id)}
 		onNewProject={addProject}
-		onNewSession={addSession}
-		onCloseSession={removeSession}
+		onNewSession={(p) => store.addSession(p)}
+		onCloseSession={(id) => store.removeSession(id)}
 		onCloseProject={removeProject}
-		onHistory={openHistory}
+		onHistory={(p) => store.openHistory(p)}
 		onSettings={() => (showSettings = true)}
 		onMarket={() => (showMarket = true)}
 		onCommandPalette={() => (showPalette = true)}
@@ -716,7 +609,7 @@
 				<div class="approval-wrap">
 					<div class="enginedown">
 						<span class="ed-text">引擎已停止运行</span>
-						<Button variant="primary" size="sm" onclick={() => restartSession(activeId, true)}>重启引擎</Button>
+						<Button variant="primary" size="sm" onclick={() => store.restartSession(activeId, true)}>重启引擎</Button>
 					</div>
 				</div>
 			{/if}
@@ -877,7 +770,7 @@
 			hasProject={!!activeProject}
 			onClose={() => (showPalette = false)}
 			onRun={(cmd) => nav(cmd)}
-			onNewSession={() => activeProject && addSession(activeProject)}
+			onNewSession={() => activeProject && store.addSession(activeProject)}
 			onNewProject={addProject}
 			onSettings={() => (showSettings = true)}
 			onMarket={() => (showMarket = true)}

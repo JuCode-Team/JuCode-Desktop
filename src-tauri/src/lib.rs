@@ -169,6 +169,20 @@ fn read_json(path: &std::path::Path) -> serde_json::Value {
         .unwrap_or_else(|| serde_json::json!({}))
 }
 
+/// Like `read_json`, but for read-modify-write callers: a missing/empty file is a
+/// fresh `{}`, while a present-but-unparseable file is an error. This stops a
+/// corrupt config/auth file from being silently overwritten (which would drop the
+/// other providers' keys still in it).
+fn read_json_strict(path: &std::path::Path) -> Result<serde_json::Value, String> {
+    match std::fs::read_to_string(path) {
+        Ok(text) if text.trim().is_empty() => Ok(serde_json::json!({})),
+        Ok(text) => serde_json::from_str(&text)
+            .map_err(|e| format!("{} 解析失败，已中止写入以免覆盖现有内容：{e}", path.display())),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(serde_json::json!({})),
+        Err(e) => Err(format!("读取 {} 失败：{e}", path.display())),
+    }
+}
+
 fn write_json(path: &std::path::Path, value: &serde_json::Value) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
@@ -187,7 +201,7 @@ fn read_config() -> serde_json::Value {
 #[tauri::command]
 fn write_config(patch: serde_json::Value) -> Result<(), String> {
     let path = jucode_dir().join("config.json");
-    let mut current = read_json(&path);
+    let mut current = read_json_strict(&path)?;
     if let (Some(cur), Some(p)) = (current.as_object_mut(), patch.as_object()) {
         for (key, value) in p {
             cur.insert(key.clone(), value.clone());
@@ -196,20 +210,34 @@ fn write_config(patch: serde_json::Value) -> Result<(), String> {
     write_json(&path, &current)
 }
 
-/// Returns the provider names that have a stored API key (not the keys).
+/// Returns the provider names the user is authenticated with. JuCode is now
+/// an OAuth login (tokens live in the top-level `jucode` block, not the
+/// `providers` map), so it's reported as "jucode" whenever a refresh token
+/// is present.
 #[tauri::command]
 fn read_auth_providers() -> Vec<String> {
-    read_json(&jucode_dir().join("auth.json"))
+    let auth = read_json(&jucode_dir().join("auth.json"));
+    let mut providers: Vec<String> = auth
         .get("providers")
         .and_then(|v| v.as_object())
         .map(|m| m.keys().cloned().collect())
-        .unwrap_or_default()
+        .unwrap_or_default();
+    let logged_in = auth
+        .get("jucode")
+        .and_then(|j| j.get("refresh_token"))
+        .and_then(|v| v.as_str())
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false);
+    if logged_in && !providers.iter().any(|p| p == "jucode") {
+        providers.push("jucode".to_string());
+    }
+    providers
 }
 
 #[tauri::command]
 fn set_auth_key(provider: String, key: String) -> Result<(), String> {
     let path = jucode_dir().join("auth.json");
-    let mut current = read_json(&path);
+    let mut current = read_json_strict(&path)?;
     let root = current
         .as_object_mut()
         .ok_or_else(|| "auth.json is not an object".to_string())?;
@@ -223,10 +251,17 @@ fn set_auth_key(provider: String, key: String) -> Result<(), String> {
 }
 
 /// Removes a provider's stored credential — logout (jucode) / clear key (others).
+/// For jucode this clears the OAuth token block; the device authorization
+/// itself can be revoked from the web console's 授权设备 page.
 #[tauri::command]
 fn remove_auth_key(provider: String) -> Result<(), String> {
     let path = jucode_dir().join("auth.json");
-    let mut current = read_json(&path);
+    let mut current = read_json_strict(&path)?;
+    if provider == "jucode" {
+        if let Some(root) = current.as_object_mut() {
+            root.remove("jucode");
+        }
+    }
     if let Some(map) = current
         .get_mut("providers")
         .and_then(|v| v.as_object_mut())
@@ -236,23 +271,109 @@ fn remove_auth_key(provider: String) -> Result<(), String> {
     write_json(&path, &current)
 }
 
-/// Fetches the JuCode skills marketplace using the configured api url and the
-/// stored jucode key, returning the raw `{skills, default_skill_ids}` JSON.
-#[tauri::command]
-fn fetch_marketplace() -> Result<serde_json::Value, String> {
-    let config = read_json(&jucode_dir().join("config.json"));
-    let api_url = config
+const DEFAULT_API_URL: &str = "https://api.jucode.cn";
+
+fn jucode_api_url() -> String {
+    read_json(&jucode_dir().join("config.json"))
         .get("jucode_api_url")
         .and_then(|v| v.as_str())
-        .unwrap_or("https://api.jucode.cn")
+        .unwrap_or(DEFAULT_API_URL)
         .trim_end_matches('/')
+        .to_string()
+}
+
+fn unix_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Returns a valid JuCode access token, transparently refreshing (and
+/// rewriting auth.json) via the rotating refresh token when the stored
+/// access token is missing or near expiry. The CLI engine owns login; this
+/// only keeps the Desktop's own API calls authenticated between logins.
+fn jucode_access_token() -> Result<String, String> {
+    let path = jucode_dir().join("auth.json");
+    let auth = read_json(&path);
+    let jucode = auth.get("jucode").cloned().unwrap_or_else(|| serde_json::json!({}));
+    let access = jucode
+        .get("access_token")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
         .to_string();
+    let refresh = jucode
+        .get("refresh_token")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let access_exp = jucode.get("access_expires_at").and_then(|v| v.as_u64()).unwrap_or(0);
+    if refresh.is_empty() {
+        return Err("not logged in to JuCode".to_string());
+    }
+    let now = unix_now();
+    if !access.is_empty() && access_exp > now + 120 {
+        return Ok(access);
+    }
+    let url = format!("{}/v1/oauth/token", jucode_api_url());
+    let resp: serde_json::Value = ureq::post(&url)
+        .timeout(std::time::Duration::from_secs(30))
+        .send_json(serde_json::json!({
+            "grant_type": "refresh_token",
+            "client_id": "jucode-cli",
+            "refresh_token": refresh,
+        }))
+        .map_err(|e| e.to_string())?
+        .into_json()
+        .map_err(|e| e.to_string())?;
+    let new_access = resp.get("access_token").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let new_refresh = resp.get("refresh_token").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    if new_access.is_empty() || new_refresh.is_empty() {
+        return Err("JuCode session expired; please sign in again".to_string());
+    }
+    let expires_in = resp.get("expires_in").and_then(|v| v.as_u64()).unwrap_or(3600);
+    let refresh_expires_in = resp
+        .get("refresh_expires_in")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(90 * 24 * 3600);
+    let mut current = read_json(&path);
+    if let Some(root) = current.as_object_mut() {
+        root.insert(
+            "jucode".to_string(),
+            serde_json::json!({
+                "access_token": new_access,
+                "refresh_token": new_refresh,
+                "access_expires_at": now + expires_in,
+                "refresh_expires_at": now + refresh_expires_in,
+            }),
+        );
+    }
+    let _ = write_json(&path, &current);
+    Ok(new_access)
+}
+
+fn jucode_get(path: &str) -> Result<serde_json::Value, String> {
+    let token = jucode_access_token()?;
+    let url = format!("{}{}", jucode_api_url(), path);
+    ureq::get(&url)
+        .timeout(std::time::Duration::from_secs(30))
+        .set("Authorization", &format!("Bearer {token}"))
+        .call()
+        .map_err(|e| e.to_string())?
+        .into_json::<serde_json::Value>()
+        .map_err(|e| e.to_string())
+}
+
+/// Fetches the JuCode skills marketplace. The endpoint is public; the access
+/// token (when present) is sent best-effort without forcing a refresh.
+#[tauri::command(async)]
+fn fetch_marketplace() -> Result<serde_json::Value, String> {
+    let url = format!("{}/v1/skills/marketplace", jucode_api_url());
     let key = read_json(&jucode_dir().join("auth.json"))
-        .get("providers")
-        .and_then(|p| p.get("jucode"))
+        .get("jucode")
+        .and_then(|j| j.get("access_token"))
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
-    let url = format!("{api_url}/v1/skills/marketplace");
     let mut req = ureq::get(&url).timeout(std::time::Duration::from_secs(30));
     if let Some(k) = key.filter(|k| !k.trim().is_empty()) {
         req = req.set("Authorization", &format!("Bearer {k}"));
@@ -261,6 +382,24 @@ fn fetch_marketplace() -> Result<serde_json::Value, String> {
         .map_err(|e| e.to_string())?
         .into_json::<serde_json::Value>()
         .map_err(|e| e.to_string())
+}
+
+/// Account overview (profile + balance + active plan) for the GUI.
+#[tauri::command(async)]
+fn fetch_account_info() -> Result<serde_json::Value, String> {
+    jucode_get("/v1/oauth/userinfo")
+}
+
+/// Plan quota usage (5h / weekly / monthly used vs cap).
+#[tauri::command(async)]
+fn fetch_usage() -> Result<serde_json::Value, String> {
+    jucode_get("/v1/oauth/usage")
+}
+
+/// Recent call details (调用详情).
+#[tauri::command(async)]
+fn fetch_usage_logs() -> Result<serde_json::Value, String> {
+    jucode_get("/v1/oauth/usage-logs?limit=10")
 }
 
 #[tauri::command]
@@ -321,7 +460,7 @@ struct EnvReport {
 
 /// First-run environment check: is `git` available, and can the `jucode` engine
 /// binary be resolved? Drives the setup wizard.
-#[tauri::command]
+#[tauri::command(async)]
 fn check_environment() -> EnvReport {
     let git = match Command::new("git").arg("--version").output() {
         Ok(out) if out.status.success() => DepStatus {
@@ -361,7 +500,7 @@ fn check_environment() -> EnvReport {
 /// Tools installer (which provides git) via a native dialog — no sudo, returns
 /// immediately. Other platforms are guided (the UI shows a copyable command), so
 /// this returns an error there.
-#[tauri::command]
+#[tauri::command(async)]
 fn install_dependency(name: String) -> Result<String, String> {
     if name != "git" {
         return Err(format!("unsupported dependency: {name}"));
@@ -407,7 +546,7 @@ fn list_dir(path: Option<String>) -> Result<Vec<FsEntry>, String> {
 }
 
 /// Built-in providers (id + default base_url) from the engine, for the settings picker.
-#[tauri::command]
+#[tauri::command(async)]
 fn list_providers() -> Result<serde_json::Value, String> {
     let out = Command::new(resolve_bin())
         .arg("providers")
@@ -423,7 +562,7 @@ fn list_providers() -> Result<serde_json::Value, String> {
 /// filesystem directly — no git dependency — so non-git directories and untracked /
 /// gitignored files are all referenceable; only heavy dependency/build/cache dirs
 /// are pruned by name (see SKIP_DIRS), bounded by MAX_LIST_FILES.
-#[tauri::command]
+#[tauri::command(async)]
 fn list_files(cwd: Option<String>) -> Result<Vec<String>, String> {
     let dir = cwd.map(PathBuf::from).unwrap_or_else(resolve_cwd);
     let mut files = Vec::new();
@@ -493,6 +632,23 @@ fn walk_files(root: &Path, dir: &Path, out: &mut Vec<String>) {
 fn save_temp_image(data: Vec<u8>, ext: String) -> Result<String, String> {
     let dir = std::env::temp_dir().join("jucode-paste");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    // Best-effort: drop paste images older than a day so this temp dir doesn't
+    // grow without bound across sessions.
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        let now = std::time::SystemTime::now();
+        for entry in entries.flatten() {
+            let stale = entry
+                .metadata()
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|t| now.duration_since(t).ok())
+                .map(|age| age.as_secs() > 86_400)
+                .unwrap_or(false);
+            if stale {
+                let _ = std::fs::remove_file(entry.path());
+            }
+        }
+    }
     let safe_ext = if !ext.is_empty() && ext.chars().all(|c| c.is_ascii_alphanumeric()) {
         ext.to_lowercase()
     } else {
@@ -519,7 +675,7 @@ fn read_text(path: String) -> Result<String, String> {
 }
 
 /// Runs a git command in the project root and returns stdout (or stderr on failure).
-#[tauri::command]
+#[tauri::command(async)]
 fn git(args: Vec<String>, cwd: Option<String>) -> Result<String, String> {
     let dir = cwd.map(PathBuf::from).unwrap_or_else(resolve_cwd);
     let output = Command::new("git")
@@ -671,6 +827,9 @@ pub fn run() {
             set_auth_key,
             remove_auth_key,
             fetch_marketplace,
+            fetch_account_info,
+            fetch_usage,
+            fetch_usage_logs,
             project_root,
             list_providers,
             list_dir,
@@ -687,4 +846,48 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::read_json_strict;
+
+    fn tmp(name: &str) -> std::path::PathBuf {
+        let p = std::env::temp_dir().join(format!("jucode-test-{}-{}", std::process::id(), name));
+        let _ = std::fs::remove_file(&p);
+        p
+    }
+
+    #[test]
+    fn missing_file_is_empty_object() {
+        let p = tmp("missing.json");
+        assert_eq!(read_json_strict(&p).unwrap(), serde_json::json!({}));
+    }
+
+    #[test]
+    fn empty_file_is_empty_object() {
+        let p = tmp("empty.json");
+        std::fs::write(&p, "   \n").unwrap();
+        assert_eq!(read_json_strict(&p).unwrap(), serde_json::json!({}));
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
+    fn valid_json_is_parsed() {
+        let p = tmp("valid.json");
+        std::fs::write(&p, r#"{"providers":{"openai":"k"}}"#).unwrap();
+        assert_eq!(
+            read_json_strict(&p).unwrap(),
+            serde_json::json!({ "providers": { "openai": "k" } })
+        );
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
+    fn corrupt_file_errors_instead_of_clobbering() {
+        let p = tmp("corrupt.json");
+        std::fs::write(&p, "{ not valid json").unwrap();
+        assert!(read_json_strict(&p).is_err());
+        let _ = std::fs::remove_file(&p);
+    }
 }
