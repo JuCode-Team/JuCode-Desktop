@@ -5,6 +5,7 @@
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import { git } from '$lib/protocol';
+	import { t } from '$lib/i18n';
 
 	let { cwd = '' }: { cwd?: string } = $props();
 	const dir = () => cwd || undefined;
@@ -68,7 +69,7 @@
 	const unstage = (c: Change) => run(['restore', '--staged', '--', c.path]);
 	const stageAll = () => run(['add', '-A']);
 	async function discard(c: Change) {
-		const ok = await ask(`丢弃「${c.path}」的改动？此操作不可撤销。`, { title: '丢弃改动', kind: 'warning' });
+		const ok = await ask(t('dock.git.discardConfirm', { path: c.path }), { title: t('dock.git.discardTitle'), kind: 'warning' });
 		if (!ok) return;
 		if (c.untracked) await run(['clean', '-fd', '--', c.path]);
 		else await run(['restore', '--staged', '--worktree', '--', c.path]);
@@ -82,12 +83,12 @@
 	async function showDiff(c: Change) {
 		try {
 			if (c.untracked) {
-				diff = { path: c.path, lines: classify('（未跟踪的新文件，暂存后可查看 diff）') };
+				diff = { path: c.path, lines: classify(t('dock.git.untrackedDiff')) };
 				return;
 			}
 			const args = c.staged && c.y === ' ' ? ['diff', '--cached', '--no-color', '--', c.path] : ['diff', '--no-color', '--', c.path];
 			const text = await git(args, dir());
-			diff = { path: c.path, lines: classify(text || '（没有可显示的改动）') };
+			diff = { path: c.path, lines: classify(text || t('dock.git.noDiff')) };
 		} catch (e) {
 			diff = { path: c.path, lines: classify(String(e)) };
 		}
@@ -96,7 +97,7 @@
 
 <div class="git">
 	{#if error && changes.length === 0 && !branch}
-		<div class="err">{error.includes('not a git repository') ? '不是 Git 仓库' : error}</div>
+		<div class="err">{error.includes('not a git repository') ? t('dock.git.notRepo') : error}</div>
 	{:else}
 		<div class="bar">
 			<GitBranch size={14} class="bcol" />
@@ -104,12 +105,12 @@
 			<IconButton size="sm" onclick={refresh} label="refresh"><RefreshCw size={13} /></IconButton>
 		</div>
 		{#if error}
-			<div class="oerr" role="button" tabindex="0" onclick={() => (error = '')} onkeydown={(e) => e.key === 'Enter' && (error = '')} title="点击关闭">{error}</div>
+			<div class="oerr" role="button" tabindex="0" onclick={() => (error = '')} onkeydown={(e) => e.key === 'Enter' && (error = '')} title={t('dock.git.closeHint')}>{error}</div>
 		{/if}
 		<div class="scroll">
 			<div class="sec">
-				改动 <span class="count">{changes.length}</span>
-				{#if changes.length}<button class="seclink" onclick={stageAll} disabled={busy}>全部暂存</button>{/if}
+				{t('dock.git.changes')} <span class="count">{changes.length}</span>
+				{#if changes.length}<button class="seclink" onclick={stageAll} disabled={busy}>{t('dock.git.stageAll')}</button>{/if}
 			</div>
 			{#each changes as c (c.path)}
 				<div class="chg">
@@ -117,18 +118,18 @@
 					<button class="cpath" onclick={() => showDiff(c)} title={c.path}>{c.path}</button>
 					<div class="acts">
 						{#if c.staged}
-							<IconButton size="sm" onclick={() => unstage(c)} disabled={busy} label="unstage" title="取消暂存"><Minus size={13} /></IconButton>
+							<IconButton size="sm" onclick={() => unstage(c)} disabled={busy} label="unstage" title={t('dock.git.unstage')}><Minus size={13} /></IconButton>
 						{/if}
 						{#if c.y !== ' ' || c.untracked}
-							<IconButton size="sm" onclick={() => stage(c)} disabled={busy} label="stage" title="暂存"><Plus size={13} /></IconButton>
+							<IconButton size="sm" onclick={() => stage(c)} disabled={busy} label="stage" title={t('dock.git.stage')}><Plus size={13} /></IconButton>
 						{/if}
-						<IconButton size="sm" onclick={() => discard(c)} disabled={busy} label="discard" title="丢弃改动"><Undo2 size={13} /></IconButton>
+						<IconButton size="sm" onclick={() => discard(c)} disabled={busy} label="discard" title={t('dock.git.discard')}><Undo2 size={13} /></IconButton>
 					</div>
 				</div>
 			{/each}
-			{#if changes.length === 0}<div class="clean">工作区干净</div>{/if}
+			{#if changes.length === 0}<div class="clean">{t('dock.git.clean')}</div>{/if}
 
-			<div class="sec">提交历史</div>
+			<div class="sec">{t('dock.git.history')}</div>
 			{#each commits as c (c)}
 				<div class="commit">
 					<span class="hash">{c.slice(0, 7)}</span>
@@ -141,10 +142,10 @@
 			<div class="commitbar">
 				<input
 					bind:value={message}
-					placeholder="提交信息…"
+					placeholder={t('dock.git.commitPlaceholder')}
 					onkeydown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), commit())}
 				/>
-				<Button size="sm" variant="primary" onclick={commit} disabled={!message.trim() || busy}>提交 {stagedCount}</Button>
+				<Button size="sm" variant="primary" onclick={commit} disabled={!message.trim() || busy}>{t('dock.git.commit', { n: stagedCount })}</Button>
 			</div>
 		{/if}
 	{/if}

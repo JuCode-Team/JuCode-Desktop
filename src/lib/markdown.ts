@@ -1,6 +1,7 @@
 import { Marked } from 'marked';
 import { markedHighlight } from 'marked-highlight';
 import hljs from 'highlight.js';
+import { t } from '$lib/i18n';
 
 // One configured instance for the whole app. Configuring the shared `marked`
 // singleton from each <Markdown> instance stacks the highlight extension and
@@ -34,7 +35,7 @@ marked.use({
 			return (
 				`<div class="codeblock"><div class="cb-head">` +
 				`<span class="cb-lang">${escapeHtml(lang)}</span>` +
-				`<button class="cb-copy" type="button">复制</button></div>` +
+				`<button class="cb-copy" type="button">${escapeHtml(t('common.copy'))}</button></div>` +
 				`<pre><code class="hljs${langCls}">${body}</code></pre></div>`
 			);
 		}

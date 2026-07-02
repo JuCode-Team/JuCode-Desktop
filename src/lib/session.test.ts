@@ -10,11 +10,17 @@ vi.mock('./protocol', () => ({
 
 import { SessionStore } from './session.svelte';
 import { createSession } from './protocol';
+import { setLocale } from './i18n';
 import type { Project } from './types';
 
 const proj = (id = 'p1'): Project => ({ id, name: id, path: `/tmp/${id}`, sessions: [] });
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+	vi.clearAllMocks();
+	// Pin the locale so user-facing strings are deterministic regardless of the
+	// host's navigator.language.
+	setLocale('zh');
+});
 
 describe('SessionStore lifecycle', () => {
 	it('addSession spawns a session and makes it active', () => {

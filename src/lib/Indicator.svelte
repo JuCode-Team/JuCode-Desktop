@@ -1,13 +1,15 @@
 <script lang="ts">
+	import { t } from '$lib/i18n';
+
 	let { phase, tokens = 0 }: { phase: string | null; tokens?: number } = $props();
 
-	const LABEL: Record<string, string> = {
-		connecting: '连接中',
-		waiting: '等待响应',
-		generating: '生成中',
-		tool: '执行工具',
-		compacting: '压缩上下文'
-	};
+	const LABEL = $derived<Record<string, string>>({
+		connecting: t('chat.phaseConnecting'),
+		waiting: t('chat.phaseWaiting'),
+		generating: t('chat.phaseGenerating'),
+		tool: t('chat.phaseTool'),
+		compacting: t('chat.phaseCompacting')
+	});
 	const fmt = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
 </script>
 
@@ -25,7 +27,7 @@
 			<span class="glyph compress"><i></i><i></i></span>
 		{/if}
 		<span class="label">{LABEL[phase] ?? phase}</span>
-		{#if phase === 'compacting' && tokens > 0}<span class="ctok">{fmt(tokens)} tokens</span>{/if}
+		{#if phase === 'compacting' && tokens > 0}<span class="ctok">{t('chat.tokens', { n: fmt(tokens) })}</span>{/if}
 	</div>
 {/if}
 

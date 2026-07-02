@@ -7,6 +7,7 @@
 	} from 'lucide-svelte';
 	import type { ChatState } from '$lib/chat.svelte';
 	import { focusTrap } from '$lib/focusTrap';
+	import { t } from '$lib/i18n';
 
 	let {
 		chat,
@@ -58,21 +59,21 @@
 	// curated ones, which already cover the common /model, /tree, /resume… verbs).
 	const actions = $derived.by<Action[]>(() => {
 		const curated: Action[] = [
-			{ id: 'new-session', label: '新建对话', keys: '⌘N', icon: Plus, keywords: 'new session 对话', disabled: !hasProject, run: wrap(onNewSession) },
-			{ id: 'new-project', label: '新建项目', icon: FolderPlus, keywords: 'new project 项目 目录', run: wrap(onNewProject) },
-			{ id: 'model', label: '切换模型 / 推理强度', icon: Cpu, keywords: 'model effort 模型', run: wrap(() => onRun('/model')) },
-			{ id: 'rewind', label: '回退到历史回合', hint: '会还原文件改动', icon: RotateCcw, keywords: 'rewind undo 回退 撤销', run: wrap(() => onRun('/rewind')) },
-			{ id: 'resume', label: '恢复历史会话', icon: History, keywords: 'resume history 历史 恢复', run: wrap(() => onRun('/resume')) },
-			{ id: 'tree', label: '对话分支树', icon: GitBranch, keywords: 'tree branch 分支 树', run: wrap(() => onRun('/tree')) },
-			{ id: 'compact', label: '压缩上下文', icon: Layers, keywords: 'compact 压缩', run: wrap(() => onRun('/compact')) },
-			{ id: 'context', label: '上下文用量', icon: Gauge, keywords: 'context usage 上下文', run: wrap(() => onRun('/context')) },
-			{ id: 'stats', label: '会话统计', icon: Activity, keywords: 'stats 统计', run: wrap(() => onRun('/stats')) },
-			{ id: 'doctor', label: '环境诊断', icon: Stethoscope, keywords: 'doctor 诊断', run: wrap(() => onRun('/doctor')) },
-			{ id: 'market', label: '扩展市场', icon: Store, keywords: 'market skills 市场 技能 扩展', run: wrap(onMarket) },
-			{ id: 'settings', label: '设置', keys: '⌘,', icon: SettingsIcon, keywords: 'settings 设置 provider', run: wrap(onSettings) },
-			{ id: 'setup', label: '安装向导 / 环境检查', hint: 'git、登录', icon: Wrench, keywords: 'setup wizard env git login 安装 向导 环境 登录', run: wrap(onSetup) },
-			{ id: 'panel', label: '切换右侧面板', keys: '⌘B', icon: PanelRight, keywords: 'panel dock 面板', run: wrap(onTogglePanel) },
-			{ id: 'theme', label: '切换主题', icon: SunMoon, keywords: 'theme dark light 主题', run: wrap(onToggleTheme) }
+			{ id: 'new-session', label: t('shell.cmd.newSession'), keys: '⌘N', icon: Plus, keywords: t('shell.cmd.newSessionKw'), disabled: !hasProject, run: wrap(onNewSession) },
+			{ id: 'new-project', label: t('shell.cmd.newProject'), icon: FolderPlus, keywords: t('shell.cmd.newProjectKw'), run: wrap(onNewProject) },
+			{ id: 'model', label: t('shell.cmd.model'), icon: Cpu, keywords: t('shell.cmd.modelKw'), run: wrap(() => onRun('/model')) },
+			{ id: 'rewind', label: t('shell.cmd.rewind'), hint: t('shell.cmd.rewindHint'), icon: RotateCcw, keywords: t('shell.cmd.rewindKw'), run: wrap(() => onRun('/rewind')) },
+			{ id: 'resume', label: t('shell.cmd.resume'), icon: History, keywords: t('shell.cmd.resumeKw'), run: wrap(() => onRun('/resume')) },
+			{ id: 'tree', label: t('shell.cmd.tree'), icon: GitBranch, keywords: t('shell.cmd.treeKw'), run: wrap(() => onRun('/tree')) },
+			{ id: 'compact', label: t('shell.cmd.compact'), icon: Layers, keywords: t('shell.cmd.compactKw'), run: wrap(() => onRun('/compact')) },
+			{ id: 'context', label: t('shell.cmd.context'), icon: Gauge, keywords: t('shell.cmd.contextKw'), run: wrap(() => onRun('/context')) },
+			{ id: 'stats', label: t('shell.cmd.stats'), icon: Activity, keywords: t('shell.cmd.statsKw'), run: wrap(() => onRun('/stats')) },
+			{ id: 'doctor', label: t('shell.cmd.doctor'), icon: Stethoscope, keywords: t('shell.cmd.doctorKw'), run: wrap(() => onRun('/doctor')) },
+			{ id: 'market', label: t('shell.cmd.market'), icon: Store, keywords: t('shell.cmd.marketKw'), run: wrap(onMarket) },
+			{ id: 'settings', label: t('shell.cmd.settings'), keys: '⌘,', icon: SettingsIcon, keywords: t('shell.cmd.settingsKw'), run: wrap(onSettings) },
+			{ id: 'setup', label: t('shell.cmd.setup'), hint: t('shell.cmd.setupHint'), icon: Wrench, keywords: t('shell.cmd.setupKw'), run: wrap(onSetup) },
+			{ id: 'panel', label: t('shell.cmd.panel'), keys: '⌘B', icon: PanelRight, keywords: t('shell.cmd.panelKw'), run: wrap(onTogglePanel) },
+			{ id: 'theme', label: t('shell.cmd.theme'), icon: SunMoon, keywords: t('shell.cmd.themeKw'), run: wrap(onToggleTheme) }
 		];
 		const known = new Set(['/model', '/rewind', '/undo', '/resume', '/tree', '/compact', '/context', '/stats', '/doctor', '/new']);
 		const slash: Action[] = (chat?.commands ?? [])
@@ -125,10 +126,10 @@
 </script>
 
 <div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && onClose()}>
-	<div class="palette" role="dialog" aria-modal="true" tabindex="-1" aria-label="命令面板" use:focusTrap>
+	<div class="palette" role="dialog" aria-modal="true" tabindex="-1" aria-label={t('shell.paletteLabel')} use:focusTrap>
 		<div class="search">
 			<Search size={16} />
-			<input bind:this={inputEl} bind:value={query} onkeydown={onKey} placeholder="搜索命令或操作…" />
+			<input bind:this={inputEl} bind:value={query} onkeydown={onKey} placeholder={t('shell.paletteSearch')} />
 		</div>
 		<div class="rows">
 			{#each filtered as a, i (a.id)}
@@ -139,9 +140,9 @@
 					{#if a.keys}<span class="keys">{a.keys}</span>{/if}
 				</button>
 			{/each}
-			{#if filtered.length === 0}<div class="empty">没有匹配的命令</div>{/if}
+			{#if filtered.length === 0}<div class="empty">{t('shell.paletteEmpty')}</div>{/if}
 		</div>
-		<div class="foot">↑↓ 选择 · Enter 执行 · Esc 关闭</div>
+		<div class="foot">{t('shell.paletteFoot')}</div>
 	</div>
 </div>
 

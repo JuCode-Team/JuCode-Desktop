@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { LoaderCircle, ChevronRight } from 'lucide-svelte';
+	import { t } from '$lib/i18n';
 
 	let { name, output, running, isError }: { name: string; output: string; running: boolean; isError: boolean } =
 		$props();
@@ -93,6 +94,24 @@
 
 	// Read cards stay a single line — the header names the file; the contents add noise.
 	const isRead = $derived(name === 'read' && !errorText);
+
+	// Only render inline images for a whitelist of raster MIME types. SVG is
+	// deliberately excluded: it can embed <script> and run in a data: URL.
+	const IMG_MIME_WHITELIST = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
+	// A plausible base64 payload: only base64 alphabet + padding, non-empty.
+	const isPlausibleBase64 = (v: string) => v.length > 0 && /^[A-Za-z0-9+/]+={0,2}$/.test(v);
+
+	const imageSrc = $derived.by(() => {
+		const p = parsed;
+		if (!p || kind !== 'image' || typeof p.base64 !== 'string') return null;
+		const mime = s(p.mime) || 'image/png';
+		const b64 = s(p.base64);
+		if (!IMG_MIME_WHITELIST.has(mime.toLowerCase())) return null;
+		if (!isPlausibleBase64(b64)) return null;
+		return `data:${mime};base64,${b64}`;
+	});
+	// True when the tool reports an image but we refuse to render it.
+	const unsupportedImage = $derived(kind === 'image' && typeof parsed?.base64 === 'string' && !imageSrc);
 </script>
 
 <div class="tool" class:err={isError || !!errorText}>
@@ -109,7 +128,7 @@
 		{#if exitCode !== null}
 			<span class="exit" class:bad={exitCode !== 0}>exit {exitCode}</span>
 		{/if}
-		<span class="state">{running ? 'running' : isError || errorText ? 'error' : 'done'}</span>
+		<span class="state">{running ? t('chat.toolRunning') : isError || errorText ? t('chat.toolError') : t('chat.toolDone')}</span>
 	</button>
 
 	{#if !collapsed && !isRead}
@@ -118,10 +137,12 @@
 				<div class="err-text">{errorText}</div>
 			{:else if !parsed}
 				{#if output}<pre>{output}</pre>{/if}
-			{:else if kind === 'image' && typeof parsed.base64 === 'string'}
-				<img class="img" src={`data:${s(parsed.mime) || 'image/png'};base64,${s(parsed.base64)}`} alt={target} />
+			{:else if imageSrc}
+				<img class="img" src={imageSrc} alt={target} />
+			{:else if unsupportedImage}
+				<div class="meta">{t('chat.unsupportedImage')}</div>
 			{:else if kind === 'binary'}
-				<div class="meta">二进制文件{#if bytes !== null} · {fmtBytes(bytes)}{/if}</div>
+				<div class="meta">{t('chat.binaryFile')}{#if bytes !== null} · {fmtBytes(bytes)}{/if}</div>
 			{:else if diffLines.length}
 				<pre class="diff">{#each diffLines as d (d)}<span class={d.cls}>{d.line}
 </span>{/each}</pre>
@@ -130,14 +151,14 @@
 				{#if stdout}<pre>{stdout}</pre>{/if}
 				{#if stderr}<pre class="stderr">{stderr}</pre>{/if}
 			{:else if hasEntries}
-				{#if entries.length}<pre class="entries">{entries.join('\n')}</pre>{:else}<div class="meta">空目录</div>{/if}
+				{#if entries.length}<pre class="entries">{entries.join('\n')}</pre>{:else}<div class="meta">{t('chat.emptyDir')}</div>{/if}
 			{:else if symbols.length}
 				<pre class="entries">{#each symbols as sym (sym.line)}{sym.line}  {sym.symbol}
 {/each}</pre>
 			{:else if kind === 'text'}
-				{#if content}<pre>{content}</pre>{:else}<div class="meta">空文件</div>{/if}
+				{#if content}<pre>{content}</pre>{:else}<div class="meta">{t('chat.emptyFile')}</div>{/if}
 			{:else if bytes !== null || truncated}
-				<div class="meta">{[bytes !== null ? fmtBytes(bytes) : '', truncated ? '已截断' : ''].filter(Boolean).join(' · ')}</div>
+				<div class="meta">{[bytes !== null ? fmtBytes(bytes) : '', truncated ? t('chat.truncated') : ''].filter(Boolean).join(' · ')}</div>
 			{/if}
 		</div>
 	{/if}

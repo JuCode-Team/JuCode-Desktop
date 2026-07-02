@@ -1,5 +1,6 @@
 import type { AgentEvent } from './protocol';
 import { EDIT_TOOLS } from './approval';
+import { recordUsage } from './usageStats';
 
 export type Msg =
 	| { kind: 'user'; text: string }
@@ -94,7 +95,7 @@ export class ChatState {
 	// A rewind targeted at a specific rendered user message: the page sets this
 	// before sending `/rewind`, and the checkpoint_view handler resolves it to a
 	// concrete turn id (positional: the i-th user turn matches the i-th user message).
-	rewindIntent: { userIndex: number; text: string } | null = null;
+	rewindIntent = $state<{ userIndex: number; text: string } | null>(null);
 	pendingRewind = $state<{ id: string; text: string } | null>(null);
 
 	// Engine crash auto-restart bookkeeping (driven by the page on agent-exit).
@@ -108,6 +109,11 @@ export class ChatState {
 	#reasoningIdx = -1;
 	#turnStart: number | null = null;
 	#pendingUserEcho: string | null = null;
+	// Fast lookup for the tool message backing a call_id, so tool_update/tool_output
+	// don't scan the whole transcript. Populated on tool_start; invalidated when the
+	// message array is replaced wholesale (transcript). #tool() falls back to a scan
+	// on a miss (e.g. transcript-restored tools, which carry no call_id).
+	#toolsByCallId = new Map<string, Extract<Msg, { kind: 'tool' }>>();
 
 	constructor() {
 		try {
@@ -187,6 +193,8 @@ export class ChatState {
 	}
 
 	#tool(callId: string): Extract<Msg, { kind: 'tool' }> | undefined {
+		const hit = this.#toolsByCallId.get(callId);
+		if (hit) return hit;
 		for (let i = this.messages.length - 1; i >= 0; i--) {
 			const m = this.messages[i];
 			if (m.kind === 'tool' && m.callId === callId) return m;
@@ -259,14 +267,19 @@ export class ChatState {
 				// One reasoning block per round: collapse this round's reasoning once
 				// its tool call appears, so the next round starts a fresh block.
 				this.#collapseReasoning();
-				this.messages.push({
-					kind: 'tool',
-					callId: str(ev.call_id),
-					name: str(ev.name),
-					output: '',
-					running: true,
-					isError: false
-				});
+				{
+					const callId = str(ev.call_id);
+					const toolMsg: Extract<Msg, { kind: 'tool' }> = {
+						kind: 'tool',
+						callId,
+						name: str(ev.name),
+						output: '',
+						running: true,
+						isError: false
+					};
+					this.messages.push(toolMsg);
+					if (callId) this.#toolsByCallId.set(callId, toolMsg);
+				}
 				break;
 			case 'tool_update': {
 				const t = this.#tool(str(ev.call_id));
@@ -288,8 +301,9 @@ export class ChatState {
 						for (const p of paths) {
 							if (typeof p === 'string' && p && !this.changedFiles.includes(p)) this.changedFiles.push(p);
 						}
-					} catch {
+					} catch (e) {
 						/* non-JSON output */
+						console.warn('tool_output JSON parse failed', e);
 					}
 				}
 				break;
@@ -332,6 +346,10 @@ export class ChatState {
 			}
 			case 'transcript': {
 				const items = arr<Record<string, unknown>>(ev.items);
+				// The message array is reassigned wholesale below and restored tool
+				// entries carry no call_id, so the fast-lookup map is now stale — clear
+				// it and let #tool() fall back to scanning.
+				this.#toolsByCallId.clear();
 				this.messages = items
 					.map((it): Msg | null => {
 						const role = str(it.role);
@@ -398,8 +416,10 @@ export class ChatState {
 				break;
 			case 'usage': {
 				const out = num(ev.output_tokens);
-				this.totalIn += num(ev.input_tokens);
+				const inn = num(ev.input_tokens);
+				this.totalIn += inn;
 				this.totalOut += out;
+				recordUsage(inn, out, this.provider);
 				if (this.#assistantIdx >= 0) {
 					const m = this.messages[this.#assistantIdx];
 					if (m?.kind === 'assistant') m.tokens = (m.tokens ?? 0) + out;
@@ -424,6 +444,14 @@ export class ChatState {
 				const m = msg.match(/^(?:new|resumed) session (\S+)/);
 				if (m) this.sessionId = m[1];
 				this.engineState = msg;
+				// A status event with no error means the (possibly just-restarted) engine
+				// is healthy again, so clear the crash auto-restart budget. This replaces
+				// the old time-window reset, which cleared the counter merely because 30s
+				// had elapsed even if every attempt had crashed.
+				if (!ev.error) {
+					this.restarts = 0;
+					this.restartWindowStart = null;
+				}
 				if (!this.busy) {
 					this.#endTurn();
 					this.#resetCurrent();

@@ -1,5 +1,6 @@
 import { ChatState } from './chat.svelte';
 import { sendOp, createSession, closeSession, projectRoot, writeConfig } from './protocol';
+import { t } from '$lib/i18n';
 import type { Project } from './types';
 
 // The persisted shape of a project + its open tabs (engine session id + title).
@@ -46,7 +47,7 @@ export class SessionStore {
 
 	#engineFailed(chat: ChatState, e: unknown) {
 		chat.engineState = 'exited';
-		chat.messages.push({ kind: 'error', text: `无法启动引擎：${e}` });
+		chat.messages.push({ kind: 'error', text: t('shell.startFail', { msg: String(e) }) });
 	}
 
 	/** Spawn a fresh session in `project` and make it active. */
@@ -81,22 +82,24 @@ export class SessionStore {
 
 	/**
 	 * Re-spawn the engine for a session that exited, resuming its conversation if
-	 * it had one. Auto-restart is capped at 3 within a 30s window to avoid crash
-	 * loops; `force` (the manual button) resets the window.
+	 * it had one. Auto-restart is capped at 3 consecutive crashes to avoid crash
+	 * loops; the counter is reset by a healthy engine `status` event (see
+	 * ChatState.handle) — i.e. only after a restart genuinely succeeds — and by
+	 * `force` (the manual button), which clears the budget so the user can retry.
 	 */
 	restartSession(id: string, force = false) {
 		const s = this.allSessions.find((x) => x.id === id);
 		if (!s) return;
 		const now = Date.now();
-		if (force || s.chat.restartWindowStart == null || now - s.chat.restartWindowStart > 30000) {
-			s.chat.restartWindowStart = now;
+		if (force) {
 			s.chat.restarts = 0;
 		}
+		s.chat.restartWindowStart = now;
 		s.chat.restarts++;
 		const sid = s.chat.sessionId;
 		const canResume = s.chat.resumable;
 		s.chat.engineState = 'connecting';
-		s.chat.messages.push({ kind: 'system', text: force ? '正在重启引擎…' : '引擎已退出，正在自动重启…' });
+		s.chat.messages.push({ kind: 'system', text: force ? t('shell.restarting') : t('shell.autoRestarting') });
 		createSession(id, this.projectPathOf(id))
 			.then(() => {
 				if (sid && canResume) sendOp(id, { op: 'command', input: `/resume ${sid}` });
@@ -105,7 +108,9 @@ export class SessionStore {
 	}
 
 	/** Handle an engine exit: mark exited and auto-restart unless we've already
-	 *  retried 3× in the last 30s. */
+	 *  retried 3× in a row without the engine coming back healthy. The counter is
+	 *  reset by a healthy `status` event, so a restart that actually recovers frees
+	 *  the budget again; a run of crashes without recovery exhausts it. */
 	handleExit(id: string) {
 		const s = this.allSessions.find((x) => x.id === id);
 		if (!s) return;
@@ -116,12 +121,10 @@ export class SessionStore {
 			return;
 		}
 		s.chat.engineState = 'exited';
-		const now = Date.now();
-		const freshWindow = s.chat.restartWindowStart == null || now - s.chat.restartWindowStart > 30000;
-		if (freshWindow || s.chat.restarts < 3) {
+		if (s.chat.restarts < 3) {
 			this.restartSession(id);
 		} else {
-			s.chat.messages.push({ kind: 'error', text: '引擎多次退出，已暂停自动重启。点「重启引擎」重试。' });
+			s.chat.messages.push({ kind: 'error', text: t('shell.restartExhausted') });
 		}
 	}
 
@@ -157,7 +160,7 @@ export class SessionStore {
 		const canResume = s.chat.resumable;
 		s.chat.switching = true;
 		s.chat.engineState = 'connecting';
-		s.chat.messages.push({ kind: 'system', text: `正在切换到 ${provider.id} · ${model}…` });
+		s.chat.messages.push({ kind: 'system', text: t('shell.switchingTo', { provider: provider.id, model }) });
 		try {
 			await closeSession(id);
 			await createSession(id, this.projectPathOf(id));

@@ -6,6 +6,7 @@
 	import Button from '$lib/ui/Button.svelte';
 	import Chip from '$lib/ui/Chip.svelte';
 	import { focusTrap } from '$lib/focusTrap';
+	import { t } from '$lib/i18n';
 
 	let { sessionId, onClose }: { sessionId: string; onClose: () => void } = $props();
 
@@ -48,11 +49,11 @@
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && onClose()} />
 <div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && onClose()}>
-	<div class="sheet" role="dialog" aria-modal="true" tabindex="-1" aria-label="扩展市场" use:focusTrap>
+	<div class="sheet" role="dialog" aria-modal="true" tabindex="-1" aria-label={t('settings.marketplace.title')} use:focusTrap>
 		<div class="head">
 			<div>
-				<h2>扩展市场</h2>
-				<p>为 JuCode 安装技能扩展。</p>
+				<h2>{t('settings.marketplace.title')}</h2>
+				<p>{t('settings.marketplace.subtitle')}</p>
 			</div>
 			<IconButton onclick={onClose} label="close"><X size={18} /></IconButton>
 		</div>
@@ -60,42 +61,42 @@
 		<div class="toolbar">
 			<div class="search">
 				<Search size={15} />
-				<input bind:value={query} placeholder="搜索扩展…" />
+				<input bind:value={query} placeholder={t('settings.marketplace.search')} />
 			</div>
-			<Button variant="secondary" size="icon" onclick={load} title="刷新"><RefreshCw size={14} /></Button>
+			<Button variant="secondary" size="icon" onclick={load} title={t('settings.usage.refresh')}><RefreshCw size={14} /></Button>
 		</div>
 
 		{#if tags.length}
 			<div class="chips">
-				<Chip selected={tag === ''} onclick={() => (tag = '')}>全部</Chip>
-				{#each tags as t (t)}
-					<Chip selected={tag === t} onclick={() => (tag = t)}>{t}</Chip>
+				<Chip selected={tag === ''} onclick={() => (tag = '')}>{t('settings.marketplace.all')}</Chip>
+				{#each tags as tg (tg)}
+					<Chip selected={tag === tg} onclick={() => (tag = tg)}>{tg}</Chip>
 				{/each}
 			</div>
 		{/if}
 
 		<div class="body">
 			{#if loading}
-				<div class="state"><LoaderCircle size={20} class="spin" /> 加载中…</div>
+				<div class="state"><LoaderCircle size={20} class="spin" /> {t('common.loading')}</div>
 			{:else if error}
-				<div class="state err">{error.includes('401') || error.toLowerCase().includes('unauth') ? '需要登录 JuCode 账号后才能浏览市场（设置 → 登录）。' : `加载失败：${error}`}</div>
+				<div class="state err">{error.includes('401') || error.toLowerCase().includes('unauth') ? t('settings.marketplace.needLogin') : t('settings.marketplace.loadFailed', { error })}</div>
 			{:else if filtered.length === 0}
-				<div class="state">没有匹配的扩展</div>
+				<div class="state">{t('settings.marketplace.noMatch')}</div>
 			{:else}
 				<div class="grid">
 					{#each filtered as s (s.id)}
 						<div class="card">
 							<div class="card-top">
 								<span class="name">{s.name}</span>
-								{#if s.isDefault}<span class="badge">默认</span>{/if}
+								{#if s.isDefault}<span class="badge">{t('settings.account.default')}</span>{/if}
 							</div>
 							<p class="desc">{s.description}</p>
 							<div class="card-foot">
 								<div class="tagrow">
-									{#each s.tags.slice(0, 3) as t (t)}<span class="t">{t}</span>{/each}
+									{#each s.tags.slice(0, 3) as tg (tg)}<span class="t">{tg}</span>{/each}
 								</div>
 								<Button variant="primary" size="sm" disabled={installing[s.id]} onclick={() => install(s)}>
-									{#if installing[s.id]}<LoaderCircle size={14} class="spin" /> 安装中{:else}<Download size={14} /> 安装{/if}
+									{#if installing[s.id]}<LoaderCircle size={14} class="spin" /> {t('settings.marketplace.installing')}{:else}<Download size={14} /> {t('settings.marketplace.install')}{/if}
 								</Button>
 							</div>
 						</div>

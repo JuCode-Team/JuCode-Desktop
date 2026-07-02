@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { ListTodo, Circle, CircleDot, CircleCheck } from 'lucide-svelte';
 	import type { PlanStep } from '$lib/chat.svelte';
+	import { t } from '$lib/i18n';
 
 	let { plan }: { plan: PlanStep[] } = $props();
 
@@ -16,7 +17,7 @@
 <div class="panel">
 	{#if plan.length}
 		<div class="head">
-			<span class="title">任务计划</span>
+			<span class="title">{t('dock.plan.title')}</span>
 			<span class="count">{done}/{plan.length}</span>
 		</div>
 		<ol class="steps">
@@ -31,8 +32,8 @@
 	{:else}
 		<div class="empty">
 			<ListTodo size={26} />
-			<p>暂无计划</p>
-			<span>多步任务时 AI 会在此列出步骤</span>
+			<p>{t('dock.plan.empty')}</p>
+			<span>{t('dock.plan.emptyHint')}</span>
 		</div>
 	{/if}
 </div>

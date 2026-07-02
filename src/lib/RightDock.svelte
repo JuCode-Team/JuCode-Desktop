@@ -8,6 +8,7 @@
 	import ChangesPanel from './ChangesPanel.svelte';
 	import TerminalPanel from './TerminalPanel.svelte';
 	import type { Goal, PlanStep } from '$lib/chat.svelte';
+	import { t } from '$lib/i18n';
 
 	let {
 		goal,
@@ -18,14 +19,14 @@
 	}: { goal: Goal | null; plan?: PlanStep[]; cwd?: string; changed?: string[]; onRevertFile?: (p: string) => void } = $props();
 
 	const PANELS = [
-		{ key: 'plan', label: '计划', icon: ListTodo },
-		{ key: 'goal', label: '目标', icon: Target },
-		{ key: 'changes', label: '改动', icon: FileDiff },
-		{ key: 'files', label: '文件', icon: FolderTree },
-		{ key: 'git', label: 'Git', icon: GitBranch },
-		{ key: 'term', label: '终端', icon: Terminal }
+		{ key: 'plan', icon: ListTodo },
+		{ key: 'goal', icon: Target },
+		{ key: 'changes', icon: FileDiff },
+		{ key: 'files', icon: FolderTree },
+		{ key: 'git', icon: GitBranch },
+		{ key: 'term', icon: Terminal }
 	];
-	const labelOf = (key: string) => PANELS.find((p) => p.key === key)?.label ?? key;
+	const labelOf = (key: string) => (PANELS.some((p) => p.key === key) ? t(`dock.tabs.${key}`) : key);
 
 	// A tab is an *instance* of a panel, so several tabs can share a panel type
 	// (e.g. two terminals); each carries its own id.
@@ -150,7 +151,7 @@
 				<button class="add-backdrop" aria-label="close" onclick={() => (addOpen = false)}></button>
 				<div class="add-menu">
 					{#each PANELS as p (p.key)}
-						<button class="add-item" onclick={() => openPanel(p.key)}>{p.label}</button>
+						<button class="add-item" onclick={() => openPanel(p.key)}>{labelOf(p.key)}</button>
 					{/each}
 				</div>
 			{/if}
@@ -170,13 +171,13 @@
 		{/each}
 		{#if openTabs.length === 0}
 			<div class="empty">
-				<p>没有打开的面板</p>
-				<span>选一个面板打开，或点右上角 <b>+</b></span>
+				<p>{t('dock.dock.empty')}</p>
+				<span>{t('dock.dock.hint')} <b>+</b></span>
 					<div class="empty-grid">
 						{#each PANELS as p (p.key)}
 							<button class="pcardbtn" onclick={() => openPanel(p.key)}>
 								<p.icon size={18} />
-								<span>{p.label}</span>
+								<span>{labelOf(p.key)}</span>
 							</button>
 						{/each}
 					</div>

@@ -15,6 +15,7 @@
 	import { shouldAutoApprove } from '$lib/approval';
 	import { focusTrap } from '$lib/focusTrap';
 	import { sendOp, readAuthProviders, listProviders, type EventPayload } from '$lib/protocol';
+	import { t } from '$lib/i18n';
 	import { SessionStore } from '$lib/session.svelte';
 	import Settings from '$lib/Settings.svelte';
 	import Setup from '$lib/Setup.svelte';
@@ -27,7 +28,8 @@
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import CommandPalette from '$lib/CommandPalette.svelte';
 	import type { Project } from '$lib/types';
-	import Vendor from '$lib/Vendor.svelte';
+	import Picker from '$lib/shell/Picker.svelte';
+	import FindBar from '$lib/shell/FindBar.svelte';
 
 
 	// Project/session tree + lifecycle lives in the store; the page keeps thin
@@ -39,6 +41,9 @@
 	const chat = $derived(store.chat);
 	const activeProject = $derived(store.activeProject);
 	const activeId = $derived(store.activeId);
+	// O(1) session lookup for the hot agent-event path (fires per stream chunk),
+	// instead of an O(n) allSessions.find on every event.
+	const sessionMap = $derived(new Map(allSessions.map((s) => [s.id, s])));
 	// Read the saved layout synchronously, before any effect can overwrite it.
 	const savedProjectsData: Array<{
 		id: string;
@@ -48,7 +53,8 @@
 	}> = (() => {
 		try {
 			return JSON.parse(localStorage.getItem('jucode-projects') || '[]');
-		} catch {
+		} catch (e) {
+			console.error('failed to restore jucode-projects', e);
 			return [];
 		}
 	})();
@@ -60,9 +66,20 @@
 	let atBottom = $state(true);
 	let providers = $state<string[]>([]);
 
-	// In-conversation find (⌘F)
+	// In-conversation find (⌘F). The raw input updates per keystroke; the actual
+	// scan (findHits) keys off the debounced `findQuery` so the O(n) message scan
+	// doesn't run on every keystroke (or every stream chunk while typing).
 	let showFind = $state(false);
+	let findInput = $state('');
 	let findQuery = $state('');
+	let findDebounce: ReturnType<typeof setTimeout> | null = null;
+	function onFindInput() {
+		if (findDebounce != null) clearTimeout(findDebounce);
+		findDebounce = setTimeout(() => {
+			findQuery = findInput;
+			findDebounce = null;
+		}, 220);
+	}
 	let findIdx = $state(0);
 	let findInputEl = $state<HTMLInputElement | null>(null);
 	// Picker filter (history / long lists)
@@ -72,14 +89,14 @@
 		try {
 			let granted = await isPermissionGranted();
 			if (!granted) granted = (await requestPermission()) === 'granted';
-			if (granted) sendNotification({ title: 'JuCode', body: `对话完成：${title || '未命名'}` });
+			if (granted) sendNotification({ title: 'JuCode', body: t('shell.notifyDone', { title: title || t('shell.untitled') }) });
 		} catch {
 			/* ignore */
 		}
 	}
 	let selIdx = $state(0);
 	let showSettings = $state(false);
-	let settingsInitial = $state<'model' | 'account' | 'behavior'>('model');
+	let settingsInitial = $state<'overview' | 'account' | 'behavior'>('overview');
 	let showMarket = $state(false);
 	let showSetup = $state(false);
 	let showPalette = $state(false);
@@ -101,7 +118,8 @@
 				let custom: typeof providersList = [];
 				try {
 					custom = JSON.parse(localStorage.getItem('jucode-custom-providers') || '[]');
-				} catch {
+				} catch (e) {
+					console.error('failed to restore jucode-custom-providers', e);
 					custom = [];
 				}
 				providersList = [
@@ -228,29 +246,30 @@
 	const fmtTokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
 	const isImage = (p: string) => /\.(png|jpe?g|gif|webp|bmp)$/i.test(p);
 	const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
-	// Engine subagent lifecycle status → Chinese (falls back to the raw value).
-	const AGENT_STATUS: Record<string, string> = {
-		started: '已启动',
-		running: '运行中',
-		completed: '已完成',
-		done: '已完成',
-		interrupted: '已中断',
-		closed: '已关闭'
+	// Engine subagent lifecycle status → localized label (falls back to the raw value).
+	// 'done' is an alias of 'completed'.
+	const AGENT_STATUS_KEY: Record<string, string> = {
+		started: 'started',
+		running: 'running',
+		completed: 'completed',
+		done: 'completed',
+		interrupted: 'interrupted',
+		closed: 'closed'
 	};
-	const agentStatus = (s: string) => AGENT_STATUS[s] ?? s;
+	const agentStatus = (s: string) => (AGENT_STATUS_KEY[s] ? t(`shell.agentStatus.${AGENT_STATUS_KEY[s]}`) : s);
 
 	const project = $derived(activeProject?.name ?? (chat?.cwd ? base(chat.cwd) : 'workspace'));
 
 	// pickers (tree / model / resume) — active session
 	const pickerTitle = $derived(
 		chat?.picker?.kind === 'tree'
-			? '对话分支树'
+			? t('shell.picker.tree')
 			: chat?.picker?.kind === 'model'
-				? '选择模型'
+				? t('shell.picker.model')
 				: chat?.picker?.kind === 'resume'
-					? '恢复历史会话'
+					? t('shell.picker.resume')
 					: chat?.picker?.kind === 'checkpoint'
-						? '回退到历史回合'
+						? t('shell.picker.checkpoint')
 						: ''
 	);
 	const activeModel = $derived(
@@ -291,7 +310,7 @@
 					.map((m) => ({
 						id: `${pv.id}::${m.name}`,
 						label: m.name,
-						detail: `${pv.id}${providers.includes(pv.id) ? '' : ' · 未配置'} · ${fmtTokens(m.context_window ?? 0)}`,
+						detail: `${pv.id}${providers.includes(pv.id) ? '' : ` · ${t('shell.notConfigured')}`} · ${fmtTokens(m.context_window ?? 0)}`,
 						active: false,
 						command: `@switch ${pv.id} ${m.name}`,
 						depth: nil
@@ -333,14 +352,14 @@
 	});
 
 	async function addProject() {
-		const path = await open({ directory: true, title: '选择项目目录' });
+		const path = await open({ directory: true, title: t('shell.pickDirTitle') });
 		if (!path || Array.isArray(path)) return;
 		store.createProject(path);
 	}
 	async function removeProject(p: Project) {
 		if (p.sessions.length) {
-			const ok = await ask(`关闭「${p.name}」会结束其下 ${p.sessions.length} 个对话，确定吗？`, {
-				title: '关闭项目',
+			const ok = await ask(t('shell.closeProjectConfirm', { name: p.name, count: p.sessions.length }), {
+				title: t('shell.closeProjectTitle'),
 				kind: 'warning'
 			});
 			if (!ok) return;
@@ -355,7 +374,7 @@
 		if (path && !attachments.some((a) => a.path === path)) attachments.push({ path, image: isImage(path) });
 	}
 	async function pickFiles() {
-		const sel = await open({ multiple: true, title: 'Attach files' });
+		const sel = await open({ multiple: true, title: t('shell.attachTitle') });
 		if (!sel) return;
 		for (const p of Array.isArray(sel) ? sel : [sel]) addAttachment(p);
 	}
@@ -510,6 +529,11 @@
 	}
 	function closeFind() {
 		showFind = false;
+		if (findDebounce != null) {
+			clearTimeout(findDebounce);
+			findDebounce = null;
+		}
+		findInput = '';
 		findQuery = '';
 	}
 	const findNext = () => findHits.length && (findIdx = (findIdx + 1) % findHits.length);
@@ -549,7 +573,7 @@
 		let disposed = false;
 		(async () => {
 			const unlisten = await listen<EventPayload>('agent-event', (e) => {
-				const s = allSessions.find((x) => x.id === e.payload.session);
+				const s = sessionMap.get(e.payload.session);
 				if (!s) return;
 				const wasBusy = s.chat.busy;
 				try {
@@ -558,11 +582,15 @@
 					/* ignore */
 				}
 				autoApprove(s.chat, s.id);
-				if (wasBusy && !s.chat.busy && s.id !== activeId) {
+				// Read the current active session at call time (store.activeId is
+				// reactive) — not a value snapshotted when the listener was mounted —
+				// so auto-scroll/notification target the right session after tab switches.
+				const curActive = store.activeId;
+				if (wasBusy && !s.chat.busy && s.id !== curActive) {
 					s.chat.unseen = true;
 					notifyDone(s.chat.title);
 				}
-				if (s.id === activeId) scrollToEnd();
+				if (s.id === curActive) scrollToEnd();
 			});
 			const unexit = await listen<string>('agent-exit', (e) => store.handleExit(e.payload));
 			const undrop = await getCurrentWebview().onDragDropEvent((e) => {
@@ -592,6 +620,7 @@
 		return () => {
 			disposed = true;
 			cleanups.forEach((f) => f());
+			if (findDebounce != null) clearTimeout(findDebounce);
 		};
 	});
 </script>
@@ -627,7 +656,7 @@
 					<span class="hcrumb">{project}</span>
 				</div>
 				<div class="hspace" data-tauri-drag-region></div>
-				<button class="hicon" class:on={showRight} onclick={toggleRight} aria-label="toggle panel" title="侧边面板 · ⌘B"><PanelRight size={16} /></button>
+				<button class="hicon" class:on={showRight} onclick={toggleRight} aria-label="toggle panel" title={t('shell.togglePanel')}><PanelRight size={16} /></button>
 			</header>
 
 			{#if Object.keys(chat.subagents).length}
@@ -639,29 +668,32 @@
 			{/if}
 
 			{#if showFind}
-				<div class="findbar">
-					<Search size={14} />
-					<input bind:this={findInputEl} bind:value={findQuery} onkeydown={findKey} placeholder="在对话中查找…" />
-					<span class="findcount">{findQuery.trim() ? (findHits.length ? `${Math.min(findIdx + 1, findHits.length)}/${findHits.length}` : '无结果') : ''}</span>
-					<IconButton size="sm" onclick={findPrev} label="上一个" disabled={!findHits.length}><ChevronUp size={15} /></IconButton>
-					<IconButton size="sm" onclick={findNext} label="下一个" disabled={!findHits.length}><ChevronDown size={15} /></IconButton>
-					<IconButton size="sm" onclick={closeFind} label="关闭"><X size={15} /></IconButton>
-				</div>
+				<FindBar
+					bind:value={findInput}
+					bind:inputEl={findInputEl}
+					hitCount={findHits.length}
+					activeIndex={findIdx}
+					onInput={onFindInput}
+					onKey={findKey}
+					onPrev={findPrev}
+					onNext={findNext}
+					onClose={closeFind}
+				/>
 			{/if}
 
 			<main bind:this={scroller} onscroll={onScroll}>
 				<div bind:this={contentEl}>
-					<MessageList messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} compactionTokens={chat.compactionTokens} {findActive} onEdit={editMessage} onRewind={rewindToMessage} />
+					<MessageList messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} compactionTokens={chat.compactionTokens} {findActive} {scroller} onEdit={editMessage} onRewind={rewindToMessage} />
 				</div>
 				{#if chat.messages.length === 0 && !chat.busy}
 					<div class="welcome">
 						<span class="welcome-mark">JuCode</span>
-						<p class="welcome-tip">给 JuCode 指派一个任务，开始新对话</p>
+						<p class="welcome-tip">{t('shell.welcomeTip')}</p>
 						<div class="welcome-hints">
-							<span><kbd>/</kbd> 命令</span>
-							<span><kbd>@</kbd> 引用文件</span>
-							<span><kbd>⌘K</kbd> 命令面板</span>
-							<span>拖入 / 粘贴图片</span>
+							<span><kbd>/</kbd> {t('shell.hintCommand')}</span>
+							<span><kbd>@</kbd> {t('shell.hintRef')}</span>
+							<span><kbd>⌘K</kbd> {t('shell.hintPalette')}</span>
+							<span>{t('shell.hintImage')}</span>
 						</div>
 					</div>
 				{/if}
@@ -674,8 +706,8 @@
 			{#if chat.engineState === 'exited'}
 				<div class="approval-wrap">
 					<div class="enginedown">
-						<span class="ed-text">引擎已停止运行</span>
-						<Button variant="primary" size="sm" onclick={() => store.restartSession(activeId, true)}>重启引擎</Button>
+						<span class="ed-text">{t('shell.engineDown')}</span>
+						<Button variant="primary" size="sm" onclick={() => store.restartSession(activeId, true)}>{t('shell.restartEngine')}</Button>
 					</div>
 				</div>
 			{/if}
@@ -685,15 +717,15 @@
 					<div class="approval">
 						<div class="approval-head">
 							<ShieldAlert size={15} />
-							<span>{isShell ? '允许执行命令' : '允许修改文件'} · <b>{chat.pendingApproval.name}</b></span>
+							<span>{isShell ? t('shell.approveCommand') : t('shell.approveFile')} · <b>{chat.pendingApproval.name}</b></span>
 						</div>
 						{#if chat.pendingApproval.summary}
 							<pre class="approval-sum" class:cmd={isShell}>{isShell ? `$ ${chat.pendingApproval.summary}` : chat.pendingApproval.summary}</pre>
 						{/if}
 						<div class="approval-actions">
-							<Button variant="primary" size="sm" onclick={() => respondApproval('allow once')}>允许一次</Button>
-							<Button variant="secondary" size="sm" onclick={() => respondApproval('allow always')}>本会话始终允许</Button>
-							<Button variant="danger" size="sm" onclick={() => respondApproval('deny')}>拒绝</Button>
+							<Button variant="primary" size="sm" onclick={() => respondApproval('allow once')}>{t('shell.allowOnce')}</Button>
+							<Button variant="secondary" size="sm" onclick={() => respondApproval('allow always')}>{t('shell.allowAlways')}</Button>
+							<Button variant="danger" size="sm" onclick={() => respondApproval('deny')}>{t('shell.deny')}</Button>
 						</div>
 					</div>
 				</div>
@@ -715,8 +747,8 @@
 		{:else}
 			<div class="nochat" data-tauri-drag-region>
 				<span class="welcome-mark">JuCode</span>
-				<p class="welcome-tip">没有打开的对话</p>
-				<Button variant="primary" size="sm" onclick={addProject}>选择项目，开始对话</Button>
+				<p class="welcome-tip">{t('shell.noChat')}</p>
+				<Button variant="primary" size="sm" onclick={addProject}>{t('shell.startFromProject')}</Button>
 			</div>
 		{/if}
 	</div>
@@ -736,7 +768,7 @@
 	</aside>
 
 	{#if showSettings}
-		<Settings sessionId={activeId} initialSection={settingsInitial} onAuthChange={refreshAuth} onClose={() => { showSettings = false; settingsInitial = 'model'; loadProviders(); }} />
+		<Settings sessionId={activeId} initialSection={settingsInitial} onAuthChange={refreshAuth} onClose={() => { showSettings = false; settingsInitial = 'overview'; loadProviders(); }} />
 	{/if}
 
 	{#if showMarket}
@@ -760,71 +792,47 @@
 
 	{#if chat?.trustPrompt}
 		<div class="overlay" role="presentation">
-			<div class="modal trust" role="dialog" aria-modal="true" tabindex="-1" aria-label="信任项目" use:focusTrap>
-				<div class="modal-head"><span>信任此项目？</span></div>
+			<div class="modal trust" role="dialog" aria-modal="true" tabindex="-1" aria-label={t('shell.trustLabel')} use:focusTrap>
+				<div class="modal-head"><span>{t('shell.trustQuestion')}</span></div>
 				<div class="trust-body">
-					<p>该项目包含可执行代码的本地技能或 hooks。信任后 JuCode 才会加载它们。</p>
+					<p>{t('shell.trustBody')}</p>
 					<code class="trust-path">{chat.trustPrompt.repoRoot ?? chat.trustPrompt.cwd}</code>
 				</div>
 				<div class="trust-actions">
-					<button class="btn ghost" onclick={() => respondTrust('no')}>不信任</button>
-					{#if chat.trustPrompt.repoRoot}<button class="btn" onclick={() => respondTrust('repo')}>信任整个仓库</button>{/if}
-					<button class="btn primary" onclick={() => respondTrust('yes')}>信任</button>
+					<button class="btn ghost" onclick={() => respondTrust('no')}>{t('shell.distrust')}</button>
+					{#if chat.trustPrompt.repoRoot}<button class="btn" onclick={() => respondTrust('repo')}>{t('shell.trustRepo')}</button>{/if}
+					<button class="btn primary" onclick={() => respondTrust('yes')}>{t('shell.trust')}</button>
 				</div>
 			</div>
 		</div>
 	{/if}
 
 	{#if chat?.picker}
-		<div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && chat?.closePicker()}>
-			<div class="modal" role="dialog" aria-modal="true" tabindex="-1" aria-label={pickerTitle} use:focusTrap>
-				<div class="modal-head">
-					<span>{pickerTitle}</span>
-					<IconButton onclick={() => chat?.closePicker()} label="close"><X size={15} /></IconButton>
-				</div>
-				{#if chat.picker.kind === 'model' && activeModel}
-					<div class="efforts">
-						<span class="dim">effort</span>
-						{#each activeModel.reasoning_efforts as ef (ef)}
-							<button class="eff" class:on={ef === chat.picker.activeEffort} onclick={() => setEffort(ef)}>{ef}</button>
-						{/each}
-					</div>
-				{/if}
-				{#if showPickerSearch}
-					<div class="psearch">
-						<Search size={14} />
-						<!-- svelte-ignore a11y_autofocus -->
-						<input bind:value={pickerQuery} placeholder="筛选…" autofocus />
-					</div>
-				{/if}
-				<div class="rows">
-					{#each filteredRows as row, i (row.id)}
-						<button class="prow" class:sel={i === selIdx} onclick={() => selectRow(row.command)} onmouseenter={() => (selIdx = i)} style:padding-left={row.depth != null ? `${11 + row.depth * 16}px` : null}>
-							{#if chat.picker.kind === 'model'}<Vendor model={row.label} size={15} />{/if}
-							{#if row.depth != null && row.depth > 0}<span class="twig">↳</span>{/if}
-							<span class="prow-main">{row.label || '(empty)'}</span>
-							<span class="prow-detail">{row.detail}</span>
-							{#if row.active}<Check size={14} class="prow-check" />{/if}
-						</button>
-					{/each}
-					{#if filteredRows.length === 0}<div class="pempty">{pickerQuery.trim() ? '无匹配' : '暂无可选项'}</div>{/if}
-				</div>
-				<div class="modal-foot dim">↑↓ 选择 · Enter 确认 · Esc 关闭</div>
-			</div>
-		</div>
+		<Picker
+			{chat}
+			title={pickerTitle}
+			{activeModel}
+			rows={filteredRows}
+			showSearch={showPickerSearch}
+			bind:query={pickerQuery}
+			bind:selIdx
+			onClose={() => chat?.closePicker()}
+			onSelect={selectRow}
+			onEffort={setEffort}
+		/>
 	{/if}
 
 	{#if chat?.pendingRewind}
 		<div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && chat && (chat.pendingRewind = null)}>
-			<div class="modal trust" role="dialog" aria-modal="true" tabindex="-1" aria-label="回退确认" use:focusTrap>
-				<div class="modal-head"><span>回退到这一轮并重写？</span></div>
+			<div class="modal trust" role="dialog" aria-modal="true" tabindex="-1" aria-label={t('shell.rewindLabel')} use:focusTrap>
+				<div class="modal-head"><span>{t('shell.rewindQuestion')}</span></div>
 				<div class="trust-body">
-					<p>对话会回退到这条消息发出前，<b>此后的文件改动也会一并还原</b>。原消息已填入输入框，可修改后重新发送。此操作不可撤销。</p>
+					<p>{@html t('shell.rewindBody')}</p>
 					<code class="trust-path">{chat.pendingRewind.text.slice(0, 120)}</code>
 				</div>
 				<div class="trust-actions">
-					<button class="btn ghost" onclick={() => chat && (chat.pendingRewind = null)}>取消</button>
-					<button class="btn primary" onclick={confirmRewind}>回退并重写</button>
+					<button class="btn ghost" onclick={() => chat && (chat.pendingRewind = null)}>{t('common.cancel')}</button>
+					<button class="btn primary" onclick={confirmRewind}>{t('shell.rewindConfirm')}</button>
 				</div>
 			</div>
 		</div>
@@ -999,36 +1007,6 @@
 		padding: 8px 18px;
 		border-bottom: 1px solid var(--hairline);
 	}
-	.findbar {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		padding: 8px 14px;
-		border-bottom: 1px solid var(--hairline);
-		color: var(--dim);
-		background: var(--panel);
-	}
-	.findbar input {
-		flex: 1;
-		min-width: 0;
-		border: none;
-		outline: none;
-		background: none;
-		color: var(--text);
-		font-family: var(--font-sans);
-		font-size: 13.5px;
-	}
-	.findbar input::placeholder {
-		color: var(--dim2);
-	}
-	.findcount {
-		font-family: var(--font-mono);
-		font-size: 11.5px;
-		color: var(--dim2);
-		flex-shrink: 0;
-		min-width: 36px;
-		text-align: right;
-	}
 	.agent {
 		display: inline-flex;
 		align-items: center;
@@ -1176,109 +1154,9 @@
 		font-size: 14px;
 		border-bottom: 1px solid var(--hairline);
 	}
-	.efforts {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		padding: 10px 16px;
-		border-bottom: 1px solid var(--hairline);
-		font-size: 12px;
-	}
-	.psearch {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		padding: 10px 16px;
-		border-bottom: 1px solid var(--hairline);
-		color: var(--dim);
-	}
-	.psearch input {
-		flex: 1;
-		min-width: 0;
-		border: none;
-		outline: none;
-		background: none;
-		color: var(--text);
-		font-family: var(--font-sans);
-		font-size: 13.5px;
-	}
-	.psearch input::placeholder {
-		color: var(--dim2);
-	}
-	.dim {
-		color: var(--dim);
-	}
-	.eff {
-		font-family: var(--font-mono);
-		font-size: 12px;
-		padding: 3px 10px;
-		border-radius: 999px;
-		border: 1px solid var(--border);
-		background: var(--surface2);
-		color: var(--dim);
-		cursor: pointer;
-	}
-	.eff.on {
-		color: var(--on-accent);
-		background: var(--accent);
-		border-color: var(--accent);
-	}
-	.rows {
-		overflow-y: auto;
-		padding: 6px;
-	}
-	.prow {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		width: 100%;
-		text-align: left;
-		padding: 9px 11px;
-		border: none;
-		border-radius: var(--r-sm);
-		background: none;
-		color: var(--text);
-		cursor: pointer;
-		font-size: 13px;
-	}
-	.prow.sel {
-		background: var(--surface2);
-	}
-	.prow-main {
-		flex: 1;
-		font-family: var(--font-mono);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	.twig {
-		color: var(--dim2);
-		font-family: var(--font-mono);
-		margin-right: -4px;
-		flex-shrink: 0;
-	}
-	.prow-detail {
-		color: var(--dim);
-		font-size: 12px;
-		font-family: var(--font-mono);
-		flex-shrink: 0;
-	}
 	:global(.prow-check) {
 		color: var(--accent-bright);
 		flex-shrink: 0;
-	}
-	.pempty {
-		padding: 18px;
-		text-align: center;
-		color: var(--dim);
-		font-size: 13px;
-	}
-	.modal-foot {
-		padding: 9px 16px;
-		border-top: 1px solid var(--hairline);
-		font-size: 11px;
-		font-family: var(--font-mono);
-		text-align: center;
 	}
 	.modal.trust {
 		width: min(460px, 92vw);

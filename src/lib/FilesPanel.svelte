@@ -3,6 +3,7 @@
 	import { Folder, FileText, ArrowUp, RefreshCw, X } from 'lucide-svelte';
 	import { projectRoot, listDir, readText, type FsEntry } from '$lib/protocol';
 	import IconButton from '$lib/ui/IconButton.svelte';
+	import { t } from '$lib/i18n';
 
 	let { rootDir = '' }: { rootDir?: string } = $props();
 	let root = $state('');
@@ -60,7 +61,7 @@
 					<span class="ename">{e.name}</span>
 				</button>
 			{/each}
-			{#if entries.length === 0}<div class="empty">空目录</div>{/if}
+			{#if entries.length === 0}<div class="empty">{t('dock.files.empty')}</div>{/if}
 		</div>
 	{/if}
 </div>

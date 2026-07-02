@@ -4,6 +4,7 @@
 	import Markdown from '$lib/Markdown.svelte';
 	import ToolCard from '$lib/ToolCard.svelte';
 	import Indicator from '$lib/Indicator.svelte';
+	import { t } from '$lib/i18n';
 	import type { Msg } from '$lib/chat.svelte';
 
 	let {
@@ -13,6 +14,7 @@
 		phase,
 		compactionTokens = 0,
 		findActive = null,
+		scroller = null,
 		onEdit,
 		onRewind
 	}: {
@@ -22,16 +24,116 @@
 		phase: string | null;
 		compactionTokens?: number;
 		findActive?: number | null;
+		// The scroll viewport (owned by +page). When provided and the history is
+		// long, rows outside the viewport are windowed out.
+		scroller?: HTMLElement | null;
 		onEdit: (text: string) => void;
 		onRewind: (text: string, userIndex: number) => void;
 	} = $props();
 
-	// Scroll the current find hit into view (highlight is applied via the .hit class).
-	let rowEls: HTMLElement[] = [];
+	// ── Virtual list (dynamic-height windowing) ─────────────────────────────
+	// Only long histories are windowed; short conversations render in full so the
+	// streaming/auto-scroll path is completely untouched. Heights are measured per
+	// message (cached by object identity) with an estimate for not-yet-seen rows.
+	const VIRTUAL_MIN = 40; // messages before windowing engages
+	const EST_ROW = 120; // px estimate for an unmeasured row
+	const GAP = 16; // px, matches .list gap
+	const OVERSCAN = 800; // px rendered beyond the viewport on each side
+
+	const heights = new Map<Msg, number>();
+	let measureVersion = $state(0);
+	let scrollTop = $state(0);
+	let viewH = $state(0);
+	let raf = 0;
+
+	// Track the viewport's scroll position + height.
+	$effect(() => {
+		const el = scroller;
+		if (!el) return;
+		const sync = () => {
+			scrollTop = el.scrollTop;
+			viewH = el.clientHeight;
+		};
+		sync();
+		el.addEventListener('scroll', sync, { passive: true });
+		const ro = new ResizeObserver(sync);
+		ro.observe(el);
+		return () => {
+			el.removeEventListener('scroll', sync);
+			ro.disconnect();
+		};
+	});
+
+	const virtual = $derived(!!scroller && messages.length >= VIRTUAL_MIN);
+
+	// Cumulative top offset of each row (offsets[i] = top of row i, offsets[n] = end).
+	const offsets = $derived.by(() => {
+		measureVersion; // recompute when a measurement lands
+		const offs = new Array(messages.length + 1);
+		offs[0] = 0;
+		for (let i = 0; i < messages.length; i++) {
+			const m = messages[i];
+			// Unshown placeholders occupy no row (and no gap).
+			const h = shown(m) ? (heights.get(m) ?? EST_ROW) + GAP : 0;
+			offs[i + 1] = offs[i] + h;
+		}
+		return offs;
+	});
+	const totalH = $derived(offsets[messages.length] ?? 0);
+
+	// [first, last] inclusive window of rows to render.
+	const range = $derived.by(() => {
+		if (!virtual) return { first: 0, last: messages.length - 1 };
+		const top = scrollTop - OVERSCAN;
+		const bottom = scrollTop + viewH + OVERSCAN;
+		let first = 0;
+		while (first < messages.length && offsets[first + 1] < top) first++;
+		let last = first;
+		while (last < messages.length - 1 && offsets[last] < bottom) last++;
+		return { first, last };
+	});
+	const windowRows = $derived(messages.slice(range.first, range.last + 1));
+	const padTop = $derived(virtual ? offsets[range.first] : 0);
+	const padBottom = $derived(virtual ? Math.max(0, totalH - offsets[range.last + 1]) : 0);
+
+	// Measure a rendered row and cache its height, coalescing recomputes into one rAF.
+	function measure(node: HTMLElement, msg: Msg) {
+		const record = () => {
+			const h = node.offsetHeight;
+			if (h > 0 && heights.get(msg) !== h) {
+				heights.set(msg, h);
+				if (!raf)
+					raf = requestAnimationFrame(() => {
+						raf = 0;
+						measureVersion++;
+					});
+			}
+		};
+		record();
+		const ro = new ResizeObserver(record);
+		ro.observe(node);
+		return {
+			update(next: Msg) {
+				msg = next;
+				record();
+			},
+			destroy() {
+				ro.disconnect();
+			}
+		};
+	}
+
+	// Scroll the current find hit into view. Under windowing the row may be unrendered,
+	// so scroll the viewport to the row's computed offset (which brings it into range).
 	$effect(() => {
 		if (findActive == null) return;
-		rowEls[findActive]?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+		if (virtual && scroller) {
+			scroller.scrollTo({ top: Math.max(0, offsets[findActive] - viewH / 2), behavior: 'smooth' });
+		} else {
+			rowEls[findActive]?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+		}
 	});
+	let rowEls: HTMLElement[] = [];
 
 	// Map each user message to its 0-based ordinal so a rewind can target the
 	// matching engine turn (the engine lists user turns in the same order).
@@ -108,10 +210,24 @@
 	// Incremental streaming markdown: render completed blocks as markdown (memoized
 	// by the slice, so it only re-parses when a block finalizes) and the in-progress
 	// tail block as plain text. Per-token cost tracks the current block, not the
-	// whole message. The split never lands inside an open ``` code fence.
+	// whole message. The split never lands inside an open code fence.
+	//
+	// Fences are matched anchored to line starts per CommonMark (optional ≤3 spaces,
+	// then 3+ backticks or tildes). Counting every "```" occurrence — as before —
+	// miscounts inline code spans and 4-backtick fences, splitting the block wrongly
+	// mid-stream.
+	const FENCE_RE = /^ {0,3}(`{3,}|~{3,})/gm;
 	function splitIdx(text: string): number {
-		const fences = (text.match(/```/g) || []).length;
-		if (fences % 2 === 1) return text.lastIndexOf('```');
+		const fences = text.match(FENCE_RE);
+		if (fences && fences.length % 2 === 1) {
+			// Inside an open fence: keep the whole open block in the plain-text tail
+			// so it isn't parsed as a finalized (broken) code block. Split at the
+			// start of the last fence line.
+			let idx = 0;
+			const re = new RegExp(FENCE_RE.source, 'gm');
+			for (let m = re.exec(text); m; m = re.exec(text)) idx = m.index;
+			return idx;
+		}
 		const i = text.lastIndexOf('\n\n');
 		return i < 0 ? 0 : i + 2;
 	}
@@ -123,30 +239,31 @@
 	}
 </script>
 
-<div class="list">
-	{#each messages as m, i (m)}
+<div class="list" style:padding-top="{padTop}px" style:padding-bottom="{padBottom}px">
+	{#each windowRows as m, k (m)}
+		{@const i = range.first + k}
 		{#if shown(m)}
-			<div class="mwrap" class:hit={i === findActive} bind:this={rowEls[i]}>
+			<div class="mwrap" class:hit={i === findActive} bind:this={rowEls[i]} use:measure={m}>
 				{#if m.kind === 'user'}
 			<div class="row user">
-				<button class="uedit" onclick={() => onRewind(m.text, userOrdinal.get(m) ?? 0)} aria-label="rewind" title="回退到此轮并重写（会还原文件改动）"><RotateCcw size={12} /></button>
-				<button class="uedit" onclick={() => onEdit(m.text)} aria-label="quote" title="引用到输入框"><Pencil size={12} /></button>
+				<button class="uedit" onclick={() => onRewind(m.text, userOrdinal.get(m) ?? 0)} aria-label="rewind" title={t('chat.rewindTitle')}><RotateCcw size={12} /></button>
+				<button class="uedit" onclick={() => onEdit(m.text)} aria-label="quote" title={t('chat.quoteTitle')}><Pencil size={12} /></button>
 				<div class="bubble">{m.text}</div>
 			</div>
 		{:else if m.kind === 'assistant'}
 			<div class="answer">
 				{#if m === streamingMsg}
-					{@const t = revealed(m)}
-					{@const i = splitIdx(t)}
-					{#if i > 0}<Markdown text={t.slice(0, i)} />{/if}
-					<div class="stream">{t.slice(i)}</div>
+					{@const rt = revealed(m)}
+					{@const si = splitIdx(rt)}
+					{#if si > 0}<Markdown text={rt.slice(0, si)} />{/if}
+					<div class="stream">{rt.slice(si)}</div>
 				{:else}
 					<Markdown text={m.text} />
 					<div class="foot">
 						{#if m.elapsed}<span class="mono">{fmtDur(m.elapsed)}</span>{/if}
-						{#if m.tokens}<span class="mono">{m.tokens} tokens</span>{/if}
+						{#if m.tokens}<span class="mono">{t('chat.tokens', { n: m.tokens })}</span>{/if}
 						<button class="copy" onclick={() => copy(m.text, m)} aria-label="copy">
-							{#if copied === m}<Check size={13} /> 已复制{:else}<Copy size={13} /> 复制{/if}
+							{#if copied === m}<Check size={13} /> {t('common.copied')}{:else}<Copy size={13} /> {t('common.copy')}{/if}
 						</button>
 					</div>
 				{/if}
@@ -155,7 +272,7 @@
 			<div class="reason" class:open={!m.collapsed}>
 				<button class="reason-head" onclick={() => (m.collapsed = !m.collapsed)}>
 					<span class="rchev"><ChevronRight size={13} /></span>
-					<span>推理</span>
+					<span>{t('chat.reasoning')}</span>
 				</button>
 				{#if !m.collapsed}
 					<div class="reason-body" transition:slide={{ duration: 180 }}>

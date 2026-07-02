@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Target, Loader, Pause, OctagonAlert, CircleCheck, Clock, Coins } from 'lucide-svelte';
 	import type { Goal } from '$lib/chat.svelte';
+	import { t } from '$lib/i18n';
 
 	let { goal }: { goal: Goal | null } = $props();
 
@@ -11,18 +12,21 @@
 		goal?.token_budget ? Math.min(100, Math.round((goal.tokens_used / goal.token_budget) * 100)) : null
 	);
 
-	const META: Record<string, { label: string; cls: string; icon: typeof Target; hint: string }> = {
-		active: { label: '进行中', cls: 'active', icon: Loader, hint: '正在朝目标推进。' },
-		paused: { label: '已暂停', cls: 'paused', icon: Pause, hint: '已暂停，/goal resume 继续。' },
+	const META: Record<string, { key: string; cls: string; icon: typeof Target }> = {
+		active: { key: 'active', cls: 'active', icon: Loader },
+		paused: { key: 'paused', cls: 'paused', icon: Pause },
 		blocked: {
-			label: '受阻',
+			key: 'blocked',
 			cls: 'blocked',
-			icon: OctagonAlert,
-			hint: '需要你补充信息或外部变更后才能继续。'
+			icon: OctagonAlert
 		},
-		complete: { label: '已完成', cls: 'complete', icon: CircleCheck, hint: '目标已达成。' }
+		complete: { key: 'complete', cls: 'complete', icon: CircleCheck }
 	};
-	const meta = $derived(META[goal?.status ?? ''] ?? { label: goal?.status ?? '', cls: 'active', icon: Target, hint: '' });
+	const meta = $derived.by(() => {
+		const m = META[goal?.status ?? ''];
+		if (!m) return { label: goal?.status ?? '', cls: 'active', icon: Target, hint: '' };
+		return { label: t(`dock.goal.${m.key}`), cls: m.cls, icon: m.icon, hint: t(`dock.goal.${m.key}Hint`) };
+	});
 </script>
 
 <div class="panel">
@@ -41,21 +45,21 @@
 					<span class="stat-ico"><Coins size={13} /></span>
 					<div>
 						<div class="stat-val">{fmt(goal.tokens_used)}{#if goal.token_budget} / {fmt(goal.token_budget)}{/if}</div>
-						<div class="stat-lab">tokens{#if !goal.token_budget} · 无预算{/if}</div>
+						<div class="stat-lab">tokens{#if !goal.token_budget} · {t('dock.goal.noBudget')}{/if}</div>
 					</div>
 				</div>
 				<div class="stat">
 					<span class="stat-ico"><Clock size={13} /></span>
 					<div>
 						<div class="stat-val">{fmtTime(goal.time_used_seconds)}</div>
-						<div class="stat-lab">用时</div>
+						<div class="stat-lab">{t('dock.goal.timeUsed')}</div>
 					</div>
 				</div>
 			</div>
 
 			{#if pct !== null}
 				<div class="prog">
-					<div class="prog-top"><span>token 预算</span><span class="prog-pct">{pct}%</span></div>
+					<div class="prog-top"><span>{t('dock.goal.tokenBudget')}</span><span class="prog-pct">{pct}%</span></div>
 					<div class="bar"><span class="fill" class:over={pct >= 90} style:width="{pct}%"></span></div>
 				</div>
 			{/if}
@@ -63,8 +67,8 @@
 	{:else}
 		<div class="empty">
 			<Target size={26} />
-			<p>暂无目标</p>
-			<span>用 <code>/goal &lt;目标&gt;</code> 设置一个</span>
+			<p>{t('dock.goal.empty')}</p>
+			<span>{t('dock.goal.emptyHintPre')} <code>/goal &lt;{t('dock.goal.goalPlaceholder')}&gt;</code> {t('dock.goal.emptyHintPost')}</span>
 		</div>
 	{/if}
 </div>

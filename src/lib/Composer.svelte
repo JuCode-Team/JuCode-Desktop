@@ -1,12 +1,15 @@
 <script lang="ts">
-	import { Send, Square, Paperclip, X, FileText, FastForward, File, Folder, ShieldCheck } from 'lucide-svelte';
+	import { Send, Square, Paperclip, FastForward, ShieldCheck } from 'lucide-svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
-	import { convertFileSrc } from '@tauri-apps/api/core';
 	import Vendor from '$lib/Vendor.svelte';
-	import ContextRing from '$lib/ContextRing.svelte';
 	import Segmented from '$lib/ui/Segmented.svelte';
 	import { listFiles, saveTempImage } from '$lib/protocol';
-	import { buildEntries, mentionMatches, fuzzyPositions, type AtEntry } from '$lib/mention';
+	import { buildEntries, mentionMatches, type AtEntry } from '$lib/mention';
+	import { t } from '$lib/i18n';
+	import SlashMenu from '$lib/composer/SlashMenu.svelte';
+	import MentionMenu from '$lib/composer/MentionMenu.svelte';
+	import AttachmentChips from '$lib/composer/AttachmentChips.svelte';
+	import ContextIndicator from '$lib/composer/ContextIndicator.svelte';
 	import type { ChatState } from '$lib/chat.svelte';
 
 	let {
@@ -37,12 +40,12 @@
 	let showEffort = $state(false);
 	let showApproval = $state(false);
 
-	const APPROVAL = [
-		{ value: 'ask', label: '谨慎' },
-		{ value: 'edits', label: '自动改文件' },
-		{ value: 'all', label: '全自动' }
-	];
-	const approvalLabel = $derived(APPROVAL.find((a) => a.value === chat.approvalMode)?.label ?? '谨慎');
+	const APPROVAL = $derived([
+		{ value: 'ask', label: t('chat.approvalAsk') },
+		{ value: 'edits', label: t('chat.approvalEdits') },
+		{ value: 'all', label: t('chat.approvalAll') }
+	]);
+	const approvalLabel = $derived(APPROVAL.find((a) => a.value === chat.approvalMode)?.label ?? t('chat.approvalAsk'));
 	function setApproval(m: string) {
 		chat.approvalMode = m as 'ask' | 'edits' | 'all';
 		localStorage.setItem('jucode-approval-mode', m);
@@ -50,8 +53,6 @@
 	}
 
 	const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
-	const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
-	const fmtTokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
 
 	const slashMatches = $derived.by(() => {
 		const t = input.trim();
@@ -121,23 +122,6 @@
 			return `${lead}@${entry.path}${suffix}`;
 		});
 		el?.focus();
-	}
-
-	// Split a label into matched/unmatched segments for highlighting (fuzzy mode
-	// only — root/drill queries aren't a meaningful highlight).
-	function hlSegments(text: string, q: string | null) {
-		if (!q || q === '' || q.endsWith('/')) return [{ text, hit: false }];
-		const pos = fuzzyPositions(text, q);
-		if (!pos || pos.length === 0) return [{ text, hit: false }];
-		const set = new Set(pos);
-		const segs: { text: string; hit: boolean }[] = [];
-		for (let i = 0; i < text.length; i++) {
-			const hit = set.has(i);
-			const last = segs[segs.length - 1];
-			if (last && last.hit === hit) last.text += text[i];
-			else segs.push({ text: text[i], hit });
-		}
-		return segs;
 	}
 
 	// Active option id for the combobox (aria-activedescendant).
@@ -235,46 +219,20 @@
 
 <div class="composer-wrap">
 	{#if slashMatches.length}
-		<div class="slash" id="composer-menu" role="listbox" aria-label="命令补全">
-			{#each slashMatches as c, i (c.command)}
-				<button class="slash-item" id="cmp-opt-{i}" role="option" aria-selected={i === slashIdx} class:sel={i === slashIdx} onclick={() => (input = c.command + ' ')} onmouseenter={() => (slashIdx = i)}>
-					<span class="slash-cmd">{c.command}</span>
-					{#if c.args}<span class="slash-args">{c.args}</span>{/if}
-					{#if c.description}<span class="slash-desc">{c.description}</span>{/if}
-					{#if c.marker}<span class="slash-marker">{c.marker}</span>{/if}
-				</button>
-			{/each}
-		</div>
+		<SlashMenu matches={slashMatches} selected={slashIdx} onSelect={(c) => (input = c.command + ' ')} onHover={(i) => (slashIdx = i)} />
 	{:else if atQuery !== null}
-		<div class="slash" id="composer-menu" role="listbox" aria-label="文件补全">
-			{#each atMatches as e, i (e.path)}
-				<button class="slash-item" id="cmp-opt-{i}" role="option" aria-selected={i === atIdx} class:sel={i === atIdx} onclick={() => applyAt(e)} onmouseenter={() => (atIdx = i)}>
-					{#if e.dir}<Folder size={13} class="atfolder" />{:else}<File size={13} />{/if}
-					<span class="at-name">{#each hlSegments(base(e.path), atQuery) as seg}{#if seg.hit}<b class="hl">{seg.text}</b>{:else}{seg.text}{/if}{/each}{#if e.dir}/{/if}</span>
-					<span class="at-path">{e.path}</span>
-				</button>
-			{/each}
-			{#if atMatches.length === 0 && atQuery}<div class="slash-empty">无匹配文件</div>{/if}
-		</div>
+		<MentionMenu matches={atMatches} query={atQuery} selected={atIdx} onSelect={applyAt} onHover={(i) => (atIdx = i)} />
 	{/if}
 	{#if attachments.length}
-		<div class="chips">
-			{#each attachments as a, i (a.path)}
-				<span class="chip" class:imgchip={a.image}>
-					{#if a.image}<img class="chip-thumb" src={convertFileSrc(a.path)} alt="" />{:else}<FileText size={12} />{/if}
-					<span class="chip-name">{base(a.path)}</span>
-					<IconButton size="xs" onclick={() => attachments.splice(i, 1)} label="remove"><X size={12} /></IconButton>
-				</span>
-			{/each}
-		</div>
+		<AttachmentChips {attachments} onRemove={(i) => attachments.splice(i, 1)} />
 	{/if}
 	{#if chat.pendingMessages.length}
 		<div class="queued">
-			<span class="queued-label">排队 {chat.pendingMessages.length}</span>
+			<span class="queued-label">{t('chat.queuedLabel', { n: chat.pendingMessages.length })}</span>
 			{#each chat.pendingMessages as q, i (i)}
 				<span class="qchip" title={q}>{q}</span>
 			{/each}
-			<button class="qsteer" onclick={onSteer} title="打断当前回合，立即执行队首消息"><FastForward size={12} />插队执行</button>
+			<button class="qsteer" onclick={onSteer} title={t('chat.steerTitle')}><FastForward size={12} />{t('chat.steerAction')}</button>
 		</div>
 	{/if}
 	<div class="composer">
@@ -284,7 +242,7 @@
 			onkeydown={onKey}
 			onpaste={onPaste}
 			rows="1"
-			placeholder="给 JuCode 指派一个任务…  (拖入/粘贴图片 · 回形针附加文件 · / 唤起命令)"
+			placeholder={t('chat.composerPlaceholder')}
 			role="combobox"
 			aria-expanded={menuOpen}
 			aria-controls="composer-menu"
@@ -292,13 +250,13 @@
 			aria-activedescendant={activeOptionId}
 		></textarea>
 		<div class="composer-bar">
-			<IconButton onclick={onPick} label="attach" title="附加文件"><Paperclip size={16} /></IconButton>
-			<button class="flatbtn model" onclick={onModel} title="切换模型">
+			<IconButton onclick={onPick} label="attach" title={t('chat.attachTitle')}><Paperclip size={16} /></IconButton>
+			<button class="flatbtn model" onclick={onModel} title={t('chat.switchModel')}>
 				<Vendor model={chat.model} size={15} /><span>{chat.model || 'model'}</span>
 			</button>
 			{#if chat.efforts.length}
 				<div class="effortsel">
-					<button class="flatbtn" onclick={() => (showEffort = !showEffort)} title="思考强度">
+					<button class="flatbtn" onclick={() => (showEffort = !showEffort)} title={t('chat.effortTitle')}>
 						{cap(chat.effort) || 'Effort'}
 					</button>
 					{#if showEffort}
@@ -310,7 +268,7 @@
 				</div>
 			{/if}
 			<div class="effortsel">
-				<button class="flatbtn appr" class:auto={chat.approvalMode !== 'ask'} onclick={() => (showApproval = !showApproval)} title="工具审批模式">
+				<button class="flatbtn appr" class:auto={chat.approvalMode !== 'ask'} onclick={() => (showApproval = !showApproval)} title={t('chat.approvalModeTitle')}>
 					<ShieldCheck size={14} /><span>{approvalLabel}</span>
 				</button>
 				{#if showApproval}
@@ -322,21 +280,12 @@
 			</div>
 			<div class="cspace"></div>
 			{#if ctxLimit > 0}
-				<div class="ctxwrap">
-					<ContextRing pct={ctxPct} label="" />
-					<div class="ctx-pop">
-						<div class="ctx-row"><span>上下文</span><span class="ctx-val">{fmtTokens(chat.contextTokens)} / {fmtTokens(ctxLimit)}</span></div>
-						<div class="ctx-bar"><span class="ctx-fill" class:warn={ctxPct >= 85} style:width="{ctxPct}%"></span></div>
-						<div class="ctx-sub">{ctxPct}% · 到压缩点</div>
-						{#if chat.totalIn || chat.totalOut}<div class="ctx-row mt"><span>本会话用量</span><span class="ctx-val">↑{fmtTokens(chat.totalIn)} ↓{fmtTokens(chat.totalOut)}</span></div>{/if}
-						{#if chat.cost > 0}<div class="ctx-row"><span>成本</span><span class="ctx-val">${chat.cost.toFixed(3)}</span></div>{/if}
-					</div>
-				</div>
+				<ContextIndicator pct={ctxPct} contextTokens={chat.contextTokens} contextLimit={ctxLimit} totalIn={chat.totalIn} totalOut={chat.totalOut} cost={chat.cost} />
 			{/if}
 			{#if chat.busy}
-				<button class="cact stop" onclick={onStop} aria-label="stop" title="停止"><Square size={15} /></button>
+				<button class="cact stop" onclick={onStop} aria-label="stop" title={t('chat.stopTitle')}><Square size={15} /></button>
 			{:else}
-				<button class="cact send" onclick={onSubmit} disabled={!input.trim() && !attachments.length} aria-label="send" title="发送"><Send size={16} /></button>
+				<button class="cact send" onclick={onSubmit} disabled={!input.trim() && !attachments.length} aria-label="send" title={t('chat.sendTitle')}><Send size={16} /></button>
 			{/if}
 		</div>
 	</div>
@@ -430,65 +379,6 @@
 		box-shadow: var(--shadow-pop);
 		animation: rise 0.12s ease;
 	}
-	.ctxwrap {
-		position: relative;
-		display: inline-flex;
-	}
-	.ctx-pop {
-		position: absolute;
-		bottom: calc(100% + 10px);
-		right: 0;
-		z-index: 21;
-		width: 200px;
-		padding: 11px 12px;
-		background: var(--panel);
-		border: 1px solid var(--border);
-		border-radius: var(--r-md);
-		box-shadow: var(--shadow-pop);
-		opacity: 0;
-		transform: translateY(4px);
-		pointer-events: none;
-		transition: opacity 0.13s, transform 0.13s;
-	}
-	.ctxwrap:hover .ctx-pop {
-		opacity: 1;
-		transform: translateY(0);
-	}
-	.ctx-row {
-		display: flex;
-		align-items: baseline;
-		justify-content: space-between;
-		gap: 10px;
-		font-size: 12px;
-		color: var(--dim);
-	}
-	.ctx-row.mt {
-		margin-top: 9px;
-	}
-	.ctx-val {
-		font-family: var(--font-mono);
-		color: var(--text);
-	}
-	.ctx-bar {
-		height: 5px;
-		border-radius: 999px;
-		background: var(--surface2);
-		overflow: hidden;
-		margin: 7px 0 4px;
-	}
-	.ctx-fill {
-		display: block;
-		height: 100%;
-		border-radius: 999px;
-		background: var(--accent);
-	}
-	.ctx-fill.warn {
-		background: var(--warn);
-	}
-	.ctx-sub {
-		font-size: 11px;
-		color: var(--dim2);
-	}
 	.cspace {
 		flex: 1;
 	}
@@ -519,115 +409,6 @@
 		color: var(--err);
 	}
 
-	.slash {
-		margin-bottom: 8px;
-		background: var(--panel);
-		border: 1px solid var(--border);
-		border-radius: var(--r-md);
-		overflow: hidden;
-		box-shadow: var(--shadow-pop);
-	}
-	.slash-item {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		width: 100%;
-		text-align: left;
-		padding: 8px 12px;
-		border: none;
-		background: none;
-		color: var(--text);
-		cursor: pointer;
-		font-size: 13px;
-	}
-	.slash-item.sel {
-		background: var(--surface2);
-	}
-	.slash-cmd {
-		font-family: var(--font-mono);
-		flex-shrink: 0;
-	}
-	.slash-args {
-		font-family: var(--font-mono);
-		font-size: 11px;
-		color: var(--dim2);
-		flex-shrink: 0;
-	}
-	.slash-desc {
-		flex: 1;
-		color: var(--dim);
-		font-size: 12px;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	.slash-marker {
-		flex-shrink: 0;
-		font-size: 10px;
-		color: var(--accent-bright);
-		border: 1px solid color-mix(in oklab, var(--accent) 40%, transparent);
-		border-radius: 4px;
-		padding: 1px 5px;
-	}
-	.at-name {
-		font-family: var(--font-mono);
-		flex-shrink: 0;
-	}
-	.at-name .hl {
-		color: var(--accent-bright);
-		font-weight: 700;
-	}
-	.slash-empty {
-		padding: 10px 12px;
-		font-size: 12.5px;
-		color: var(--dim2);
-	}
-	:global(.atfolder) {
-		color: var(--accent-bright);
-		flex-shrink: 0;
-	}
-	.at-path {
-		flex: 1;
-		color: var(--dim2);
-		font-size: 12px;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		text-align: right;
-	}
-	.chips {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 6px;
-		margin-bottom: 8px;
-	}
-	.chip {
-		display: inline-flex;
-		align-items: center;
-		gap: 5px;
-		font-size: 12px;
-		font-family: var(--font-mono);
-		background: var(--surface2);
-		border: 1px solid var(--border);
-		border-radius: 7px;
-		padding: 3px 5px 3px 8px;
-		max-width: 200px;
-	}
-	.chip.imgchip {
-		padding: 3px 5px 3px 3px;
-	}
-	.chip-thumb {
-		width: 26px;
-		height: 26px;
-		border-radius: 4px;
-		object-fit: cover;
-		flex-shrink: 0;
-	}
-	.chip-name {
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
 	.queued {
 		display: flex;
 		align-items: center;

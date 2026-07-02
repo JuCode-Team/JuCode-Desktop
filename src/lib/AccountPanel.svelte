@@ -9,6 +9,7 @@
 		type PlanUsage,
 		type UsageLogRow
 	} from '$lib/protocol';
+	import { t } from '$lib/i18n';
 
 	let loading = $state(true);
 	let error = $state<string | null>(null);
@@ -38,16 +39,16 @@
 	const fmtNum = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
 	function relTime(v?: string): string {
 		if (!v) return '';
-		const t = new Date(v).getTime();
-		if (Number.isNaN(t)) return '';
-		const s = Math.max(0, Math.floor((Date.now() - t) / 1000));
-		if (s < 60) return '刚刚';
+		const ts = new Date(v).getTime();
+		if (Number.isNaN(ts)) return '';
+		const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+		if (s < 60) return t('settings.usage.justNow');
 		const m = Math.floor(s / 60);
-		if (m < 60) return `${m} 分钟前`;
+		if (m < 60) return t('settings.usage.minutesAgo', { n: m });
 		const h = Math.floor(m / 60);
-		if (h < 24) return `${h} 小时前`;
+		if (h < 24) return t('settings.usage.hoursAgo', { n: h });
 		const d = Math.floor(h / 24);
-		return d < 7 ? `${d} 天前` : new Date(v).toLocaleDateString();
+		return d < 7 ? t('settings.usage.daysAgo', { n: d }) : new Date(v).toLocaleDateString();
 	}
 
 	function pct(used?: string, quota?: string): string {
@@ -69,8 +70,8 @@
 
 <div class="group">
 	<div class="glabel-row">
-		<div class="glabel">账户用量</div>
-		<button class="refresh" onclick={load} disabled={loading} aria-label="刷新">
+		<div class="glabel">{t('settings.usage.groupLabel')}</div>
+		<button class="refresh" onclick={load} disabled={loading} aria-label={t('settings.usage.refresh')}>
 			<RefreshCw size={13} class={loading ? 'spin' : ''} />
 		</button>
 	</div>
@@ -78,33 +79,33 @@
 	{#if error}
 		<p class="hint err">{error}</p>
 	{:else if loading && !account}
-		<p class="hint">加载中…</p>
+		<p class="hint">{t('common.loading')}</p>
 	{:else if account}
 		<div class="cards">
 			<div class="card">
 				<span class="ci"><Wallet size={15} /></span>
-				<span class="cl">余额</span>
+				<span class="cl">{t('settings.usage.balance')}</span>
 				<span class="cv">{account.balance ?? '0'} {account.currency ?? ''}</span>
 			</div>
 			<div class="card">
 				<span class="ci"><Package size={15} /></span>
-				<span class="cl">套餐</span>
-				<span class="cv">{account.active_plan?.name ?? '无活跃套餐'}</span>
+				<span class="cl">{t('settings.usage.plan')}</span>
+				<span class="cv">{account.active_plan?.name ?? t('settings.usage.noActivePlan')}</span>
 			</div>
 		</div>
 
 		{#if usage?.has_active_plan}
 			<div class="bars">
-				{@render bar('5 小时', usage.used_5h, usage.quota_5h)}
-				{@render bar('本周', usage.used_weekly, usage.quota_weekly)}
-				{@render bar('本月', usage.used_monthly, usage.quota_monthly)}
+				{@render bar(t('settings.usage.window5h'), usage.used_5h, usage.quota_5h)}
+				{@render bar(t('settings.usage.weekly'), usage.used_weekly, usage.quota_weekly)}
+				{@render bar(t('settings.usage.monthly'), usage.used_monthly, usage.quota_monthly)}
 			</div>
 		{/if}
 
 		<div class="logs">
-			<div class="logs-h"><Activity size={13} /> 最近调用</div>
+			<div class="logs-h"><Activity size={13} /> {t('settings.usage.recentCalls')}</div>
 			{#if logs.length === 0}
-				<p class="hint">暂无调用记录</p>
+				<p class="hint">{t('settings.usage.noCalls')}</p>
 			{:else}
 				{#each logs.slice(0, 8) as l, i (l.created_at ?? i)}
 					<div class="logrow">

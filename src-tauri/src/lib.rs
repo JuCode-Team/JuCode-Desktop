@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
@@ -78,6 +79,25 @@ fn resolve_cwd() -> PathBuf {
     std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
 
+/// Confines a requested filesystem `path` to `root` (or the project root when no
+/// override is given). Canonicalizes both and rejects anything that resolves
+/// outside the root — defeating `../` traversal and symlink escapes. Returns the
+/// canonical path on success.
+fn confine_to_root(path: &Path, root: Option<&Path>) -> Result<PathBuf, String> {
+    let base = root.map(PathBuf::from).unwrap_or_else(resolve_cwd);
+    let canon_root = base
+        .canonicalize()
+        .map_err(|e| format!("failed to resolve project root: {e}"))?;
+    let canon_path = path
+        .canonicalize()
+        .map_err(|e| format!("failed to resolve path: {e}"))?;
+    if canon_path.starts_with(&canon_root) {
+        Ok(canon_path)
+    } else {
+        Err("path is outside the project root".to_string())
+    }
+}
+
 /// Spawns a new engine process for `session`. The frontend generates the id and
 /// registers its event listener before calling this, so no startup event is lost.
 #[tauri::command]
@@ -100,8 +120,14 @@ fn create_session(
         .spawn()
         .map_err(|error| format!("failed to start jucode serve: {error}"))?;
 
-    let stdout = child.stdout.take().expect("child stdout");
-    let stdin = child.stdin.take().expect("child stdin");
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "failed to capture child stdout".to_string())?;
+    let stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| "failed to capture child stdin".to_string())?;
 
     let id = session.clone();
     let handle = app.clone();
@@ -125,13 +151,17 @@ fn create_session(
         let _ = handle.emit("agent-exit", id.clone());
     });
 
-    engines.sessions.lock().unwrap().insert(
-        session,
-        Arc::new(Session {
-            stdin: Mutex::new(stdin),
-            child: Mutex::new(child),
-        }),
-    );
+    engines
+        .sessions
+        .lock()
+        .map_err(|e| format!("lock poisoned: {e}"))?
+        .insert(
+            session,
+            Arc::new(Session {
+                stdin: Mutex::new(stdin),
+                child: Mutex::new(child),
+            }),
+        );
     Ok(())
 }
 
@@ -144,7 +174,7 @@ fn send_op(
     let target = engines
         .sessions
         .lock()
-        .unwrap()
+        .map_err(|e| format!("lock poisoned: {e}"))?
         .get(&session)
         .cloned()
         .ok_or_else(|| format!("unknown session: {session}"))?;
@@ -315,7 +345,40 @@ fn jucode_access_token() -> Result<String, String> {
     if !access.is_empty() && access_exp > now + 120 {
         return Ok(access);
     }
-    let url = format!("{}/v1/oauth/token", jucode_api_url());
+    // Serialize the read-modify-write of auth.json so two concurrent refreshes
+    // can't clobber each other's rotated refresh token.
+    static REFRESH_LOCK: std::sync::OnceLock<Mutex<()>> = std::sync::OnceLock::new();
+    let _guard = REFRESH_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|e| format!("lock poisoned: {e}"))?;
+    // Re-read after acquiring the lock: another thread may have just refreshed.
+    let fresh = read_json(&path);
+    let fresh_jucode = fresh.get("jucode").cloned().unwrap_or_else(|| serde_json::json!({}));
+    let fresh_access = fresh_jucode
+        .get("access_token")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let fresh_exp = fresh_jucode
+        .get("access_expires_at")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    if !fresh_access.is_empty() && fresh_exp > now + 120 {
+        return Ok(fresh_access);
+    }
+    let refresh = fresh_jucode
+        .get("refresh_token")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .unwrap_or(refresh);
+    let api_url = jucode_api_url();
+    // The token endpoint carries the refresh token; refuse to send it over cleartext.
+    if !api_url.starts_with("https://") {
+        return Err("refusing to refresh JuCode token over non-https endpoint".to_string());
+    }
+    let url = format!("{}/v1/oauth/token", api_url);
     let resp: serde_json::Value = ureq::post(&url)
         .timeout(std::time::Duration::from_secs(30))
         .send_json(serde_json::json!({
@@ -424,9 +487,16 @@ fn fetch_deepseek_balance() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 fn close_session(session: String, engines: tauri::State<Engines>) -> Result<(), String> {
-    if let Some(target) = engines.sessions.lock().unwrap().remove(&session) {
+    let removed = engines
+        .sessions
+        .lock()
+        .map_err(|e| format!("lock poisoned: {e}"))?
+        .remove(&session);
+    if let Some(target) = removed {
         if let Ok(mut child) = target.child.lock() {
             let _ = child.kill();
+            // Reap the process so it doesn't linger as a zombie.
+            let _ = child.wait();
         }
     }
     Ok(())
@@ -546,7 +616,8 @@ struct FsEntry {
 /// Lists a directory (defaults to the project root), directories first.
 #[tauri::command]
 fn list_dir(path: Option<String>) -> Result<Vec<FsEntry>, String> {
-    let dir = path.map(PathBuf::from).unwrap_or_else(resolve_cwd);
+    let requested = path.map(PathBuf::from).unwrap_or_else(resolve_cwd);
+    let dir = confine_to_root(&requested, None)?;
     let mut entries = Vec::new();
     for entry in std::fs::read_dir(&dir).map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;
@@ -632,7 +703,13 @@ fn walk_files(root: &Path, dir: &Path, out: &mut Vec<String>) {
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
         let path = entry.path();
-        if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+        let file_type = entry.file_type().ok();
+        // Never follow symlinks: a symlink like node_modules -> /etc could escape
+        // the project root.
+        if file_type.map(|t| t.is_symlink()).unwrap_or(false) {
+            continue;
+        }
+        if file_type.map(|t| t.is_dir()).unwrap_or(false) {
             if SKIP_DIRS.contains(&name.as_str()) {
                 continue;
             }
@@ -686,17 +763,53 @@ fn save_temp_image(data: Vec<u8>, ext: String) -> Result<String, String> {
 /// Reads a UTF-8 text file (size-capped). Returns an error for binary/oversized files.
 #[tauri::command]
 fn read_text(path: String) -> Result<String, String> {
-    let meta = std::fs::metadata(&path).map_err(|e| e.to_string())?;
+    let safe = confine_to_root(&PathBuf::from(&path), None)?;
+    let meta = std::fs::metadata(&safe).map_err(|e| e.to_string())?;
     if meta.len() > MAX_TEXT_READ {
         return Err(format!("file too large to view ({} bytes)", meta.len()));
     }
-    let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+    let bytes = std::fs::read(&safe).map_err(|e| e.to_string())?;
     String::from_utf8(bytes).map_err(|_| "not a UTF-8 text file".to_string())
+}
+
+/// Subcommands the GUI is allowed to run through the `git` bridge — read-only
+/// inspection plus the local staging/commit workflow. Anything that can talk to a
+/// remote or run arbitrary programs is intentionally excluded.
+const GIT_SUBCOMMANDS: &[&str] = &[
+    "status", "log", "diff", "add", "reset", "restore", "commit", "stash", "show",
+    "rev-parse", "branch", "checkout", "ls-files",
+];
+
+/// Rejects git argument vectors that could be used to run arbitrary code or reach a
+/// remote host: the first arg must be a whitelisted subcommand, and no arg may set a
+/// config value, an exec path, or an upload/receive-pack override.
+fn validate_git_args(args: &[String]) -> Result<(), String> {
+    let sub = args
+        .first()
+        .ok_or_else(|| "no git subcommand given".to_string())?;
+    if !GIT_SUBCOMMANDS.contains(&sub.as_str()) {
+        return Err(format!("git subcommand not allowed: {sub}"));
+    }
+    for arg in args {
+        if arg == "-c"
+            || arg == "--config"
+            || arg.starts_with("--upload-pack")
+            || arg.starts_with("--receive-pack")
+            || arg.starts_with("--exec")
+            || arg.starts_with("--upload-pack=")
+            || arg.starts_with("--receive-pack=")
+            || arg.starts_with("--exec=")
+        {
+            return Err(format!("git argument not allowed: {arg}"));
+        }
+    }
+    Ok(())
 }
 
 /// Runs a git command in the project root and returns stdout (or stderr on failure).
 #[tauri::command(async)]
 fn git(args: Vec<String>, cwd: Option<String>) -> Result<String, String> {
+    validate_git_args(&args)?;
     let dir = cwd.map(PathBuf::from).unwrap_or_else(resolve_cwd);
     let output = Command::new("git")
         .args(&args)
@@ -716,6 +829,8 @@ struct Pty {
     writer: Mutex<Box<dyn Write + Send>>,
     master: Mutex<Box<dyn portable_pty::MasterPty + Send>>,
     child: Mutex<Box<dyn portable_pty::Child + Send + Sync>>,
+    /// Set by `pty_close` to tell the reader thread to stop before the child is killed.
+    stop: Arc<AtomicBool>,
 }
 
 #[derive(Default)]
@@ -763,11 +878,16 @@ fn pty_open(
     let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
     let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
 
+    let stop = Arc::new(AtomicBool::new(false));
     let handle = app.clone();
     let stream_id = id.clone();
+    let reader_stop = stop.clone();
     std::thread::spawn(move || {
         let mut buf = [0u8; 4096];
         loop {
+            if reader_stop.load(Ordering::Relaxed) {
+                break;
+            }
             match reader.read(&mut buf) {
                 Ok(0) | Err(_) => break,
                 Ok(n) => {
@@ -785,31 +905,45 @@ fn pty_open(
         let _ = handle.emit("pty-exit", stream_id.clone());
     });
 
-    ptys.map.lock().unwrap().insert(
-        id,
-        Arc::new(Pty {
-            writer: Mutex::new(writer),
-            master: Mutex::new(pair.master),
-            child: Mutex::new(child),
-        }),
-    );
+    ptys.map
+        .lock()
+        .map_err(|e| format!("lock poisoned: {e}"))?
+        .insert(
+            id,
+            Arc::new(Pty {
+                writer: Mutex::new(writer),
+                master: Mutex::new(pair.master),
+                child: Mutex::new(child),
+                stop,
+            }),
+        );
     Ok(())
 }
 
 #[tauri::command]
 fn pty_write(id: String, data: String, ptys: tauri::State<Ptys>) -> Result<(), String> {
-    let pty = ptys.map.lock().unwrap().get(&id).cloned();
+    let pty = ptys
+        .map
+        .lock()
+        .map_err(|e| format!("lock poisoned: {e}"))?
+        .get(&id)
+        .cloned();
     let pty = pty.ok_or_else(|| "unknown terminal".to_string())?;
-    let mut writer = pty.writer.lock().unwrap();
+    let mut writer = pty.writer.lock().map_err(|e| format!("lock poisoned: {e}"))?;
     writer.write_all(data.as_bytes()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn pty_resize(id: String, cols: u16, rows: u16, ptys: tauri::State<Ptys>) -> Result<(), String> {
     use portable_pty::PtySize;
-    let pty = ptys.map.lock().unwrap().get(&id).cloned();
+    let pty = ptys
+        .map
+        .lock()
+        .map_err(|e| format!("lock poisoned: {e}"))?
+        .get(&id)
+        .cloned();
     let pty = pty.ok_or_else(|| "unknown terminal".to_string())?;
-    let master = pty.master.lock().unwrap();
+    let master = pty.master.lock().map_err(|e| format!("lock poisoned: {e}"))?;
     master
         .resize(PtySize {
             rows,
@@ -822,8 +956,19 @@ fn pty_resize(id: String, cols: u16, rows: u16, ptys: tauri::State<Ptys>) -> Res
 
 #[tauri::command]
 fn pty_close(id: String, ptys: tauri::State<Ptys>) -> Result<(), String> {
-    if let Some(pty) = ptys.map.lock().unwrap().remove(&id) {
-        let _ = pty.child.lock().unwrap().kill();
+    let removed = ptys
+        .map
+        .lock()
+        .map_err(|e| format!("lock poisoned: {e}"))?
+        .remove(&id);
+    if let Some(pty) = removed {
+        // Stop the reader thread before killing so it doesn't spin on a dead fd.
+        pty.stop.store(true, Ordering::Relaxed);
+        if let Ok(mut child) = pty.child.lock() {
+            let _ = child.kill();
+            // Reap the process so it doesn't linger as a zombie.
+            let _ = child.wait();
+        }
     }
     Ok(())
 }

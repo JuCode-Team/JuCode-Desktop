@@ -3,6 +3,7 @@
 	import { ask } from '@tauri-apps/plugin-dialog';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import { git } from '$lib/protocol';
+	import { t } from '$lib/i18n';
 
 	// `files` is the session-tracked set of agent-edited paths; onRevert removes one.
 	let { cwd = '', files = [], onRevert }: { cwd?: string; files?: string[]; onRevert?: (p: string) => void } = $props();
@@ -52,14 +53,14 @@
 	async function showDiff(path: string) {
 		try {
 			const text = await git(['diff', '--no-color', '--', path], dir());
-			diff = { path, lines: classify(text || '（新文件或无可显示的 diff）') };
+			diff = { path, lines: classify(text || t('dock.changes.newFileDiff')) };
 		} catch (e) {
 			diff = { path, lines: classify(String(e)) };
 		}
 	}
 
 	async function revert(path: string) {
-		const ok = await ask(`还原「${path}」到改动前？此操作不可撤销。`, { title: '还原文件', kind: 'warning' });
+		const ok = await ask(t('dock.changes.revertConfirm', { path }), { title: t('dock.changes.revertTitle'), kind: 'warning' });
 		if (!ok) return;
 		busy = true;
 		error = '';
@@ -80,7 +81,7 @@
 <div class="changes">
 	<div class="bar">
 		<FileDiff size={14} class="ccol" />
-		<span class="title">本会话改动 <span class="count">{files.length}</span></span>
+		<span class="title">{t('dock.changes.title')} <span class="count">{files.length}</span></span>
 		<IconButton size="sm" onclick={refresh} label="refresh"><RefreshCw size={13} /></IconButton>
 	</div>
 	{#if error}
@@ -89,8 +90,8 @@
 	{#if files.length === 0}
 		<div class="empty">
 			<FileDiff size={26} />
-			<p>本会话暂无文件改动</p>
-			<span>AI 编辑文件后会在此列出</span>
+			<p>{t('dock.changes.empty')}</p>
+			<span>{t('dock.changes.emptyHint')}</span>
 		</div>
 	{:else}
 		<div class="list">
@@ -102,7 +103,7 @@
 						<span class="rdir">{f}</span>
 					</button>
 					{#if s}<span class="stat"><span class="add">+{s.add}</span> <span class="del">−{s.del}</span></span>{/if}
-					<IconButton size="sm" onclick={() => revert(f)} disabled={busy} label="还原" title="还原此文件"><Undo2 size={13} /></IconButton>
+					<IconButton size="sm" onclick={() => revert(f)} disabled={busy} label={t('dock.changes.revert')} title={t('dock.changes.revertFile')}><Undo2 size={13} /></IconButton>
 				</div>
 			{/each}
 		</div>

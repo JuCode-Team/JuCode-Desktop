@@ -9,6 +9,7 @@
 	import Button from '$lib/ui/Button.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import { focusTrap } from '$lib/focusTrap';
+	import { t } from '$lib/i18n';
 
 	let {
 		sessionId,
@@ -24,7 +25,7 @@
 		onClose: () => void;
 	} = $props();
 
-	const STEPS = ['环境检查', '登录账号', '开始使用'];
+	const STEPS = $derived([t('setup.steps.env'), t('setup.steps.login'), t('setup.steps.start')]);
 	let step = $state(0);
 	let env = $state<EnvReport | null>(null);
 	let checking = $state(true);
@@ -63,7 +64,7 @@
 		try {
 			installMsg = await installDependency('git');
 		} catch (e) {
-			installMsg = `自动安装不可用：${e}。请用下方命令手动安装。`;
+			installMsg = t('setup.installGit.autoInstallFailed', { e: String(e) });
 		} finally {
 			installing = false;
 		}
@@ -95,8 +96,8 @@
 </script>
 
 <div class="overlay" role="presentation">
-	<div class="wiz" role="dialog" aria-modal="true" tabindex="-1" aria-label="安装向导" use:focusTrap>
-		<button class="skip" onclick={finish} aria-label="skip" title="跳过"><X size={18} /></button>
+	<div class="wiz" role="dialog" aria-modal="true" tabindex="-1" aria-label={t('setup.wizardLabel')} use:focusTrap>
+		<button class="skip" onclick={finish} aria-label="skip" title={t('setup.skip')}><X size={18} /></button>
 
 		<div class="brand">JuCode</div>
 		<div class="steps">
@@ -111,15 +112,15 @@
 
 		<div class="body">
 			{#if step === 0}
-				<h2>检查运行环境</h2>
-				<p class="sub">JuCode 需要 git 来读取项目文件与版本管理。下面是检测结果。</p>
+				<h2>{t('setup.envCheck.title')}</h2>
+				<p class="sub">{t('setup.envCheck.sub')}</p>
 
 				<div class="checks">
 					<div class="dep">
 						<span class="dep-ico"><GitBranch size={17} /></span>
 						<div class="dep-txt">
 							<span class="dep-name">Git</span>
-							<span class="dep-detail">{gitOk ? env?.git.detail : '未检测到'}</span>
+							<span class="dep-detail">{gitOk ? env?.git.detail : t('setup.envCheck.notDetected')}</span>
 						</div>
 						<span class="dep-state" class:ok={gitOk} class:bad={!gitOk && !checking}>
 							{#if checking}<LoaderCircle size={15} class="spin" />{:else if gitOk}<Check size={16} />{:else}<X size={16} />{/if}
@@ -128,8 +129,8 @@
 					<div class="dep">
 						<span class="dep-ico"><Cpu size={17} /></span>
 						<div class="dep-txt">
-							<span class="dep-name">JuCode 引擎</span>
-							<span class="dep-detail">{engineOk ? env?.engine.detail : '未找到引擎二进制'}</span>
+							<span class="dep-name">{t('setup.envCheck.engineName')}</span>
+							<span class="dep-detail">{engineOk ? env?.engine.detail : t('setup.envCheck.engineNotFound')}</span>
 						</div>
 						<span class="dep-state" class:ok={engineOk} class:bad={!engineOk && !checking}>
 							{#if checking}<LoaderCircle size={15} class="spin" />{:else if engineOk}<Check size={16} />{:else}<X size={16} />{/if}
@@ -139,75 +140,75 @@
 
 				{#if !checking && !gitOk}
 					<div class="fix">
-						<div class="fix-head">安装 Git</div>
+						<div class="fix-head">{t('setup.installGit.head')}</div>
 						{#if env?.os === 'macos'}
-							<p class="fix-tip">点下方按钮触发系统「命令行工具」安装（含 git），在弹出的对话框中完成后点「重新检查」。</p>
+							<p class="fix-tip">{t('setup.installGit.tipMac')}</p>
 							<div class="fix-row">
 								<Button variant="primary" size="sm" disabled={installing} onclick={autoInstall}>
-									{#if installing}<LoaderCircle size={14} class="spin" /> 启动安装…{:else}<Download size={14} /> 自动安装{/if}
+									{#if installing}<LoaderCircle size={14} class="spin" /> {t('setup.installGit.starting')}{:else}<Download size={14} /> {t('setup.installGit.autoInstall')}{/if}
 								</Button>
-								<Button variant="ghost" size="sm" onclick={() => openUrl('https://git-scm.com/downloads')}><ExternalLink size={14} /> 下载页</Button>
+								<Button variant="ghost" size="sm" onclick={() => openUrl('https://git-scm.com/downloads')}><ExternalLink size={14} /> {t('setup.installGit.downloadPage')}</Button>
 							</div>
 							{#if installMsg}<p class="fix-msg">{installMsg}</p>{/if}
-							<div class="cmd"><code>{installCmd}</code><IconButton size="sm" onclick={copyCmd} label="copy" title="复制">{#if copied}<Check size={14} />{:else}<Copy size={14} />{/if}</IconButton></div>
+							<div class="cmd"><code>{installCmd}</code><IconButton size="sm" onclick={copyCmd} label="copy" title={t('common.copy')}>{#if copied}<Check size={14} />{:else}<Copy size={14} />{/if}</IconButton></div>
 						{:else}
-							<p class="fix-tip">在终端执行以下命令安装，完成后点「重新检查」。</p>
-							<div class="cmd"><code>{installCmd}</code><IconButton size="sm" onclick={copyCmd} label="copy" title="复制">{#if copied}<Check size={14} />{:else}<Copy size={14} />{/if}</IconButton></div>
-							<Button variant="ghost" size="sm" onclick={() => openUrl('https://git-scm.com/downloads')}><ExternalLink size={14} /> 官方下载页</Button>
+							<p class="fix-tip">{t('setup.installGit.tipOther')}</p>
+							<div class="cmd"><code>{installCmd}</code><IconButton size="sm" onclick={copyCmd} label="copy" title={t('common.copy')}>{#if copied}<Check size={14} />{:else}<Copy size={14} />{/if}</IconButton></div>
+							<Button variant="ghost" size="sm" onclick={() => openUrl('https://git-scm.com/downloads')}><ExternalLink size={14} /> {t('setup.installGit.officialDownloadPage')}</Button>
 						{/if}
 					</div>
 				{/if}
 
 				{#if !checking && !engineOk}
 					<div class="fix warn">
-						<div class="fix-head">未找到 JuCode 引擎</div>
-						<p class="fix-tip">正式安装包内置引擎；若你在开发环境，请设置 <code>JUCODE_BIN</code> 或在同级目录构建 JuCode-CLI。</p>
+						<div class="fix-head">{t('setup.engineMissing.head')}</div>
+						<p class="fix-tip">{@html t('setup.engineMissing.tip', { bin: '<code>JUCODE_BIN</code>' })}</p>
 					</div>
 				{/if}
 			{:else if step === 1}
-				<h2>登录 JuCode</h2>
-				<p class="sub">登录后即可使用 JuCode 托管的模型；也可以用自己的 API Key 接入任意兼容端点。</p>
+				<h2>{t('setup.loginOauth.title')}</h2>
+				<p class="sub">{t('setup.loginOauth.sub')}</p>
 
 				{#if loggedIn}
-					<div class="loginok"><span class="loginok-ico"><Check size={18} /></span> 已登录，可继续下一步。</div>
+					<div class="loginok"><span class="loginok-ico"><Check size={18} /></span> {t('setup.loginOauth.loggedIn')}</div>
 				{:else}
 					<div class="loginbox">
 						<Button variant="primary" full onclick={login} disabled={loggingIn}>
-							{#if loggingIn}<LoaderCircle size={15} class="spin" /> 等待浏览器授权…{:else}<LogIn size={15} /> 使用 JuCode 账号登录{/if}
+							{#if loggingIn}<LoaderCircle size={15} class="spin" /> {t('setup.loginOauth.waiting')}{:else}<LogIn size={15} /> {t('setup.loginOauth.loginBtn')}{/if}
 						</Button>
-						{#if loggingIn}<p class="hint center">已在浏览器中打开授权页，完成后会自动识别。</p>{/if}
-						<div class="or"><span>或</span></div>
-						<Button variant="secondary" full onclick={onOpenSettings}><KeyRound size={15} /> 使用 API Key / 自定义 Provider</Button>
+						{#if loggingIn}<p class="hint center">{t('setup.loginOauth.browserOpened')}</p>{/if}
+						<div class="or"><span>{t('setup.loginOauth.or')}</span></div>
+						<Button variant="secondary" full onclick={onOpenSettings}><KeyRound size={15} /> {t('setup.loginOauth.apiKeyBtn')}</Button>
 					</div>
 				{/if}
 			{:else}
 				<div class="done">
 					<span class="done-ico"><PartyPopper size={30} /></span>
-					<h2>一切就绪</h2>
+					<h2>{t('setup.done.title')}</h2>
 					<p class="sub center">
-						{gitOk ? 'Git 已就绪' : 'Git 仍缺失（部分功能受限）'} ·
-						{loggedIn ? '已登录' : '未登录（可稍后在设置中配置）'}
+						{gitOk ? t('setup.done.gitReady') : t('setup.done.gitMissing')} ·
+						{loggedIn ? t('setup.done.loggedIn') : t('setup.done.notLoggedIn')}
 					</p>
-					<p class="hint center">提示：<kbd>⌘K</kbd> 打开命令面板，<kbd>/</kbd> 唤起命令，<kbd>@</kbd> 引用文件。</p>
+					<p class="hint center">{@html t('setup.done.hint', { cmdk: '<kbd>⌘K</kbd>', slash: '<kbd>/</kbd>', at: '<kbd>@</kbd>' })}</p>
 				</div>
 			{/if}
 		</div>
 
 		<div class="foot">
 			{#if step === 0}
-				<Button variant="ghost" size="sm" onclick={runCheck} disabled={checking}><RefreshCw size={14} /> 重新检查</Button>
+				<Button variant="ghost" size="sm" onclick={runCheck} disabled={checking}><RefreshCw size={14} /> {t('setup.nav.recheck')}</Button>
 				<div class="spacer"></div>
-				<Button variant="ghost" size="sm" onclick={finish}>跳过</Button>
-				<Button variant="primary" size="sm" onclick={() => (step = 1)}>下一步</Button>
+				<Button variant="ghost" size="sm" onclick={finish}>{t('setup.nav.skip')}</Button>
+				<Button variant="primary" size="sm" onclick={() => (step = 1)}>{t('setup.nav.next')}</Button>
 			{:else if step === 1}
-				<Button variant="ghost" size="sm" onclick={() => (step = 0)}>上一步</Button>
+				<Button variant="ghost" size="sm" onclick={() => (step = 0)}>{t('setup.nav.prev')}</Button>
 				<div class="spacer"></div>
-				<Button variant="ghost" size="sm" onclick={() => (step = 2)}>暂不登录</Button>
-				<Button variant="primary" size="sm" onclick={() => (step = 2)} disabled={!loggedIn}>下一步</Button>
+				<Button variant="ghost" size="sm" onclick={() => (step = 2)}>{t('setup.nav.skipLogin')}</Button>
+				<Button variant="primary" size="sm" onclick={() => (step = 2)} disabled={!loggedIn}>{t('setup.nav.next')}</Button>
 			{:else}
-				<Button variant="ghost" size="sm" onclick={() => (step = 1)}>上一步</Button>
+				<Button variant="ghost" size="sm" onclick={() => (step = 1)}>{t('setup.nav.prev')}</Button>
 				<div class="spacer"></div>
-				<Button variant="primary" onclick={finish}><ShieldCheck size={15} /> 开始使用</Button>
+				<Button variant="primary" onclick={finish}><ShieldCheck size={15} /> {t('setup.nav.start')}</Button>
 			{/if}
 		</div>
 	</div>
@@ -413,7 +414,7 @@
 		line-height: 1.55;
 		color: var(--dim);
 	}
-	.fix-tip code {
+	.fix-tip :global(code) {
 		font-family: var(--font-mono);
 		font-size: 0.9em;
 		background: var(--surface2);
@@ -478,7 +479,7 @@
 	.hint.center {
 		text-align: center;
 	}
-	.hint kbd {
+	.hint :global(kbd) {
 		font-family: var(--font-mono);
 		font-size: 11px;
 		color: var(--dim);
@@ -515,7 +516,7 @@
 		color: var(--accent-bright);
 		margin-bottom: 4px;
 	}
-	.done kbd {
+	.done :global(kbd) {
 		font-family: var(--font-mono);
 		font-size: 11px;
 		color: var(--dim);

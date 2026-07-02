@@ -2,10 +2,19 @@
 	import DOMPurify from 'dompurify';
 	import { openUrl } from '@tauri-apps/plugin-opener';
 	import { renderMarkdown } from '$lib/markdown';
+	import { t } from '$lib/i18n';
 
 	let { text }: { text: string } = $props();
 
 	const html = $derived(DOMPurify.sanitize(renderMarkdown(text)));
+
+	// Only hand a link to the system opener if it carries an explicit, allowed
+	// scheme. The test is anchored and case-insensitive so tricks like
+	// "JavaScript:" or " javascript:" (already trimmed by the browser) can't slip
+	// through. Relative/schemeless hrefs return false — nothing is opened.
+	function isSafeExternalHref(href: string): boolean {
+		return /^(https?|mailto):/i.test(href.trim());
+	}
 
 	function onClick(e: MouseEvent) {
 		const el = e.target as HTMLElement;
@@ -16,8 +25,8 @@
 			const code = pre?.textContent ?? '';
 			navigator.clipboard?.writeText(code).catch(() => {});
 			const btn = copy as HTMLButtonElement;
-			btn.textContent = '已复制';
-			setTimeout(() => (btn.textContent = '复制'), 1400);
+			btn.textContent = t('common.copied');
+			setTimeout(() => (btn.textContent = t('common.copy')), 1400);
 			return;
 		}
 		const a = el.closest('a');
@@ -26,7 +35,7 @@
 			// Always stop the webview from navigating to a markdown link (it's
 			// LLM/file-supplied), and only hand safe schemes to the system opener.
 			e.preventDefault();
-			if (/^(https?|mailto):/i.test(href)) openUrl(href).catch(() => {});
+			if (isSafeExternalHref(href)) openUrl(href).catch(() => {});
 		}
 	}
 </script>

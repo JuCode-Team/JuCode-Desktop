@@ -1,0 +1,293 @@
+// Shell area: +page, Sidebar, CommandPalette, session/protocol runtime messages.
+// Populated during the shell-area i18n migration.
+const shell = {
+	zh: {
+		// notifications / runtime
+		notifyDone: '对话完成：{title}',
+		untitled: '未命名',
+
+		// agent lifecycle status
+		agentStatus: {
+			started: '已启动',
+			running: '运行中',
+			completed: '已完成',
+			interrupted: '已中断',
+			closed: '已关闭'
+		},
+
+		// pickers
+		picker: {
+			tree: '对话分支树',
+			model: '选择模型',
+			resume: '恢复历史会话',
+			checkpoint: '回退到历史回合'
+		},
+		notConfigured: '未配置',
+		pickerSearchPlaceholder: '筛选…',
+		empty: '(empty)',
+		noMatch: '无匹配',
+		noOptions: '暂无可选项',
+		pickerFoot: '↑↓ 选择 · Enter 确认 · Esc 关闭',
+
+		// header / panel
+		togglePanel: '侧边面板 · ⌘B',
+
+		// find bar
+		findPlaceholder: '在对话中查找…',
+		findNoResult: '无结果',
+		findPrev: '上一个',
+		findNext: '下一个',
+
+		// welcome / empty states
+		welcomeTip: '给 JuCode 指派一个任务，开始新对话',
+		hintCommand: '命令',
+		hintRef: '引用文件',
+		hintPalette: '命令面板',
+		hintImage: '拖入 / 粘贴图片',
+		noChat: '没有打开的对话',
+		startFromProject: '选择项目，开始对话',
+
+		// engine
+		engineDown: '引擎已停止运行',
+		restartEngine: '重启引擎',
+
+		// approval
+		approveCommand: '允许执行命令',
+		approveFile: '允许修改文件',
+		allowOnce: '允许一次',
+		allowAlways: '本会话始终允许',
+		deny: '拒绝',
+
+		// trust
+		trustLabel: '信任项目',
+		trustQuestion: '信任此项目？',
+		trustBody: '该项目包含可执行代码的本地技能或 hooks。信任后 JuCode 才会加载它们。',
+		distrust: '不信任',
+		trustRepo: '信任整个仓库',
+		trust: '信任',
+
+		// rewind
+		rewindLabel: '回退确认',
+		rewindQuestion: '回退到这一轮并重写？',
+		rewindBody: '对话会回退到这条消息发出前，<b>此后的文件改动也会一并还原</b>。原消息已填入输入框，可修改后重新发送。此操作不可撤销。',
+		rewindConfirm: '回退并重写',
+
+		// dialogs (page)
+		pickDirTitle: '选择项目目录',
+		closeProjectConfirm: '关闭「{name}」会结束其下 {count} 个对话，确定吗？',
+		closeProjectTitle: '关闭项目',
+		attachTitle: 'Attach files',
+
+		// sidebar
+		theme: {
+			system: '主题：跟随系统',
+			light: '主题：浅色',
+			dark: '主题：深色'
+		},
+		market: '市场',
+		sessionsByProject: '对话 · 按项目',
+		newProjectTitle: '新建项目（选择目录）',
+		history: '历史对话',
+		newSessionInProject: '在此项目下新建对话',
+		closeProject: '关闭项目',
+		awaitConfirm: '等待你的确认',
+		newSession: '+ 新建对话',
+		accountSettings: '账户与设置',
+		notLoggedIn: '未登录',
+		settings: '设置',
+		commandPalette: '命令面板',
+		toggleTheme: '切换主题',
+
+		// command palette
+		paletteLabel: '命令面板',
+		paletteSearch: '搜索命令或操作…',
+		paletteEmpty: '没有匹配的命令',
+		paletteFoot: '↑↓ 选择 · Enter 执行 · Esc 关闭',
+		cmd: {
+			newSession: '新建对话',
+			newSessionKw: 'new session 对话',
+			newProject: '新建项目',
+			newProjectKw: 'new project 项目 目录',
+			model: '切换模型 / 推理强度',
+			modelKw: 'model effort 模型',
+			rewind: '回退到历史回合',
+			rewindHint: '会还原文件改动',
+			rewindKw: 'rewind undo 回退 撤销',
+			resume: '恢复历史会话',
+			resumeKw: 'resume history 历史 恢复',
+			tree: '对话分支树',
+			treeKw: 'tree branch 分支 树',
+			compact: '压缩上下文',
+			compactKw: 'compact 压缩',
+			context: '上下文用量',
+			contextKw: 'context usage 上下文',
+			stats: '会话统计',
+			statsKw: 'stats 统计',
+			doctor: '环境诊断',
+			doctorKw: 'doctor 诊断',
+			market: '扩展市场',
+			marketKw: 'market skills 市场 技能 扩展',
+			settings: '设置',
+			settingsKw: 'settings 设置 provider',
+			setup: '安装向导 / 环境检查',
+			setupHint: 'git、登录',
+			setupKw: 'setup wizard env git login 安装 向导 环境 登录',
+			panel: '切换右侧面板',
+			panelKw: 'panel dock 面板',
+			theme: '切换主题',
+			themeKw: 'theme dark light 主题'
+		},
+
+		// session runtime (session.svelte.ts)
+		startFail: '无法启动引擎：{msg}',
+		restarting: '正在重启引擎…',
+		autoRestarting: '引擎已退出，正在自动重启…',
+		restartExhausted: '引擎多次退出，已暂停自动重启。点「重启引擎」重试。',
+		switchingTo: '正在切换到 {provider} · {model}…'
+	},
+	en: {
+		// notifications / runtime
+		notifyDone: 'Conversation done: {title}',
+		untitled: 'Untitled',
+
+		// agent lifecycle status
+		agentStatus: {
+			started: 'Started',
+			running: 'Running',
+			completed: 'Completed',
+			interrupted: 'Interrupted',
+			closed: 'Closed'
+		},
+
+		// pickers
+		picker: {
+			tree: 'Conversation branches',
+			model: 'Select model',
+			resume: 'Resume a session',
+			checkpoint: 'Rewind to a turn'
+		},
+		notConfigured: 'not configured',
+		pickerSearchPlaceholder: 'Filter…',
+		empty: '(empty)',
+		noMatch: 'No matches',
+		noOptions: 'No options available',
+		pickerFoot: '↑↓ Navigate · Enter Select · Esc Close',
+
+		// header / panel
+		togglePanel: 'Side panel · ⌘B',
+
+		// find bar
+		findPlaceholder: 'Find in conversation…',
+		findNoResult: 'No results',
+		findPrev: 'Previous',
+		findNext: 'Next',
+
+		// welcome / empty states
+		welcomeTip: 'Assign JuCode a task to start a new conversation',
+		hintCommand: 'Commands',
+		hintRef: 'Reference files',
+		hintPalette: 'Command palette',
+		hintImage: 'Drop / paste images',
+		noChat: 'No open conversation',
+		startFromProject: 'Pick a project to start',
+
+		// engine
+		engineDown: 'Engine has stopped',
+		restartEngine: 'Restart engine',
+
+		// approval
+		approveCommand: 'Allow running command',
+		approveFile: 'Allow file changes',
+		allowOnce: 'Allow once',
+		allowAlways: 'Always allow this session',
+		deny: 'Deny',
+
+		// trust
+		trustLabel: 'Trust project',
+		trustQuestion: 'Trust this project?',
+		trustBody: 'This project contains local skills or hooks with executable code. JuCode loads them only after you trust it.',
+		distrust: "Don't trust",
+		trustRepo: 'Trust whole repo',
+		trust: 'Trust',
+
+		// rewind
+		rewindLabel: 'Confirm rewind',
+		rewindQuestion: 'Rewind to this turn and rewrite?',
+		rewindBody: 'The conversation rewinds to before this message, <b>and file changes made after it are reverted too</b>. The original message is placed in the input box so you can edit and resend. This cannot be undone.',
+		rewindConfirm: 'Rewind and rewrite',
+
+		// dialogs (page)
+		pickDirTitle: 'Select project directory',
+		closeProjectConfirm: 'Closing "{name}" will end its {count} conversation(s). Continue?',
+		closeProjectTitle: 'Close project',
+		attachTitle: 'Attach files',
+
+		// sidebar
+		theme: {
+			system: 'Theme: follow system',
+			light: 'Theme: light',
+			dark: 'Theme: dark'
+		},
+		market: 'Market',
+		sessionsByProject: 'Conversations · by project',
+		newProjectTitle: 'New project (pick a directory)',
+		history: 'History',
+		newSessionInProject: 'New conversation in this project',
+		closeProject: 'Close project',
+		awaitConfirm: 'Awaiting your confirmation',
+		newSession: '+ New conversation',
+		accountSettings: 'Account & settings',
+		notLoggedIn: 'Not signed in',
+		settings: 'Settings',
+		commandPalette: 'Command palette',
+		toggleTheme: 'Toggle theme',
+
+		// command palette
+		paletteLabel: 'Command palette',
+		paletteSearch: 'Search commands or actions…',
+		paletteEmpty: 'No matching commands',
+		paletteFoot: '↑↓ Navigate · Enter Run · Esc Close',
+		cmd: {
+			newSession: 'New conversation',
+			newSessionKw: 'new session',
+			newProject: 'New project',
+			newProjectKw: 'new project directory',
+			model: 'Switch model / reasoning effort',
+			modelKw: 'model effort',
+			rewind: 'Rewind to a turn',
+			rewindHint: 'Reverts file changes',
+			rewindKw: 'rewind undo',
+			resume: 'Resume a session',
+			resumeKw: 'resume history',
+			tree: 'Conversation branches',
+			treeKw: 'tree branch',
+			compact: 'Compact context',
+			compactKw: 'compact',
+			context: 'Context usage',
+			contextKw: 'context usage',
+			stats: 'Session stats',
+			statsKw: 'stats',
+			doctor: 'Diagnose environment',
+			doctorKw: 'doctor',
+			market: 'Extension market',
+			marketKw: 'market skills',
+			settings: 'Settings',
+			settingsKw: 'settings provider',
+			setup: 'Setup wizard / env check',
+			setupHint: 'git, sign-in',
+			setupKw: 'setup wizard env git login',
+			panel: 'Toggle right panel',
+			panelKw: 'panel dock',
+			theme: 'Toggle theme',
+			themeKw: 'theme dark light'
+		},
+
+		// session runtime (session.svelte.ts)
+		startFail: 'Failed to start engine: {msg}',
+		restarting: 'Restarting engine…',
+		autoRestarting: 'Engine exited, auto-restarting…',
+		restartExhausted: 'Engine exited repeatedly; auto-restart paused. Click "Restart engine" to retry.',
+		switchingTo: 'Switching to {provider} · {model}…'
+	}
+};
+export default shell;

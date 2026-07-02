@@ -2,10 +2,11 @@
 	import { Store, Plus, History, X, LoaderCircle, Command, Moon, Sun, Monitor } from 'lucide-svelte';
 	import { themeState, cycleTheme } from '$lib/theme.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
+	import { t } from '$lib/i18n';
 	import type { Project } from '$lib/types';
 
 	const themeLabel = $derived(
-		themeState.pref === 'system' ? '主题：跟随系统' : themeState.pref === 'light' ? '主题：浅色' : '主题：深色'
+		themeState.pref === 'system' ? t('shell.theme.system') : themeState.pref === 'light' ? t('shell.theme.light') : t('shell.theme.dark')
 	);
 
 	let {
@@ -47,13 +48,13 @@
 	</div>
 
 	<div class="nav">
-		<button class="navcard" onclick={onMarket}><Store size={14} /><span>市场</span></button>
+		<button class="navcard" onclick={onMarket}><Store size={14} /><span>{t('shell.market')}</span></button>
 	</div>
 
 	<div class="sess-head">
-		<span>对话 · 按项目</span>
+		<span>{t('shell.sessionsByProject')}</span>
 		<div class="sess-actions">
-			<button onclick={onNewProject} aria-label="new project" title="新建项目（选择目录）"><Plus size={15} /></button>
+			<button onclick={onNewProject} aria-label="new project" title={t('shell.newProjectTitle')}><Plus size={15} /></button>
 		</div>
 	</div>
 
@@ -62,15 +63,15 @@
 			<div class="group">
 				<span class="group-name" title={p.path}>{p.name}</span>
 				<span class="group-count">{p.sessions.length}</span>
-				<button class="group-add" onclick={() => onHistory(p)} aria-label="history" title="历史对话"><History size={13} /></button>
-				<button class="group-add no-auto" onclick={() => onNewSession(p)} aria-label="new session" title="在此项目下新建对话"><Plus size={13} /></button>
+				<button class="group-add" onclick={() => onHistory(p)} aria-label="history" title={t('shell.history')}><History size={13} /></button>
+				<button class="group-add no-auto" onclick={() => onNewSession(p)} aria-label="new session" title={t('shell.newSessionInProject')}><Plus size={13} /></button>
 				{#if projects.length > 1}
-					<button class="group-x" onclick={() => onCloseProject(p)} aria-label="close project" title="关闭项目"><X size={12} /></button>
+					<button class="group-x" onclick={() => onCloseProject(p)} aria-label="close project" title={t('shell.closeProject')}><X size={12} /></button>
 				{/if}
 			</div>
 			{#each p.sessions as s (s.id)}
 				<button class="sess" class:on={s.id === activeId} onclick={() => onSelect(s.id)}>
-					<span class="sess-dot" class:busy={s.chat.busy} class:err={s.chat.engineState === 'exited'} class:unseen={s.chat.unseen && !s.chat.busy} class:attn={!!(s.chat.pendingApproval || s.chat.trustPrompt)} title={s.chat.pendingApproval || s.chat.trustPrompt ? '等待你的确认' : ''}></span>
+					<span class="sess-dot" class:busy={s.chat.busy} class:err={s.chat.engineState === 'exited'} class:unseen={s.chat.unseen && !s.chat.busy} class:attn={!!(s.chat.pendingApproval || s.chat.trustPrompt)} title={s.chat.pendingApproval || s.chat.trustPrompt ? t('shell.awaitConfirm') : ''}></span>
 					<span class="sess-title">{s.chat.title}</span>
 					{#if s.chat.busy}<LoaderCircle size={12} class="spin" />{/if}
 					<span
@@ -87,21 +88,21 @@
 				</button>
 			{/each}
 			{#if p.sessions.length === 0}
-				<button class="sess-empty" onclick={() => onNewSession(p)}>+ 新建对话</button>
+				<button class="sess-empty" onclick={() => onNewSession(p)}>{t('shell.newSession')}</button>
 			{/if}
 		{/each}
 	</div>
 
-	<button class="account" onclick={onSettings} title="账户与设置">
+	<button class="account" onclick={onSettings} title={t('shell.accountSettings')}>
 		<span class="acc-dot" class:on={loggedIn}></span>
-		<span class="acc-name">{loggedIn ? providerName : '未登录'}</span>
-		<span class="acc-go">设置</span>
+		<span class="acc-name">{loggedIn ? providerName : t('shell.notLoggedIn')}</span>
+		<span class="acc-go">{t('shell.settings')}</span>
 	</button>
 	<div class="side-foot">
-		<button class="foot-btn" onclick={onCommandPalette} title="命令面板">
-			<Command size={15} /><span>命令面板</span><kbd class="foot-kbd">⌘K</kbd>
+		<button class="foot-btn" onclick={onCommandPalette} title={t('shell.commandPalette')}>
+			<Command size={15} /><span>{t('shell.commandPalette')}</span><kbd class="foot-kbd">⌘K</kbd>
 		</button>
-		<IconButton onclick={cycleTheme} label="切换主题" title={themeLabel}>
+		<IconButton onclick={cycleTheme} label={t('shell.toggleTheme')} title={themeLabel}>
 			{#if themeState.pref === 'system'}<Monitor size={15} />{:else if themeState.pref === 'light'}<Sun size={15} />{:else}<Moon size={15} />{/if}
 		</IconButton>
 	</div>
