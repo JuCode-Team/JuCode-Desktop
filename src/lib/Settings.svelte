@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
-	import { X, LogIn, LogOut, KeyRound, SlidersHorizontal, Plus, Trash2, Zap, CircleCheck, ChevronDown, Wallet, LayoutDashboard } from 'lucide-svelte';
+	import { X, LogIn, LogOut, KeyRound, SlidersHorizontal, Plus, Trash2, Zap, CircleCheck, ChevronDown, Wallet, LayoutDashboard, Mic } from 'lucide-svelte';
 	import { readConfig, writeConfig, readAuthProviders, setAuthKey, removeAuthKey, listProviders, sendOp, fetchAccountInfo, fetchDeepseekBalance, type AccountInfo, type DeepseekBalance } from '$lib/protocol';
 	import Vendor from '$lib/Vendor.svelte';
 	import OverviewPanel from '$lib/OverviewPanel.svelte';
@@ -244,6 +244,17 @@
 	// Card click: not-logged-in jucode kicks off OAuth directly (no expand); other
 	// (key-based) providers expand to reveal the key input. Logged-in cards expand
 	// to show details.
+	// MiMo ASR key for composer voice input (stored as providers.mimo — a plain
+	// keyed provider from auth.json's perspective, but not a chat provider, so
+	// it gets its own group instead of a provider card).
+	let mimoKey = $state('');
+	async function saveMimoKey() {
+		if (!mimoKey.trim()) return;
+		await setAuthKey('mimo', mimoKey.trim());
+		keyed = await readAuthProviders();
+		mimoKey = '';
+	}
+
 	function cardClick(p: Provider, authed: boolean) {
 		if (p.id === 'jucode' && !authed) {
 			if (!loggingIn) login();
@@ -327,6 +338,19 @@
 						{:else}
 							<button class="addprov" onclick={openCreate}><Plus size={15} /> {t('settings.custom.add')}</button>
 						{/if}
+					</div>
+
+					<div class="group">
+						<div class="glabel"><Mic size={12} /> {t('settings.voice.groupLabel')}</div>
+						<p class="hint">{t('settings.voice.hint')}</p>
+						<div class="voicekey">
+							<TextField bind:value={mimoKey} type="password" placeholder={t('settings.voice.keyPlaceholder')} />
+							<Button variant="primary" size="sm" disabled={!mimoKey.trim()} onclick={saveMimoKey}>{t('settings.account.saveKey')}</Button>
+							{#if keyed.includes('mimo')}
+								<Button variant="ghost" size="sm" onclick={() => logout('mimo')}>{t('settings.account.clearKey')}</Button>
+							{/if}
+						</div>
+						{#if keyed.includes('mimo')}<p class="hint mt keyok"><CircleCheck size={13} /> {t('settings.account.keyed')}</p>{/if}
 					</div>
 				{:else}
 					<div class="group">
@@ -631,6 +655,18 @@
 		to {
 			transform: rotate(360deg);
 		}
+	}
+
+	.voicekey {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+	.keyok {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		color: var(--ok);
 	}
 
 	.addprov {

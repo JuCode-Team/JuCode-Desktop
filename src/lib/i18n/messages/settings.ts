@@ -35,6 +35,11 @@ const settings = {
 			clearKey: '清除密钥',
 			keyPlaceholder: '{id} API key · sk-…'
 		},
+		voice: {
+			groupLabel: '语音识别（小米 MiMo）',
+			hint: '配置 MiMo API key 后，输入框可通过麦克风语音输入（mimo-v2.5-asr 模型转写）。',
+			keyPlaceholder: 'MiMo API key'
+		},
 		custom: {
 			title: '新建自定义 Provider',
 			providerId: 'Provider ID',
@@ -156,6 +161,11 @@ const settings = {
 			saveKey: 'Save key',
 			clearKey: 'Clear key',
 			keyPlaceholder: '{id} API key · sk-…'
+		},
+		voice: {
+			groupLabel: 'Speech recognition (Xiaomi MiMo)',
+			hint: 'With a MiMo API key configured, the composer supports microphone voice input (transcribed by mimo-v2.5-asr).',
+			keyPlaceholder: 'MiMo API key'
 		},
 		custom: {
 			title: 'New custom provider',

@@ -3,7 +3,7 @@
 	import { listen } from '@tauri-apps/api/event';
 	import { getCurrentWebview } from '@tauri-apps/api/webview';
 	import { X, Check, PanelRight, ChevronDown, ChevronUp, ShieldAlert, Search } from 'lucide-svelte';
-	import { open, ask } from '@tauri-apps/plugin-dialog';
+	import { open, ask, message } from '@tauri-apps/plugin-dialog';
 	import { cycleTheme } from '$lib/theme.svelte';
 	import {
 		isPermissionGranted,
@@ -14,7 +14,17 @@
 	import { treeRows } from '$lib/tree';
 	import { shouldAutoApprove } from '$lib/approval';
 	import { focusTrap } from '$lib/focusTrap';
-	import { sendOp, readAuthProviders, listProviders, type EventPayload } from '$lib/protocol';
+	import {
+		sendOp,
+		readAuthProviders,
+		listProviders,
+		captureScreenshot,
+		startScreenRecording,
+		stopScreenRecording,
+		processVideo,
+		type EventPayload
+	} from '$lib/protocol';
+	import { browser, type WebRef } from '$lib/browser.svelte';
 	import { t } from '$lib/i18n';
 	import { SessionStore } from '$lib/session.svelte';
 	import Settings from '$lib/Settings.svelte';
@@ -60,8 +70,20 @@
 	})();
 	let input = $state('');
 	let attachments = $state<{ path: string; image: boolean }[]>([]);
+	// Videos attach as extracted keyframes (images) + a text description — the
+	// engine protocol only understands image paths.
+	let videos = $state<{ path: string; frames: string[]; duration: number }[]>([]);
+	// Page elements picked in the embedded browser. Each pick inserts an inline
+	// token ([网页元素#N:…]) into the composer text at the cursor, so the user can
+	// position/reorder/delete it inline; on submit the token expands in place into
+	// the full reference. Refs whose token was deleted are dropped.
+	type PickedRef = WebRef & { id: number };
+	let webRefs = $state<PickedRef[]>([]);
+	let refSeq = 0;
+	let recording = $state(false);
 	let scroller = $state<HTMLElement | null>(null);
-	let composerEl = $state<HTMLTextAreaElement | null>(null);
+	let composerEl = $state<HTMLElement | null>(null);
+	let composerRef = $state<{ insertToken: (t: string) => void } | undefined>();
 	let bottomH = $state(120);
 	let atBottom = $state(true);
 	let providers = $state<string[]>([]);
@@ -158,6 +180,30 @@
 		showRight = !showRight;
 		autoCollapsedRight = false;
 	}
+
+	// Opening a page in the embedded browser (agent tool / element pick / typed
+	// URL) must reveal the right dock, or the webview has nowhere to render.
+	$effect(() => {
+		if (browser.openSignal === 0) return;
+		untrack(() => {
+			showRight = true;
+			autoCollapsedRight = false;
+		});
+	});
+
+	// Native child webviews always paint above the DOM, so any modal overlay
+	// would appear underneath the browser — collapse it while a modal is open.
+	$effect(() => {
+		const modalOpen =
+			showSettings ||
+			showMarket ||
+			showSetup ||
+			showPalette ||
+			!!chat?.picker ||
+			!!chat?.trustPrompt ||
+			!!chat?.pendingRewind;
+		browser.setSuspended(modalOpen);
+	});
 
 	function startSidebarResize(e: PointerEvent) {
 		e.preventDefault();
@@ -370,8 +416,15 @@
 		if (chat) sendOp(activeId, { op: 'command', input: command });
 	}
 
+	const isVideo = (p: string) => /\.(mp4|mov|webm|mkv|avi|m4v)$/i.test(p);
+
 	function addAttachment(path: string) {
-		if (path && !attachments.some((a) => a.path === path)) attachments.push({ path, image: isImage(path) });
+		if (!path) return;
+		if (isVideo(path)) {
+			attachVideo(path);
+			return;
+		}
+		if (!attachments.some((a) => a.path === path)) attachments.push({ path, image: isImage(path) });
 	}
 	async function pickFiles() {
 		const sel = await open({ multiple: true, title: t('shell.attachTitle') });
@@ -379,18 +432,94 @@
 		for (const p of Array.isArray(sel) ? sel : [sel]) addAttachment(p);
 	}
 
+	// Video → keyframes: extraction happens on attach (not send) so the chip can
+	// show the result and errors surface immediately.
+	async function attachVideo(path: string) {
+		if (videos.some((v) => v.path === path)) return;
+		try {
+			const info = await processVideo(path);
+			videos.push({ path: info.path, frames: info.frames, duration: info.duration });
+		} catch (e) {
+			await message(String(e), { title: 'JuCode', kind: 'error' });
+		}
+	}
+
+	async function screenshot() {
+		try {
+			const path = await captureScreenshot();
+			if (path) {
+				attachments.push({ path, image: true });
+				composerEl?.focus();
+			}
+		} catch (e) {
+			await message(String(e), { title: 'JuCode', kind: 'error' });
+		}
+	}
+
+	async function toggleRecord() {
+		try {
+			if (!recording) {
+				await startScreenRecording();
+				recording = true;
+			} else {
+				recording = false;
+				const path = await stopScreenRecording();
+				await attachVideo(path);
+				composerEl?.focus();
+			}
+		} catch (e) {
+			recording = false;
+			await message(String(e), { title: 'JuCode', kind: 'error' });
+		}
+	}
+
+	// Serialize a picked element into model-readable context. Inserted in place of
+	// its inline token on submit.
+	function formatWebRef(r: PickedRef): string {
+		const lines = [
+			`[网页元素引用 #${r.id}] ${r.title || r.url}`,
+			`页面: ${r.url}`,
+			`选择器: ${r.selector}`
+		];
+		if (r.text) lines.push(`文本: ${r.text}`);
+		if (r.html) lines.push(`HTML:\n${r.html}`);
+		return lines.join('\n');
+	}
+
+	// Builds a reference token and inserts it as an atomic chip at the composer
+	// caret (via the rich editor). Falls back to appending to the text if the
+	// editor isn't mounted.
+	function insertRefToken(id: number, label: string) {
+		const clean = label.replace(/[\]\n\r]+/g, ' ').trim().slice(0, 24);
+		const token = clean ? `[网页元素#${id}:${clean}]` : `[网页元素#${id}]`;
+		if (composerRef) composerRef.insertToken(token);
+		else input = input && !/\s$/.test(input) ? `${input} ${token} ` : `${input}${token} `;
+	}
+
 	function submit() {
 		if (!chat) return;
 		const text = input.trim();
-		if (!text && attachments.length === 0) return;
+		if (!text && attachments.length === 0 && videos.length === 0) return;
 		if (text.startsWith('/')) {
 			sendOp(activeId, { op: 'command', input: text });
 		} else {
 			const images = attachments.filter((a) => a.image).map((a) => a.path);
 			const files = attachments.filter((a) => !a.image).map((a) => a.path);
 			let content = text;
+			// Expand each web-element token in place (order = its position in the
+			// text). Match by id so an edited descriptor still resolves; refs whose
+			// token was deleted are simply never expanded.
+			for (const ref of webRefs) {
+				const re = new RegExp(`\\[网页元素#${ref.id}(?::[^\\]]*)?\\]`, 'g');
+				if (re.test(content)) content = content.replace(re, `\n\n${formatWebRef(ref)}\n`);
+			}
+			content = content.replace(/\n{3,}/g, '\n\n').trim();
 			if (files.length)
 				content += `${content ? '\n\n' : ''}Attached files (read these):\n${files.join('\n')}`;
+			for (const v of videos) {
+				images.push(...v.frames);
+				content += `${content ? '\n\n' : ''}[视频附件] ${base(v.path)}（时长 ${v.duration.toFixed(1)} 秒）：已按时间等间隔抽取 ${v.frames.length} 个关键帧，随消息以图片附上（按时间先后排序），请结合这些关键帧理解视频内容。`;
+			}
 			// Echo the message instantly when it starts a turn now (a busy session
 			// queues it instead, shown in the composer's queue strip).
 			if (chat && !chat.busy) chat.optimisticUser(content);
@@ -398,6 +527,8 @@
 		}
 		input = '';
 		attachments = [];
+		videos = [];
+		webRefs = [];
 	}
 	function stop() {
 		sendOp(activeId, { op: 'interrupt' });
@@ -596,7 +727,31 @@
 			const undrop = await getCurrentWebview().onDragDropEvent((e) => {
 				if (e.payload.type === 'drop') for (const p of e.payload.paths) addAttachment(p);
 			});
-			cleanups.push(unlisten, unexit, undrop);
+			// Embedded-browser events: element picks become composer chips; nav/state
+			// updates flow into the browser store.
+			const unbrowser = await listen<Record<string, unknown>>('browser-event', (e) => {
+				const p = e.payload;
+				if (p.kind === 'element') {
+					browser.picking = false;
+					const ref: PickedRef = {
+						id: ++refSeq,
+						url: typeof p.url === 'string' ? p.url : '',
+						title: typeof p.title === 'string' ? p.title : '',
+						selector: typeof p.selector === 'string' ? p.selector : '',
+						tag: typeof p.tag === 'string' ? p.tag : '',
+						text: typeof p.text === 'string' ? p.text : '',
+						html: typeof p.html === 'string' ? p.html : ''
+					};
+					webRefs.push(ref);
+					insertRefToken(ref.id, ref.text || ref.tag || 'element');
+				} else {
+					browser.handleEvent(p);
+				}
+			});
+			cleanups.push(unlisten, unexit, undrop, unbrowser);
+			// The agent's browser_open tool navigates the embedded browser.
+			ChatState.onBrowserOpen = (url) => browser.open(url);
+			cleanups.push(() => (ChatState.onBrowserOpen = null));
 			if (disposed) {
 				cleanups.forEach((f) => f());
 				return;
@@ -733,13 +888,18 @@
 
 			<Composer
 				{chat}
+				bind:this={composerRef}
 				bind:input
 				bind:attachments
+				bind:videos
 				bind:el={composerEl}
+				{recording}
 				onSubmit={submit}
 				onStop={stop}
 				onSteer={() => sendOp(activeId, { op: 'steer' })}
 				onPick={pickFiles}
+				onScreenshot={screenshot}
+				onRecord={toggleRecord}
 				onModel={() => nav('/model')}
 				onEffort={chooseEffort}
 			/>

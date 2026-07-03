@@ -1,9 +1,11 @@
 <script lang="ts">
-	import { Send, Square, Paperclip, FastForward, ShieldCheck } from 'lucide-svelte';
+	import { Send, Square, Paperclip, FastForward, ShieldCheck, Camera, Video, CircleStop, Mic, LoaderCircle } from 'lucide-svelte';
+	import { message } from '@tauri-apps/plugin-dialog';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Vendor from '$lib/Vendor.svelte';
 	import Segmented from '$lib/ui/Segmented.svelte';
-	import { listFiles, saveTempImage } from '$lib/protocol';
+	import { listFiles, saveTempImage, transcribeAudio } from '$lib/protocol';
+	import { VoiceRecorder } from '$lib/audio';
 	import { buildEntries, mentionMatches, type AtEntry } from '$lib/mention';
 	import { t } from '$lib/i18n';
 	import SlashMenu from '$lib/composer/SlashMenu.svelte';
@@ -16,22 +18,30 @@
 		chat,
 		input = $bindable(),
 		attachments = $bindable(),
+		videos = $bindable([]),
 		el = $bindable(),
+		recording = false,
 		onSubmit,
 		onStop,
 		onSteer,
 		onPick,
+		onScreenshot,
+		onRecord,
 		onModel,
 		onEffort
 	}: {
 		chat: ChatState;
 		input: string;
 		attachments: { path: string; image: boolean }[];
-		el: HTMLTextAreaElement | null;
+		videos?: { path: string; frames: string[]; duration: number }[];
+		el: HTMLElement | null;
+		recording?: boolean;
 		onSubmit: () => void;
 		onStop: () => void;
 		onSteer: () => void;
 		onPick: () => void;
+		onScreenshot?: () => void;
+		onRecord?: () => void;
 		onModel: () => void;
 		onEffort: (ef: string) => void;
 	} = $props();
@@ -39,6 +49,118 @@
 	let slashIdx = $state(0);
 	let showEffort = $state(false);
 	let showApproval = $state(false);
+
+	// --- rich contenteditable editing surface ------------------------------
+	// `input` (bindable) stays the plain-text source of truth: a web-element chip
+	// serializes to its [网页元素#N:label] token, so all downstream logic (submit,
+	// slash, @-mention) keeps operating on a string. The DOM is the live editor;
+	// we sync OUT of it on input, and rebuild it only when `input` is changed
+	// programmatically (completion / refill / cleared on send) — never mid-typing.
+	let composing = $state(false);
+	let lastSync = '';
+	const TOKEN_RE = /\[网页元素#(\d+)(?::([^\]]*))?\]/g;
+
+	const tokenLabel = (token: string) => {
+		const m = /^\[网页元素#(\d+)(?::([^\]]*))?\]$/.exec(token);
+		return m ? (m[2]?.trim() || `#${m[1]}`) : token;
+	};
+	function makeChip(token: string): HTMLElement {
+		const span = document.createElement('span');
+		span.className = 'refchip';
+		span.contentEditable = 'false';
+		span.dataset.token = token;
+		span.textContent = tokenLabel(token);
+		return span;
+	}
+	// DOM → plain text: chips become their token, <br> becomes a newline.
+	function serialize(root: Node): string {
+		let out = '';
+		root.childNodes.forEach((n) => {
+			if (n.nodeType === Node.TEXT_NODE) out += n.nodeValue ?? '';
+			else if (n.nodeType === Node.ELEMENT_NODE) {
+				const e = n as HTMLElement;
+				if (e.dataset?.token) out += e.dataset.token;
+				else if (e.tagName === 'BR') out += '\n';
+				else out += serialize(e);
+			}
+		});
+		return out;
+	}
+	// Plain text → DOM: split out tokens into chip spans, the rest into text.
+	function renderInput(str: string) {
+		if (!el) return;
+		el.textContent = '';
+		const frag = document.createDocumentFragment();
+		let last = 0;
+		TOKEN_RE.lastIndex = 0;
+		let m: RegExpExecArray | null;
+		while ((m = TOKEN_RE.exec(str))) {
+			if (m.index > last) frag.appendChild(document.createTextNode(str.slice(last, m.index)));
+			frag.appendChild(makeChip(m[0]));
+			last = m.index + m[0].length;
+		}
+		if (last < str.length) frag.appendChild(document.createTextNode(str.slice(last)));
+		el.appendChild(frag);
+	}
+	function caretToEnd() {
+		if (!el) return;
+		const r = document.createRange();
+		r.selectNodeContents(el);
+		r.collapse(false);
+		const sel = window.getSelection();
+		sel?.removeAllRanges();
+		sel?.addRange(r);
+	}
+	function syncFromDom() {
+		if (!el) return;
+		const s = serialize(el);
+		// Normalize a WebKit-left empty state so the placeholder shows.
+		if (s === '' && el.childNodes.length) el.textContent = '';
+		lastSync = s;
+		input = s;
+	}
+	function insertNodesAtCaret(nodes: Node[]) {
+		if (!el || !nodes.length) return;
+		el.focus();
+		const sel = window.getSelection();
+		let range: Range;
+		if (sel && sel.rangeCount && el.contains(sel.anchorNode)) range = sel.getRangeAt(0);
+		else {
+			range = document.createRange();
+			range.selectNodeContents(el);
+			range.collapse(false);
+		}
+		range.deleteContents();
+		const frag = document.createDocumentFragment();
+		nodes.forEach((n) => frag.appendChild(n));
+		const lastNode = nodes[nodes.length - 1];
+		range.insertNode(frag);
+		const after = document.createRange();
+		after.setStartAfter(lastNode);
+		after.collapse(true);
+		sel?.removeAllRanges();
+		sel?.addRange(after);
+		syncFromDom();
+	}
+	function insertTextAtCaret(text: string) {
+		insertNodesAtCaret([document.createTextNode(text)]);
+	}
+	// Exposed to the page: drop a web-element reference chip at the caret.
+	export function insertToken(token: string) {
+		insertNodesAtCaret([makeChip(token), document.createTextNode(' ')]);
+	}
+
+	// Rebuild the editor DOM on external `input` changes only (slash/@ completion,
+	// edit/rewind refill, voice append, cleared on send). During typing input ===
+	// lastSync so this is a no-op; skipped mid-IME-composition to protect the caret.
+	$effect(() => {
+		const v = input;
+		if (!el || composing) return;
+		if (v === lastSync) return;
+		renderInput(v);
+		lastSync = v;
+		if (document.activeElement === el) caretToEnd();
+	});
 
 	const APPROVAL = $derived([
 		{ value: 'ask', label: t('chat.approvalAsk') },
@@ -180,22 +302,27 @@
 				return;
 			}
 		}
-		if (e.key === 'Enter' && !e.shiftKey) {
+		if (e.key === 'Enter') {
+			// contenteditable would otherwise insert a <div>/<br>; we control both:
+			// plain Enter submits, Shift+Enter inserts a newline (rendered via pre-wrap).
 			e.preventDefault();
-			onSubmit();
+			if (e.shiftKey) insertTextAtCaret('\n');
+			else onSubmit();
 		}
 	}
 
 	// Paste an image straight from the clipboard: write it to a temp file and
 	// attach the path (screenshots, copied images — no need to save to disk first).
 	async function onPaste(e: ClipboardEvent) {
-		const items = e.clipboardData?.items;
-		if (!items) return;
-		for (const it of items) {
+		const dt = e.clipboardData;
+		if (!dt) return;
+		// Image paste → temp-file attachment (screenshots, copied images).
+		let imaged = false;
+		for (const it of dt.items) {
 			if (it.kind !== 'file' || !it.type.startsWith('image/')) continue;
 			const file = it.getAsFile();
 			if (!file) continue;
-			e.preventDefault();
+			imaged = true;
 			const ext = (it.type.split('/')[1] || 'png').replace(/[^a-z0-9]/gi, '') || 'png';
 			try {
 				const buf = new Uint8Array(await file.arrayBuffer());
@@ -205,16 +332,64 @@
 				/* ignore */
 			}
 		}
+		if (imaged) {
+			e.preventDefault();
+			return;
+		}
+		// Plain-text paste: insert as text so no rich HTML lands in the editor.
+		const text = dt.getData('text/plain');
+		if (text) {
+			e.preventDefault();
+			insertTextAtCaret(text);
+		}
 	}
 
-	// Grow the textarea with its content (up to the CSS max-height, then scroll).
-	// Tracks `input` so it also resizes on programmatic fills (slash/@/edit/rewind).
-	$effect(() => {
-		input;
-		if (!el) return;
-		el.style.height = 'auto';
-		el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
-	});
+	// Voice input: mic → 16 kHz WAV → MiMo ASR (Tauri backend) → append to the
+	// composer. Auto-stops at 3 min so the base64 payload stays under MiMo's
+	// 10 MB cap.
+	let voice = $state<'idle' | 'rec' | 'busy'>('idle');
+	let recorder: VoiceRecorder | null = null;
+	let voiceTimer: ReturnType<typeof setTimeout> | undefined;
+
+	async function toggleVoice() {
+		if (voice === 'busy') return;
+		if (voice === 'rec') return stopVoice();
+		try {
+			const r = new VoiceRecorder();
+			await r.start();
+			recorder = r;
+			voice = 'rec';
+			voiceTimer = setTimeout(stopVoice, 180_000);
+		} catch (e) {
+			recorder = null;
+			await message(t('chat.voiceMicError', { error: String(e) }), { title: 'JuCode', kind: 'error' });
+		}
+	}
+
+	async function stopVoice() {
+		if (!recorder) return;
+		clearTimeout(voiceTimer);
+		const { base64, seconds } = recorder.stop();
+		recorder = null;
+		// Accidental tap — nothing worth a round-trip.
+		if (seconds < 0.5) {
+			voice = 'idle';
+			return;
+		}
+		voice = 'busy';
+		try {
+			const text = (await transcribeAudio(base64)).trim();
+			if (text) {
+				input = input && !/\s$/.test(input) ? `${input} ${text}` : input + text;
+				el?.focus();
+			}
+		} catch (e) {
+			await message(String(e), { title: 'JuCode', kind: 'error' });
+		} finally {
+			voice = 'idle';
+		}
+	}
+
 </script>
 
 <div class="composer-wrap">
@@ -223,8 +398,13 @@
 	{:else if atQuery !== null}
 		<MentionMenu matches={atMatches} query={atQuery} selected={atIdx} onSelect={applyAt} onHover={(i) => (atIdx = i)} />
 	{/if}
-	{#if attachments.length}
-		<AttachmentChips {attachments} onRemove={(i) => attachments.splice(i, 1)} />
+	{#if attachments.length || videos.length}
+		<AttachmentChips
+			{attachments}
+			{videos}
+			onRemove={(i) => attachments.splice(i, 1)}
+			onRemoveVideo={(i) => videos.splice(i, 1)}
+		/>
 	{/if}
 	{#if chat.pendingMessages.length}
 		<div class="queued">
@@ -236,21 +416,53 @@
 		</div>
 	{/if}
 	<div class="composer">
-		<textarea
+		<div
+			class="rich"
+			class:empty={input === ''}
 			bind:this={el}
-			bind:value={input}
+			contenteditable="true"
+			role="combobox"
+			tabindex="0"
+			data-placeholder={t('chat.composerPlaceholder')}
+			oninput={syncFromDom}
 			onkeydown={onKey}
 			onpaste={onPaste}
-			rows="1"
-			placeholder={t('chat.composerPlaceholder')}
-			role="combobox"
+			oncompositionstart={() => (composing = true)}
+			oncompositionend={() => {
+				composing = false;
+				syncFromDom();
+			}}
 			aria-expanded={menuOpen}
 			aria-controls="composer-menu"
 			aria-autocomplete="list"
 			aria-activedescendant={activeOptionId}
-		></textarea>
+		></div>
 		<div class="composer-bar">
 			<IconButton onclick={onPick} label="attach" title={t('chat.attachTitle')}><Paperclip size={16} /></IconButton>
+			{#if onScreenshot}
+				<IconButton onclick={onScreenshot} label="screenshot" title={t('chat.screenshotTitle')}><Camera size={16} /></IconButton>
+			{/if}
+			{#if onRecord}
+				<button
+					class="recbtn"
+					class:on={recording}
+					onclick={onRecord}
+					aria-label="record screen"
+					title={recording ? t('chat.recordStopTitle') : t('chat.recordTitle')}
+				>
+					{#if recording}<CircleStop size={16} />{:else}<Video size={16} />{/if}
+				</button>
+			{/if}
+			<button
+				class="recbtn"
+				class:on={voice === 'rec'}
+				onclick={toggleVoice}
+				disabled={voice === 'busy'}
+				aria-label="voice input"
+				title={voice === 'rec' ? t('chat.voiceStopTitle') : voice === 'busy' ? t('chat.voiceBusyTitle') : t('chat.voiceTitle')}
+			>
+				{#if voice === 'busy'}<span class="vspin"><LoaderCircle size={16} /></span>{:else if voice === 'rec'}<CircleStop size={16} />{:else}<Mic size={16} />{/if}
+			</button>
 			<button class="flatbtn model" onclick={onModel} title={t('chat.switchModel')}>
 				<Vendor model={chat.model} size={15} /><span>{chat.model || 'model'}</span>
 			</button>
@@ -285,7 +497,7 @@
 			{#if chat.busy}
 				<button class="cact stop" onclick={onStop} aria-label="stop" title={t('chat.stopTitle')}><Square size={15} /></button>
 			{:else}
-				<button class="cact send" onclick={onSubmit} disabled={!input.trim() && !attachments.length} aria-label="send" title={t('chat.sendTitle')}><Send size={16} /></button>
+				<button class="cact send" onclick={onSubmit} disabled={!input.trim() && !attachments.length && !videos.length} aria-label="send" title={t('chat.sendTitle')}><Send size={16} /></button>
 			{/if}
 		</div>
 	</div>
@@ -308,9 +520,11 @@
 	.composer:focus-within {
 		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
 	}
-	textarea {
+	.rich {
 		width: 100%;
-		resize: none;
+		min-height: 22px;
+		max-height: 180px;
+		overflow-y: auto;
 		border: none;
 		outline: none;
 		background: transparent;
@@ -318,11 +532,38 @@
 		font-family: var(--font-sans);
 		font-size: 14px;
 		line-height: 1.55;
-		max-height: 180px;
 		padding: 2px 0 8px;
+		white-space: pre-wrap;
+		overflow-wrap: break-word;
+		word-break: break-word;
+		cursor: text;
 	}
-	textarea::placeholder {
+	.rich.empty::before {
+		content: attr(data-placeholder);
 		color: var(--dim2);
+		pointer-events: none;
+	}
+	/* Web-element reference chip: atomic (contenteditable=false), deletes as a unit.
+	   Chips are created in JS, so Svelte's scoped hash never lands on them — style
+	   them via :global, kept namespaced under the scoped .rich. */
+	.rich :global(.refchip) {
+		display: inline;
+		white-space: normal;
+		color: var(--accent-bright);
+		background: var(--accent-soft);
+		border-radius: 5px;
+		padding: 1px 6px 1px 5px;
+		margin: 0 1px;
+		box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 35%, transparent);
+		font-size: 12.5px;
+		-webkit-user-select: none;
+		user-select: none;
+		cursor: default;
+	}
+	.rich :global(.refchip)::before {
+		content: '🌐';
+		margin-right: 3px;
+		font-size: 10px;
 	}
 	.composer-bar {
 		display: flex;
@@ -407,6 +648,38 @@
 		background: var(--surface2);
 		border: 1px solid var(--border);
 		color: var(--err);
+	}
+	.recbtn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 7px;
+		border: none;
+		border-radius: var(--r-sm);
+		background: none;
+		color: var(--dim);
+		cursor: pointer;
+	}
+	.recbtn:hover {
+		background: var(--surface2);
+		color: var(--text);
+	}
+	.recbtn.on {
+		color: var(--err);
+		animation: pulse 1.2s ease-in-out infinite;
+	}
+	.recbtn:disabled {
+		cursor: default;
+		color: var(--dim2);
+	}
+	.vspin {
+		display: inline-flex;
+		animation: vspin 0.9s linear infinite;
+	}
+	@keyframes vspin {
+		to {
+			transform: rotate(360deg);
+		}
 	}
 
 	.queued {

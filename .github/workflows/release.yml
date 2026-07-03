@@ -21,16 +21,8 @@ jobs:
           - os: ubuntu-22.04 # Linux x86_64
           - os: windows-latest # Windows x86_64
     runs-on: ${{ matrix.os }}
-    env:
-      # The engine sidecar is built from the JuCode-CLI checkout below.
-      JUCODE_CLI_DIR: ${{ github.workspace }}/_engine
     steps:
       - uses: actions/checkout@v4
-      - name: Checkout engine (JuCode-CLI)
-        uses: actions/checkout@v4
-        with:
-          repository: JuCode-Team/JuCode-CLI
-          path: _engine
 
       - name: Install Linux dependencies
         if: matrix.os == 'ubuntu-22.04'
@@ -48,15 +40,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: |
-            src-tauri
-            _engine
+          workspaces: src-tauri
 
       - run: pnpm install --frozen-lockfile
 
-      # tauri-action runs beforeBuildCommand (pnpm bundle:engine && pnpm build),
-      # which builds the engine sidecar from JUCODE_CLI_DIR, then bundles the app
-      # and uploads the installers to a release named after the tag.
+      # tauri-action runs beforeBuildCommand (pnpm build), bundles the app and
+      # uploads the installers to a release named after the tag. The engine is
+      # no longer bundled — the app drives the system-installed `jucode` CLI.
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

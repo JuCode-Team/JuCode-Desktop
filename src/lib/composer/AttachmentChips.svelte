@@ -1,17 +1,28 @@
 <script lang="ts">
-	import { X, FileText } from 'lucide-svelte';
+	import { X, FileText, Film, Globe } from 'lucide-svelte';
 	import { convertFileSrc } from '@tauri-apps/api/core';
 	import IconButton from '$lib/ui/IconButton.svelte';
+	import type { WebRef } from '$lib/browser.svelte';
+	import { t } from '$lib/i18n';
 
 	let {
 		attachments,
-		onRemove
+		videos = [],
+		webRefs = [],
+		onRemove,
+		onRemoveVideo,
+		onRemoveRef
 	}: {
 		attachments: { path: string; image: boolean }[];
+		videos?: { path: string; frames: string[]; duration: number }[];
+		webRefs?: WebRef[];
 		onRemove: (i: number) => void;
+		onRemoveVideo?: (i: number) => void;
+		onRemoveRef?: (i: number) => void;
 	} = $props();
 
 	const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
+	const refLabel = (r: WebRef) => r.title || r.selector || r.url;
 </script>
 
 <div class="chips">
@@ -20,6 +31,22 @@
 			{#if a.image}<img class="chip-thumb" src={convertFileSrc(a.path)} alt="" />{:else}<FileText size={12} />{/if}
 			<span class="chip-name">{base(a.path)}</span>
 			<IconButton size="xs" onclick={() => onRemove(i)} label="remove"><X size={12} /></IconButton>
+		</span>
+	{/each}
+	{#each videos as v, i (v.path)}
+		<span class="chip videochip">
+			{#if v.frames.length}<img class="chip-thumb" src={convertFileSrc(v.frames[0])} alt="" />{:else}<Film size={12} />{/if}
+			<span class="chip-name">{base(v.path)}</span>
+			<span class="chip-meta">{t('chat.videoMeta', { s: v.duration.toFixed(0), n: v.frames.length })}</span>
+			<IconButton size="xs" onclick={() => onRemoveVideo?.(i)} label="remove"><X size={12} /></IconButton>
+		</span>
+	{/each}
+	{#each webRefs as r, i (r.url + r.selector + i)}
+		<span class="chip refchip" title={`${r.url}\n${r.selector}`}>
+			<Globe size={12} />
+			<span class="chip-name">{refLabel(r)}</span>
+			<span class="chip-meta">&lt;{r.tag}&gt;</span>
+			<IconButton size="xs" onclick={() => onRemoveRef?.(i)} label="remove"><X size={12} /></IconButton>
 		</span>
 	{/each}
 </div>
@@ -43,8 +70,14 @@
 		padding: 3px 5px 3px 8px;
 		max-width: 200px;
 	}
-	.chip.imgchip {
+	.chip.imgchip,
+	.chip.videochip {
 		padding: 3px 5px 3px 3px;
+	}
+	.chip.refchip {
+		max-width: 260px;
+		border-color: color-mix(in oklab, var(--accent) 35%, var(--border));
+		color: var(--accent-bright);
 	}
 	.chip-thumb {
 		width: 26px;
@@ -57,5 +90,11 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+	.chip-meta {
+		color: var(--dim2);
+		font-size: 11px;
+		white-space: nowrap;
+		flex-shrink: 0;
 	}
 </style>

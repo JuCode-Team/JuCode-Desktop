@@ -60,6 +60,11 @@ const arr = <T>(v: unknown) => (Array.isArray(v) ? (v as T[]) : []);
 
 /** Reactive chat state projected from the engine's AgentEvent stream. */
 export class ChatState {
+	/** Set by the page: invoked when the agent's `browser_open` tool succeeds,
+	 *  so the embedded browser panel navigates to the requested URL. Static —
+	 *  there's one browser panel regardless of which session's agent asked. */
+	static onBrowserOpen: ((url: string) => void) | null = null;
+
 	messages = $state<Msg[]>([]);
 	provider = $state('');
 	model = $state('');
@@ -292,6 +297,16 @@ export class ChatState {
 					t.output = str(ev.output);
 					t.running = false;
 					t.isError = ev.is_error === true;
+				}
+				// A successful browser_open acknowledgement carries the URL the agent
+				// wants shown — drive the embedded browser panel.
+				if (ev.is_error !== true && str(ev.name) === 'browser_open') {
+					try {
+						const out = JSON.parse(str(ev.output)) as Record<string, unknown>;
+						if (typeof out.url === 'string' && out.url) ChatState.onBrowserOpen?.(out.url);
+					} catch {
+						/* non-JSON output */
+					}
 				}
 				// Record files touched by a successful edit tool for the Changes panel.
 				if (ev.is_error !== true && EDIT_TOOLS.includes(str(ev.name))) {

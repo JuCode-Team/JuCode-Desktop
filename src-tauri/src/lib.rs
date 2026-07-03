@@ -7,6 +7,9 @@ use std::sync::{Arc, Mutex};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
+mod browser;
+mod capture;
+
 /// One `jucode serve` child process backing a single GUI session.
 struct Session {
     stdin: Mutex<ChildStdin>,
@@ -26,26 +29,32 @@ struct EventPayload {
     data: String,
 }
 
-/// Resolves the `jucode` binary: `JUCODE_BIN` override, then the bundled sidecar
-/// next to the app executable, then a sibling `JuCode-CLI` checkout / in-tree
-/// build (dev), then `jucode` on PATH.
+/// Resolves the `jucode` binary: `JUCODE_BIN` override, then the system-installed
+/// CLI on PATH, then a sibling `JuCode-CLI` checkout / in-tree build (dev
+/// convenience). The desktop app no longer bundles the engine — it drives
+/// whatever `jucode` the user has installed.
 fn resolve_bin() -> PathBuf {
     if let Ok(path) = std::env::var("JUCODE_BIN") {
         return PathBuf::from(path);
     }
-    // Packaged macOS app: use the externalBin sidecar next to the main binary.
-    // Only a real .app bundle — never in dev, where target/<profile>/jucode may be
-    // a stale externalBin copy that would shadow the freshly-built engine.
-    if let Ok(exe) = std::env::current_exe() {
-        if exe.to_string_lossy().contains(".app/Contents/MacOS") {
-            if let Some(sidecar) = exe.parent().map(|dir| dir.join("jucode")) {
-                if sidecar.exists() {
-                    return sidecar;
-                }
-            }
+    // System install (PATH). A packaged .app inherits a minimal PATH from
+    // launchd, so also probe the usual install locations directly.
+    if let Some(found) = which("jucode") {
+        return found;
+    }
+    let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
+    let well_known = [
+        PathBuf::from("/opt/homebrew/bin/jucode"),
+        PathBuf::from("/usr/local/bin/jucode"),
+        home.join(".cargo/bin/jucode"),
+        home.join(".local/bin/jucode"),
+    ];
+    for candidate in well_known {
+        if candidate.is_file() {
+            return candidate;
         }
     }
-    // Dev: the freshly-built engine from the sibling checkout.
+    // Dev fallback: the freshly-built engine from the sibling checkout.
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR")); // <repo>/src-tauri
     let candidates = [
         "../../JuCode-CLI/target/debug/jucode",
@@ -57,14 +66,6 @@ fn resolve_bin() -> PathBuf {
         let candidate = manifest.join(rel);
         if candidate.exists() {
             return candidate;
-        }
-    }
-    // Other packaging (Linux/Windows): sidecar next to the executable.
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(sidecar) = exe.parent().map(|dir| dir.join("jucode")) {
-            if sidecar.exists() {
-                return sidecar;
-            }
         }
     }
     PathBuf::from("jucode")
@@ -113,6 +114,8 @@ fn create_session(
         .unwrap_or_else(resolve_cwd);
     let mut child = Command::new(resolve_bin())
         .arg("serve")
+        // Lets the engine enable desktop-only tools (e.g. browser_open).
+        .env("JUCODE_DESKTOP", "1")
         .current_dir(dir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -485,6 +488,57 @@ fn fetch_deepseek_balance() -> Result<serde_json::Value, String> {
         .map_err(|e| e.to_string())
 }
 
+/// 语音转写：调用小米 MiMo ASR（OpenAI 兼容 chat/completions 端点，模型
+/// mimo-v2.5-asr），API key 存于 auth.json 的 providers.mimo。音频为 base64
+/// 编码的 WAV/MP3（编码后 ≤10MB），返回转写文本。
+#[tauri::command(async)]
+fn transcribe_audio(
+    audio_base64: String,
+    mime: Option<String>,
+    language: Option<String>,
+) -> Result<String, String> {
+    let key = read_json(&jucode_dir().join("auth.json"))
+        .get("providers")
+        .and_then(|p| p.get("mimo"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|k| !k.is_empty())
+        .ok_or_else(|| "未配置 MiMo API key（设置 → 账户 → 语音识别）".to_string())?;
+    let mime = mime.unwrap_or_else(|| "audio/wav".to_string());
+    let language = language.unwrap_or_else(|| "auto".to_string());
+    let body = serde_json::json!({
+        "model": "mimo-v2.5-asr",
+        "messages": [{
+            "role": "user",
+            "content": [{
+                "type": "input_audio",
+                "input_audio": { "data": format!("data:{mime};base64,{audio_base64}") }
+            }]
+        }],
+        "asr_options": { "language": language }
+    });
+    let resp = ureq::post("https://api.xiaomimimo.com/v1/chat/completions")
+        .timeout(std::time::Duration::from_secs(120))
+        .set("api-key", &key)
+        .send_json(body)
+        .map_err(|e| match e {
+            ureq::Error::Status(code, r) => format!(
+                "MiMo ASR 请求失败（HTTP {code}）：{}",
+                r.into_string().unwrap_or_default()
+            ),
+            other => other.to_string(),
+        })?
+        .into_json::<serde_json::Value>()
+        .map_err(|e| e.to_string())?;
+    resp.get("choices")
+        .and_then(|c| c.get(0))
+        .and_then(|c| c.get("message"))
+        .and_then(|m| m.get("content"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .ok_or_else(|| format!("无法解析转写结果：{resp}"))
+}
+
 #[tauri::command]
 fn close_session(session: String, engines: tauri::State<Engines>) -> Result<(), String> {
     let removed = engines
@@ -516,7 +570,7 @@ fn project_root() -> String {
 }
 
 /// Scans PATH for an executable named `cmd`, returning its full path.
-fn which(cmd: &str) -> Option<PathBuf> {
+pub(crate) fn which(cmd: &str) -> Option<PathBuf> {
     let path = std::env::var_os("PATH")?;
     for dir in std::env::split_paths(&path) {
         let candidate = dir.join(cmd);
@@ -982,6 +1036,7 @@ pub fn run() {
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(Engines::default())
         .manage(Ptys::default())
+        .manage(capture::Recorder::default())
         .invoke_handler(tauri::generate_handler![
             create_session,
             send_op,
@@ -996,6 +1051,7 @@ pub fn run() {
             fetch_usage,
             fetch_usage_logs,
             fetch_deepseek_balance,
+            transcribe_audio,
             project_root,
             list_providers,
             list_dir,
@@ -1008,7 +1064,19 @@ pub fn run() {
             pty_open,
             pty_write,
             pty_resize,
-            pty_close
+            pty_close,
+            browser::browser_open,
+            browser::browser_navigate,
+            browser::browser_back,
+            browser::browser_forward,
+            browser::browser_reload,
+            browser::browser_set_bounds,
+            browser::browser_close,
+            browser::browser_pick,
+            capture::capture_screenshot,
+            capture::start_screen_recording,
+            capture::stop_screen_recording,
+            capture::process_video
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -177,6 +177,33 @@ export function ptyClose(id: string): Promise<void> {
 	return invoke('pty_close', { id });
 }
 
+// Screen capture / recording / video keyframe extraction (Tauri layer).
+export function captureScreenshot(): Promise<string | null> {
+	return invoke('capture_screenshot');
+}
+export function startScreenRecording(): Promise<void> {
+	return invoke('start_screen_recording');
+}
+export function stopScreenRecording(): Promise<string> {
+	return invoke('stop_screen_recording');
+}
+export interface VideoInfo {
+	path: string;
+	duration: number;
+	width: number;
+	height: number;
+	frames: string[];
+}
+export function processVideo(path: string, maxFrames?: number): Promise<VideoInfo> {
+	return invoke('process_video', { path, maxFrames });
+}
+
+// Speech-to-text via Xiaomi MiMo ASR (key stored under providers.mimo in
+// auth.json; the HTTP call happens in the Tauri backend to bypass CSP/CORS).
+export function transcribeAudio(audioBase64: string, mime?: string, language?: string): Promise<string> {
+	return invoke('transcribe_audio', { audioBase64, mime, language });
+}
+
 // Events the engine emits on stdout, tagged with the originating session.
 export interface AgentEvent {
 	type: string;

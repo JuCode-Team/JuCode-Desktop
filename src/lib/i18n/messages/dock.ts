@@ -8,11 +8,22 @@ const dock = {
 			changes: '改动',
 			files: '文件',
 			git: 'Git',
-			term: '终端'
+			term: '终端',
+			browser: '浏览器'
 		},
 		dock: {
 			empty: '没有打开的面板',
 			hint: '选一个面板打开，或点右上角'
+		},
+		browser: {
+			urlPlaceholder: '输入网址，回车打开',
+			back: '后退',
+			forward: '前进',
+			reload: '刷新',
+			pick: '选择页面元素，引用到对话',
+			pickHint: '在页面中点击要引用的元素（Esc 取消）',
+			empty: '输入网址开始浏览',
+			emptyHint: 'AI 也可以通过 browser_open 工具在这里打开页面'
 		},
 		git: {
 			notRepo: '不是 Git 仓库',
@@ -74,11 +85,22 @@ const dock = {
 			changes: 'Changes',
 			files: 'Files',
 			git: 'Git',
-			term: 'Terminal'
+			term: 'Terminal',
+			browser: 'Browser'
 		},
 		dock: {
 			empty: 'No open panels',
 			hint: 'Pick a panel to open, or click the top-right'
+		},
+		browser: {
+			urlPlaceholder: 'Enter a URL and press Enter',
+			back: 'Back',
+			forward: 'Forward',
+			reload: 'Reload',
+			pick: 'Pick a page element to reference in chat',
+			pickHint: 'Click the element to reference (Esc to cancel)',
+			empty: 'Enter a URL to start browsing',
+			emptyHint: 'The AI can also open pages here via the browser_open tool'
 		},
 		git: {
 			notRepo: 'Not a Git repository',

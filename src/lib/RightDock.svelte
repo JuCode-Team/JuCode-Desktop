@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { X, Plus, ListTodo, Target, FileDiff, FolderTree, GitBranch, Terminal } from 'lucide-svelte';
+	import { untrack } from 'svelte';
+	import { X, Plus, ListTodo, Target, FileDiff, FolderTree, GitBranch, Terminal, Globe } from 'lucide-svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import GoalPanel from './GoalPanel.svelte';
 	import PlanPanel from './PlanPanel.svelte';
@@ -7,6 +8,8 @@
 	import GitPanel from './GitPanel.svelte';
 	import ChangesPanel from './ChangesPanel.svelte';
 	import TerminalPanel from './TerminalPanel.svelte';
+	import BrowserPanel from './BrowserPanel.svelte';
+	import { browser } from '$lib/browser.svelte';
 	import type { Goal, PlanStep } from '$lib/chat.svelte';
 	import { t } from '$lib/i18n';
 
@@ -24,7 +27,8 @@
 		{ key: 'changes', icon: FileDiff },
 		{ key: 'files', icon: FolderTree },
 		{ key: 'git', icon: GitBranch },
-		{ key: 'term', icon: Terminal }
+		{ key: 'term', icon: Terminal },
+		{ key: 'browser', icon: Globe }
 	];
 	const labelOf = (key: string) => (PANELS.some((p) => p.key === key) ? t(`dock.tabs.${key}`) : key);
 
@@ -77,11 +81,27 @@
 	});
 
 	function openPanel(panel: string) {
+		// The embedded browser is a singleton native webview — a second tab
+		// would fight over it, so re-activate the existing one instead.
+		if (panel === 'browser') {
+			const existing = openTabs.find((t) => t.panel === 'browser');
+			if (existing) {
+				active = existing.id;
+				addOpen = false;
+				return;
+			}
+		}
 		const id = newId();
 		openTabs = [...openTabs, { id, panel }];
 		active = id;
 		addOpen = false;
 	}
+
+	// A browser open (agent tool call, typed URL, element pick) reveals the tab.
+	$effect(() => {
+		if (browser.openSignal === 0) return;
+		untrack(() => openPanel('browser'));
+	});
 	function closeTab(id: string) {
 		const idx = openTabs.findIndex((t) => t.id === id);
 		openTabs = openTabs.filter((t) => t.id !== id);
@@ -166,7 +186,8 @@
 				{:else if tab.panel === 'changes'}<ChangesPanel {cwd} files={changed} onRevert={onRevertFile} />
 				{:else if tab.panel === 'files'}<FilesPanel rootDir={cwd} />
 				{:else if tab.panel === 'git'}<GitPanel {cwd} />
-				{:else if tab.panel === 'term'}<TerminalPanel {cwd} />{/if}
+				{:else if tab.panel === 'term'}<TerminalPanel {cwd} />
+				{:else if tab.panel === 'browser'}<BrowserPanel />{/if}
 			</div>
 		{/each}
 		{#if openTabs.length === 0}
