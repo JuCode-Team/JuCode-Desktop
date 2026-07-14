@@ -4,6 +4,7 @@
 
 	let {
 		pct,
+		atThreshold = false,
 		contextTokens,
 		contextLimit,
 		totalIn,
@@ -11,6 +12,9 @@
 		cost
 	}: {
 		pct: number;
+		// True only when contextLimit is the engine's real auto-compaction threshold
+		// (jucode). Otherwise we're gauging against the raw window → "context used".
+		atThreshold?: boolean;
 		contextTokens: number;
 		contextLimit: number;
 		totalIn: number;
@@ -26,7 +30,7 @@
 	<div class="ctx-pop">
 		<div class="ctx-row"><span>{t('chat.context')}</span><span class="ctx-val">{fmtTokens(contextTokens)} / {fmtTokens(contextLimit)}</span></div>
 		<div class="ctx-bar"><span class="ctx-fill" class:warn={pct >= 85} style:width="{pct}%"></span></div>
-		<div class="ctx-sub">{t('chat.toCompaction', { pct })}</div>
+		<div class="ctx-sub">{atThreshold ? t('chat.toCompaction', { pct }) : t('chat.contextUsed', { pct })}</div>
 		{#if totalIn || totalOut}<div class="ctx-row mt"><span>{t('chat.sessionUsage')}</span><span class="ctx-val">↑{fmtTokens(totalIn)} ↓{fmtTokens(totalOut)}</span></div>{/if}
 		{#if cost > 0}<div class="ctx-row"><span>{t('chat.cost')}</span><span class="ctx-val">${cost.toFixed(3)}</span></div>{/if}
 	</div>

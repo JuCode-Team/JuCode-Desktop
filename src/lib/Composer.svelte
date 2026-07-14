@@ -304,6 +304,10 @@
 
 	// Gauge against the auto-compaction limit, so a full ring means "about to
 	// compact" (falls back to the window if the engine didn't send a limit).
+	// Only jucode reports a real compaction threshold; claude/codex send limit 0,
+	// so we gauge against the raw window and label it "context used" instead of
+	// "to compaction" (which would be misleading — the CLI compacts before 100%).
+	const ctxAtThreshold = $derived(chat.contextLimit > 0);
 	const ctxLimit = $derived(chat.contextLimit || chat.contextWindow);
 	const ctxPct = $derived(
 		ctxLimit > 0 ? Math.min(100, Math.round((chat.contextTokens / ctxLimit) * 100)) : 0
@@ -571,7 +575,7 @@
 			{/if}
 			<div class="cspace"></div>
 			{#if bcaps.contextUsage && ctxLimit > 0}
-				<ContextIndicator pct={ctxPct} contextTokens={chat.contextTokens} contextLimit={ctxLimit} totalIn={chat.totalIn} totalOut={chat.totalOut} cost={chat.cost} />
+				<ContextIndicator pct={ctxPct} atThreshold={ctxAtThreshold} contextTokens={chat.contextTokens} contextLimit={ctxLimit} totalIn={chat.totalIn} totalOut={chat.totalOut} cost={chat.cost} />
 			{/if}
 			{#if chat.busy}
 				<button class="cact stop" onclick={onStop} aria-label="stop" title={t('chat.stopTitle')}><Square size={15} /></button>
