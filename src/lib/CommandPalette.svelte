@@ -6,6 +6,7 @@
 		PanelRight, SunMoon, ChevronRight, Wrench
 	} from 'lucide-svelte';
 	import type { ChatState } from '$lib/chat.svelte';
+	import { caps, type BackendCaps } from '$lib/backends';
 	import { focusTrap } from '$lib/focusTrap';
 	import { t } from '$lib/i18n';
 
@@ -48,8 +49,13 @@
 		icon: typeof Plus;
 		keywords?: string;
 		disabled?: boolean;
+		/** Backend capability required for the entry (omit = always shown). */
+		cap?: keyof BackendCaps;
 		run: () => void;
 	};
+
+	// Capability gating for the active session's engine backend.
+	const bcaps = $derived(caps(chat));
 
 	let query = $state('');
 	let idx = $state(0);
@@ -67,22 +73,23 @@
 			{ id: 'new-session', label: t('shell.cmd.newSession'), keys: '⌘N', icon: Plus, keywords: t('shell.cmd.newSessionKw'), disabled: !hasProject, run: wrap(onNewSession) },
 			{ id: 'new-project', label: t('shell.cmd.newProject'), icon: FolderPlus, keywords: t('shell.cmd.newProjectKw'), run: wrap(onNewProject) },
 			{ id: 'new-task', label: t('shell.cmd.newTask'), hint: t('shell.cmd.newTaskHint'), icon: GitBranchPlus, keywords: t('shell.cmd.newTaskKw'), disabled: !canNewTask, run: wrap(onNewTask) },
-			{ id: 'model', label: t('shell.cmd.model'), icon: Cpu, keywords: t('shell.cmd.modelKw'), run: wrap(() => onRun('/model')) },
-			{ id: 'rewind', label: t('shell.cmd.rewind'), hint: t('shell.cmd.rewindHint'), icon: RotateCcw, keywords: t('shell.cmd.rewindKw'), run: wrap(() => onRun('/rewind')) },
-			{ id: 'resume', label: t('shell.cmd.resume'), icon: History, keywords: t('shell.cmd.resumeKw'), run: wrap(() => onRun('/resume')) },
-			{ id: 'tree', label: t('shell.cmd.tree'), icon: GitBranch, keywords: t('shell.cmd.treeKw'), run: wrap(() => onRun('/tree')) },
-			{ id: 'compact', label: t('shell.cmd.compact'), icon: Layers, keywords: t('shell.cmd.compactKw'), run: wrap(() => onRun('/compact')) },
-			{ id: 'context', label: t('shell.cmd.context'), icon: Gauge, keywords: t('shell.cmd.contextKw'), run: wrap(() => onRun('/context')) },
-			{ id: 'stats', label: t('shell.cmd.stats'), icon: Activity, keywords: t('shell.cmd.statsKw'), run: wrap(() => onRun('/stats')) },
-			{ id: 'doctor', label: t('shell.cmd.doctor'), icon: Stethoscope, keywords: t('shell.cmd.doctorKw'), run: wrap(() => onRun('/doctor')) },
-			{ id: 'market', label: t('shell.cmd.market'), icon: Store, keywords: t('shell.cmd.marketKw'), run: wrap(onMarket) },
+			{ id: 'model', label: t('shell.cmd.model'), icon: Cpu, keywords: t('shell.cmd.modelKw'), cap: 'modelPicker', run: wrap(() => onRun('/model')) },
+			{ id: 'rewind', label: t('shell.cmd.rewind'), hint: t('shell.cmd.rewindHint'), icon: RotateCcw, keywords: t('shell.cmd.rewindKw'), cap: 'checkpoints', run: wrap(() => onRun('/rewind')) },
+			{ id: 'resume', label: t('shell.cmd.resume'), icon: History, keywords: t('shell.cmd.resumeKw'), cap: 'resume', run: wrap(() => onRun('/resume')) },
+			{ id: 'tree', label: t('shell.cmd.tree'), icon: GitBranch, keywords: t('shell.cmd.treeKw'), cap: 'branchTree', run: wrap(() => onRun('/tree')) },
+			{ id: 'compact', label: t('shell.cmd.compact'), icon: Layers, keywords: t('shell.cmd.compactKw'), cap: 'compact', run: wrap(() => onRun('/compact')) },
+			{ id: 'context', label: t('shell.cmd.context'), icon: Gauge, keywords: t('shell.cmd.contextKw'), cap: 'slashCommands', run: wrap(() => onRun('/context')) },
+			{ id: 'stats', label: t('shell.cmd.stats'), icon: Activity, keywords: t('shell.cmd.statsKw'), cap: 'slashCommands', run: wrap(() => onRun('/stats')) },
+			{ id: 'doctor', label: t('shell.cmd.doctor'), icon: Stethoscope, keywords: t('shell.cmd.doctorKw'), cap: 'slashCommands', run: wrap(() => onRun('/doctor')) },
+			{ id: 'market', label: t('shell.cmd.market'), icon: Store, keywords: t('shell.cmd.marketKw'), cap: 'skills', run: wrap(onMarket) },
 			{ id: 'settings', label: t('shell.cmd.settings'), keys: '⌘,', icon: SettingsIcon, keywords: t('shell.cmd.settingsKw'), run: wrap(onSettings) },
 			{ id: 'setup', label: t('shell.cmd.setup'), hint: t('shell.cmd.setupHint'), icon: Wrench, keywords: t('shell.cmd.setupKw'), run: wrap(onSetup) },
 			{ id: 'panel', label: t('shell.cmd.panel'), keys: '⌘B', icon: PanelRight, keywords: t('shell.cmd.panelKw'), run: wrap(onTogglePanel) },
 			{ id: 'theme', label: t('shell.cmd.theme'), icon: SunMoon, keywords: t('shell.cmd.themeKw'), run: wrap(onToggleTheme) }
 		];
 		const known = new Set(['/model', '/rewind', '/undo', '/resume', '/tree', '/compact', '/context', '/stats', '/doctor', '/new']);
-		const slash: Action[] = (chat?.commands ?? [])
+		const gated = curated.filter((a) => !a.cap || bcaps[a.cap]);
+		const slash: Action[] = (bcaps.slashCommands ? (chat?.commands ?? []) : [])
 			.filter((c) => !known.has(c.command))
 			.map((c) => ({
 				id: `cmd${c.command}`,
@@ -92,7 +99,7 @@
 				keywords: `${c.command} ${c.description ?? ''}`,
 				run: wrap(() => onRun(c.command))
 			}));
-		return [...curated, ...slash];
+		return [...gated, ...slash];
 	});
 
 	const filtered = $derived.by(() => {

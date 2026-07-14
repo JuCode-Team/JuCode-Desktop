@@ -5,7 +5,8 @@
 		LogIn, LoaderCircle, Copy, ShieldCheck, KeyRound, PartyPopper
 	} from 'lucide-svelte';
 	import { openUrl } from '@tauri-apps/plugin-opener';
-	import { sendOp, checkEnvironment, installDependency, type EnvReport } from '$lib/protocol';
+	import { checkEnvironment, installDependency, type EnvReport } from '$lib/protocol';
+	import { dispatch } from '$lib/backends/router';
 	import { gitInstallUi } from '$lib/setup';
 	import Button from '$lib/ui/Button.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
@@ -80,7 +81,7 @@
 	}
 
 	function login() {
-		sendOp(sessionId, { op: 'command', input: '/login' });
+		dispatch(sessionId, { op: 'command', input: '/login' });
 		loggingIn = true;
 	}
 	// Poll auth.json while waiting for the OAuth round-trip to land.

@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { X, Search, Download, LoaderCircle, RefreshCw } from 'lucide-svelte';
-	import { fetchMarketplace, sendOp, type MarketSkill } from '$lib/protocol';
+	import { fetchMarketplace, type MarketSkill } from '$lib/protocol';
+	import { dispatch } from '$lib/backends/router';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import Chip from '$lib/ui/Chip.svelte';
@@ -42,7 +43,7 @@
 
 	function install(s: MarketSkill) {
 		installing[s.id] = true;
-		sendOp(sessionId, { op: 'command', input: `/skills install ${s.id}` });
+		dispatch(sessionId, { op: 'command', input: `/skills install ${s.id}` });
 		setTimeout(() => (installing[s.id] = false), 2500);
 	}
 </script>

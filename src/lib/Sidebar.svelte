@@ -3,6 +3,8 @@
 	import { themeState, cycleTheme } from '$lib/theme.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import { t } from '$lib/i18n';
+	import { BACKEND_LABELS } from '$lib/backends';
+	import BackendIcon from '$lib/BackendIcon.svelte';
 	import type { Project } from '$lib/types';
 
 	const themeLabel = $derived(
@@ -90,6 +92,12 @@
 				<button class="sess" class:on={s.id === activeId} onclick={() => onSelect(s.id)}>
 					<span class="sess-dot" class:busy={s.chat.busy} class:err={s.chat.engineState === 'exited'} class:unseen={s.chat.unseen && !s.chat.busy} class:attn={!!(s.chat.pendingApproval || s.chat.trustPrompt)} title={s.chat.pendingApproval || s.chat.trustPrompt ? t('shell.awaitConfirm') : ''}></span>
 					<span class="sess-title">{s.chat.title}</span>
+					{#if s.backendId && s.backendId !== 'jucode'}
+						<!-- engine-backend badge (only when not the native engine) -->
+						<span class="backend-chip" title={BACKEND_LABELS[s.backendId]}>
+							<BackendIcon backend={s.backendId} size={11} />{BACKEND_LABELS[s.backendId].split(' ')[0]}
+						</span>
+					{/if}
 					{#if s.chat.busy}<LoaderCircle size={12} class="spin" />{/if}
 					<span
 						class="sess-x"
@@ -387,6 +395,20 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+	/* 非 jucode 引擎的小角标 */
+	.backend-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		font-size: 10px;
+		font-family: var(--font-mono);
+		color: var(--dim);
+		background: var(--surface2);
+		border: 1px solid var(--hairline);
+		border-radius: 999px;
+		padding: 1px 7px 1px 5px;
+		flex-shrink: 0;
 	}
 	.sess-x {
 		display: inline-flex;

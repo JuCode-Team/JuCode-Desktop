@@ -166,6 +166,24 @@ const shell = {
 		},
 
 		// session runtime (session.svelte.ts)
+		// 引擎后端（多后端支持）
+		backend: {
+			pickTitle: '选择引擎后端',
+			pickFoot: '↑↓ 选择 · Enter 确认 · Esc 关闭',
+			notFound: '未检测到',
+			descJucode: '原生引擎 · 完整功能',
+			descCodex: 'OpenAI Codex CLI',
+			descClaude: 'Claude Code CLI',
+			opUnsupported: '当前引擎后端不支持该操作：{op}',
+			codexAuthHint: 'Codex 认证已失效：请在终端运行 `codex login` 重新登录后重试。',
+			codexUnsupportedRequest: '已拒绝引擎的一个不支持的请求：{method}',
+			codexCmdGoal: '设置或查看会话目标（/goal <目标>，/goal clear 清除）',
+			claudeAuthHint:
+				'Claude Code 认证已失效：请在终端运行 `claude` 并执行 /login 重新登录（或运行 `claude setup-token`）后重试。',
+			claudeUnsupportedRequest: '已拒绝引擎的一个不支持的请求：{subtype}',
+			claudeHistoryFail: '读取 Claude Code 历史会话失败：{msg}'
+		},
+
 		startFail: '无法启动引擎：{msg}',
 		restarting: '正在重启引擎…',
 		autoRestarting: '引擎已退出，正在自动重启…',
@@ -337,6 +355,24 @@ const shell = {
 		},
 
 		// session runtime (session.svelte.ts)
+		// engine backends (multi-backend support)
+		backend: {
+			pickTitle: 'Choose engine backend',
+			pickFoot: '↑↓ select · Enter confirm · Esc close',
+			notFound: 'not found',
+			descJucode: 'Native engine · full feature set',
+			descCodex: 'OpenAI Codex CLI',
+			descClaude: 'Claude Code CLI',
+			opUnsupported: 'The current engine backend does not support this action: {op}',
+			codexAuthHint: 'Codex authentication is invalid: run `codex login` in a terminal, then retry.',
+			codexUnsupportedRequest: 'Declined an unsupported engine request: {method}',
+			codexCmdGoal: 'Set or view the session goal (/goal <objective>, /goal clear)',
+			claudeAuthHint:
+				'Claude Code authentication is invalid: run `claude` in a terminal and sign in with /login (or run `claude setup-token`), then retry.',
+			claudeUnsupportedRequest: 'Declined an unsupported engine request: {subtype}',
+			claudeHistoryFail: 'Failed to read Claude Code session history: {msg}'
+		},
+
 		startFail: 'Failed to start engine: {msg}',
 		restarting: 'Restarting engine…',
 		autoRestarting: 'Engine exited, auto-restarting…',

@@ -7,8 +7,13 @@ use std::sync::{Arc, Mutex};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
+mod backend;
 mod browser;
 mod capture;
+mod claude_history;
+mod shell_env;
+
+use backend::BackendKind;
 
 /// One `jucode serve` child process backing a single GUI session.
 struct Session {
@@ -30,62 +35,13 @@ struct EventPayload {
 }
 
 /// Resolves the `jucode` binary: `JUCODE_BIN` override, then the system-installed
-/// CLI on PATH, then a sibling `JuCode-CLI` checkout / in-tree build (dev
-/// convenience). The desktop app no longer bundles the engine — it drives
-/// whatever `jucode` the user has installed.
+/// CLI on PATH, then well-known install dirs, then a sibling `JuCode-CLI`
+/// checkout / in-tree build (dev convenience). The desktop app no longer
+/// bundles the engine — it drives whatever `jucode` the user has installed.
+/// (Resolution now lives in `backend::resolve_backend_bin`, shared with the
+/// codex / claude backends.)
 fn resolve_bin() -> PathBuf {
-    // On Windows the engine binary carries an .exe suffix.
-    let exe = if cfg!(windows) { "jucode.exe" } else { "jucode" };
-    if let Ok(path) = std::env::var("JUCODE_BIN") {
-        return PathBuf::from(path);
-    }
-    // System install (PATH). A packaged app inherits a minimal PATH (launchd on
-    // macOS, the desktop session elsewhere), so also probe the usual install
-    // locations directly.
-    if let Some(found) = which("jucode") {
-        return found;
-    }
-    // HOME on unix; USERPROFILE on Windows.
-    let home = std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
-        .unwrap_or_default();
-    let mut well_known: Vec<PathBuf> = Vec::new();
-    if cfg!(windows) {
-        // Per-user installer dir and the npm global prefix.
-        if let Some(la) = std::env::var_os("LOCALAPPDATA") {
-            well_known.push(PathBuf::from(la).join("Programs").join("jucode").join(exe));
-        }
-        if let Some(ad) = std::env::var_os("APPDATA") {
-            well_known.push(PathBuf::from(ad).join("npm").join(exe));
-        }
-        well_known.push(home.join(".cargo").join("bin").join(exe));
-    } else {
-        well_known.push(PathBuf::from("/opt/homebrew/bin/jucode")); // macOS (arm64 Homebrew)
-        well_known.push(PathBuf::from("/usr/local/bin/jucode")); // macOS (intel) / Linux
-        well_known.push(home.join(".cargo/bin/jucode"));
-        well_known.push(home.join(".local/bin/jucode")); // Linux per-user installs
-    }
-    for candidate in well_known {
-        if candidate.is_file() {
-            return candidate;
-        }
-    }
-    // Dev fallback: the freshly-built engine from the sibling checkout.
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR")); // <repo>/src-tauri
-    let candidates = [
-        format!("../../JuCode-CLI/target/debug/{exe}"),
-        format!("../../JuCode-CLI/target/release/{exe}"),
-        format!("../../target/debug/{exe}"),
-        format!("../../target/release/{exe}"),
-    ];
-    for rel in candidates {
-        let candidate = manifest.join(rel);
-        if candidate.exists() {
-            return candidate;
-        }
-    }
-    PathBuf::from("jucode")
+    backend::resolve_backend_bin(BackendKind::Jucode, None)
 }
 
 /// Working directory the agent operates in. `JUCODE_CWD` override, else the
@@ -140,27 +96,55 @@ fn confine_to_root(path: &Path, root: Option<&Path>) -> Result<PathBuf, String> 
 
 /// Spawns a new engine process for `session`. The frontend generates the id and
 /// registers its event listener before calling this, so no startup event is lost.
+///
+/// `backend` selects which agent CLI backs the session (default `"jucode"`,
+/// which keeps the historical behavior exactly); `backend_opts` is validated
+/// against that backend's fixed option allowlist (see `backend::validate_opts`)
+/// — the frontend can never pass raw argv.
 #[tauri::command]
 fn create_session(
     session: String,
     cwd: Option<String>,
+    backend: Option<String>,
+    backend_opts: Option<serde_json::Value>,
     app: AppHandle,
     engines: tauri::State<Engines>,
 ) -> Result<(), String> {
+    let kind = BackendKind::parse(backend.as_deref().unwrap_or("jucode"))?;
+    let opts = backend::validate_opts(kind, backend_opts.as_ref())?;
+    let bin = backend::resolve_backend_bin(kind, opts.bin_override.as_deref());
+    let args = backend::build_args(kind, &opts);
     let dir = cwd
         .map(PathBuf::from)
         .filter(|p| p.is_dir())
         .unwrap_or_else(resolve_cwd);
-    let mut child = Command::new(resolve_bin())
-        .arg("serve")
-        // Lets the engine enable desktop-only tools (e.g. browser_open).
-        .env("JUCODE_DESKTOP", "1")
+    let mut cmd = Command::new(bin);
+    cmd.args(&args)
         .current_dir(dir)
         .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .map_err(|error| format!("failed to start jucode serve: {error}"))?;
+        .stdout(Stdio::piped());
+    if kind == BackendKind::Jucode {
+        // jucode's stderr stays inherited (visible in the app's own stderr),
+        // exactly as before multi-backend support.
+        cmd.stderr(Stdio::inherit());
+    } else {
+        // codex / claude diagnostics matter to their adapters — pipe stderr and
+        // forward each line to the webview as a distinct `{__stderr: …}` payload.
+        cmd.stderr(Stdio::piped());
+    }
+    // 终端等价环境：快照可用则从零重建子进程环境（见 shell_env.rs），
+    // JUCODE_DESKTOP 让引擎启用桌面专属工具（如 browser_open），协议关键、
+    // 最后断言不可被用户自定义覆盖。
+    let explicit: &[(&str, &str)] = if kind == BackendKind::Jucode {
+        &[("JUCODE_DESKTOP", "1")]
+    } else {
+        &[]
+    };
+    shell_env::apply_to_command(&mut cmd, opts.use_shell_env, explicit, &opts.env);
+    let mut child = cmd.spawn().map_err(|error| match kind {
+        BackendKind::Jucode => format!("failed to start jucode serve: {error}"),
+        _ => format!("failed to start {} backend: {error}", kind.bin_name()),
+    })?;
 
     let stdout = child
         .stdout
@@ -170,6 +154,32 @@ fn create_session(
         .stdin
         .take()
         .ok_or_else(|| "failed to capture child stdin".to_string())?;
+
+    // Piped stderr (codex / claude): forward lines as {"__stderr": "<line>"}
+    // agent-event payloads so adapters can surface diagnostics.
+    if let Some(stderr) = child.stderr.take() {
+        let id = session.clone();
+        let handle = app.clone();
+        std::thread::spawn(move || {
+            let reader = BufReader::new(stderr);
+            for line in reader.lines() {
+                match line {
+                    Ok(line) if !line.trim().is_empty() => {
+                        let data = serde_json::json!({ "__stderr": line }).to_string();
+                        let _ = handle.emit(
+                            "agent-event",
+                            EventPayload {
+                                session: id.clone(),
+                                data,
+                            },
+                        );
+                    }
+                    Ok(_) => {}
+                    Err(_) => break,
+                }
+            }
+        });
+    }
 
     let id = session.clone();
     let handle = app.clone();
@@ -207,26 +217,91 @@ fn create_session(
     Ok(())
 }
 
-#[tauri::command]
-fn send_op(
-    session: String,
-    op: serde_json::Value,
-    engines: tauri::State<Engines>,
-) -> Result<(), String> {
+/// Writes one raw line (a single protocol frame) to a session child's stdin.
+fn write_line(engines: &Engines, session: &str, line: &str) -> Result<(), String> {
     let target = engines
         .sessions
         .lock()
         .map_err(|e| format!("lock poisoned: {e}"))?
-        .get(&session)
+        .get(session)
         .cloned()
         .ok_or_else(|| format!("unknown session: {session}"))?;
-    let line = serde_json::to_string(&op).map_err(|error| error.to_string())?;
     let mut stdin = target.stdin.lock().map_err(|error| error.to_string())?;
     stdin
         .write_all(line.as_bytes())
         .and_then(|_| stdin.write_all(b"\n"))
         .and_then(|_| stdin.flush())
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn send_op(
+    session: String,
+    op: serde_json::Value,
+    engines: tauri::State<Engines>,
+) -> Result<(), String> {
+    let line = serde_json::to_string(&op).map_err(|error| error.to_string())?;
+    write_line(&engines, &session, &line)
+}
+
+/// Raw stdin write for non-jucode backends: the frontend adapter composes its
+/// own protocol frame (JSON-RPC for codex, stream-json for claude) and sends it
+/// as one line. Embedded newlines are rejected — one call, one frame.
+#[tauri::command]
+fn send_line(
+    session: String,
+    line: String,
+    engines: tauri::State<Engines>,
+) -> Result<(), String> {
+    if line.contains('\n') || line.contains('\r') {
+        return Err("line must be a single frame (no embedded newlines)".to_string());
+    }
+    write_line(&engines, &session, &line)
+}
+
+/// Availability report for one backend binary (settings / new-session UI).
+#[derive(Serialize)]
+struct BackendStatus {
+    found: bool,
+    path: Option<String>,
+    version: Option<String>,
+}
+
+/// Probes a backend binary: resolves it (honoring `bin_override`) and runs
+/// `<bin> --version` with a short timeout. `found` reflects the binary's
+/// presence; `version` is best-effort.
+#[tauri::command(async)]
+fn check_backend(backend: String, bin_override: Option<String>) -> Result<BackendStatus, String> {
+    let kind = BackendKind::parse(&backend)?;
+    let bin = backend::resolve_backend_bin(kind, bin_override.as_deref());
+    // A bare name means "nothing found, hope PATH has it at spawn time" —
+    // resolve it through PATH for the report (None when truly absent).
+    let path = if bin.components().count() == 1 {
+        which(&bin.to_string_lossy())
+    } else if bin.is_file() {
+        Some(bin)
+    } else {
+        None
+    };
+    let Some(path) = path else {
+        return Ok(BackendStatus {
+            found: false,
+            path: None,
+            version: None,
+        });
+    };
+    let mut cmd = Command::new(&path);
+    cmd.arg("--version");
+    let version = run_with_timeout(cmd, std::time::Duration::from_secs(15))
+        .ok()
+        .filter(|out| out.status.success())
+        .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
+        .filter(|v| !v.is_empty());
+    Ok(BackendStatus {
+        found: true,
+        path: Some(path.display().to_string()),
+        version,
+    })
 }
 
 fn jucode_dir() -> PathBuf {
@@ -609,8 +684,18 @@ fn project_root() -> String {
 }
 
 /// Scans PATH for an executable named `cmd`, returning its full path.
+/// 终端环境快照可用时优先用快照 PATH（GUI 进程的 PATH 往往缺用户目录），
+/// 再回退进程自身 PATH。
 pub(crate) fn which(cmd: &str) -> Option<PathBuf> {
-    let path = std::env::var_os("PATH")?;
+    if let Some(snap) = shell_env::snapshot_path() {
+        if let Some(found) = which_in(cmd, std::ffi::OsString::from(snap)) {
+            return Some(found);
+        }
+    }
+    which_in(cmd, std::env::var_os("PATH")?)
+}
+
+fn which_in(cmd: &str, path: std::ffi::OsString) -> Option<PathBuf> {
     for dir in std::env::split_paths(&path) {
         let candidate = dir.join(cmd);
         if candidate.is_file() {
@@ -1291,10 +1376,8 @@ fn validate_git_args(args: &[String]) -> Result<(), String> {
             }
         }
         // remote 只用于列出（remote -v），不放行 add/set-url 等子操作。
-        "remote" => {
-            if !positionals.is_empty() {
-                return Err("git remote only supports listing (-v)".to_string());
-            }
+        "remote" if !positionals.is_empty() => {
+            return Err("git remote only supports listing (-v)".to_string());
         }
         _ => {}
     }
@@ -1532,6 +1615,9 @@ fn git(args: Vec<String>, cwd: Option<String>) -> Result<String, String> {
         .first()
         .is_some_and(|s| GIT_REMOTE_SUBCOMMANDS.contains(&s.as_str()));
     let mut cmd = Command::new("git");
+    // 远程操作需要终端环境（SSH agent、凭据助手的 PATH 等）——合并快照但
+    // 不清空，协议性变量随后显式覆盖。
+    shell_env::merge_into(&mut cmd);
     cmd.args(&args)
         .current_dir(dir)
         // 永不弹终端凭据提示：缺凭据直接失败，stderr 会带回前端展示。
@@ -1648,6 +1734,8 @@ fn gh(args: Vec<String>, cwd: Option<String>) -> Result<String, String> {
     validate_gh_args(&args)?;
     let dir = cwd.map(PathBuf::from).unwrap_or_else(resolve_cwd);
     let mut cmd = Command::new(resolve_gh());
+    // gh 的登录态/配置常依赖终端环境（GH_CONFIG_DIR、代理等）。
+    shell_env::merge_into(&mut cmd);
     cmd.args(&args)
         .current_dir(dir)
         // 全程非交互：未登录 / 缺配置时立即报错返回，绝不挂起等输入。
@@ -1916,6 +2004,8 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .setup(|app| {
+            // 异步捕获登录 shell 环境快照（不阻塞启动；见 shell_env.rs）。
+            shell_env::init_async();
             #[cfg(desktop)]
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
@@ -1946,6 +2036,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             create_session,
             send_op,
+            send_line,
+            check_backend,
+            shell_env::shell_env_status,
+            shell_env::refresh_shell_env,
             close_session,
             read_config,
             write_config,
@@ -1972,6 +2066,8 @@ pub fn run() {
             git,
             gh,
             worktree_base,
+            claude_history::claude_sessions,
+            claude_history::claude_session_transcript,
             pty_open,
             pty_write,
             pty_resize,

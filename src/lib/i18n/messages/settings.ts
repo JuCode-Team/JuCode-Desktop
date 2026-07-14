@@ -55,6 +55,28 @@ const settings = {
 			create: '创建',
 			add: '添加自定义 Provider'
 		},
+		backend: {
+			groupLabel: '引擎后端',
+			hint: '每个会话可选择由哪个 Agent CLI 驱动。可为各后端指定可执行文件路径（留空则按 PATH 与常见安装目录自动查找）。',
+			checking: '检测中…',
+			found: '已安装',
+			notFound: '未检测到，请安装或填写路径',
+			recheck: '重新检测',
+			pathPlaceholder: '{bin} 可执行文件路径（可选，覆盖自动查找）',
+			defaultLabel: '新会话默认后端',
+			defaultHint: '新建会话时默认使用的引擎；每个项目会记住其上次选择。',
+			mcpUnsupported: '当前会话的引擎后端不支持 MCP 管理。切换到 JuCode 引擎的会话后可在此管理 MCP 服务器。',
+			shellEnvLabel: '终端环境',
+			shellEnvCaptured: '已捕获 {count} 个变量（{shell}）',
+			shellEnvNotCaptured: '未捕获（将继承应用环境）',
+			shellEnvRefresh: '重新捕获终端环境',
+			shellEnvToggle: '使用终端环境启动引擎',
+			shellEnvHint:
+				'启动引擎时注入登录 shell 的环境快照（PATH、代理、证书等），使其行为与终端一致。关闭则继承应用自身环境。',
+			envLabel: '环境变量',
+			envPlaceholder: 'KEY=VALUE，每行一条（在终端环境快照之上追加）',
+			envInvalid: '以下行无效已忽略：{lines}'
+		},
 		behavior: {
 			defaultModel: '默认模型',
 			selectModel: '选择模型',
@@ -254,6 +276,28 @@ const settings = {
 			contextWindow: 'Window',
 			create: 'Create',
 			add: 'Add custom provider'
+		},
+		backend: {
+			groupLabel: 'Engine backends',
+			hint: 'Each session picks which agent CLI drives it. Optionally pin a binary path per backend (leave empty to auto-detect via PATH and common install dirs).',
+			checking: 'Checking…',
+			found: 'Installed',
+			notFound: 'Not found — install it or set a path',
+			recheck: 'Re-check',
+			pathPlaceholder: '{bin} binary path (optional, overrides auto-detection)',
+			defaultLabel: 'Default backend for new sessions',
+			defaultHint: 'The engine new sessions use by default; each project remembers its last choice.',
+			mcpUnsupported: 'The active session’s engine backend does not support MCP management. Switch to a JuCode-engine session to manage MCP servers here.',
+			shellEnvLabel: 'Terminal environment',
+			shellEnvCaptured: '{count} variables captured ({shell})',
+			shellEnvNotCaptured: 'Not captured (app environment will be inherited)',
+			shellEnvRefresh: 'Re-capture terminal environment',
+			shellEnvToggle: 'Launch engines with the terminal environment',
+			shellEnvHint:
+				'Injects a login-shell environment snapshot (PATH, proxies, certificates, …) when starting engines, so they behave exactly like in your terminal. Off = inherit the app environment.',
+			envLabel: 'Environment variables',
+			envPlaceholder: 'KEY=VALUE, one per line (applied on top of the snapshot)',
+			envInvalid: 'Invalid lines ignored: {lines}'
 		},
 		behavior: {
 			defaultModel: 'Default model',

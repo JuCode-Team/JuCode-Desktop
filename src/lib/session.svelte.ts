@@ -1,16 +1,21 @@
 import { ChatState } from './chat.svelte';
-import { sendOp, createSession, closeSession, projectRoot, writeConfig, git } from './protocol';
+import { createSession, closeSession, projectRoot, writeConfig, git, claudeSessionTranscript } from './protocol';
+import { createAdapter, normalizeBackendId, type BackendId } from './backends';
+import { dispatch, ioFor, registerAdapter, unregisterAdapter } from './backends/router';
+import { buildBackendOpts, defaultBackendFor } from './backends/settings';
 import { t } from '$lib/i18n';
-import type { Project, WorktreeMeta } from './types';
+import type { Project, Session, WorktreeMeta } from './types';
 
 // The persisted shape of a project + its open tabs (engine session id + title).
 export interface SavedProject {
 	id: string;
 	name: string;
 	path: string;
-	tabs?: { sid: string; title: string }[];
+	tabs?: { sid: string; title: string; backend?: string }[];
 	/** 并行任务 worktree 项目的元数据（isWorktree/mainRepoPath/branch/baseBranch/slug）。 */
 	worktree?: WorktreeMeta;
+	/** 本项目最近一次新建会话所用的引擎后端（缺省 = jucode）。 */
+	lastBackend?: string;
 }
 
 const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
@@ -52,35 +57,108 @@ export class SessionStore {
 		chat.messages.push({ kind: 'error', text: t('shell.startFail', { msg: String(e) }) });
 	}
 
-	/** Spawn a fresh session in `project` and make it active. `firstMessage`
-	 *  (e.g. a parallel task's 任务描述) is sent as the opening user turn once
-	 *  the engine is up. */
-	addSession(project: Project, firstMessage?: string) {
+	/** Builds a session record (chat + per-session adapter) and registers the
+	 *  adapter with the op router. */
+	#newSession(backendId: BackendId): Session {
 		const id = this.uid();
 		const chat = new ChatState();
-		project.sessions.push({ id, chat });
-		this.activeId = id;
-		createSession(id, project.path)
-			.then(() => {
-				if (firstMessage) {
-					chat.optimisticUser(firstMessage);
-					sendOp(id, { op: 'user_message', content: firstMessage });
-				}
-			})
-			.catch((e) => this.#engineFailed(chat, e));
-		return id;
+		chat.backendId = backendId;
+		const adapter = createAdapter(backendId);
+		registerAdapter(id, adapter);
+		return { id, chat, backendId, adapter };
 	}
 
-	/** Re-open a persisted conversation in a new session (resume by id). */
-	restoreSession(project: Project, sid: string, title: string) {
-		const id = this.uid();
-		const chat = new ChatState();
-		if (title) chat.title = title;
-		project.sessions.push({ id, chat });
-		createSession(id, project.path)
-			.then(() => sendOp(id, { op: 'command', input: `/resume ${sid}` }))
-			.catch((e) => this.#engineFailed(chat, e));
-		return id;
+	/** Spawns the engine child for `s`, invokes the adapter's onStart hook once
+	 *  it is up (initial spawn and every restart alike), then runs `after` in
+	 *  the same continuation (so a first message follows the handshake without
+	 *  an extra microtask hop). The plain jucode call stays exactly the
+	 *  historical two-argument createSession (byte-for-byte default behavior);
+	 *  other backends (or a configured bin override) pass backend + opts.
+	 *  `extraOpts` adds per-spawn options on top of the settings-derived ones
+	 *  (e.g. claude's allowlisted `resume` session id). `resume` instead rides
+	 *  the SessionCtx into the adapter, for backends whose resume is a protocol
+	 *  call after the handshake rather than a spawn flag (codex thread/resume). */
+	#spawn(
+		s: Session,
+		cwd: string | undefined,
+		after?: () => void,
+		extraOpts?: Record<string, unknown>,
+		resume?: string
+	) {
+		const base = buildBackendOpts(s.backendId);
+		const opts = extraOpts ? { ...(base ?? {}), ...extraOpts } : base;
+		const spawned =
+			s.backendId === 'jucode' && !opts
+				? createSession(s.id, cwd)
+				: createSession(s.id, cwd, s.backendId, opts ?? {});
+		return spawned.then(() => {
+			// The child is up and its stdout is being pumped — let the adapter
+			// send handshake frames / reset per-process state before any op flows.
+			s.adapter.onStart(ioFor(s.id), {
+				cwd: cwd ?? '',
+				approvalMode: s.chat.approvalMode,
+				sessionId: s.id,
+				...(resume ? { resume } : {})
+			});
+			after?.();
+		});
+	}
+
+	/** Spawn a fresh session in `project` and make it active. `firstMessage`
+	 *  (e.g. a parallel task's 任务描述) is sent as the opening user turn once
+	 *  the engine is up. `backend` overrides the project's last-used backend
+	 *  (which itself falls back to the settings default). */
+	addSession(project: Project, firstMessage?: string, backend?: BackendId) {
+		const backendId = backend ?? defaultBackendFor(project.lastBackend);
+		const s = this.#newSession(backendId);
+		project.sessions.push(s);
+		project.lastBackend = backendId;
+		this.activeId = s.id;
+		this.#spawn(s, project.path, () => {
+			if (firstMessage) {
+				s.chat.optimisticUser(firstMessage);
+				dispatch(s.id, { op: 'user_message', content: firstMessage });
+			}
+		}).catch((e) => this.#engineFailed(s.chat, e));
+		return s.id;
+	}
+
+	/** Re-open a persisted conversation in a new session (resume by id).
+	 *  jucode resumes via the `/resume` command; claude has no such command in
+	 *  stream-json mode and resumes via the allowlisted `--resume` spawn option
+	 *  instead, replaying the transcript from the session file on disk (the
+	 *  engine-side context is preserved by --resume regardless);
+	 *  codex resumes via the thread/resume RPC after the handshake (the thread
+	 *  id rides the SessionCtx, and the response replays the transcript). */
+	restoreSession(project: Project, sid: string, title: string, backend: BackendId = 'jucode') {
+		const s = this.#newSession(backend);
+		if (title) s.chat.title = title;
+		project.sessions.push(s);
+		if (backend === 'claude' || backend === 'codex') s.chat.sessionId = sid;
+		const spawned =
+			backend === 'claude'
+				? this.#spawn(s, project.path, () => this.#replayClaudeTranscript(s, project.path, sid), {
+						resume: sid
+					})
+				: backend === 'codex'
+					? this.#spawn(s, project.path, undefined, undefined, sid)
+					: this.#spawn(s, project.path, () => dispatch(s.id, { op: 'command', input: `/resume ${sid}` }));
+		spawned.catch((e) => this.#engineFailed(s.chat, e));
+		return s.id;
+	}
+
+	/** Best-effort transcript replay for a resumed claude session: the session
+	 *  file's user/assistant text becomes the message list (caps.transcriptReplay).
+	 *  Failures are silent — `--resume` already restored the engine-side context,
+	 *  the chat just starts visually empty. Only restores replay (crash
+	 *  auto-restarts keep their in-memory messages). */
+	#replayClaudeTranscript(s: Session, cwd: string, sid: string) {
+		claudeSessionTranscript(cwd, sid)
+			.then((rows) => {
+				if (!rows?.length || s.chat.messages.some((m) => m.kind === 'user')) return;
+				s.chat.handle({ type: 'transcript', items: rows });
+			})
+			.catch(() => {});
 	}
 
 	/** Create a project from a directory path and seed its first session.
@@ -114,11 +192,21 @@ export class SessionStore {
 		const canResume = s.chat.resumable;
 		s.chat.engineState = 'connecting';
 		s.chat.messages.push({ kind: 'system', text: force ? t('shell.restarting') : t('shell.autoRestarting') });
-		createSession(id, this.projectPathOf(id))
-			.then(() => {
-				if (sid && canResume) sendOp(id, { op: 'command', input: `/resume ${sid}` });
-			})
-			.catch((e) => this.#engineFailed(s.chat, e));
+		// claude resumes via the --resume spawn option (no /resume command in
+		// stream-json mode); codex resumes via the thread/resume RPC (thread id
+		// through SessionCtx); jucode resumes with the command after the handshake.
+		const resumeViaSpawn = s.backendId === 'claude' && sid && canResume;
+		const resumeViaCtx = s.backendId === 'codex' && sid && canResume;
+		this.#spawn(
+			s,
+			this.projectPathOf(id),
+			() => {
+				if (sid && canResume && s.backendId === 'jucode')
+					dispatch(id, { op: 'command', input: `/resume ${sid}` });
+			},
+			resumeViaSpawn ? { resume: sid } : undefined,
+			resumeViaCtx ? sid : undefined
+		).catch((e) => this.#engineFailed(s.chat, e));
 	}
 
 	/** Handle an engine exit: mark exited and auto-restart unless we've already
@@ -177,8 +265,8 @@ export class SessionStore {
 		s.chat.messages.push({ kind: 'system', text: t('shell.switchingTo', { provider: provider.id, model }) });
 		try {
 			await closeSession(id);
-			await createSession(id, this.projectPathOf(id));
-			if (sid && canResume) sendOp(id, { op: 'command', input: `/resume ${sid}` });
+			await this.#spawn(s, this.projectPathOf(id));
+			if (sid && canResume) dispatch(id, { op: 'command', input: `/resume ${sid}` });
 		} catch (e) {
 			s.chat.switching = false;
 			this.#engineFailed(s.chat, e);
@@ -187,6 +275,7 @@ export class SessionStore {
 
 	removeSession(id: string) {
 		closeSession(id).catch(() => {});
+		unregisterAdapter(id);
 		const p = this.projects.find((pr) => pr.sessions.some((s) => s.id === id));
 		if (p) p.sessions = p.sessions.filter((s) => s.id !== id);
 		if (this.activeId === id) this.activeId = this.allSessions[0]?.id ?? '';
@@ -194,28 +283,39 @@ export class SessionStore {
 
 	/** Tear down a project and all its sessions (the page handles confirmation). */
 	removeProject(p: Project) {
-		for (const s of p.sessions) closeSession(s.id).catch(() => {});
+		for (const s of p.sessions) {
+			closeSession(s.id).catch(() => {});
+			unregisterAdapter(s.id);
+		}
 		this.projects = this.projects.filter((x) => x.id !== p.id);
 		if (!this.allSessions.some((s) => s.id === this.activeId)) this.activeId = this.allSessions[0]?.id ?? '';
 	}
 
-	/** Open the project's history picker (/resume with no arg). */
+	/** Open the project's history picker (/resume with no arg). History is a
+	 *  jucode-engine feature, so prefer a live jucode session (or spawn one). */
 	openHistory(p: Project) {
-		const id = p.sessions[0]?.id ?? this.addSession(p);
+		const id = p.sessions.find((s) => s.backendId === 'jucode')?.id ?? this.addSession(p, undefined, 'jucode');
 		this.activeId = id;
-		sendOp(id, { op: 'command', input: '/resume' });
+		dispatch(id, { op: 'command', input: '/resume' });
 	}
 
-	/** Snapshot of the layout + open tabs for persistence. */
+	/** Snapshot of the layout + open tabs for persistence. The backend id is
+	 *  only written when it isn't the default, so pre-existing layouts stay
+	 *  byte-identical. */
 	serialize(): SavedProject[] {
 		return this.projects.map((p) => ({
 			id: p.id,
 			name: p.name,
 			path: p.path,
 			...(p.worktree ? { worktree: p.worktree } : {}),
+			...(p.lastBackend && p.lastBackend !== 'jucode' ? { lastBackend: p.lastBackend } : {}),
 			tabs: p.sessions
 				.filter((s) => s.chat.resumable)
-				.map((s) => ({ sid: s.chat.sessionId, title: s.chat.title }))
+				.map((s) => ({
+					sid: s.chat.sessionId,
+					title: s.chat.title,
+					...(s.backendId !== 'jucode' ? { backend: s.backendId } : {})
+				}))
 		}));
 	}
 
@@ -229,6 +329,7 @@ export class SessionStore {
 		if (saved.length) {
 			for (const p of saved) {
 				const proj: Project = { id: p.id, name: p.name, path: p.path, sessions: [] };
+				if (p.lastBackend) proj.lastBackend = normalizeBackendId(p.lastBackend);
 				if (p.worktree) {
 					proj.worktree = p.worktree;
 					try {
@@ -241,7 +342,9 @@ export class SessionStore {
 				if (proj.stale) continue;
 				for (const t of p.tabs ?? []) {
 					if (!t.sid) continue;
-					const id = this.restoreSession(proj, t.sid, t.title);
+					// Tabs saved before multi-backend support carry no backend field →
+					// jucode (normalizeBackendId maps unknown/missing to the default).
+					const id = this.restoreSession(proj, t.sid, t.title, normalizeBackendId(t.backend));
 					if (!first) first = id;
 				}
 			}

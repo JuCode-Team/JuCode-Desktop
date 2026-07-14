@@ -5,7 +5,8 @@
 	// config.json entries render read-only.
 	import { onMount } from 'svelte';
 	import { Plus, Pencil, Trash2, RotateCw, ChevronDown, Server, Blocks } from 'lucide-svelte';
-	import { readConfig, sendOp, type Op } from '$lib/protocol';
+	import { readConfig, type Op } from '$lib/protocol';
+	import { dispatch } from '$lib/backends/router';
 	import type { ChatState } from '$lib/chat.svelte';
 	import {
 		emptyMcpForm,
@@ -65,7 +66,7 @@
 
 	function send(op: Op) {
 		opError = '';
-		sendOp(sessionId, op).catch((e) => (opError = String(e)));
+		dispatch(sessionId, op, (e) => (opError = String(e)));
 	}
 
 	function upsertLocal(entry: McpServerEntry) {

@@ -20,6 +20,7 @@
 		cwd = '',
 		changed = [],
 		worktree = null,
+		goalsEnabled = true,
 		onRevertFile,
 		onOpenTask,
 		onTaskRemoved
@@ -30,12 +31,14 @@
 		changed?: string[];
 		/** 当前激活项目是并行任务 worktree 时的元数据（透传给 Git 面板）。 */
 		worktree?: WorktreeMeta | null;
+		/** 当前会话引擎是否支持 goal/plan（不支持时隐藏这两个标签页）。 */
+		goalsEnabled?: boolean;
 		onRevertFile?: (p: string) => void;
 		onOpenTask?: (path: string, meta: WorktreeMeta) => void;
 		onTaskRemoved?: (path: string) => void;
 	} = $props();
 
-	const PANELS = [
+	const ALL_PANELS = [
 		{ key: 'plan', icon: ListTodo },
 		{ key: 'goal', icon: Target },
 		{ key: 'changes', icon: FileDiff },
@@ -44,7 +47,10 @@
 		{ key: 'term', icon: Terminal },
 		{ key: 'browser', icon: Globe }
 	];
-	const labelOf = (key: string) => (PANELS.some((p) => p.key === key) ? t(`dock.tabs.${key}`) : key);
+	// Plan/Goal are engine features — hide them when the session's backend
+	// doesn't report goals (capability-gated by the page via `caps()`).
+	const PANELS = $derived(ALL_PANELS.filter((p) => goalsEnabled || (p.key !== 'plan' && p.key !== 'goal')));
+	const labelOf = (key: string) => (ALL_PANELS.some((p) => p.key === key) ? t(`dock.tabs.${key}`) : key);
 
 	// A tab is an *instance* of a panel, so several tabs can share a panel type
 	// (e.g. two terminals); each carries its own id.
@@ -62,7 +68,7 @@
 						if (t && typeof t.id === 'string' && typeof t.panel === 'string') return { id: t.id, panel: t.panel };
 						return null;
 					})
-					.filter((t): t is Tab => t !== null && PANELS.some((p) => p.key === t.panel));
+					.filter((t): t is Tab => t !== null && ALL_PANELS.some((p) => p.key === t.panel));
 				if (tabs.length) return tabs;
 			}
 		} catch {
@@ -72,6 +78,9 @@
 	}
 
 	let openTabs = $state<Tab[]>(loadTabs());
+	// Tab instances of hidden panels stay in storage but aren't rendered, so
+	// switching back to a goals-capable session restores them untouched.
+	const visibleTabs = $derived(openTabs.filter((t) => goalsEnabled || (t.panel !== 'plan' && t.panel !== 'goal')));
 	let active = $state(
 		(() => {
 			const saved = localStorage.getItem('jucode-dock-active');
@@ -88,6 +97,14 @@
 		const same = openTabs.filter((t) => t.panel === tab.panel);
 		return same.length < 2 ? base : `${base} ${same.indexOf(tab) + 1}`;
 	}
+
+	// If the active tab just got hidden (session switch to a goals-less
+	// backend), fall back to the first visible tab.
+	$effect(() => {
+		if (visibleTabs.length && !visibleTabs.some((t) => t.id === active)) {
+			active = visibleTabs[0].id;
+		}
+	});
 
 	$effect(() => {
 		localStorage.setItem('jucode-dock-tabs', JSON.stringify(openTabs));
@@ -153,7 +170,7 @@
 <div class="dock">
 	<div class="tabbar">
 		<div class="tabs" bind:this={bar}>
-			{#each openTabs as tab (tab.id)}
+			{#each visibleTabs as tab (tab.id)}
 			<div
 				class="tab"
 				class:on={tab.id === active}
@@ -193,7 +210,7 @@
 	</div>
 
 	<div class="content">
-		{#each openTabs as tab (tab.id)}
+		{#each visibleTabs as tab (tab.id)}
 			<div class="pane" class:hidden={tab.id !== active}>
 				{#if tab.panel === 'plan'}<PlanPanel {plan} />
 				{:else if tab.panel === 'goal'}<GoalPanel {goal} />
@@ -204,7 +221,7 @@
 				{:else if tab.panel === 'browser'}<BrowserPanel />{/if}
 			</div>
 		{/each}
-		{#if openTabs.length === 0}
+		{#if visibleTabs.length === 0}
 			<div class="empty">
 				<p>{t('dock.dock.empty')}</p>
 				<span>{t('dock.dock.hint')} <b>+</b></span>

@@ -1,4 +1,5 @@
 import type { AgentEvent } from './protocol';
+import type { BackendId } from './backends/types';
 import {
 	EDIT_TOOLS,
 	parseHunks,
@@ -77,6 +78,10 @@ export class ChatState {
 	/** Set by the page: invoked with the file paths a successful edit tool
 	 *  touched, so the built-in editor can auto-reload open tabs (⌘K flow). */
 	static onFilesEdited: ((paths: string[]) => void) | null = null;
+
+	/** Which engine backend drives this session ('jucode' default). Set once at
+	 *  session creation; the `caps()` helper gates UI surfaces off it. */
+	backendId: BackendId = 'jucode';
 
 	messages = $state<Msg[]>([]);
 	provider = $state('');
@@ -291,13 +296,18 @@ export class ChatState {
 				break;
 			case 'user_message': {
 				const text = str(ev.content);
-				// Skip the echo of a message we already showed optimistically.
-				const last = this.messages[this.messages.length - 1];
-				if (this.#pendingUserEcho === text && last?.kind === 'user' && last.text === text) {
+				// Skip the echo of a message we already showed optimistically. The
+				// echo need not be the last message: claude's --replay-user-messages
+				// re-emits the user turn AFTER the assistant reply, so the optimistic
+				// bubble is no longer at the tail — match on the pending echo alone.
+				if (this.#pendingUserEcho === text) {
 					this.#pendingUserEcho = null;
 					this.#resetCurrent();
 					break;
 				}
+				// A real, non-optimistic user message (e.g. a queued send that was
+				// never shown optimistically) — clear any stale echo so it can't
+				// later swallow an identical message.
 				this.#pendingUserEcho = null;
 				this.messages.push({ kind: 'user', text });
 				if (this.title === 'New session' && text.trim()) {

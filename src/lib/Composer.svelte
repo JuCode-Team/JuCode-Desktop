@@ -4,6 +4,7 @@
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Vendor from '$lib/Vendor.svelte';
 	import Segmented from '$lib/ui/Segmented.svelte';
+	import EffortSlider from '$lib/ui/EffortSlider.svelte';
 	import { listFiles, saveTempImage, transcribeAudio } from '$lib/protocol';
 	import { VoiceRecorder } from '$lib/audio';
 	import { buildEntries, mentionMatches, type AtEntry } from '$lib/mention';
@@ -14,6 +15,7 @@
 	import ContextIndicator from '$lib/composer/ContextIndicator.svelte';
 	import type { ChatState } from '$lib/chat.svelte';
 	import type { ApprovalMode } from '$lib/approval';
+	import { caps } from '$lib/backends';
 
 	let {
 		chat,
@@ -52,6 +54,9 @@
 	let slashIdx = $state(0);
 	let showEffort = $state(false);
 	let showApproval = $state(false);
+
+	// Capability gating for the session's engine backend (jucode = everything).
+	const bcaps = $derived(caps(chat));
 
 	// --- rich contenteditable editing surface ------------------------------
 	// `input` (bindable) stays the plain-text source of truth: a web-element chip
@@ -416,7 +421,9 @@
 			{#each chat.pendingMessages as q, i (i)}
 				<span class="qchip" title={q}>{q}</span>
 			{/each}
-			<button class="qsteer" onclick={onSteer} title={t('chat.steerTitle')}><FastForward size={12} />{t('chat.steerAction')}</button>
+			{#if bcaps.steer}
+				<button class="qsteer" onclick={onSteer} title={t('chat.steerTitle')}><FastForward size={12} />{t('chat.steerAction')}</button>
+			{/if}
 		</div>
 	{/if}
 	<div class="composer">
@@ -467,35 +474,41 @@
 			>
 				{#if voice === 'busy'}<span class="vspin"><LoaderCircle size={16} /></span>{:else if voice === 'rec'}<CircleStop size={16} />{:else}<Mic size={16} />{/if}
 			</button>
-			<button class="flatbtn model" onclick={onModel} title={t('chat.switchModel')}>
-				<Vendor model={chat.model} size={15} /><span>{chat.model || 'model'}</span>
-			</button>
-			{#if chat.efforts.length}
+			{#if bcaps.modelPicker}
+				<button class="flatbtn model" onclick={onModel} title={t('chat.switchModel')}>
+					<Vendor model={chat.model} size={15} /><span>{chat.model || 'model'}</span>
+				</button>
+			{:else if chat.model}
+				<span class="flatbtn model static"><Vendor model={chat.model} size={15} /><span>{chat.model}</span></span>
+			{/if}
+			{#if bcaps.modelPicker && chat.efforts.length}
 				<div class="effortsel">
 					<button class="flatbtn" onclick={() => (showEffort = !showEffort)} title={t('chat.effortTitle')}>
 						{cap(chat.effort) || 'Effort'}
 					</button>
 					{#if showEffort}
 						<button class="pop-backdrop" aria-label="close" onclick={() => (showEffort = false)}></button>
-						<div class="effort-pop">
-							<Segmented value={chat.effort} options={chat.efforts.map((e) => ({ value: e, label: cap(e) }))} onChange={(e) => { onEffort(e); showEffort = false; }} />
+						<div class="effort-pop wide">
+							<EffortSlider value={chat.effort} options={chat.efforts} onChange={(e) => { onEffort(e); showEffort = false; }} />
 						</div>
 					{/if}
 				</div>
 			{/if}
-			<div class="effortsel">
-				<button class="flatbtn appr" class:auto={chat.approvalMode !== 'ask'} onclick={() => (showApproval = !showApproval)} title={t('chat.approvalModeTitle')}>
-					<ShieldCheck size={14} /><span>{approvalLabel}</span>
-				</button>
-				{#if showApproval}
-					<button class="pop-backdrop" aria-label="close" onclick={() => (showApproval = false)}></button>
-					<div class="effort-pop">
-						<Segmented value={chat.approvalMode} options={APPROVAL} onChange={setApproval} />
-					</div>
-				{/if}
-			</div>
+			{#if bcaps.approvalModes}
+				<div class="effortsel">
+					<button class="flatbtn appr" class:auto={chat.approvalMode !== 'ask'} onclick={() => (showApproval = !showApproval)} title={t('chat.approvalModeTitle')}>
+						<ShieldCheck size={14} /><span>{approvalLabel}</span>
+					</button>
+					{#if showApproval}
+						<button class="pop-backdrop" aria-label="close" onclick={() => (showApproval = false)}></button>
+						<div class="effort-pop">
+							<Segmented value={chat.approvalMode} options={APPROVAL} onChange={setApproval} />
+						</div>
+					{/if}
+				</div>
+			{/if}
 			<div class="cspace"></div>
-			{#if ctxLimit > 0}
+			{#if bcaps.contextUsage && ctxLimit > 0}
 				<ContextIndicator pct={ctxPct} contextTokens={chat.contextTokens} contextLimit={ctxLimit} totalIn={chat.totalIn} totalOut={chat.totalOut} cost={chat.cost} />
 			{/if}
 			{#if chat.busy}
@@ -594,6 +607,13 @@
 		font-family: var(--font-mono);
 		font-size: 12px;
 	}
+	/* read-only model label for backends without an in-chat model picker */
+	.flatbtn.static {
+		cursor: default;
+	}
+	.flatbtn.static:hover {
+		background: none;
+	}
 	.flatbtn.appr span {
 		font-size: 12px;
 	}
@@ -623,6 +643,10 @@
 		border-radius: var(--r-md);
 		box-shadow: var(--shadow-pop);
 		animation: rise 0.12s ease;
+	}
+	.effort-pop.wide {
+		padding: 12px 14px 8px;
+		border-radius: 14px;
 	}
 	.cspace {
 		flex: 1;

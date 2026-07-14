@@ -20,8 +20,17 @@ export type Op =
 	| { op: 'mcp_remove'; name: string }
 	| { op: 'mcp_toggle'; name: string; enabled: boolean };
 
-export function createSession(session: string, cwd?: string): Promise<void> {
-	return invoke('create_session', { session, cwd });
+/** Spawns the engine child for a session. `backend` picks the agent CLI
+ *  ('jucode' default); `backendOpts` is validated Rust-side against that
+ *  backend's fixed option allowlist (bin_override, claude's permission_mode /
+ *  resume / session_id / model). */
+export function createSession(
+	session: string,
+	cwd?: string,
+	backend?: string,
+	backendOpts?: Record<string, unknown>
+): Promise<void> {
+	return invoke('create_session', { session, cwd, backend, backendOpts });
 }
 
 export function closeSession(session: string): Promise<void> {
@@ -30,6 +39,56 @@ export function closeSession(session: string): Promise<void> {
 
 export function sendOp(session: string, op: Op): Promise<void> {
 	return invoke('send_op', { session, op });
+}
+
+/** Writes one raw line (a single protocol frame composed by a backend adapter)
+ *  to the session child's stdin. */
+export function sendLine(session: string, line: string): Promise<void> {
+	return invoke('send_line', { session, line });
+}
+
+/** Availability probe for a backend binary (`<bin> --version`). */
+export interface BackendStatus {
+	found: boolean;
+	path?: string | null;
+	version?: string | null;
+}
+export function checkBackend(backend: string, binOverride?: string): Promise<BackendStatus> {
+	return invoke('check_backend', { backend, binOverride });
+}
+
+/** Login-shell environment snapshot state (see src-tauri/src/shell_env.rs). */
+export interface ShellEnvStatus {
+	supported: boolean;
+	captured: boolean;
+	count: number;
+	captured_at_ms?: number | null;
+	shell?: string | null;
+}
+export function shellEnvStatus(): Promise<ShellEnvStatus> {
+	return invoke('shell_env_status');
+}
+export function refreshShellEnv(): Promise<ShellEnvStatus> {
+	return invoke('refresh_shell_env');
+}
+
+// Claude Code session history (read-only listing of the per-project session
+// files under ~/.claude/projects — drives the claude /resume picker and the
+// transcript replay of a resumed session).
+export interface ClaudeSessionEntry {
+	id: string;
+	mtime_ms: number;
+	preview: string;
+}
+export function claudeSessions(cwd: string): Promise<ClaudeSessionEntry[]> {
+	return invoke('claude_sessions', { cwd });
+}
+export interface ClaudeTranscriptRow {
+	role: string;
+	content: string;
+}
+export function claudeSessionTranscript(cwd: string, id: string): Promise<ClaudeTranscriptRow[]> {
+	return invoke('claude_session_transcript', { cwd, id });
 }
 
 // Config / auth (read & write ~/.jucode/{config.json,auth.json} via Tauri fs).

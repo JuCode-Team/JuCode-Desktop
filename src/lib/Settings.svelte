@@ -1,7 +1,10 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
 	import { X, LogIn, LogOut, KeyRound, SlidersHorizontal, Plus, Trash2, Zap, CircleCheck, ChevronDown, Wallet, LayoutDashboard, Mic, Puzzle } from 'lucide-svelte';
-	import { readConfig, writeConfig, readAuthProviders, setAuthKey, removeAuthKey, listProviders, sendOp, fetchAccountInfo, fetchDeepseekBalance, type AccountInfo, type DeepseekBalance } from '$lib/protocol';
+	import { readConfig, writeConfig, readAuthProviders, setAuthKey, removeAuthKey, listProviders, fetchAccountInfo, fetchDeepseekBalance, type AccountInfo, type DeepseekBalance } from '$lib/protocol';
+	import { dispatch } from '$lib/backends/router';
+	import { caps } from '$lib/backends';
+	import BackendSection from '$lib/settings/BackendSection.svelte';
 	import type { ChatState } from '$lib/chat.svelte';
 	import Vendor from '$lib/Vendor.svelte';
 	import OverviewPanel from '$lib/OverviewPanel.svelte';
@@ -214,7 +217,7 @@
 	}
 	let loggingIn = $state(false);
 	function login() {
-		sendOp(sessionId, { op: 'command', input: '/login' });
+		dispatch(sessionId, { op: 'command', input: '/login' });
 		loggingIn = true;
 	}
 	// While a login is in flight, poll auth state so the modal flips to
@@ -362,12 +365,20 @@
 						{#if keyed.includes('mimo')}<p class="hint mt keyok"><CircleCheck size={13} /> {t('settings.account.keyed')}</p>{/if}
 					</div>
 				{:else if section === 'extensions'}
-					<McpSection {sessionId} {chat} />
+					{#if caps(chat).mcpManage}
+						<McpSection {sessionId} {chat} />
+					{:else}
+						<div class="group">
+							<p class="hint">{t('settings.backend.mcpUnsupported')}</p>
+						</div>
+					{/if}
 				{:else}
 					<div class="group">
 						<div class="glabel">{t('settings.language')}</div>
 						<Segmented value={getLocale()} options={LOCALES.map((l) => ({ value: l, label: LOCALE_LABELS[l] }))} onChange={(v) => setLocale(v as (typeof LOCALES)[number])} />
 					</div>
+
+					<BackendSection />
 
 					<div class="group">
 						<div class="glabel">{t('settings.behavior.defaultModel')}</div>

@@ -35,6 +35,17 @@ describe('ChatState.handle', () => {
 		expect(userTexts(c)).toEqual(['first', 'second']);
 	});
 
+	it('de-duplicates a replay echo that arrives after the assistant reply (claude)', () => {
+		// claude's --replay-user-messages re-emits the user turn only after the
+		// assistant has answered, so the optimistic bubble is no longer at the tail.
+		const c = new ChatState();
+		c.optimisticUser('你好');
+		c.handle({ type: 'assistant_start' });
+		c.handle({ type: 'assistant_delta', text: '你好！' });
+		c.handle({ type: 'user_message', content: '你好' });
+		expect(userTexts(c)).toEqual(['你好']);
+	});
+
 	it('aggregates a tool card by call_id and marks it done', () => {
 		const c = new ChatState();
 		c.handle({ type: 'tool_start', call_id: '1', name: 'read' });

@@ -15,7 +15,6 @@
 	import { buildSetApprovalModeOp, type ApprovalMode, type ApproveOp } from '$lib/approval';
 	import { focusTrap } from '$lib/focusTrap';
 	import {
-		sendOp,
 		readAuthProviders,
 		listProviders,
 		listDir,
@@ -23,8 +22,13 @@
 		startScreenRecording,
 		stopScreenRecording,
 		processVideo,
-		type EventPayload
+		claudeSessions,
+		type EventPayload,
+		type Op
 	} from '$lib/protocol';
+	import { dispatch } from '$lib/backends/router';
+	import { caps, type BackendId } from '$lib/backends';
+	import BackendPicker from '$lib/shell/BackendPicker.svelte';
 	import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
 	import { updater } from '$lib/updater.svelte';
 	import { browser, type WebRef } from '$lib/browser.svelte';
@@ -127,6 +131,66 @@
 	let showPalette = $state(false);
 	// 「新建并行任务」对话框：为哪个（主仓库）项目开任务。
 	let taskDialogFor = $state<Project | null>(null);
+	// 「新建会话」后端选择：为哪个项目开新会话（null = 关闭）。
+	let backendPickFor = $state<Project | null>(null);
+
+	// Ops flow through the active session's backend adapter; an unsupported op
+	// (non-jucode stub backends) surfaces as an inline system notice.
+	function send(op: Op) {
+		// claude's /resume can't go over the wire: stream-json mode has no session
+		// listing protocol, the history lives in files under ~/.claude/projects.
+		// Bare /resume synthesizes the picker from the claude_sessions command; a
+		// typed `/resume <id>` opens that session in a fresh tab (same flow as a
+		// picker pick — the current chat is never replaced).
+		if (op.op === 'command' && chat?.backendId === 'claude') {
+			const input = op.input.trim();
+			if (input === '/resume') {
+				openClaudeHistory();
+				return;
+			}
+			if (input.startsWith('/resume ') && activeProject) {
+				const sid = input.slice('/resume '.length).trim();
+				chat.closePicker();
+				store.activeId = store.restoreSession(activeProject, sid, '', 'claude');
+				return;
+			}
+		}
+		if (!dispatch(activeId, op)) {
+			chat?.messages.push({ kind: 'system', text: t('shell.backend.opUnsupported', { op: op.op }) });
+		}
+	}
+
+	// Builds the claude /resume picker from the session files Claude Code
+	// persisted for this project (claude_sessions → synthesized resume_view).
+	async function openClaudeHistory() {
+		const c = chat;
+		const proj = activeProject;
+		if (!c || !proj) return;
+		try {
+			const sessions = await claudeSessions(proj.path);
+			c.handle({
+				type: 'resume_view',
+				items: sessions.map((s) => ({
+					id: s.id,
+					label: s.preview || s.id.slice(0, 8),
+					detail: new Date(s.mtime_ms).toLocaleString(),
+					active: s.id === c.sessionId
+				}))
+			});
+		} catch (e) {
+			c.messages.push({ kind: 'system', text: t('shell.backend.claudeHistoryFail', { msg: String(e) }) });
+		}
+	}
+	// New-session flow: pick the engine backend first (default = the project's
+	// last-used backend, falling back to the settings default).
+	function newSessionFlow(p: Project) {
+		backendPickFor = p;
+	}
+	function pickBackend(b: BackendId) {
+		const p = backendPickFor;
+		backendPickFor = null;
+		if (p) store.addSession(p, undefined, b);
+	}
 
 	function refreshAuth() {
 		readAuthProviders()
@@ -211,6 +275,7 @@
 			showPalette ||
 			showQuickOpen ||
 			!!taskDialogFor ||
+			!!backendPickFor ||
 			!!chat?.picker ||
 			!!chat?.trustPrompt ||
 			!!chat?.pendingRewind;
@@ -290,12 +355,12 @@
 	function sendAiEdit(content: string): boolean {
 		if (!chat || chat.engineState === 'exited') return false;
 		if (!chat.busy) chat.optimisticUser(content);
-		sendOp(activeId, { op: 'user_message', content });
+		send({ op: 'user_message', content });
 		return true;
 	}
 
 	function chooseEffort(ef: string) {
-		if (chat) sendOp(activeId, { op: 'command', input: `/model ${chat.model} ${ef}` });
+		if (chat) send({ op: 'command', input: `/model ${chat.model} ${ef}` });
 	}
 
 	// The assistant message that's still streaming: render it as plain text and
@@ -403,7 +468,10 @@
 			command: `/model ${m.model}`,
 			depth: nil
 		}));
-		const otherRows = providersList
+		// Provider switching rewrites the native engine's global config and
+		// restarts it — meaningful for jucode sessions only. Other backends'
+		// pickers list just their own engine's model_view catalog.
+		const otherRows = (chat?.backendId !== 'jucode' ? [] : providersList)
 			.filter((pv) => pv.id !== cur)
 			.flatMap((pv) =>
 				pv.models
@@ -480,7 +548,7 @@
 		store.removeProject(p);
 	}
 	function nav(command: string) {
-		if (chat) sendOp(activeId, { op: 'command', input: command });
+		if (chat) send({ op: 'command', input: command });
 	}
 
 	// ---------- 并行任务（git worktree） ----------
@@ -640,7 +708,7 @@
 		const text = input.trim();
 		if (!text && attachments.length === 0 && videos.length === 0) return;
 		if (text.startsWith('/')) {
-			sendOp(activeId, { op: 'command', input: text });
+			send({ op: 'command', input: text });
 		} else {
 			const images = attachments.filter((a) => a.image).map((a) => a.path);
 			const files = attachments.filter((a) => !a.image).map((a) => a.path);
@@ -662,7 +730,7 @@
 			// Echo the message instantly when it starts a turn now (a busy session
 			// queues it instead, shown in the composer's queue strip).
 			if (chat && !chat.busy) chat.optimisticUser(content);
-			sendOp(activeId, { op: 'user_message', content, images: images.length ? images : undefined });
+			send({ op: 'user_message', content, images: images.length ? images : undefined });
 		}
 		input = '';
 		attachments = [];
@@ -670,11 +738,11 @@
 		webRefs = [];
 	}
 	function stop() {
-		sendOp(activeId, { op: 'interrupt' });
+		send({ op: 'interrupt' });
 	}
 	function respondApproval(op: ApproveOp) {
 		if (!chat?.pendingApproval) return;
-		sendOp(activeId, op);
+		send(op);
 		chat.pendingApproval = null;
 	}
 	// User changed the approval-mode picker: persist locally and push it to this
@@ -682,14 +750,14 @@
 	function setApprovalMode(m: ApprovalMode) {
 		if (!chat) return;
 		chat.setApprovalMode(m);
-		sendOp(activeId, buildSetApprovalModeOp(m));
+		send(buildSetApprovalModeOp(m));
 	}
 	// The engine announced its startup approval mode and it diverges from the
 	// desktop's persisted mode (fresh start, crash auto-restart or provider
 	// switch): push ours. Runs off the agent-event stream, per session.
 	function flushModeSync(c: ChatState, sid: string) {
 		if (!c.pendingModeSync) return;
-		sendOp(sid, { op: 'set_approval_mode', mode: c.pendingModeSync });
+		dispatch(sid, { op: 'set_approval_mode', mode: c.pendingModeSync });
 		c.pendingModeSync = null;
 	}
 
@@ -709,12 +777,25 @@
 		// Resuming a history item opens it in a fresh session so the current chat
 		// isn't replaced; everything else acts on the active session.
 		if (command.startsWith('/resume ') && activeProject) {
+			const sid = command.slice('/resume '.length).trim();
+			// Codex/claude resume items open in a fresh session of the same backend
+			// (codex: thread/resume via SessionCtx.resume; claude: the --resume
+			// spawn option + transcript replay from the session file).
+			if (chat?.backendId === 'codex' || chat?.backendId === 'claude') {
+				const backend = chat.backendId;
+				const item = chat.picker?.kind === 'resume' ? chat.picker.items.find((i) => i.id === sid) : undefined;
+				chat.closePicker();
+				store.activeId = store.restoreSession(activeProject, sid, item?.label ?? '', backend);
+				return;
+			}
+			// jucode history entries come from the jucode engine, so the new session
+			// is always jucode-backed regardless of the project's last-used backend.
 			chat?.closePicker();
-			const id = store.addSession(activeProject);
-			sendOp(id, { op: 'command', input: command });
+			const id = store.addSession(activeProject, undefined, 'jucode');
+			dispatch(id, { op: 'command', input: command });
 			return;
 		}
-		sendOp(activeId, { op: 'command', input: command });
+		send({ op: 'command', input: command });
 		chat?.closePicker();
 	}
 	function setEffort(effort: string) {
@@ -739,7 +820,7 @@
 	}
 	function respondTrust(answer: 'yes' | 'no' | 'repo') {
 		if (!chat) return;
-		sendOp(activeId, { op: 'command', input: `/trust ${answer}` });
+		send({ op: 'command', input: `/trust ${answer}` });
 		chat.trustPrompt = null;
 	}
 	function onWindowKey(e: KeyboardEvent) {
@@ -840,12 +921,12 @@
 	function rewindToMessage(text: string, userIndex: number) {
 		if (!chat) return;
 		chat.rewindIntent = { userIndex, text };
-		sendOp(activeId, { op: 'command', input: '/rewind' });
+		send({ op: 'command', input: '/rewind' });
 	}
 	function confirmRewind() {
 		const pr = chat?.pendingRewind;
 		if (!pr || !chat) return;
-		sendOp(activeId, { op: 'command', input: `/rewind ${pr.id}` });
+		send({ op: 'command', input: `/rewind ${pr.id}` });
 		input = pr.text;
 		chat.pendingRewind = null;
 		composerEl?.focus();
@@ -866,7 +947,9 @@
 				if (!s) return;
 				const wasBusy = s.chat.busy;
 				try {
-					s.chat.handle(JSON.parse(e.payload.data));
+					// Route the raw line through the session's backend adapter; jucode's
+					// is the identity, codex/claude translate to the jucode dialect.
+					for (const ev of s.adapter.translate(JSON.parse(e.payload.data))) s.chat.handle(ev);
 				} catch {
 					/* ignore */
 				}
@@ -970,7 +1053,7 @@
 		onSelect={(id) => (store.activeId = id)}
 		onNewProject={addProject}
 		onNewTask={newTask}
-		onNewSession={(p) => store.addSession(p)}
+		onNewSession={(p) => newSessionFlow(p)}
 		onCloseSession={(id) => store.removeSession(id)}
 		onCloseProject={removeProject}
 		onHistory={(p) => store.openHistory(p)}
@@ -1062,7 +1145,7 @@
 				{recording}
 				onSubmit={submit}
 				onStop={stop}
-				onSteer={() => sendOp(activeId, { op: 'steer' })}
+				onSteer={() => send({ op: 'steer' })}
 				onPick={pickFiles}
 				onScreenshot={screenshot}
 				onRecord={toggleRecord}
@@ -1093,6 +1176,7 @@
 	<aside class="right" class:closed={!showRight} class:resizing style:width={showRight ? `${rightWidth}px` : '0px'}>
 		<div class="right-inner" style:width="{rightWidth}px">
 			<RightDock
+				goalsEnabled={caps(chat).goals}
 				goal={chat?.goal ?? null}
 				plan={chat?.plan ?? []}
 				cwd={activeProject?.path ?? ''}
@@ -1188,6 +1272,10 @@
 		/>
 	{/if}
 
+	{#if backendPickFor}
+		<BackendPicker lastUsed={backendPickFor.lastBackend} onPick={pickBackend} onClose={() => (backendPickFor = null)} />
+	{/if}
+
 	{#if taskDialogFor}
 		<TaskDialog project={taskDialogFor} onClose={() => (taskDialogFor = null)} onCreated={openTaskProject} />
 	{/if}
@@ -1199,7 +1287,7 @@
 			canNewTask={!!activeProject && !activeProject.stale}
 			onClose={() => (showPalette = false)}
 			onRun={(cmd) => nav(cmd)}
-			onNewSession={() => activeProject && store.addSession(activeProject)}
+			onNewSession={() => activeProject && newSessionFlow(activeProject)}
 			onNewProject={addProject}
 			onNewTask={() => newTask(activeProject)}
 			onSettings={() => (showSettings = true)}
