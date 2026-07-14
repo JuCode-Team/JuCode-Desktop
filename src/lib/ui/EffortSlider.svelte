@@ -8,10 +8,12 @@
 	let {
 		value,
 		options,
+		backendId = '',
 		onChange
 	}: {
 		value: string;
 		options: string[];
+		backendId?: string;
 		onChange: (v: string) => void;
 	} = $props();
 
@@ -35,11 +37,13 @@
 		return v.charAt(0).toUpperCase() + v.slice(1);
 	}
 	const currentLabel = $derived(labelFor(options[shownIndex]));
-	// Special top tiers get their own accent + a flowing shimmer.
+	// Special top tiers get their own accent + a flowing shimmer. Backend-scoped:
+	// claude's `max` → orange, codex's `ultra` → purple. Codex's own `max` (and any
+	// other backend) stays on the default accent.
 	const tier = $derived.by(() => {
 		const v = (options[shownIndex] ?? '').toLowerCase();
-		if (v === 'max') return 'max';
-		if (v === 'ultra') return 'ultra';
+		if (backendId === 'claude' && v === 'max') return 'max';
+		if (backendId === 'codex' && v === 'ultra') return 'ultra';
 		return '';
 	});
 
@@ -103,7 +107,7 @@
 		onkeydown={onKey}
 	>
 		<div class="es-inner" bind:this={inner}>
-			<div class="es-fill" class:flowing={tier !== ''} style="width: calc({pct}% + 11px)"></div>
+			<div class="es-fill" class:flowing={tier !== ''} style="width: calc({pct}% + 22px)"></div>
 			{#each options as opt, i (opt)}
 				<span
 					class="es-dot"

@@ -276,7 +276,9 @@
 			showQuickOpen ||
 			!!taskDialogFor ||
 			!!backendPickFor ||
-			!!chat?.picker ||
+			// The model picker is now an in-composer popover (like effort/approval),
+			// not a centered overlay, so it needn't collapse the browser webview.
+			(!!chat?.picker && chat.picker.kind !== 'model') ||
 			!!chat?.trustPrompt ||
 			!!chat?.pendingRewind;
 		browser.setSuspended(modalOpen);
@@ -1166,6 +1168,15 @@
 				onScreenshot={screenshot}
 				onRecord={toggleRecord}
 				onModel={() => nav('/model')}
+				onModelSelect={selectRow}
+				onModelEffort={setEffort}
+				onModelClose={() => chat?.closePicker()}
+				modelRows={filteredRows}
+				modelActive={activeModel}
+				modelTitle={pickerTitle}
+				modelSearch={showPickerSearch}
+				bind:pickerQuery
+				bind:pickerSelIdx={selIdx}
 				onEffort={chooseEffort}
 				onApproval={setApprovalMode}
 			/>
@@ -1245,7 +1256,7 @@
 		</div>
 	{/if}
 
-	{#if chat?.picker}
+	{#if chat?.picker && chat.picker.kind !== 'model'}
 		<Picker
 			{chat}
 			title={pickerTitle}

@@ -13,9 +13,20 @@
 	import MentionMenu from '$lib/composer/MentionMenu.svelte';
 	import AttachmentChips from '$lib/composer/AttachmentChips.svelte';
 	import ContextIndicator from '$lib/composer/ContextIndicator.svelte';
+	import Picker from '$lib/shell/Picker.svelte';
 	import type { ChatState } from '$lib/chat.svelte';
 	import type { ApprovalMode } from '$lib/approval';
 	import { caps } from '$lib/backends';
+
+	type PickerRow = {
+		id: string;
+		label: string;
+		vendor?: string;
+		detail: string;
+		active: boolean;
+		command: string;
+		depth: number | undefined;
+	};
 
 	let {
 		chat,
@@ -24,6 +35,12 @@
 		videos = $bindable([]),
 		el = $bindable(),
 		recording = false,
+		pickerQuery = $bindable(''),
+		pickerSelIdx = $bindable(0),
+		modelRows = [],
+		modelActive,
+		modelTitle = '',
+		modelSearch = false,
 		onSubmit,
 		onStop,
 		onSteer,
@@ -31,6 +48,9 @@
 		onScreenshot,
 		onRecord,
 		onModel,
+		onModelSelect,
+		onModelEffort,
+		onModelClose,
 		onEffort,
 		onApproval
 	}: {
@@ -40,6 +60,12 @@
 		videos?: { path: string; frames: string[]; duration: number }[];
 		el: HTMLElement | null;
 		recording?: boolean;
+		pickerQuery?: string;
+		pickerSelIdx?: number;
+		modelRows?: PickerRow[];
+		modelActive?: { model: string; reasoning_efforts: string[]; active: boolean };
+		modelTitle?: string;
+		modelSearch?: boolean;
 		onSubmit: () => void;
 		onStop: () => void;
 		onSteer: () => void;
@@ -47,6 +73,9 @@
 		onScreenshot?: () => void;
 		onRecord?: () => void;
 		onModel: () => void;
+		onModelSelect?: (command: string) => void;
+		onModelEffort?: (effort: string) => void;
+		onModelClose?: () => void;
 		onEffort: (ef: string) => void;
 		onApproval: (mode: ApprovalMode) => void;
 	} = $props();
@@ -487,9 +516,30 @@
 				{#if voice === 'busy'}<span class="vspin"><LoaderCircle size={16} /></span>{:else if voice === 'rec'}<CircleStop size={16} />{:else}<Mic size={16} />{/if}
 			</button>
 			{#if bcaps.modelPicker}
-				<button class="flatbtn model" onclick={onModel} title={t('chat.switchModel')}>
-					<Vendor model={chat.model} size={15} /><span>{chat.modelLabel || chat.model || 'model'}</span>
-				</button>
+				<div class="effortsel">
+					<button
+						class="flatbtn model"
+						onclick={() => (chat.picker?.kind === 'model' ? onModelClose?.() : onModel())}
+						title={t('chat.switchModel')}
+					>
+						<Vendor model={chat.model} size={15} /><span>{chat.modelLabel || chat.model || 'model'}</span>
+					</button>
+					{#if chat.picker?.kind === 'model'}
+						<Picker
+							anchored
+							{chat}
+							title={modelTitle}
+							activeModel={modelActive}
+							rows={modelRows}
+							showSearch={modelSearch}
+							bind:query={pickerQuery}
+							bind:selIdx={pickerSelIdx}
+							onClose={() => onModelClose?.()}
+							onSelect={(c) => onModelSelect?.(c)}
+							onEffort={(e) => onModelEffort?.(e)}
+						/>
+					{/if}
+				</div>
 			{:else if chat.model}
 				<span class="flatbtn model static"><Vendor model={chat.model} size={15} /><span>{chat.modelLabel || chat.model}</span></span>
 			{/if}
@@ -501,7 +551,7 @@
 					{#if showEffort}
 						<button class="pop-backdrop" aria-label="close" onclick={() => (showEffort = false)}></button>
 						<div class="effort-pop wide">
-							<EffortSlider value={chat.effort} options={chat.efforts} onChange={(e) => { onEffort(e); showEffort = false; }} />
+							<EffortSlider value={chat.effort} options={chat.efforts} backendId={chat.backendId} onChange={onEffort} />
 						</div>
 					{/if}
 				</div>

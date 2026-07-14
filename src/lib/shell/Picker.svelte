@@ -22,6 +22,7 @@
 		activeModel,
 		rows,
 		showSearch,
+		anchored = false,
 		query = $bindable(),
 		selIdx = $bindable(),
 		onClose,
@@ -33,6 +34,9 @@
 		activeModel: { model: string; reasoning_efforts: string[]; active: boolean } | undefined;
 		rows: Row[];
 		showSearch: boolean;
+		// Anchored: render as a compact popover above the caller (no dimmed overlay,
+		// no focus trap) instead of a screen-centered modal.
+		anchored?: boolean;
 		query: string;
 		selIdx: number;
 		onClose: () => void;
@@ -41,42 +45,53 @@
 	} = $props();
 </script>
 
-<div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && onClose()}>
-	<div class="modal" role="dialog" aria-modal="true" tabindex="-1" aria-label={title} use:focusTrap>
-		<div class="modal-head">
-			<span>{title}</span>
-			<IconButton onclick={onClose} label="close"><X size={15} /></IconButton>
-		</div>
-		{#if chat.picker?.kind === 'model' && activeModel}
-			<div class="efforts">
-				<span class="dim">effort</span>
-				{#each activeModel.reasoning_efforts as ef (ef)}
-					<button class="eff" class:on={ef === chat.picker.activeEffort} onclick={() => onEffort(ef)}>{ef}</button>
-				{/each}
-			</div>
-		{/if}
-		{#if showSearch}
-			<div class="psearch">
-				<Search size={14} />
-				<!-- svelte-ignore a11y_autofocus -->
-				<input bind:value={query} placeholder={t('shell.pickerSearchPlaceholder')} autofocus />
-			</div>
-		{/if}
-		<div class="rows">
-			{#each rows as row, i (row.id)}
-				<button class="prow" class:sel={i === selIdx} onclick={() => onSelect(row.command)} onmouseenter={() => (selIdx = i)} style:padding-left={row.depth != null ? `${11 + row.depth * 16}px` : null}>
-					{#if chat.picker?.kind === 'model'}<Vendor model={row.vendor ?? row.label} size={15} />{/if}
-					{#if row.depth != null && row.depth > 0}<span class="twig">↳</span>{/if}
-					<span class="prow-main">{row.label || t('shell.empty')}</span>
-					<span class="prow-detail">{row.detail}</span>
-					{#if row.active}<Check size={14} class="prow-check" />{/if}
-				</button>
-			{/each}
-			{#if rows.length === 0}<div class="pempty">{query.trim() ? t('shell.noMatch') : t('shell.noOptions')}</div>{/if}
-		</div>
-		<div class="modal-foot dim">{t('shell.pickerFoot')}</div>
+{#snippet body()}
+	<div class="modal-head">
+		<span>{title}</span>
+		<IconButton onclick={onClose} label="close"><X size={15} /></IconButton>
 	</div>
-</div>
+	{#if chat.picker?.kind === 'model' && activeModel}
+		<div class="efforts">
+			<span class="dim">effort</span>
+			{#each activeModel.reasoning_efforts as ef (ef)}
+				<button class="eff" class:on={ef === chat.picker.activeEffort} onclick={() => onEffort(ef)}>{ef}</button>
+			{/each}
+		</div>
+	{/if}
+	{#if showSearch}
+		<div class="psearch">
+			<Search size={14} />
+			<!-- svelte-ignore a11y_autofocus -->
+			<input bind:value={query} placeholder={t('shell.pickerSearchPlaceholder')} autofocus />
+		</div>
+	{/if}
+	<div class="rows">
+		{#each rows as row, i (row.id)}
+			<button class="prow" class:sel={i === selIdx} onclick={() => onSelect(row.command)} onmouseenter={() => (selIdx = i)} style:padding-left={row.depth != null ? `${11 + row.depth * 16}px` : null}>
+				{#if chat.picker?.kind === 'model'}<Vendor model={row.vendor ?? row.label} size={15} />{/if}
+				{#if row.depth != null && row.depth > 0}<span class="twig">↳</span>{/if}
+				<span class="prow-main">{row.label || t('shell.empty')}</span>
+				<span class="prow-detail">{row.detail}</span>
+				{#if row.active}<Check size={14} class="prow-check" />{/if}
+			</button>
+		{/each}
+		{#if rows.length === 0}<div class="pempty">{query.trim() ? t('shell.noMatch') : t('shell.noOptions')}</div>{/if}
+	</div>
+	<div class="modal-foot dim">{t('shell.pickerFoot')}</div>
+{/snippet}
+
+{#if anchored}
+	<button class="pop-backdrop" aria-label="close" onclick={onClose}></button>
+	<div class="modal anchored" role="dialog" aria-label={title}>
+		{@render body()}
+	</div>
+{:else}
+	<div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && onClose()}>
+		<div class="modal" role="dialog" aria-modal="true" tabindex="-1" aria-label={title} use:focusTrap>
+			{@render body()}
+		</div>
+	</div>
+{/if}
 
 <style>
 	.overlay {
@@ -98,6 +113,33 @@
 		border-radius: var(--r-lg);
 		box-shadow: var(--shadow-modal);
 		overflow: hidden;
+	}
+	/* Anchored popover: sits above the caller (composer's model button), not
+	   centered. The caller wraps us in a position:relative container. */
+	.pop-backdrop {
+		position: fixed;
+		inset: 0;
+		background: none;
+		border: none;
+		z-index: 20;
+		cursor: default;
+	}
+	.modal.anchored {
+		position: absolute;
+		bottom: calc(100% + 8px);
+		left: 0;
+		z-index: 21;
+		width: min(380px, 82vw);
+		max-height: min(60vh, 420px);
+		border-radius: var(--r-md);
+		box-shadow: var(--shadow-pop);
+		animation: rise 0.12s ease;
+	}
+	@keyframes rise {
+		from {
+			opacity: 0;
+			transform: translateY(4px);
+		}
 	}
 	.modal-head {
 		display: flex;
