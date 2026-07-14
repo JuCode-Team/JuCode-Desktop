@@ -41,6 +41,7 @@
 	import Sidebar from '$lib/Sidebar.svelte';
 	import Composer from '$lib/Composer.svelte';
 	import MessageList from '$lib/MessageList.svelte';
+	import StatusStrip from '$lib/composer/StatusStrip.svelte';
 	import ApprovalCard from '$lib/ApprovalCard.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
@@ -1184,6 +1185,8 @@
 					{/key}
 				</div>
 			{/if}
+
+			<StatusStrip items={chat.statusLog} />
 
 			<Composer
 				{chat}

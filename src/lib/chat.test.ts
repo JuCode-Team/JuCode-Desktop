@@ -142,6 +142,18 @@ describe('ChatState.handle', () => {
 		expect(c.modelCatalogEffort).toBe('high');
 	});
 
+	it('collects meta notices into statusLog, keeping them out of the bubble stream', () => {
+		const c = new ChatState();
+		c.handle({ type: 'user_message', content: 'hi' });
+		c.handle({ type: 'retrying' });
+		c.handle({ type: 'compaction_end' });
+		c.handle({ type: 'error', message: 'boom' });
+		// statusLog holds only the system/meta notices…
+		expect(c.statusLog.length).toBe(2);
+		// …while user + error stay as bubbles in messages.
+		expect(c.messages.map((m) => m.kind)).toEqual(['user', 'system', 'system', 'error']);
+	});
+
 	it('tracks busy state from engine status', () => {
 		const c = new ChatState();
 		c.handle({ type: 'model_status', state: 'streaming' });

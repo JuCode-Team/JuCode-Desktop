@@ -234,6 +234,8 @@
 
 	// Skip empty placeholders (e.g. an assistant message before its first delta).
 	function shown(m: Msg): boolean {
+		// Meta/status notices render in the collapsible status strip, not inline.
+		if (m.kind === 'system') return false;
 		if (m.kind === 'tool') return !!(m.name || m.output);
 		return !!m.text && m.text.trim().length > 0;
 	}
@@ -288,8 +290,6 @@
 			</div>
 		{:else if m.kind === 'tool'}
 			<ToolCard name={m.name} output={m.output} running={m.running} isError={m.isError} />
-		{:else if m.kind === 'system'}
-			<div class="system">{m.text}</div>
 		{:else if m.kind === 'error'}
 			<div class="error">{m.text}</div>
 				{/if}
@@ -438,12 +438,6 @@
 			opacity: 1;
 			transform: translateY(0);
 		}
-	}
-	.system {
-		font-family: var(--font-mono);
-		font-size: 12px;
-		color: var(--dim2);
-		text-align: center;
 	}
 	.error {
 		font-family: var(--font-mono);

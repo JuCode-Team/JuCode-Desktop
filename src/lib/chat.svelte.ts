@@ -225,6 +225,16 @@ export class ChatState {
 		return ['streaming', 'connecting', 'compacting', 'steering'].includes(this.engineState);
 	}
 
+	/** Meta/status notices (retrying, compaction, stderr, engine warnings, restart
+	 *  notices) — kept out of the conversation bubble stream and shown in the
+	 *  collapsible status strip instead. Real conversation (user/assistant/
+	 *  reasoning/tool) and errors stay inline. */
+	get statusLog(): string[] {
+		const out: string[] = [];
+		for (const m of this.messages) if (m.kind === 'system') out.push(m.text);
+		return out;
+	}
+
 	/** Whether this session has something the engine actually persisted to resume.
 	 *  A fresh session (id assigned at startup but no user turn yet) was never saved,
 	 *  so `/resume <id>` would fail with "No such file". Gates restart/switch resume
