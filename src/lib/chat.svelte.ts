@@ -110,6 +110,10 @@ export class ChatState {
 	// instantly from cache while a fresh `/model` round-trip refreshes it.
 	modelCatalog = $state<ModelOption[]>([]);
 	modelCatalogEffort = $state('');
+	// File-checkpoint sha captured just before each user turn (index = turn), so a
+	// rewind can restore the working tree to that turn's state (codex/claude, where
+	// the engine only rewinds the conversation, not files).
+	fileCheckpoints = $state<Record<number, string>>({});
 	contextTokens = $state(0);
 	contextWindow = $state(0);
 	contextLimit = $state(0);

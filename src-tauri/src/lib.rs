@@ -1730,6 +1730,81 @@ fn git(args: Vec<String>, cwd: Option<String>) -> Result<String, String> {
     }
 }
 
+/// Runs a fixed git plumbing command in `dir` (optionally with an isolated index
+/// file). A stable checkpoint identity is set so `commit-tree` works even in a
+/// repo without a configured user. Returns trimmed stdout on success.
+fn git_plumb(dir: &Path, index: Option<&Path>, args: &[&str]) -> Result<String, String> {
+    let mut cmd = Command::new("git");
+    shell_env::merge_into(&mut cmd);
+    cmd.args(args)
+        .current_dir(dir)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GIT_AUTHOR_NAME", "JuCode")
+        .env("GIT_AUTHOR_EMAIL", "checkpoint@jucode.local")
+        .env("GIT_COMMITTER_NAME", "JuCode")
+        .env("GIT_COMMITTER_EMAIL", "checkpoint@jucode.local");
+    if let Some(idx) = index {
+        cmd.env("GIT_INDEX_FILE", idx);
+    }
+    let output = cmd
+        .output()
+        .map_err(|e| format!("failed to run git: {e}"))?;
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+    }
+}
+
+/// Snapshot the full working tree (tracked + untracked) as a dangling commit
+/// object, WITHOUT touching the user's index or working tree (uses an isolated
+/// temp index). Returns the commit sha — a rewind file-checkpoint. `Ok(String::new())`
+/// only if the tree is unwritable; errors bubble the git message.
+#[tauri::command(async)]
+fn git_checkpoint_capture(cwd: String) -> Result<String, String> {
+    let dir = PathBuf::from(&cwd);
+    let idx = std::env::temp_dir().join(format!("jucode-ckpt-{}.idx", std::process::id()));
+    let _ = std::fs::remove_file(&idx);
+    let has_head = git_plumb(&dir, None, &["rev-parse", "--verify", "HEAD"]).is_ok();
+    if has_head {
+        git_plumb(&dir, Some(&idx), &["read-tree", "HEAD"])?;
+    }
+    git_plumb(&dir, Some(&idx), &["add", "-A"])?;
+    let tree = git_plumb(&dir, Some(&idx), &["write-tree"])?;
+    let _ = std::fs::remove_file(&idx);
+    let commit = if has_head {
+        let head = git_plumb(&dir, None, &["rev-parse", "HEAD"])?;
+        git_plumb(
+            &dir,
+            None,
+            &["commit-tree", &tree, "-p", &head, "-m", "jucode-checkpoint"],
+        )?
+    } else {
+        git_plumb(&dir, None, &["commit-tree", &tree, "-m", "jucode-checkpoint"])?
+    };
+    Ok(commit)
+}
+
+/// Restore the working tree + index to a checkpoint commit. First snapshots the
+/// CURRENT state as a recovery commit (returned, so nothing is ever unrecoverable),
+/// then restores the checkpoint's paths. Files created after the checkpoint are
+/// left in place — this never deletes untracked work.
+#[tauri::command(async)]
+fn git_checkpoint_restore(cwd: String, checkpoint: String) -> Result<String, String> {
+    if checkpoint.len() < 7
+        || checkpoint.len() > 64
+        || !checkpoint.chars().all(|c| c.is_ascii_hexdigit())
+    {
+        return Err(format!("invalid checkpoint sha: {checkpoint}"));
+    }
+    let dir = PathBuf::from(&cwd);
+    git_plumb(&dir, None, &["cat-file", "-e", &checkpoint])
+        .map_err(|_| format!("checkpoint object not found: {checkpoint}"))?;
+    let safety = git_checkpoint_capture(cwd.clone())?;
+    git_plumb(&dir, None, &["checkout", &checkpoint, "--", "."])?;
+    Ok(safety)
+}
+
 /// Resolves the GitHub CLI binary: PATH first, then the usual install locations
 /// (a packaged .app inherits a minimal PATH from launchd).
 fn resolve_gh() -> PathBuf {
@@ -2139,6 +2214,8 @@ pub fn run() {
             fetch_deepseek_balance,
             transcribe_audio,
             generate_text,
+            git_checkpoint_capture,
+            git_checkpoint_restore,
             project_root,
             list_providers,
             list_dir,
@@ -2197,6 +2274,45 @@ mod tests {
     fn missing_file_is_empty_object() {
         let p = tmp("missing.json");
         assert_eq!(read_json_strict(&p).unwrap(), serde_json::json!({}));
+    }
+
+    #[test]
+    fn checkpoint_capture_and_restore_roundtrip() {
+        use std::process::Command;
+        let dir = std::env::temp_dir().join(format!("jucode-ckpt-it-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let git = |args: &[&str]| {
+            Command::new("git")
+                .current_dir(&dir)
+                .env("GIT_AUTHOR_NAME", "T")
+                .env("GIT_AUTHOR_EMAIL", "t@t")
+                .env("GIT_COMMITTER_NAME", "T")
+                .env("GIT_COMMITTER_EMAIL", "t@t")
+                .args(args)
+                .output()
+                .unwrap()
+        };
+        git(&["init", "-q"]);
+        std::fs::write(dir.join("a.txt"), "v1").unwrap();
+        git(&["add", "."]);
+        git(&["commit", "-q", "-m", "init"]);
+        let cwd = dir.to_string_lossy().to_string();
+        // Snapshot the "v1" state.
+        let cp0 = super::git_checkpoint_capture(cwd.clone()).unwrap();
+        assert!(!cp0.is_empty());
+        // The agent modifies a tracked file and adds a new one.
+        std::fs::write(dir.join("a.txt"), "v2").unwrap();
+        std::fs::write(dir.join("b.txt"), "new").unwrap();
+        // Restore to the checkpoint: a.txt reverts, current state saved as safety.
+        let safety = super::git_checkpoint_restore(cwd.clone(), cp0).unwrap();
+        assert!(!safety.is_empty());
+        assert_eq!(std::fs::read_to_string(dir.join("a.txt")).unwrap(), "v1");
+        // Files created after the checkpoint are left in place (never deleted).
+        assert!(dir.join("b.txt").exists());
+        // A bogus sha is rejected without touching the tree.
+        assert!(super::git_checkpoint_restore(cwd, "nothex!!".into()).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

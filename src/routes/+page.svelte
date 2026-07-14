@@ -23,6 +23,8 @@
 		stopScreenRecording,
 		processVideo,
 		claudeSessions,
+		gitCheckpointCapture,
+		gitCheckpointRestore,
 		type EventPayload,
 		type Op
 	} from '$lib/protocol';
@@ -373,7 +375,10 @@
 	// engine. Returns false when there's no live session to receive it.
 	function sendAiEdit(content: string): boolean {
 		if (!chat || chat.engineState === 'exited') return false;
-		if (!chat.busy) chat.optimisticUser(content);
+		if (!chat.busy) {
+			captureCheckpoint();
+			chat.optimisticUser(content);
+		}
 		send({ op: 'user_message', content });
 		return true;
 	}
@@ -777,7 +782,10 @@
 			}
 			// Echo the message instantly when it starts a turn now (a busy session
 			// queues it instead, shown in the composer's queue strip).
-			if (chat && !chat.busy) chat.optimisticUser(content);
+			if (chat && !chat.busy) {
+				captureCheckpoint(); // snapshot files before this turn (for rewind)
+				chat.optimisticUser(content);
+			}
 			send({ op: 'user_message', content, images: images.length ? images : undefined });
 		}
 		input = '';
@@ -980,6 +988,28 @@
 	// Real edit-and-resend: rewind the conversation (and files) to the turn that
 	// produced this user message, then drop its text back into the composer. The
 	// engine lists user turns in order, so the i-th turn matches the i-th message.
+	// Before each codex/claude turn, snapshot the working tree so a later rewind
+	// can restore files to this turn's starting state (the engines rewind only the
+	// conversation). Fire-and-forget; the sha lands under its turn index.
+	function captureCheckpoint() {
+		const c = chat;
+		const cwd = activeProject?.path;
+		if (!c || !cwd || (c.backendId !== 'codex' && c.backendId !== 'claude')) return;
+		const idx = c.userTurns;
+		gitCheckpointCapture(cwd)
+			.then((sha) => {
+				if (sha) c.fileCheckpoints[idx] = sha;
+			})
+			.catch(() => {});
+	}
+	// Restore the working tree to the checkpoint captured before the target turn.
+	function restoreCheckpoint(userIndex: number) {
+		const c = chat;
+		const cwd = activeProject?.path;
+		const sha = c?.fileCheckpoints[userIndex];
+		if (c && cwd && sha) gitCheckpointRestore(cwd, sha).catch((e) => console.error('checkpoint restore failed', e));
+	}
+
 	function rewindToMessage(text: string, userIndex: number) {
 		if (!chat) return;
 		// codex (thread/rollback) and claude (resume-at-uuid respawn) rewind without
@@ -1000,10 +1030,12 @@
 			if (numTurns > 0) send({ op: 'command', input: `/rewind ${numTurns}` });
 			// codex rolls back its own history; mirror it in our projected transcript.
 			chat.truncateToUserTurn(userIndex);
+			restoreCheckpoint(userIndex); // …and the files it changed
 		} else if (pr.id.startsWith('claude:')) {
 			const userIndex = Number(pr.id.slice('claude:'.length));
 			// Respawn resuming at the previous turn's assistant uuid (or fresh at 0).
 			store.rewindClaudeSession(activeId, chat.claudeRewindTarget(userIndex), userIndex);
+			restoreCheckpoint(userIndex);
 		} else {
 			send({ op: 'command', input: `/rewind ${pr.id}` });
 		}
