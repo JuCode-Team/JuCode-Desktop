@@ -154,6 +154,22 @@ describe('ChatState.handle', () => {
 		expect(c.messages.map((m) => m.kind)).toEqual(['user', 'system', 'system', 'error']);
 	});
 
+	it('estimates cost from token usage when the engine reports none', () => {
+		const c = new ChatState();
+		c.handle({ type: 'model_status', model: 'claude-opus-4-8', state: 'idle' });
+		c.handle({ type: 'usage', input_tokens: 1_000_000, output_tokens: 1_000_000 });
+		// opus: $15/M in + $75/M out = $90 for 1M+1M.
+		expect(c.cost).toBeCloseTo(90, 5);
+	});
+
+	it('defers to the engine cost once it reports one (no double count)', () => {
+		const c = new ChatState();
+		c.handle({ type: 'model_status', model: 'gpt-5.5', state: 'idle' });
+		c.handle({ type: 'context_usage', tokens: 100, cost: 0.42 });
+		c.handle({ type: 'usage', input_tokens: 1_000_000, output_tokens: 1_000_000 });
+		expect(c.cost).toBe(0.42);
+	});
+
 	it('tracks busy state from engine status', () => {
 		const c = new ChatState();
 		c.handle({ type: 'model_status', state: 'streaming' });

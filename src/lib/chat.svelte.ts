@@ -10,6 +10,7 @@ import {
 	type EngineApprovalMode
 } from './approval';
 import { recordUsage } from './usageStats';
+import { costUsd } from './pricing';
 import { parseMcpServersEvent, type McpServerView } from './mcp';
 
 export type Msg =
@@ -168,6 +169,10 @@ export class ChatState {
 
 	#assistantIdx = -1;
 	#reasoningIdx = -1;
+	// Set once the engine reports an authoritative cost (jucode via context_usage).
+	// While false we estimate cost client-side from token usage × model pricing
+	// (claude/codex don't report cost).
+	#engineCost = false;
 	#turnStart: number | null = null;
 	#pendingUserEcho: string | null = null;
 	// Fast lookup for the tool message backing a call_id, so tool_update/tool_output
@@ -445,7 +450,10 @@ export class ChatState {
 			}
 			case 'context_usage':
 				this.contextTokens = num(ev.tokens);
-				if (typeof ev.cost === 'number') this.cost = ev.cost;
+				if (typeof ev.cost === 'number') {
+					this.cost = ev.cost;
+					this.#engineCost = true;
+				}
 				break;
 			case 'pending_messages':
 				this.pendingMessages = arr<string>(ev.messages);
@@ -558,6 +566,8 @@ export class ChatState {
 				const inn = num(ev.input_tokens);
 				this.totalIn += inn;
 				this.totalOut += out;
+				// Estimate cost from tokens when the engine doesn't report it itself.
+				if (!this.#engineCost) this.cost += costUsd(this.model, inn, out);
 				recordUsage(inn, out, this.provider);
 				// Prefer the active assistant message (jucode reports usage per
 				// message, mid-turn). When it's already reset — e.g. claude reports
