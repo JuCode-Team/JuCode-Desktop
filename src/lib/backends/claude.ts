@@ -937,7 +937,9 @@ export function createClaudeAdapter(): EngineAdapter {
 				// eslint-disable-next-line no-control-regex
 				const line = raw.__stderr.replace(/\[[0-9;]*m/g, '').trim();
 				if (!line) return [];
-				if (/^\d{4}-\d{2}-\d{2}T\S+\s+(ERROR|WARN|INFO|DEBUG|TRACE)\b/.test(line)) return [];
+				// Drop routine tracing noise but keep ERROR/WARN — they carry the real
+				// reason when a turn fails (e.g. an error_during_execution result).
+				if (/^\d{4}-\d{2}-\d{2}T\S+\s+(INFO|DEBUG|TRACE)\b/.test(line)) return [];
 				// A --resume target the CLI can't find (session file gone / never
 				// persisted) makes it exit immediately. Signal it so the store stops
 				// re-resuming the same doomed id in an endless crash-restart loop

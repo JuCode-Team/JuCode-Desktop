@@ -4,6 +4,7 @@ import { createAdapter, normalizeBackendId, type BackendId } from './backends';
 import { dispatch, ioFor, registerAdapter, unregisterAdapter } from './backends/router';
 import { buildBackendOpts, defaultBackendFor } from './backends/settings';
 import { needsClaudeYoloRespawn, toEngineMode } from './approval';
+import { toClaudeMode } from './backends/claude';
 import { t } from '$lib/i18n';
 import type { Project, Session, WorktreeMeta } from './types';
 
@@ -226,6 +227,12 @@ export class SessionStore {
 		s.chat.resumeBroken = false;
 		const resumeViaSpawn = s.backendId === 'claude' && mayResume;
 		const resumeViaCtx = s.backendId === 'codex' && mayResume;
+		// Preserve claude's permission mode across the restart so yolo
+		// (--dangerously-skip-permissions) survives an auto-restart — otherwise the
+		// engine comes up in default mode while the desktop still thinks it's yolo.
+		const extra: Record<string, unknown> = {};
+		if (resumeViaSpawn) extra.resume = sid;
+		if (s.backendId === 'claude') extra.permission_mode = toClaudeMode(toEngineMode(s.chat.approvalMode));
 		this.#spawn(
 			s,
 			this.projectPathOf(id),
@@ -233,7 +240,7 @@ export class SessionStore {
 				if (sid && canResume && s.backendId === 'jucode')
 					dispatch(id, { op: 'command', input: `/resume ${sid}` });
 			},
-			resumeViaSpawn ? { resume: sid } : undefined,
+			Object.keys(extra).length ? extra : undefined,
 			resumeViaCtx ? sid : undefined
 		).catch((e) => this.#engineFailed(s.chat, e));
 	}

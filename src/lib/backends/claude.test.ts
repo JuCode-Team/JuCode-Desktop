@@ -1140,9 +1140,13 @@ describe('claude adapter: restarts and robustness', () => {
 			{ type: 'info', message: '[claude] node: warning' }
 		]);
 		expect(adapter.translate({ __stderr: '   ' })).toEqual([]);
-		// Tracing-formatted engine log lines are dropped as noise.
+		// Routine tracing (INFO/DEBUG/TRACE) is dropped; ERROR/WARN are kept (they
+		// carry the real reason a turn failed).
 		expect(adapter.translate({ __stderr: '2026-07-14T10:00:00.000Z DEBUG hitting cache' })).toEqual([]);
-		expect(adapter.translate({ __stderr: '2026-07-14T10:00:00Z ERROR boom' })).toEqual([]);
+		expect(adapter.translate({ __stderr: '2026-07-14T10:00:00Z INFO warming up' })).toEqual([]);
+		expect(adapter.translate({ __stderr: '2026-07-14T10:00:00Z ERROR boom' })).toEqual([
+			{ type: 'info', message: '[claude] 2026-07-14T10:00:00Z ERROR boom' }
+		]);
 		// A failed --resume signals resume_failed (breaks the crash-restart loop).
 		expect(
 			adapter.translate({ __stderr: 'No conversation found with session ID: e4f0405e-3919-4c10' })
