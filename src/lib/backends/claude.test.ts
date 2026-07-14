@@ -695,21 +695,19 @@ describe('claude adapter: model picker', () => {
 		const rows = events[0].models as {
 			model: string;
 			label: string;
+			vendor: string;
 			active: boolean;
 			reasoning_efforts: string[];
 		}[];
-		// Submitted ids stay the aliases (default/opus keep their distinct meaning)...
-		expect(rows.map((r) => r.model)).toEqual(['default', 'opus[1m]', 'sonnet', 'haiku']);
-		// ...but the picker shows the concrete resolved model id.
-		expect(rows.map((r) => r.label)).toEqual([
-			'claude-opus-4-8[1m]',
-			'claude-opus-4-8[1m]',
-			'claude-sonnet-5',
-			'claude-haiku-4-5-20251001'
-		]);
-		// The init model (claude-opus-4-8[1m]) resolves to the first matching
-		// alias only — several values map to the same concrete model.
-		expect(rows.map((r) => r.active)).toEqual([true, false, false, false]);
+		// The default/recommended alias is filtered out (it duplicates Opus);
+		// submitted ids stay the concrete aliases.
+		expect(rows.map((r) => r.model)).toEqual(['opus[1m]', 'sonnet', 'haiku']);
+		// The picker shows compact concrete names.
+		expect(rows.map((r) => r.label)).toEqual(['Opus 4.8', 'Sonnet 5', 'Haiku 4.5']);
+		// Vendor id keeps the "claude" keyword so the picker shows the claude icon.
+		expect(rows.every((r) => /claude/.test(r.vendor))).toBe(true);
+		// init model (claude-opus-4-8[1m]) marks the Opus row active.
+		expect(rows.map((r) => r.active)).toEqual([true, false, false]);
 		// No effort control exists in stream-json mode → submenu stays hidden.
 		expect(rows.every((r) => r.reasoning_efforts.length === 0)).toBe(true);
 	});

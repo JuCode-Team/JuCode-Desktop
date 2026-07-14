@@ -463,6 +463,7 @@
 		const activeRows = p.models.map((m) => ({
 			id: `${cur}::${m.model}`,
 			label: m.label || m.model,
+			vendor: m.vendor || m.model,
 			detail: m.context_window ? `${cur} · ${fmtTokens(m.context_window)}` : cur,
 			active: m.active,
 			command: `/model ${m.model}`,
@@ -479,6 +480,7 @@
 					.map((m) => ({
 						id: `${pv.id}::${m.name}`,
 						label: m.name,
+						vendor: m.name,
 						detail: `${pv.id}${providers.includes(pv.id) ? '' : ` · ${t('shell.notConfigured')}`} · ${fmtTokens(m.context_window ?? 0)}`,
 						active: false,
 						command: `@switch ${pv.id} ${m.name}`,

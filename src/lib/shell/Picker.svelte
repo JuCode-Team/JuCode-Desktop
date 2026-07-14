@@ -9,6 +9,7 @@
 	type Row = {
 		id: string;
 		label: string;
+		vendor?: string;
 		detail: string;
 		active: boolean;
 		command: string;
@@ -64,7 +65,7 @@
 		<div class="rows">
 			{#each rows as row, i (row.id)}
 				<button class="prow" class:sel={i === selIdx} onclick={() => onSelect(row.command)} onmouseenter={() => (selIdx = i)} style:padding-left={row.depth != null ? `${11 + row.depth * 16}px` : null}>
-					{#if chat.picker?.kind === 'model'}<Vendor model={row.label} size={15} />{/if}
+					{#if chat.picker?.kind === 'model'}<Vendor model={row.vendor ?? row.label} size={15} />{/if}
 					{#if row.depth != null && row.depth > 0}<span class="twig">↳</span>{/if}
 					<span class="prow-main">{row.label || t('shell.empty')}</span>
 					<span class="prow-detail">{row.detail}</span>

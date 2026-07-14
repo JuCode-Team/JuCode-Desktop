@@ -91,6 +91,23 @@ import type {
 export const CLAUDE_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'];
 const DEFAULT_CLAUDE_EFFORT = 'medium';
 
+/** Compact display name for a claude model row: "claude-opus-4-8[1m]" → "Opus
+ *  4.8", "claude-haiku-4-5-20251001" → "Haiku 4.5". The `default`/recommended
+ *  alias keeps its own label so it doesn't duplicate the concrete Opus row. */
+export function compactClaudeModel(resolvedModel: string, displayName?: string): string {
+	if (displayName && /default|recommended/i.test(displayName)) return 'Default';
+	let s = (resolvedModel || displayName || '').replace(/^claude-/, '').replace(/\[1m\]$/i, '');
+	if (!s) return displayName || resolvedModel || '';
+	const parts = s.split('-');
+	const family = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+	const ver: string[] = [];
+	for (const p of parts.slice(1)) {
+		if (!/^\d+$/.test(p) || /^\d{8}$/.test(p)) break; // stop at non-numeric or a date suffix
+		ver.push(p);
+	}
+	return ver.length ? `${family} ${ver.join('.')}` : family;
+}
+
 export const CLAUDE_CAPS: BackendCaps = {
 	approvalModes: true, // set_permission_mode control request (live, acked)
 	hunkApproval: false, // can_use_tool is whole-call allow/deny
@@ -357,17 +374,21 @@ export function createClaudeAdapter(): EngineAdapter {
 	 *  resolved "claude-haiku-4-5-20251001"; first match wins because several
 	 *  aliases can resolve to the same model). */
 	function modelViewEvent(): NormalizedEvent {
-		const rows = catalog.map((m) => ({
+		// Hide the `default`/recommended alias — it duplicates the concrete Opus
+		// row it resolves to. Show only concrete models.
+		const visible = catalog.filter((m) => !/default|recommended/i.test(m.displayName || m.value));
+		const rows = visible.map((m) => ({
 			model: m.value,
-			// Show the concrete resolved id (claude-opus-4-8) rather than the alias
-			// (opus[1m]); submitting still uses `value` so default/opus stay distinct.
-			label: m.resolvedModel || m.value,
+			// Show a compact concrete name ("Opus 4.8") rather than the alias.
+			label: compactClaudeModel(m.resolvedModel || m.value, m.displayName),
+			// Vendor icon matches on this concrete id (contains "claude").
+			vendor: m.resolvedModel || m.value,
 			active: false,
 			context_window: modelWindows.get(m.resolvedModel || m.value) ?? 0,
 			max_output_tokens: 0,
 			reasoning_efforts: [] as string[]
 		}));
-		const activeIdx = catalog.findIndex((m) => m.value === model || m.resolvedModel === model);
+		const activeIdx = visible.findIndex((m) => m.value === model || m.resolvedModel === model);
 		if (activeIdx >= 0) {
 			rows[activeIdx].active = true;
 			if (!rows[activeIdx].context_window) rows[activeIdx].context_window = contextWindow;
@@ -375,7 +396,8 @@ export function createClaudeAdapter(): EngineAdapter {
 			// Keep the active model marked even if the catalog doesn't list it.
 			rows.unshift({
 				model,
-				label: model,
+				label: compactClaudeModel(model),
+				vendor: model,
 				active: true,
 				context_window: contextWindow,
 				max_output_tokens: 0,

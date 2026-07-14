@@ -32,6 +32,9 @@ export interface ModelOption {
 	/** Human-facing concrete model to display when it differs from `model`
 	 *  (e.g. claude's resolvedModel "claude-opus-4-8" behind the alias "opus"). */
 	label?: string;
+	/** Original model id for vendor-icon matching, when `label` is a compact
+	 *  name that no longer contains the vendor keyword (e.g. "Opus 4.8"). */
+	vendor?: string;
 	active: boolean;
 	context_window: number;
 	max_output_tokens: number;
