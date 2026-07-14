@@ -91,6 +91,15 @@ import type {
 export const CLAUDE_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'];
 const DEFAULT_CLAUDE_EFFORT = 'medium';
 
+/** The `/effort` slash command echoes the raw command plus a "Set effort level to
+ *  <lvl> (this session only): …" confirmation blurb. Neither is conversation
+ *  content — the new level surfaces via model_status — so we drop them wherever
+ *  they land (replay user frame or a text frame). */
+export function isEffortEcho(text: string): boolean {
+	const s = text.trim();
+	return /^\/effort\b/.test(s) || /^set effort level to /i.test(s);
+}
+
 /** Compact display name for a claude model: "claude-opus-4-8[1m]" → "Opus 4.8
  *  (1M)", "claude-haiku-4-5-20251001" → "Haiku 4.5". The `[1m]` long-context
  *  variant is tagged so it reads as a distinct model from the standard one.
@@ -641,6 +650,8 @@ export function createClaudeAdapter(): EngineAdapter {
 				case 'text': {
 					const tail = block.text.slice(streamed);
 					if (!tail) break;
+					// Drop a /effort confirmation that arrives as a text frame.
+					if (isEffortEcho(block.text)) break;
 					if (streamed === 0) events.push({ type: 'assistant_start' });
 					events.push({ type: 'assistant_delta', delta: tail });
 					break;
@@ -670,9 +681,10 @@ export function createClaudeAdapter(): EngineAdapter {
 			const first = list.find((b) => rec(b)?.type === 'text');
 			const text = typeof content === 'string' ? content : str(rec(first)?.text);
 			// Slash-command echoes ("<command-name>/compact…", "<local-command-stdout>
-			// Set model to…") are internal bookkeeping, not conversation content —
-			// their outcomes already surface as model_status / compaction events.
-			if (/^<(local-)?command-/.test(text.trim())) return [];
+			// Set model to…"), the raw /effort echo and its "Set effort level to…"
+			// confirmation are internal bookkeeping, not conversation content — their
+			// outcomes already surface as model_status / compaction events.
+			if (/^<(local-)?command-/.test(text.trim()) || isEffortEcho(text)) return [];
 			return text ? [{ type: 'user_message', content: text }] : [];
 		}
 		if (!Array.isArray(content)) return []; // synthetic notices ("[Request interrupted by user]")

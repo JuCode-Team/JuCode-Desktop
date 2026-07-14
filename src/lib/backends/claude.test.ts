@@ -1020,6 +1020,39 @@ describe('claude adapter: slash-command echo suppression', () => {
 			})
 		).toEqual([{ type: 'user_message', content: 'queued question' }]);
 	});
+
+	it('drops the /effort echo and its "Set effort level to…" confirmation', () => {
+		const { lines } = makeIo();
+		const adapter = createClaudeAdapter();
+		boot(adapter, lines);
+		for (const content of [
+			'/effort max',
+			'Set effort level to max (this session only): Maximum capability with deepest reasoning. May use excessive tokens.'
+		]) {
+			expect(
+				adapter.translate({
+					type: 'user',
+					message: { role: 'user', content },
+					session_id: SID,
+					parent_tool_use_id: null,
+					isReplay: true
+				})
+			).toEqual([]);
+		}
+		// The same confirmation arriving as an authoritative assistant text frame is
+		// dropped too (no empty assistant bubble).
+		expect(
+			adapter.translate({
+				type: 'assistant',
+				message: {
+					role: 'assistant',
+					content: [{ type: 'text', text: 'Set effort level to max (this session only): Maximum capability.' }]
+				},
+				session_id: SID,
+				parent_tool_use_id: null
+			})
+		).toEqual([]);
+	});
 });
 
 describe('claude adapter: restarts and robustness', () => {
