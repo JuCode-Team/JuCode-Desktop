@@ -3,6 +3,7 @@ import { createSession, closeSession, projectRoot, writeConfig, git, claudeSessi
 import { createAdapter, normalizeBackendId, type BackendId } from './backends';
 import { dispatch, ioFor, registerAdapter, unregisterAdapter } from './backends/router';
 import { buildBackendOpts, defaultBackendFor } from './backends/settings';
+import { needsClaudeYoloRespawn, toEngineMode } from './approval';
 import { t } from '$lib/i18n';
 import type { Project, Session, WorktreeMeta } from './types';
 
@@ -315,6 +316,34 @@ export class SessionStore {
 			await this.#spawn(s, this.projectPathOf(id), undefined, {
 				permission_mode: 'bypassPermissions',
 				...(sid && canResume ? { resume: sid } : {})
+			});
+		} catch (e) {
+			s.chat.switching = false;
+			this.#engineFailed(s.chat, e);
+		}
+	}
+
+	/**
+	 * Rewind a claude conversation to the `userIndex`-th user turn. claude has no
+	 * live rewind control frame, so — mirroring the yolo respawn — we restart the
+	 * child resuming the session truncated at the previous turn's assistant message
+	 * (`--resume <sid> --resume-session-at <uuid>`, the same argv the Agent SDK
+	 * builds), and truncate our projected transcript to match. A null uuid (rewind
+	 * to the first turn) restarts the session fresh.
+	 */
+	async rewindClaudeSession(id: string, resumeAtUuid: string | null, userIndex: number) {
+		const s = this.allSessions.find((x) => x.id === id);
+		if (!s || s.backendId !== 'claude') return;
+		const sid = s.chat.sessionId;
+		const yolo = needsClaudeYoloRespawn('claude', toEngineMode(s.chat.approvalMode));
+		s.chat.switching = true;
+		s.chat.engineState = 'connecting';
+		s.chat.truncateToUserTurn(userIndex);
+		try {
+			await closeSession(id);
+			await this.#spawn(s, this.projectPathOf(id), undefined, {
+				...(sid && resumeAtUuid ? { resume: sid, resume_session_at: resumeAtUuid } : {}),
+				...(yolo ? { permission_mode: 'bypassPermissions' } : {})
 			});
 		} catch (e) {
 			s.chat.switching = false;

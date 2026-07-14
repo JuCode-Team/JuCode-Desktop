@@ -183,6 +183,21 @@ describe('ChatState.handle', () => {
 		expect(c.messages.map((m) => m.kind)).toEqual(['user', 'assistant']);
 	});
 
+	it('stamps assistant_uuid and resolves the claude rewind resume-at target', () => {
+		const c = new ChatState();
+		c.handle({ type: 'user_message', content: 'q1' });
+		c.handle({ type: 'assistant_delta', delta: 'a1' });
+		c.handle({ type: 'assistant_uuid', uuid: 'uuid-1' });
+		c.handle({ type: 'assistant_start' });
+		c.handle({ type: 'user_message', content: 'q2' });
+		c.handle({ type: 'assistant_delta', delta: 'a2' });
+		c.handle({ type: 'assistant_uuid', uuid: 'uuid-2' });
+		// Rewind to turn 1 (2nd user msg) resumes at turn 0's assistant uuid.
+		expect(c.claudeRewindTarget(1)).toBe('uuid-1');
+		// Rewind to turn 0 has no prior assistant → fresh restart (null).
+		expect(c.claudeRewindTarget(0)).toBeNull();
+	});
+
 	it('tracks busy state from engine status', () => {
 		const c = new ChatState();
 		c.handle({ type: 'model_status', state: 'streaming' });

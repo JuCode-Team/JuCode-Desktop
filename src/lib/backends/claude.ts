@@ -131,7 +131,7 @@ export const CLAUDE_CAPS: BackendCaps = {
 	goals: false,
 	skills: false,
 	mcpManage: false,
-	checkpoints: false,
+	checkpoints: true, // conversation rewind via --resume-session-at respawn (files desktop-side)
 	contextUsage: true, // stream_event usage + result modelUsage.contextWindow
 	compact: true, // "/compact" as stream-json user text → compacting/compact_boundary frames
 	modelPicker: true, // list_models catalog + set_model control requests (live, in place)
@@ -690,6 +690,10 @@ export function createClaudeAdapter(): EngineAdapter {
 					break;
 			}
 		}
+		// Stamp the transcript uuid onto the assistant turn so a rewind can resume
+		// the session at this point (`--resume-session-at <uuid>`).
+		const uuid = str(frame.uuid);
+		if (uuid) events.push({ type: 'assistant_uuid', uuid });
 		return events;
 	}
 

@@ -15,7 +15,7 @@ import { parseMcpServersEvent, type McpServerView } from './mcp';
 
 export type Msg =
 	| { kind: 'user'; text: string }
-	| { kind: 'assistant'; text: string; tokens?: number; elapsed?: number }
+	| { kind: 'assistant'; text: string; tokens?: number; elapsed?: number; uuid?: string }
 	| { kind: 'reasoning'; text: string; collapsed: boolean }
 	| { kind: 'tool'; callId: string; name: string; output: string; running: boolean; isError: boolean }
 	| { kind: 'system'; text: string }
@@ -245,6 +245,23 @@ export class ChatState {
 		return this.messages.filter((m) => m.kind === 'user').length;
 	}
 
+	/** For a claude rewind to the `userIndex`-th user turn: the transcript uuid of
+	 *  the assistant message ending the previous turn — the `--resume-session-at`
+	 *  target. Null when rewinding to the first turn (restart fresh). */
+	claudeRewindTarget(userIndex: number): string | null {
+		let count = 0;
+		let lastUuid: string | null = null;
+		for (const m of this.messages) {
+			if (m.kind === 'user') {
+				if (count === userIndex) return lastUuid;
+				count++;
+			} else if (m.kind === 'assistant' && m.uuid) {
+				lastUuid = m.uuid;
+			}
+		}
+		return lastUuid;
+	}
+
 	/** Drop the `userIndex`-th user turn and everything after it — used by codex's
 	 *  local view truncation on a thread/rollback rewind (the engine rewinds its
 	 *  own history; we mirror it in the projected transcript). */
@@ -466,6 +483,24 @@ export class ChatState {
 						/* non-JSON output */
 						console.warn('tool_output JSON parse failed', e);
 					}
+				}
+				break;
+			}
+			case 'assistant_uuid': {
+				// Stamp the transcript uuid on the active/last assistant turn (claude
+				// rewind resume-at target).
+				const uuid = str(ev.uuid);
+				if (uuid) {
+					let m = this.#assistantIdx >= 0 ? this.messages[this.#assistantIdx] : null;
+					if (m?.kind !== 'assistant') {
+						for (let i = this.messages.length - 1; i >= 0; i--) {
+							if (this.messages[i].kind === 'assistant') {
+								m = this.messages[i];
+								break;
+							}
+						}
+					}
+					if (m?.kind === 'assistant') m.uuid = uuid;
 				}
 				break;
 			}

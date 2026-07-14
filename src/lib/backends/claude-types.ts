@@ -109,6 +109,9 @@ export interface AssistantFrame {
 	message: { id: string; model: string; content: ContentBlock[]; usage?: ApiUsage };
 	session_id: string;
 	parent_tool_use_id: string | null;
+	/** Transcript message uuid — the resume-at target for a conversation rewind
+	 *  (`--resume-session-at <uuid>`, matching the SDK's resumeSessionAt). */
+	uuid?: string;
 }
 
 /** Echoed stdin messages (`isReplay: true`), tool results, and synthetic

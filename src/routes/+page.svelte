@@ -982,10 +982,10 @@
 	// engine lists user turns in order, so the i-th turn matches the i-th message.
 	function rewindToMessage(text: string, userIndex: number) {
 		if (!chat) return;
-		// codex rewinds its conversation with thread/rollback (by turn count), which
-		// has no checkpoint_view round-trip — confirm directly from the turn index.
-		if (chat.backendId === 'codex') {
-			chat.pendingRewind = { id: `codex:${userIndex}`, text };
+		// codex (thread/rollback) and claude (resume-at-uuid respawn) rewind without
+		// the jucode checkpoint_view round-trip — confirm directly from the index.
+		if (chat.backendId === 'codex' || chat.backendId === 'claude') {
+			chat.pendingRewind = { id: `${chat.backendId}:${userIndex}`, text };
 			return;
 		}
 		chat.rewindIntent = { userIndex, text };
@@ -1000,6 +1000,10 @@
 			if (numTurns > 0) send({ op: 'command', input: `/rewind ${numTurns}` });
 			// codex rolls back its own history; mirror it in our projected transcript.
 			chat.truncateToUserTurn(userIndex);
+		} else if (pr.id.startsWith('claude:')) {
+			const userIndex = Number(pr.id.slice('claude:'.length));
+			// Respawn resuming at the previous turn's assistant uuid (or fresh at 0).
+			store.rewindClaudeSession(activeId, chat.claudeRewindTarget(userIndex), userIndex);
 		} else {
 			send({ op: 'command', input: `/rewind ${pr.id}` });
 		}

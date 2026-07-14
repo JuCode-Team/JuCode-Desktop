@@ -59,6 +59,7 @@ impl BackendKind {
                 "bin_override",
                 "permission_mode",
                 "resume",
+                "resume_session_at",
                 "session_id",
                 "model",
                 "use_shell_env",
@@ -78,6 +79,9 @@ pub struct BackendOpts {
     pub permission_mode: Option<String>,
     /// claude: `--resume <session-id>`.
     pub resume: Option<String>,
+    /// claude: `--resume-session-at <message-uuid>` — resume a session truncated
+    /// at a given message (conversation rewind). Used together with `resume`.
+    pub resume_session_at: Option<String>,
     /// claude: `--session-id <uuid>` (mutually exclusive with `resume`).
     pub session_id: Option<String>,
     /// claude: `--model <name>`.
@@ -95,6 +99,7 @@ impl Default for BackendOpts {
             bin_override: None,
             permission_mode: None,
             resume: None,
+            resume_session_at: None,
             session_id: None,
             model: None,
             use_shell_env: true,
@@ -225,6 +230,13 @@ pub fn validate_opts(
                 }
                 opts.resume = Some(s);
             }
+            "resume_session_at" => {
+                // A message uuid (UUID-shaped: alphanumeric + dashes).
+                if !is_valid_session_id(&s) {
+                    return Err(format!("invalid resume_session_at message id: {s}"));
+                }
+                opts.resume_session_at = Some(s);
+            }
             "session_id" => {
                 if !is_valid_session_id(&s) {
                     return Err(format!("invalid session id: {s}"));
@@ -242,6 +254,9 @@ pub fn validate_opts(
     }
     if opts.resume.is_some() && opts.session_id.is_some() {
         return Err("resume and session_id are mutually exclusive".to_string());
+    }
+    if opts.resume_session_at.is_some() && opts.resume.is_none() {
+        return Err("resume_session_at requires resume".to_string());
     }
     Ok(opts)
 }
@@ -279,6 +294,10 @@ pub fn build_args(kind: BackendKind, opts: &BackendOpts) -> Vec<String> {
             if let Some(sid) = &opts.resume {
                 args.push("--resume".to_string());
                 args.push(sid.clone());
+            }
+            if let Some(uuid) = &opts.resume_session_at {
+                args.push("--resume-session-at".to_string());
+                args.push(uuid.clone());
             }
             if let Some(sid) = &opts.session_id {
                 args.push("--session-id".to_string());
@@ -467,6 +486,30 @@ mod tests {
                 "claude-sonnet-4-5",
             ]
         );
+    }
+
+    #[test]
+    fn resume_session_at_maps_to_flag_and_requires_resume() {
+        // Rewind respawn: --resume <sid> --resume-session-at <msg-uuid>.
+        let opts = validate_opts(
+            BackendKind::Claude,
+            Some(&json!({
+                "resume": "0f3d7a1c-9e2b-4b7e-9d4d-2a1b3c4d5e6f",
+                "resume_session_at": "aa11bb22-cc33-dd44-ee55-ff6677889900"
+            })),
+        )
+        .unwrap();
+        let args = build_args(BackendKind::Claude, &opts);
+        let ri = args.iter().position(|a| a == "--resume").unwrap();
+        assert_eq!(args[ri + 1], "0f3d7a1c-9e2b-4b7e-9d4d-2a1b3c4d5e6f");
+        let ai = args.iter().position(|a| a == "--resume-session-at").unwrap();
+        assert_eq!(args[ai + 1], "aa11bb22-cc33-dd44-ee55-ff6677889900");
+        // resume_session_at without resume is rejected.
+        assert!(validate_opts(
+            BackendKind::Claude,
+            Some(&json!({ "resume_session_at": "aa11bb22-cc33-dd44-ee55-ff6677889900" })),
+        )
+        .is_err());
     }
 
     #[test]

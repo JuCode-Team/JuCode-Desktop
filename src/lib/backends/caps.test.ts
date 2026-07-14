@@ -26,8 +26,9 @@ describe('caps() gating helper', () => {
 		// claude: approval picker, stop button, context ring, model picker
 		// (list_models/set_model control requests), /compact (stream-json slash
 		// text) and the resume picker (claude_sessions file listing + --resume,
-		// with transcript replay) are live; steer (stdin is already a queue),
-		// plan/goal tabs, tree / checkpoints, skills and MCP mutations stay hidden.
+		// with transcript replay) and rewind (--resume-session-at respawn) are live;
+		// steer (stdin is already a queue), plan/goal tabs, tree, skills and MCP
+		// mutations stay hidden.
 		const cl = caps({ backendId: 'claude' });
 		expect(cl.approvalModes).toBe(true);
 		expect(cl.interrupt).toBe(true);
@@ -35,7 +36,7 @@ describe('caps() gating helper', () => {
 		expect(cl.steer).toBe(false);
 		expect(cl.goals).toBe(false);
 		expect(cl.branchTree).toBe(false);
-		expect(cl.checkpoints).toBe(false);
+		expect(cl.checkpoints).toBe(true); // conversation rewind via --resume-session-at respawn
 		expect(cl.resume).toBe(true);
 		expect(cl.skills).toBe(false);
 		expect(cl.mcpManage).toBe(false);
