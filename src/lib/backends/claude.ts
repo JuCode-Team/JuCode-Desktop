@@ -381,15 +381,37 @@ export function createClaudeAdapter(): EngineAdapter {
 		context_limit: 0
 	});
 
-	/** The composer's slash autocomplete (command_list event) for claude. */
-	const commandList = (): NormalizedEvent => ({
-		type: 'command_list',
-		commands: [
-			{ command: '/model', marker: null, description: t('shell.cmd.model') },
-			{ command: '/resume', marker: null, description: t('shell.cmd.resume') },
-			{ command: '/compact', marker: null, description: t('shell.cmd.compact') }
-		]
-	});
+	// Descriptions for the slash commands we have i18n for; the rest (custom
+	// commands, less-common built-ins) show with no description.
+	const CLAUDE_CMD_DESC: Record<string, string> = {
+		model: t('shell.cmd.model'),
+		resume: t('shell.cmd.resume'),
+		compact: t('shell.cmd.compact')
+	};
+
+	/** The composer's slash autocomplete (command_list event) for claude, built
+	 *  from the CLI's own `slash_commands` (init frame) so custom + built-in
+	 *  commands like /context, /doctor all show. /model and /resume are
+	 *  desktop-driven, so ensure they're present even if the CLI omits them. */
+	const commandList = (cmds: string[]): NormalizedEvent => {
+		const names: string[] = [];
+		const seen = new Set<string>();
+		for (const raw of ['model', 'resume', ...cmds]) {
+			const n = raw.replace(/^\//, '').trim();
+			if (n && !seen.has(n)) {
+				seen.add(n);
+				names.push(n);
+			}
+		}
+		return {
+			type: 'command_list',
+			commands: names.map((n) => ({
+				command: `/${n}`,
+				marker: null,
+				description: CLAUDE_CMD_DESC[n] ?? ''
+			}))
+		};
+	};
 
 	/** list_models response → picker rows (jucode model_view shape). Row ids are
 	 *  the `value` strings set_model accepts; the active row is matched against
@@ -558,7 +580,7 @@ export function createClaudeAdapter(): EngineAdapter {
 				context_window: contextWindow
 			},
 			modelStatus(),
-			commandList(),
+			commandList(Array.isArray(frame.slash_commands) ? frame.slash_commands : []),
 			{ type: 'approval_mode', mode: fromClaudeMode(engineMode) },
 			{ type: 'status', message: 'ready' }
 		];
@@ -784,7 +806,9 @@ export function createClaudeAdapter(): EngineAdapter {
 				lastEngineMode = engineMode;
 				return [
 					{ type: 'approval_mode', mode: fromClaudeMode(engineMode) },
-					commandList(),
+					// The real slash_commands arrive with the first system/init, which
+					// re-emits command_list; here we only know the desktop-native ones.
+					commandList([]),
 					{ type: 'status', message: 'ready' }
 				];
 			}
@@ -1009,9 +1033,13 @@ export function createClaudeAdapter(): EngineAdapter {
 							];
 						default:
 							// /resume is page-driven for claude (session listing needs fs
-							// access via the claude_sessions command); anything else —
-							// /tree, /rewind, … — is unsupported and the UI notifies.
-							return null;
+							// access via the claude_sessions command).
+							if (cmd === '/resume') return null;
+							// Any other slash command comes from the CLI's own slash_commands
+							// list (built-ins like /context, /doctor or a user's custom
+							// command) — forward it verbatim as stream-json user text for the
+							// CLI to execute, same mechanism as /compact.
+							return [userText(input)];
 					}
 				}
 				case 'shutdown':

@@ -937,6 +937,38 @@ describe('claude adapter: compaction', () => {
 		});
 	});
 
+	it('surfaces the CLI slash_commands in the autocomplete (custom + built-ins)', () => {
+		const { lines } = makeIo();
+		const adapter = createClaudeAdapter();
+		lines.length = 0;
+		const events = adapter.translate({
+			...initFrame(),
+			slash_commands: ['compact', 'context', 'doctor', 'my-custom']
+		});
+		const cl = events.find((e) => e.type === 'command_list');
+		expect((cl!.commands as { command: string }[]).map((c) => c.command)).toEqual([
+			'/model',
+			'/resume',
+			'/compact',
+			'/context',
+			'/doctor',
+			'/my-custom'
+		]);
+	});
+
+	it('forwards an unrecognized slash command as stream-json user text', () => {
+		const { lines } = makeIo();
+		const adapter = createClaudeAdapter();
+		boot(adapter, lines);
+		const frames = adapter.encodeOp({ op: 'command', input: '/context' });
+		expect(parse(frames![0])).toEqual({
+			type: 'user',
+			message: { role: 'user', content: [{ type: 'text', text: '/context' }] }
+		});
+		// /resume stays page-driven (fs-based session listing), not forwarded.
+		expect(adapter.encodeOp({ op: 'command', input: '/resume' })).toBeNull();
+	});
+
 	it('maps the recorded compaction frame sequence to compaction_start/end', () => {
 		const { lines } = makeIo();
 		const adapter = createClaudeAdapter();
