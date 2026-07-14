@@ -359,6 +359,9 @@ export function createClaudeAdapter(): EngineAdapter {
 	function modelViewEvent(): NormalizedEvent {
 		const rows = catalog.map((m) => ({
 			model: m.value,
+			// Show the concrete resolved id (claude-opus-4-8) rather than the alias
+			// (opus[1m]); submitting still uses `value` so default/opus stay distinct.
+			label: m.resolvedModel || m.value,
 			active: false,
 			context_window: modelWindows.get(m.resolvedModel || m.value) ?? 0,
 			max_output_tokens: 0,
@@ -372,6 +375,7 @@ export function createClaudeAdapter(): EngineAdapter {
 			// Keep the active model marked even if the catalog doesn't list it.
 			rows.unshift({
 				model,
+				label: model,
 				active: true,
 				context_window: contextWindow,
 				max_output_tokens: 0,

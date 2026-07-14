@@ -27,7 +27,11 @@ export interface TreeNode {
 	active: boolean;
 }
 export interface ModelOption {
+	/** The id submitted to switch models (an alias like "opus[1m]" for claude). */
 	model: string;
+	/** Human-facing concrete model to display when it differs from `model`
+	 *  (e.g. claude's resolvedModel "claude-opus-4-8" behind the alias "opus"). */
+	label?: string;
 	active: boolean;
 	context_window: number;
 	max_output_tokens: number;

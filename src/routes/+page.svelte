@@ -462,8 +462,8 @@
 			['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex', 'gpt-5.2'].includes(n) || n.startsWith('claude-');
 		const activeRows = p.models.map((m) => ({
 			id: `${cur}::${m.model}`,
-			label: m.model,
-			detail: `${cur} · ${fmtTokens(m.context_window)}`,
+			label: m.label || m.model,
+			detail: m.context_window ? `${cur} · ${fmtTokens(m.context_window)}` : cur,
 			active: m.active,
 			command: `/model ${m.model}`,
 			depth: nil

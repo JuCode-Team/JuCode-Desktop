@@ -694,10 +694,19 @@ describe('claude adapter: model picker', () => {
 		expect(events[0].active_effort).toBe('');
 		const rows = events[0].models as {
 			model: string;
+			label: string;
 			active: boolean;
 			reasoning_efforts: string[];
 		}[];
+		// Submitted ids stay the aliases (default/opus keep their distinct meaning)...
 		expect(rows.map((r) => r.model)).toEqual(['default', 'opus[1m]', 'sonnet', 'haiku']);
+		// ...but the picker shows the concrete resolved model id.
+		expect(rows.map((r) => r.label)).toEqual([
+			'claude-opus-4-8[1m]',
+			'claude-opus-4-8[1m]',
+			'claude-sonnet-5',
+			'claude-haiku-4-5-20251001'
+		]);
 		// The init model (claude-opus-4-8[1m]) resolves to the first matching
 		// alias only — several values map to the same concrete model.
 		expect(rows.map((r) => r.active)).toEqual([true, false, false, false]);
