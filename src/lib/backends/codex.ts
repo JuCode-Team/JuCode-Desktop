@@ -628,6 +628,19 @@ export function createCodexAdapter(): EngineAdapter {
 	}
 
 	function onServerRequest(id: RequestId, method: string, params: unknown): NormalizedEvent[] {
+		// full-auto means "no prompts". A turn bakes its approvalPolicy at turn/start,
+		// so one started before a switch to full-auto (or the startup mode-sync race)
+		// can still emit a requestApproval — which, unanswered, blocks the turn (the
+		// command never completes, its card spins, the turn never ends). Auto-approve
+		// here to honor the user's full-auto choice and unstick it.
+		if (
+			mode === 'full-auto' &&
+			(method === 'item/commandExecution/requestApproval' ||
+				method === 'item/fileChange/requestApproval')
+		) {
+			send(frame({ id, result: { decision: 'accept' } }));
+			return [];
+		}
 		if (method === 'item/commandExecution/requestApproval') {
 			const p = params as CommandExecutionRequestApprovalParams;
 			const callId = `approval-${++approvalSeq}`;

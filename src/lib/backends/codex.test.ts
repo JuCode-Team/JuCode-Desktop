@@ -67,6 +67,37 @@ describe('codex adapter: rewind', () => {
 	});
 });
 
+describe('codex adapter: full-auto approvals', () => {
+	it('auto-approves a bridged approval request so the turn cannot block', () => {
+		const { lines } = makeIo();
+		const adapter = createCodexAdapter();
+		handshake(adapter, lines);
+		adapter.encodeOp({ op: 'set_approval_mode', mode: 'full-auto' });
+		lines.length = 0;
+		const events = adapter.translate({
+			id: 42,
+			method: 'item/commandExecution/requestApproval',
+			params: { itemId: 'i1', command: 'rm -rf x', reason: 'destructive' }
+		});
+		// No approval card surfaces; an accept response goes straight back.
+		expect(events).toEqual([]);
+		expect(parse(lines[0])).toMatchObject({ id: 42, result: { decision: 'accept' } });
+	});
+
+	it('still surfaces an approval card in non-full-auto modes', () => {
+		const { lines } = makeIo();
+		const adapter = createCodexAdapter();
+		handshake(adapter, lines);
+		adapter.encodeOp({ op: 'set_approval_mode', mode: 'auto-edit' });
+		const events = adapter.translate({
+			id: 43,
+			method: 'item/commandExecution/requestApproval',
+			params: { itemId: 'i1', command: 'ls' }
+		});
+		expect(events[0]).toMatchObject({ type: 'approval_request', name: 'bash' });
+	});
+});
+
 describe('codex adapter: handshake', () => {
 	it('onStart sends only the initialize request', () => {
 		const { lines, io } = makeIo();
