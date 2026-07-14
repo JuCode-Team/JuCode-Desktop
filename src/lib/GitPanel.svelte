@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { GitBranch, RefreshCw, X, Plus, Minus, Undo2, ChevronDown, Check, ArrowUp, ArrowDown, LoaderCircle, GitPullRequest, ExternalLink } from 'lucide-svelte';
+	import { GitBranch, RefreshCw, X, Plus, Minus, Undo2, ChevronDown, Check, ArrowUp, ArrowDown, LoaderCircle, GitPullRequest, ExternalLink, Sparkles } from 'lucide-svelte';
 	import { ask } from '@tauri-apps/plugin-dialog';
 	import { openUrl } from '@tauri-apps/plugin-opener';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Button from '$lib/ui/Button.svelte';
-	import { git, gh } from '$lib/protocol';
+	import { git, gh, generateText } from '$lib/protocol';
 	import {
 		isValidBranchName,
 		parseBranches,
@@ -25,12 +25,15 @@
 	let {
 		cwd = '',
 		worktree = null,
+		llm = null,
 		onOpenTask,
 		onTaskRemoved
 	}: {
 		cwd?: string;
 		/** 当前项目本身是并行任务 worktree 时的元数据。 */
 		worktree?: WorktreeMeta | null;
+		/** 一次性文案生成端点（无则隐藏 AI 生成按钮）。 */
+		llm?: { provider: string; baseUrl: string; format: string; model: string } | null;
 		onOpenTask?: (path: string, meta: WorktreeMeta) => void;
 		onTaskRemoved?: (path: string) => void;
 	} = $props();
@@ -129,6 +132,53 @@
 		if (!message.trim() || !stagedCount) return;
 		await run(['commit', '-m', message.trim()]);
 		if (!error) message = '';
+	}
+
+	// ---- AI 生成 commit / PR 文案（一次性 LLM 调用，不进聊天流）----
+	let genning = $state<'' | 'commit' | 'pr'>('');
+	async function genCommit() {
+		if (!llm || genning) return;
+		genning = 'commit';
+		error = '';
+		try {
+			const d = (await git(['diff', '--cached', '--no-color'], dir())) as string;
+			if (!d.trim()) {
+				error = t('dock.git.noStagedForAi');
+				return;
+			}
+			const sys =
+				'You write conventional git commit messages. Output ONLY the commit message: a concise summary line (≤72 chars, imperative mood), then optionally a blank line and short body bullets. No code fences, no surrounding quotes.';
+			const out = await generateText(llm.provider, llm.baseUrl, llm.format, llm.model, sys, d.slice(0, 14000));
+			if (out.trim()) message = out.trim();
+		} catch (e) {
+			error = String(e);
+		} finally {
+			genning = '';
+		}
+	}
+	async function genPr() {
+		if (!llm || genning) return;
+		genning = 'pr';
+		prError = '';
+		try {
+			const base = prBase || defaultBaseBranch(branches, branch);
+			const d = (await git(['diff', '--no-color', `${base}...HEAD`], dir())) as string;
+			if (!d.trim()) {
+				prError = t('dock.git.noDiffForAi');
+				return;
+			}
+			const sys =
+				'You write GitHub pull-request descriptions. Output the PR title on the first line (≤72 chars, no prefix), then a blank line, then a markdown body: a one-line summary followed by bullet points of the notable changes. No code fences.';
+			const out = await generateText(llm.provider, llm.baseUrl, llm.format, llm.model, sys, d.slice(0, 16000));
+			const lines = out.trim().split('\n');
+			const title = (lines.shift() ?? '').replace(/^#+\s*/, '').trim();
+			if (title) prTitle = title;
+			prBody = lines.join('\n').trim();
+		} catch (e) {
+			prError = String(e);
+		} finally {
+			genning = '';
+		}
 	}
 
 	async function showDiff(c: Change) {
@@ -394,6 +444,11 @@
 
 		{#if stagedCount > 0}
 			<div class="commitbar">
+				{#if llm}
+					<button class="ai-btn" onclick={genCommit} disabled={!!genning} title={t('dock.git.aiCommit')} aria-label="generate commit message">
+						{#if genning === 'commit'}<LoaderCircle size={14} class="spin" />{:else}<Sparkles size={14} />{/if}
+					</button>
+				{/if}
 				<input
 					bind:value={message}
 					placeholder={t('dock.git.commitPlaceholder')}
@@ -426,6 +481,12 @@
 				<IconButton onclick={() => (prForm = false)} label="close"><X size={15} /></IconButton>
 			</div>
 			<div class="prform">
+				{#if llm}
+					<button class="ai-btn wide" onclick={genPr} disabled={!!genning}>
+						{#if genning === 'pr'}<LoaderCircle size={13} class="spin" />{:else}<Sparkles size={13} />{/if}
+						<span>{t('dock.git.aiPr')}</span>
+					</button>
+				{/if}
 				<label class="pfield">
 					<span>{t('dock.git.prTitleLabel')}</span>
 					<input bind:value={prTitle} />
@@ -861,10 +922,38 @@
 	}
 	.commitbar {
 		display: flex;
+		align-items: stretch;
 		gap: 8px;
 		padding: 10px 12px;
 		border-top: 1px solid var(--hairline);
 		flex-shrink: 0;
+	}
+	/* AI-generate affordance (commit message / PR text). */
+	.ai-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
+		padding: 0 9px;
+		border: 1px solid color-mix(in oklab, var(--accent) 40%, var(--border));
+		border-radius: var(--r-sm);
+		background: var(--accent-soft);
+		color: var(--accent-bright);
+		cursor: pointer;
+		flex-shrink: 0;
+	}
+	.ai-btn:hover {
+		background: color-mix(in oklab, var(--accent) 18%, transparent);
+	}
+	.ai-btn:disabled {
+		opacity: 0.6;
+		cursor: default;
+	}
+	.ai-btn.wide {
+		width: 100%;
+		padding: 7px 10px;
+		font-size: 12.5px;
+		margin-bottom: 2px;
 	}
 	.commitbar input {
 		flex: 1;

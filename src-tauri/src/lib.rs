@@ -653,6 +653,92 @@ fn transcribe_audio(
         .ok_or_else(|| format!("无法解析转写结果：{resp}"))
 }
 
+/// One-shot LLM text generation (no agent, no chat pollution) — used for AI
+/// commit messages / PR text. `format` selects the wire protocol: "anthropic"
+/// posts to `{base_url}/messages`, anything else posts OpenAI-compatible
+/// `{base_url}/chat/completions`. The API key is read from auth.json's
+/// providers.<provider> (may be empty for keyless local gateways).
+#[tauri::command(async)]
+fn generate_text(
+    provider: String,
+    base_url: String,
+    format: String,
+    model: String,
+    system: String,
+    prompt: String,
+) -> Result<String, String> {
+    let key = read_json(&jucode_dir().join("auth.json"))
+        .get("providers")
+        .and_then(|p| p.get(&provider))
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default();
+    let base = base_url.trim_end_matches('/');
+    let status_err = |code: u16, r: ureq::Response| {
+        format!(
+            "文案生成请求失败（HTTP {code}）：{}",
+            r.into_string().unwrap_or_default()
+        )
+    };
+    if format == "anthropic" {
+        let body = serde_json::json!({
+            "model": model,
+            "max_tokens": 1024,
+            "system": system,
+            "messages": [{ "role": "user", "content": prompt }],
+        });
+        let mut req = ureq::post(&format!("{base}/messages"))
+            .timeout(std::time::Duration::from_secs(90))
+            .set("anthropic-version", "2023-06-01");
+        if !key.is_empty() {
+            req = req.set("x-api-key", &key);
+        }
+        let resp = req
+            .send_json(body)
+            .map_err(|e| match e {
+                ureq::Error::Status(code, r) => status_err(code, r),
+                other => other.to_string(),
+            })?
+            .into_json::<serde_json::Value>()
+            .map_err(|e| e.to_string())?;
+        return resp
+            .get("content")
+            .and_then(|c| c.get(0))
+            .and_then(|c| c.get("text"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim().to_string())
+            .ok_or_else(|| format!("无法解析生成结果：{resp}"));
+    }
+    let body = serde_json::json!({
+        "model": model,
+        "messages": [
+            { "role": "system", "content": system },
+            { "role": "user", "content": prompt },
+        ],
+        "temperature": 0.3,
+    });
+    let mut req = ureq::post(&format!("{base}/chat/completions"))
+        .timeout(std::time::Duration::from_secs(90));
+    if !key.is_empty() {
+        req = req.set("Authorization", &format!("Bearer {key}"));
+    }
+    let resp = req
+        .send_json(body)
+        .map_err(|e| match e {
+            ureq::Error::Status(code, r) => status_err(code, r),
+            other => other.to_string(),
+        })?
+        .into_json::<serde_json::Value>()
+        .map_err(|e| e.to_string())?;
+    resp.get("choices")
+        .and_then(|c| c.get(0))
+        .and_then(|c| c.get("message"))
+        .and_then(|m| m.get("content"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .ok_or_else(|| format!("无法解析生成结果：{resp}"))
+}
+
 #[tauri::command]
 fn close_session(session: String, engines: tauri::State<Engines>) -> Result<(), String> {
     let removed = engines
@@ -2052,6 +2138,7 @@ pub fn run() {
             fetch_usage_logs,
             fetch_deepseek_balance,
             transcribe_audio,
+            generate_text,
             project_root,
             list_providers,
             list_dir,

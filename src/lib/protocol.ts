@@ -318,6 +318,19 @@ export function transcribeAudio(audioBase64: string, mime?: string, language?: s
 	return invoke('transcribe_audio', { audioBase64, mime, language });
 }
 
+/** One-shot LLM completion (no agent / no chat pollution) — powers AI commit
+ *  messages and PR text. The key is read engine-side from auth.json by provider. */
+export function generateText(
+	provider: string,
+	baseUrl: string,
+	format: string,
+	model: string,
+	system: string,
+	prompt: string
+): Promise<string> {
+	return invoke('generate_text', { provider, baseUrl, format, model, system, prompt });
+}
+
 // Events the engine emits on stdout, tagged with the originating session.
 export interface AgentEvent {
 	type: string;

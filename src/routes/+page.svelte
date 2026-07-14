@@ -221,6 +221,22 @@
 			})
 			.catch(() => {});
 	}
+	// Target endpoint for one-shot AI text (commit / PR). Prefer the active
+	// session's provider; fall back to the default jucode gateway or the first
+	// configured provider. Strip any `[1m]`-style alias suffix from the model id.
+	const llmTarget = $derived.by(() => {
+		const pick =
+			providersList.find((p) => p.id === chat?.provider) ??
+			providersList.find((p) => p.id === 'jucode') ??
+			providersList[0];
+		if (!pick) return null;
+		const model =
+			chat?.provider === pick.id && chat?.model
+				? chat.model.replace(/\[.*?\]$/, '')
+				: (pick.models[0]?.name ?? '');
+		if (!model) return null;
+		return { provider: pick.id, baseUrl: pick.base_url, format: pick.format, model };
+	});
 	let showRight = $state(true);
 	let rightWidth = $state(340);
 	let sidebarWidth = $state(248);
@@ -1246,6 +1262,7 @@
 				cwd={activeProject?.path ?? ''}
 				changed={chat?.changedFiles ?? []}
 				worktree={activeProject?.worktree ?? null}
+				llm={llmTarget}
 				onRevertFile={(p) => chat && (chat.changedFiles = chat.changedFiles.filter((x) => x !== p))}
 				onOpenTask={(path, meta) => openTaskProject(path, meta)}
 				onTaskRemoved={closeTaskProject}

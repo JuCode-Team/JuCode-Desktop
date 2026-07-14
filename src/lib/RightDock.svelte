@@ -21,6 +21,7 @@
 		changed = [],
 		worktree = null,
 		goalsEnabled = true,
+		llm = null,
 		onRevertFile,
 		onOpenTask,
 		onTaskRemoved
@@ -31,6 +32,8 @@
 		changed?: string[];
 		/** 当前激活项目是并行任务 worktree 时的元数据（透传给 Git 面板）。 */
 		worktree?: WorktreeMeta | null;
+		/** 一次性文案生成的目标端点（provider/base_url/format/model），透传给 Git 面板。 */
+		llm?: { provider: string; baseUrl: string; format: string; model: string } | null;
 		/** 当前会话引擎是否支持 goal/plan（不支持时隐藏这两个标签页）。 */
 		goalsEnabled?: boolean;
 		onRevertFile?: (p: string) => void;
@@ -216,7 +219,7 @@
 				{:else if tab.panel === 'goal'}<GoalPanel {goal} />
 				{:else if tab.panel === 'changes'}<ChangesPanel {cwd} files={changed} onRevert={onRevertFile} />
 				{:else if tab.panel === 'files'}<FilesPanel rootDir={cwd} />
-				{:else if tab.panel === 'git'}<GitPanel {cwd} {worktree} {onOpenTask} {onTaskRemoved} />
+				{:else if tab.panel === 'git'}<GitPanel {cwd} {worktree} {llm} {onOpenTask} {onTaskRemoved} />
 				{:else if tab.panel === 'term'}<TerminalPanel {cwd} />
 				{:else if tab.panel === 'browser'}<BrowserPanel />{/if}
 			</div>
