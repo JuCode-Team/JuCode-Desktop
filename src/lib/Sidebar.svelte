@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Store, Plus, History, X, LoaderCircle, Command, Moon, Sun, Monitor, GitBranch, GitBranchPlus } from 'lucide-svelte';
+	import { Store, Plus, History, X, LoaderCircle, Command, Moon, Sun, Monitor, GitBranch, GitBranchPlus, Archive, ArchiveRestore, ChevronRight } from 'lucide-svelte';
 	import { themeState, cycleTheme } from '$lib/theme.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import { t } from '$lib/i18n';
@@ -24,6 +24,8 @@
 		onNewTask,
 		onCloseSession,
 		onCloseProject,
+		onArchiveSession,
+		onUnarchiveSession,
 		onHistory,
 		onSettings,
 		onMarket,
@@ -41,11 +43,16 @@
 		onNewTask: (p: Project) => void;
 		onCloseSession: (id: string) => void;
 		onCloseProject: (p: Project) => void;
+		onArchiveSession: (id: string) => void;
+		onUnarchiveSession: (id: string) => void;
 		onHistory: (p: Project) => void;
 		onSettings: () => void;
 		onMarket: () => void;
 		onCommandPalette: () => void;
 	} = $props();
+
+	// Which projects have their archived section expanded (collapsed by default).
+	let showArchived = $state<Record<string, boolean>>({});
 </script>
 
 <aside class="sidebar" style:width="{width}px">
@@ -63,6 +70,45 @@
 			<button onclick={onNewProject} aria-label="new project" title={t('shell.newProjectTitle')}><Plus size={15} /></button>
 		</div>
 	</div>
+
+	{#snippet sessRow(s: Project['sessions'][number])}
+		<button class="sess" class:on={s.id === activeId} class:arch={s.archived} onclick={() => onSelect(s.id)}>
+			<span class="sess-dot" class:busy={s.chat.busy} class:err={s.chat.engineState === 'exited'} class:unseen={s.chat.unseen && !s.chat.busy} class:attn={!!(s.chat.pendingApproval || s.chat.trustPrompt)} title={s.chat.pendingApproval || s.chat.trustPrompt ? t('shell.awaitConfirm') : ''}></span>
+			<span class="sess-title">{s.chat.title}</span>
+			{#if s.backendId && s.backendId !== 'jucode'}
+				<!-- engine-backend badge (only when not the native engine) -->
+				<span class="backend-chip" title={BACKEND_LABELS[s.backendId]}>
+					<BackendIcon backend={s.backendId} size={11} />{BACKEND_LABELS[s.backendId].split(' ')[0]}
+				</span>
+			{/if}
+			{#if s.chat.busy}<LoaderCircle size={12} class="spin" />{/if}
+			<span
+				class="sess-act"
+				role="button"
+				tabindex="0"
+				onclick={(e) => {
+					e.stopPropagation();
+					s.archived ? onUnarchiveSession(s.id) : onArchiveSession(s.id);
+				}}
+				onkeydown={(e) => e.key === 'Enter' && (e.stopPropagation(), s.archived ? onUnarchiveSession(s.id) : onArchiveSession(s.id))}
+				aria-label={s.archived ? 'unarchive' : 'archive'}
+				title={s.archived ? t('shell.unarchive') : t('shell.archive')}
+			>
+				{#if s.archived}<ArchiveRestore size={12} />{:else}<Archive size={12} />{/if}
+			</span>
+			<span
+				class="sess-x"
+				role="button"
+				tabindex="0"
+				onclick={(e) => {
+					e.stopPropagation();
+					onCloseSession(s.id);
+				}}
+				onkeydown={(e) => e.key === 'Enter' && (e.stopPropagation(), onCloseSession(s.id))}
+				aria-label="close"><X size={12} /></span
+			>
+		</button>
+	{/snippet}
 
 	<div class="sess-list">
 		{#each projects as p (p.id)}
@@ -88,32 +134,25 @@
 					<button class="group-x" class:always={p.stale} onclick={() => onCloseProject(p)} aria-label="close project" title={p.stale ? t('shell.task.staleRemove') : t('shell.closeProject')}><X size={12} /></button>
 				{/if}
 			</div>
-			{#each p.sessions as s (s.id)}
-				<button class="sess" class:on={s.id === activeId} onclick={() => onSelect(s.id)}>
-					<span class="sess-dot" class:busy={s.chat.busy} class:err={s.chat.engineState === 'exited'} class:unseen={s.chat.unseen && !s.chat.busy} class:attn={!!(s.chat.pendingApproval || s.chat.trustPrompt)} title={s.chat.pendingApproval || s.chat.trustPrompt ? t('shell.awaitConfirm') : ''}></span>
-					<span class="sess-title">{s.chat.title}</span>
-					{#if s.backendId && s.backendId !== 'jucode'}
-						<!-- engine-backend badge (only when not the native engine) -->
-						<span class="backend-chip" title={BACKEND_LABELS[s.backendId]}>
-							<BackendIcon backend={s.backendId} size={11} />{BACKEND_LABELS[s.backendId].split(' ')[0]}
-						</span>
-					{/if}
-					{#if s.chat.busy}<LoaderCircle size={12} class="spin" />{/if}
-					<span
-						class="sess-x"
-						role="button"
-						tabindex="0"
-						onclick={(e) => {
-							e.stopPropagation();
-							onCloseSession(s.id);
-						}}
-						onkeydown={(e) => e.key === 'Enter' && (e.stopPropagation(), onCloseSession(s.id))}
-						aria-label="close"><X size={12} /></span
-					>
-				</button>
+			{@const active = p.sessions.filter((s) => !s.archived)}
+			{@const arch = p.sessions.filter((s) => s.archived)}
+			{#each active as s (s.id)}
+				{@render sessRow(s)}
 			{/each}
-			{#if p.sessions.length === 0 && !p.stale}
+			{#if active.length === 0 && arch.length === 0 && !p.stale}
 				<button class="sess-empty" onclick={() => onNewSession(p)}>{t('shell.newSession')}</button>
+			{/if}
+			{#if arch.length}
+				<button class="arch-head" onclick={() => (showArchived[p.id] = !showArchived[p.id])}>
+					<span class="arch-chev" class:open={showArchived[p.id]}><ChevronRight size={12} /></span>
+					<Archive size={11} />
+					<span>{t('shell.archived')} · {arch.length}</span>
+				</button>
+				{#if showArchived[p.id]}
+					{#each arch as s (s.id)}
+						{@render sessRow(s)}
+					{/each}
+				{/if}
 			{/if}
 		{/each}
 	</div>
@@ -410,17 +449,46 @@
 		padding: 1px 7px 1px 5px;
 		flex-shrink: 0;
 	}
-	.sess-x {
+	.sess-x,
+	.sess-act {
 		display: inline-flex;
 		color: var(--dim2);
 		opacity: 0;
 		border-radius: 4px;
 	}
-	.sess:hover .sess-x {
+	.sess:hover .sess-x,
+	.sess:hover .sess-act {
 		opacity: 1;
 	}
-	.sess-x:hover {
+	.sess-x:hover,
+	.sess-act:hover {
 		color: var(--text);
+	}
+	.sess.arch .sess-title {
+		color: var(--dim);
+	}
+	/* Collapsible "Archived · n" header per project. */
+	.arch-head {
+		display: flex;
+		align-items: center;
+		gap: 5px;
+		width: 100%;
+		padding: 4px 10px 4px 14px;
+		border: none;
+		background: none;
+		color: var(--dim2);
+		font-size: 11.5px;
+		cursor: pointer;
+	}
+	.arch-head:hover {
+		color: var(--text);
+	}
+	.arch-chev {
+		display: inline-flex;
+		transition: transform 0.14s ease;
+	}
+	.arch-chev.open {
+		transform: rotate(90deg);
 	}
 	.side-foot {
 		display: flex;

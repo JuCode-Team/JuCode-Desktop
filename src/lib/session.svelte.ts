@@ -11,7 +11,7 @@ export interface SavedProject {
 	id: string;
 	name: string;
 	path: string;
-	tabs?: { sid: string; title: string; backend?: string }[];
+	tabs?: { sid: string; title: string; backend?: string; archived?: boolean }[];
 	/** 并行任务 worktree 项目的元数据（isWorktree/mainRepoPath/branch/baseBranch/slug）。 */
 	worktree?: WorktreeMeta;
 	/** 本项目最近一次新建会话所用的引擎后端（缺省 = jucode）。 */
@@ -123,6 +123,26 @@ export class SessionStore {
 		return s.id;
 	}
 
+	/** Archive a thread: hide it from the sidebar by default without closing or
+	 *  deleting it. If it was active, move focus to a live non-archived sibling. */
+	archiveSession(id: string) {
+		const s = this.allSessions.find((x) => x.id === id);
+		if (!s) return;
+		s.archived = true;
+		if (this.activeId === id) {
+			const next =
+				this.activeProject?.sessions.find((x) => x.id !== id && !x.archived) ??
+				this.allSessions.find((x) => x.id !== id && !x.archived);
+			this.activeId = next?.id ?? '';
+		}
+	}
+
+	/** Restore an archived thread to the normal list. */
+	unarchiveSession(id: string) {
+		const s = this.allSessions.find((x) => x.id === id);
+		if (s) s.archived = false;
+	}
+
 	/** Re-open a persisted conversation in a new session (resume by id).
 	 *  jucode resumes via the `/resume` command; claude has no such command in
 	 *  stream-json mode and resumes via the allowlisted `--resume` spawn option
@@ -130,9 +150,10 @@ export class SessionStore {
 	 *  engine-side context is preserved by --resume regardless);
 	 *  codex resumes via the thread/resume RPC after the handshake (the thread
 	 *  id rides the SessionCtx, and the response replays the transcript). */
-	restoreSession(project: Project, sid: string, title: string, backend: BackendId = 'jucode') {
+	restoreSession(project: Project, sid: string, title: string, backend: BackendId = 'jucode', archived = false) {
 		const s = this.#newSession(backend);
 		if (title) s.chat.title = title;
+		s.archived = archived;
 		project.sessions.push(s);
 		if (backend === 'claude' || backend === 'codex') s.chat.sessionId = sid;
 		const spawned =
@@ -342,7 +363,8 @@ export class SessionStore {
 				.map((s) => ({
 					sid: s.chat.sessionId,
 					title: s.chat.title,
-					...(s.backendId !== 'jucode' ? { backend: s.backendId } : {})
+					...(s.backendId !== 'jucode' ? { backend: s.backendId } : {}),
+					...(s.archived ? { archived: true } : {})
 				}))
 		}));
 	}
@@ -372,8 +394,8 @@ export class SessionStore {
 					if (!t.sid) continue;
 					// Tabs saved before multi-backend support carry no backend field →
 					// jucode (normalizeBackendId maps unknown/missing to the default).
-					const id = this.restoreSession(proj, t.sid, t.title, normalizeBackendId(t.backend));
-					if (!first) first = id;
+					const id = this.restoreSession(proj, t.sid, t.title, normalizeBackendId(t.backend), !!t.archived);
+					if (!first && !t.archived) first = id;
 				}
 			}
 			const firstLive = this.projects.find((p) => !p.stale);

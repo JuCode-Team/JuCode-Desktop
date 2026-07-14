@@ -49,6 +49,33 @@ describe('SessionStore lifecycle', () => {
 		expect(store.activeId).toBe('');
 	});
 
+	it('archiveSession hides a thread and re-points activeId to a live sibling', () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const a = store.addSession(p);
+		const b = store.addSession(p);
+		expect(store.activeId).toBe(b);
+		store.archiveSession(b);
+		expect(p.sessions.find((s) => s.id === b)?.archived).toBe(true);
+		expect(store.activeId).toBe(a); // moved off the archived one
+		store.unarchiveSession(b);
+		expect(p.sessions.find((s) => s.id === b)?.archived).toBe(false);
+	});
+
+	it('serialize persists the archived flag and restore re-applies it', () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		store.addSession(p);
+		p.sessions[0].chat.sessionId = 'sid-0';
+		p.sessions[0].chat.title = 'kept';
+		p.sessions[0].chat.messages.push({ kind: 'user', text: 'hi' });
+		store.archiveSession(p.sessions[0].id);
+		const snap = store.serialize();
+		expect(snap[0].tabs).toEqual([{ sid: 'sid-0', title: 'kept', archived: true }]);
+	});
+
 	it('removeProject tears down its sessions and clears a dangling activeId', () => {
 		const store = new SessionStore();
 		const p = proj();

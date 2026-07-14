@@ -97,6 +97,9 @@ const shell = {
 		newSessionInProject: '在此项目下新建对话',
 		closeProject: '关闭项目',
 		awaitConfirm: '等待你的确认',
+		archive: '归档对话',
+		unarchive: '取消归档',
+		archived: '已归档',
 		newSession: '+ 新建对话',
 		newTask: '新建并行任务',
 		task: {
@@ -287,6 +290,9 @@ const shell = {
 		newSessionInProject: 'New conversation in this project',
 		closeProject: 'Close project',
 		awaitConfirm: 'Awaiting your confirmation',
+		archive: 'Archive thread',
+		unarchive: 'Unarchive',
+		archived: 'Archived',
 		newSession: '+ New conversation',
 		newTask: 'New parallel task',
 		task: {

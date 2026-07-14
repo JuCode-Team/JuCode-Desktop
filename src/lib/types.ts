@@ -8,6 +8,9 @@ export interface Session {
 	backendId: BackendId;
 	/** Per-session adapter instance (stateful for codex/claude; not persisted). */
 	adapter: EngineAdapter;
+	/** Archived threads are hidden from the sidebar by default (persisted); the
+	 *  conversation isn't deleted and can be unarchived. */
+	archived?: boolean;
 }
 
 /** 并行任务（git worktree）项目的元数据，随项目布局持久化。 */

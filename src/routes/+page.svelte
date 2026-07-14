@@ -1102,6 +1102,8 @@
 		onNewSession={(p) => newSessionFlow(p)}
 		onCloseSession={(id) => store.removeSession(id)}
 		onCloseProject={removeProject}
+		onArchiveSession={(id) => store.archiveSession(id)}
+		onUnarchiveSession={(id) => store.unarchiveSession(id)}
 		onHistory={(p) => store.openHistory(p)}
 		onSettings={() => (showSettings = true)}
 		onMarket={() => (showMarket = true)}
