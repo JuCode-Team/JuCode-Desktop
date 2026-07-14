@@ -5,13 +5,15 @@ vi.mock('./protocol', () => ({
 	createSession: vi.fn(() => Promise.resolve()),
 	closeSession: vi.fn(() => Promise.resolve()),
 	sendOp: vi.fn(() => Promise.resolve()),
-	projectRoot: vi.fn(() => Promise.resolve('/tmp/demo'))
+	projectRoot: vi.fn(() => Promise.resolve('/tmp/demo')),
+	writeConfig: vi.fn(() => Promise.resolve()),
+	git: vi.fn(() => Promise.resolve(''))
 }));
 
 import { SessionStore } from './session.svelte';
-import { createSession } from './protocol';
+import { createSession, sendOp, git } from './protocol';
 import { setLocale } from './i18n';
-import type { Project } from './types';
+import type { Project, WorktreeMeta } from './types';
 
 const proj = (id = 'p1'): Project => ({ id, name: id, path: `/tmp/${id}`, sessions: [] });
 
@@ -103,6 +105,68 @@ describe('SessionStore lifecycle', () => {
 		]);
 		expect(store.projects[0].sessions).toHaveLength(2);
 		expect(store.activeId).toBe(store.projects[0].sessions[0].id);
+		expect(store.loaded).toBe(true);
+	});
+});
+
+describe('SessionStore parallel-task worktrees', () => {
+	const meta: WorktreeMeta = {
+		isWorktree: true,
+		mainRepoPath: '/tmp/repo',
+		branch: 'task/fix-login',
+		baseBranch: 'main',
+		slug: 'fix-login'
+	};
+	const wtPath = '/tmp/.jucode-worktrees/repo/fix-login';
+
+	it('createProject with worktree meta sends the task description as first message', async () => {
+		const store = new SessionStore();
+		const p = store.createProject(wtPath, meta, '修复登录问题');
+		expect(p.worktree).toEqual(meta);
+		expect(p.name).toBe('fix-login');
+		// first message is sent once the engine is up (createSession resolves)
+		await Promise.resolve();
+		const id = p.sessions[0].id;
+		expect(sendOp).toHaveBeenCalledWith(id, { op: 'user_message', content: '修复登录问题' });
+		expect(p.sessions[0].chat.messages.some((m) => m.kind === 'user' && m.text === '修复登录问题')).toBe(true);
+	});
+
+	it('worktree metadata round-trips through serialize/restore', async () => {
+		const store = new SessionStore();
+		const p = store.createProject(wtPath, meta);
+		p.sessions[0].chat.sessionId = 'sid-wt';
+		p.sessions[0].chat.title = 'task';
+		p.sessions[0].chat.messages.push({ kind: 'user', text: 'hi' });
+		const snap = store.serialize();
+		expect(snap[0].worktree).toEqual(meta);
+
+		const store2 = new SessionStore();
+		await store2.restore(snap);
+		expect(store2.projects[0].worktree).toEqual(meta);
+		expect(store2.projects[0].stale).toBeUndefined();
+		expect(store2.projects[0].sessions).toHaveLength(1);
+	});
+
+	it('plain projects serialize without a worktree key', () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		expect('worktree' in store.serialize()[0]).toBe(false);
+	});
+
+	it('restore marks a vanished worktree project stale and spawns no sessions', async () => {
+		vi.mocked(git).mockRejectedValueOnce(new Error('failed to run git: No such file or directory'));
+		const store = new SessionStore();
+		await store.restore([
+			{ id: 'w1', name: 'fix-login', path: wtPath, worktree: meta, tabs: [{ sid: 's-a', title: 'A' }] },
+			{ id: 'p1', name: 'p1', path: '/tmp/p1', tabs: [] }
+		]);
+		const stale = store.projects[0];
+		expect(stale.stale).toBe(true);
+		expect(stale.sessions).toHaveLength(0);
+		// active session落在仍然存活的项目上，不因 stale 项目崩溃
+		expect(store.projects[1].sessions.length).toBeGreaterThan(0);
+		expect(store.activeId).toBe(store.projects[1].sessions[0].id);
 		expect(store.loaded).toBe(true);
 	});
 });

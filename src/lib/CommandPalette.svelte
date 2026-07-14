@@ -2,7 +2,7 @@
 	import { tick } from 'svelte';
 	import {
 		Search, Plus, FolderPlus, Cpu, RotateCcw, History, Layers,
-		Gauge, Activity, Stethoscope, GitBranch, Store, Settings as SettingsIcon,
+		Gauge, Activity, Stethoscope, GitBranch, GitBranchPlus, Store, Settings as SettingsIcon,
 		PanelRight, SunMoon, ChevronRight, Wrench
 	} from 'lucide-svelte';
 	import type { ChatState } from '$lib/chat.svelte';
@@ -12,10 +12,12 @@
 	let {
 		chat,
 		hasProject,
+		canNewTask = false,
 		onClose,
 		onRun,
 		onNewSession,
 		onNewProject,
+		onNewTask,
 		onSettings,
 		onMarket,
 		onTogglePanel,
@@ -24,10 +26,13 @@
 	}: {
 		chat: ChatState | undefined;
 		hasProject: boolean;
+		/** 当前激活项目可以开并行任务（是普通项目而非 worktree）。 */
+		canNewTask?: boolean;
 		onClose: () => void;
 		onRun: (cmd: string) => void;
 		onNewSession: () => void;
 		onNewProject: () => void;
+		onNewTask: () => void;
 		onSettings: () => void;
 		onMarket: () => void;
 		onTogglePanel: () => void;
@@ -61,6 +66,7 @@
 		const curated: Action[] = [
 			{ id: 'new-session', label: t('shell.cmd.newSession'), keys: '⌘N', icon: Plus, keywords: t('shell.cmd.newSessionKw'), disabled: !hasProject, run: wrap(onNewSession) },
 			{ id: 'new-project', label: t('shell.cmd.newProject'), icon: FolderPlus, keywords: t('shell.cmd.newProjectKw'), run: wrap(onNewProject) },
+			{ id: 'new-task', label: t('shell.cmd.newTask'), hint: t('shell.cmd.newTaskHint'), icon: GitBranchPlus, keywords: t('shell.cmd.newTaskKw'), disabled: !canNewTask, run: wrap(onNewTask) },
 			{ id: 'model', label: t('shell.cmd.model'), icon: Cpu, keywords: t('shell.cmd.modelKw'), run: wrap(() => onRun('/model')) },
 			{ id: 'rewind', label: t('shell.cmd.rewind'), hint: t('shell.cmd.rewindHint'), icon: RotateCcw, keywords: t('shell.cmd.rewindKw'), run: wrap(() => onRun('/rewind')) },
 			{ id: 'resume', label: t('shell.cmd.resume'), icon: History, keywords: t('shell.cmd.resumeKw'), run: wrap(() => onRun('/resume')) },

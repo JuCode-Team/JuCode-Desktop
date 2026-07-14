@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import type { McpServerEntry } from './mcp';
 
 // Commands the GUI sends to a session's `jucode serve` over stdin.
 export type Op =
@@ -6,7 +7,18 @@ export type Op =
 	| { op: 'command'; input: string }
 	| { op: 'steer' }
 	| { op: 'interrupt' }
-	| { op: 'shutdown' };
+	| { op: 'shutdown' }
+	// Structured approval answer: `hunks` (edit tools, partial approval) is only
+	// valid with decision "allow"; `always` is whole-call only (never with hunks).
+	| { op: 'approve'; call_id: string; decision: 'allow' | 'deny'; hunks?: string[]; always?: boolean }
+	// Engine-level auto-approval policy; acknowledged by an `approval_mode` event.
+	| { op: 'set_approval_mode'; mode: 'read-only' | 'auto-edit' | 'full-auto' }
+	// MCP server management (engine config is global; any live session's engine
+	// can answer). Each op is acknowledged by an `mcp_servers` event.
+	| { op: 'mcp_list' }
+	| { op: 'mcp_set'; server: McpServerEntry }
+	| { op: 'mcp_remove'; name: string }
+	| { op: 'mcp_toggle'; name: string; enabled: boolean };
 
 export function createSession(session: string, cwd?: string): Promise<void> {
 	return invoke('create_session', { session, cwd });
@@ -124,6 +136,25 @@ export function listDir(path?: string): Promise<FsEntry[]> {
 export function readText(path: string): Promise<string> {
 	return invoke('read_text', { path });
 }
+// Editor file IO (root-confined like read_text). `write_text` rejects with a
+// structured `conflict:<mtime_ms>` error when the file changed on disk since
+// `expectedMtime` — pass undefined to force-overwrite.
+export interface FileStat {
+	mtime_ms: number;
+	size: number;
+}
+export function statText(path: string): Promise<FileStat> {
+	return invoke('stat_text', { path });
+}
+export function writeText(path: string, content: string, expectedMtime?: number): Promise<FileStat> {
+	return invoke('write_text', { path, content, expectedMtime });
+}
+export const isConflictError = (e: unknown) => String(e).startsWith('conflict:');
+// File content at git HEAD (diff gutter baseline); rejects paths outside the
+// project root / repository.
+export function gitHeadText(path: string, cwd?: string): Promise<string> {
+	return invoke('git_head_text', { path, cwd });
+}
 
 // Persists pasted image bytes to a temp file; returns the path to attach.
 export function saveTempImage(data: Uint8Array, ext: string): Promise<string> {
@@ -135,16 +166,32 @@ export interface DepStatus {
 	present: boolean;
 	detail: string;
 }
+// How the setup wizard should offer to install git on this platform:
+// 'auto' (one-click button works: macOS CLT dialog / Windows winget),
+// 'manual-command' (show a copyable command — we never run sudo GUI-side),
+// 'open-url' (official download page only).
+export interface InstallAdvice {
+	kind: 'auto' | 'manual-command' | 'open-url';
+	command: string | null;
+	url: string;
+}
 export interface EnvReport {
 	os: string;
 	arch: string;
 	git: DepStatus;
 	engine: DepStatus;
+	git_install: InstallAdvice;
 }
 export function checkEnvironment(): Promise<EnvReport> {
 	return invoke('check_environment');
 }
-export function installDependency(name: string): Promise<string> {
+// What install_dependency actually did (or wants the UI to do).
+export type InstallOutcome =
+	| { kind: 'installed'; message: string }
+	| { kind: 'started-install'; message: string }
+	| { kind: 'manual-command'; command: string; message: string }
+	| { kind: 'open-url'; url: string; message: string };
+export function installDependency(name: string): Promise<InstallOutcome> {
 	return invoke('install_dependency', { name });
 }
 
@@ -163,6 +210,14 @@ export function listProviders(): Promise<ProviderInfo[]> {
 }
 export function git(args: string[], cwd?: string): Promise<string> {
 	return invoke('git', { args, cwd });
+}
+// 并行任务 worktree 的容器目录（<repo-parent>/.jucode-worktrees/<repo-name>）。
+export function worktreeBase(cwd: string): Promise<string> {
+	return invoke('worktree_base', { cwd });
+}
+// GitHub CLI 桥（仅放行 --version / auth status / pr view / pr create）。
+export function gh(args: string[], cwd?: string): Promise<string> {
+	return invoke('gh', { args, cwd });
 }
 export function ptyOpen(id: string, cols: number, rows: number, cwd?: string): Promise<void> {
 	return invoke('pty_open', { id, cols, rows, cwd });

@@ -11,7 +11,9 @@ const settings = {
 			account: '账户与 Provider',
 			accountSub: '登录、密钥与端点',
 			behavior: '行为',
-			behaviorSub: '模型、压缩与网络'
+			behaviorSub: '模型、压缩与网络',
+			extensions: '扩展',
+			extensionsSub: 'MCP 服务器与扩展工具'
 		},
 		account: {
 			groupLabel: '登录与 Provider',
@@ -73,9 +75,80 @@ const settings = {
 			includeProjectInstructions: '包含项目说明',
 			includeProjectInstructionsSub: '加载 AGENTS.md 等项目级指令'
 		},
+		mcp: {
+			groupLabel: 'MCP 服务器',
+			hint: '管理 Model Context Protocol 服务器。更改会写入 ~/.jucode/config.json，对所有会话生效。',
+			empty: 'MCP 让智能体接入外部工具（文件、搜索、数据库等标准化服务器）。',
+			addServer: '添加服务器',
+			noSession: '需要一个打开的会话才能连接与修改 MCP 服务器，当前仅展示 config.json 中的配置。',
+			state: {
+				connecting: '连接中',
+				connected: '已连接',
+				failed: '连接失败',
+				disabled: '已禁用',
+				unknown: '未知（无会话）'
+			},
+			tools: '{n} 个工具',
+			noTools: '无工具',
+			edit: '编辑',
+			reconnect: '重新连接',
+			deleteConfirm: '删除服务器 {name}？',
+			form: {
+				addTitle: '添加 MCP 服务器',
+				editTitle: '编辑 MCP 服务器',
+				name: '名称',
+				namePlaceholder: '例如 files',
+				transport: '传输方式',
+				command: '命令',
+				commandPlaceholder: '例如 mcp-server-files',
+				args: '参数',
+				argsPlaceholder: '每行一个参数（也可用空格分隔）',
+				env: '环境变量',
+				envPlaceholder: 'KEY=VALUE，每行一条',
+				url: 'URL',
+				urlPlaceholder: 'https://example.com/mcp',
+				headers: '请求头',
+				headersPlaceholder: 'Header-Name: value，每行一条',
+				bearer: 'Bearer Token',
+				bearerHint: '便捷字段：自动设置 Authorization: Bearer <token> 请求头。',
+				timeout: '超时（秒）',
+				timeoutPlaceholder: '默认 60',
+				save: '保存',
+				enabledLabel: '启用该服务器'
+			},
+			err: {
+				nameRequired: '名称不能为空',
+				nameInvalid: '名称只能包含字母、数字、下划线和连字符',
+				commandRequired: 'stdio 传输需要填写命令',
+				urlRequired: 'http 传输需要填写 URL',
+				urlInvalid: 'URL 必须以 http:// 或 https:// 开头',
+				envInvalid: '环境变量需为 KEY=VALUE 格式，每行一条',
+				headersInvalid: '请求头需为 Header-Name: value 格式，每行一条',
+				timeoutInvalid: '超时需为 1–3600 之间的整数'
+			}
+		},
+		ext: {
+			groupLabel: '扩展工具',
+			hint: '专有扩展在 ~/.jucode/config.json 的 extensions 列表中配置，此处仅展示；可在会话中发送 /extensions 查看加载详情。',
+			empty: '未配置扩展。',
+			lazy: '懒加载'
+		},
 		footHint: '更改保存后对新建会话生效',
 		saveChanges: '保存更改',
 		saved: '已保存',
+		update: {
+			groupLabel: '应用更新',
+			currentVersion: '当前版本',
+			check: '检查更新',
+			checking: '检查中…',
+			latest: '已是最新版本',
+			found: '发现新版本 v{version}',
+			download: '下载更新',
+			downloading: '下载中 {pct}%',
+			restart: '重启并安装',
+			readyHint: '更新已下载完成，重启后生效。',
+			error: '检查更新失败：{msg}'
+		},
 		usage: {
 			groupLabel: '账户用量',
 			refresh: '刷新',
@@ -138,7 +211,9 @@ const settings = {
 			account: 'Account & Providers',
 			accountSub: 'Login, keys & endpoints',
 			behavior: 'Behavior',
-			behaviorSub: 'Model, compaction & network'
+			behaviorSub: 'Model, compaction & network',
+			extensions: 'Extensions',
+			extensionsSub: 'MCP servers & extension tools'
 		},
 		account: {
 			groupLabel: 'Login & Providers',
@@ -200,9 +275,80 @@ const settings = {
 			includeProjectInstructions: 'Include project instructions',
 			includeProjectInstructionsSub: 'Load project-level instructions such as AGENTS.md'
 		},
+		mcp: {
+			groupLabel: 'MCP servers',
+			hint: 'Manage Model Context Protocol servers. Changes are written to ~/.jucode/config.json and apply to all sessions.',
+			empty: 'MCP lets the agent use external tools (files, search, databases and other standardized servers).',
+			addServer: 'Add server',
+			noSession: 'An open session is required to connect to and modify MCP servers; showing the config.json entries read-only.',
+			state: {
+				connecting: 'Connecting',
+				connected: 'Connected',
+				failed: 'Failed',
+				disabled: 'Disabled',
+				unknown: 'Unknown (no session)'
+			},
+			tools: '{n} tools',
+			noTools: 'No tools',
+			edit: 'Edit',
+			reconnect: 'Reconnect',
+			deleteConfirm: 'Delete server {name}?',
+			form: {
+				addTitle: 'Add MCP server',
+				editTitle: 'Edit MCP server',
+				name: 'Name',
+				namePlaceholder: 'e.g. files',
+				transport: 'Transport',
+				command: 'Command',
+				commandPlaceholder: 'e.g. mcp-server-files',
+				args: 'Arguments',
+				argsPlaceholder: 'One argument per line (spaces also split)',
+				env: 'Environment',
+				envPlaceholder: 'KEY=VALUE, one per line',
+				url: 'URL',
+				urlPlaceholder: 'https://example.com/mcp',
+				headers: 'Headers',
+				headersPlaceholder: 'Header-Name: value, one per line',
+				bearer: 'Bearer token',
+				bearerHint: 'Convenience field: sets the Authorization: Bearer <token> header.',
+				timeout: 'Timeout (sec)',
+				timeoutPlaceholder: 'Default 60',
+				save: 'Save',
+				enabledLabel: 'Enable this server'
+			},
+			err: {
+				nameRequired: 'Name is required',
+				nameInvalid: 'Name may only contain letters, digits, underscores and hyphens',
+				commandRequired: 'stdio transport requires a command',
+				urlRequired: 'http transport requires a URL',
+				urlInvalid: 'URL must start with http:// or https://',
+				envInvalid: 'Environment lines must be KEY=VALUE, one per line',
+				headersInvalid: 'Header lines must be Header-Name: value, one per line',
+				timeoutInvalid: 'Timeout must be an integer between 1 and 3600'
+			}
+		},
+		ext: {
+			groupLabel: 'Extension tools',
+			hint: 'Proprietary extensions are configured in the extensions list of ~/.jucode/config.json; this view is read-only. Send /extensions in a session for load details.',
+			empty: 'No extensions configured.',
+			lazy: 'lazy'
+		},
 		footHint: 'Changes take effect for new sessions after saving',
 		saveChanges: 'Save changes',
 		saved: 'Saved',
+		update: {
+			groupLabel: 'App updates',
+			currentVersion: 'Current version',
+			check: 'Check for updates',
+			checking: 'Checking…',
+			latest: 'You are on the latest version',
+			found: 'New version v{version} available',
+			download: 'Download update',
+			downloading: 'Downloading {pct}%',
+			restart: 'Restart & install',
+			readyHint: 'Update downloaded; it takes effect after restart.',
+			error: 'Update check failed: {msg}'
+		},
 		usage: {
 			groupLabel: 'Account usage',
 			refresh: 'Refresh',

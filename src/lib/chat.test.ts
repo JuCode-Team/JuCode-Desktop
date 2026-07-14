@@ -64,11 +64,138 @@ describe('ChatState.handle', () => {
 		expect(c.pendingRewind).toBeNull();
 	});
 
+	it('stores the latest mcp_servers view on the state', () => {
+		const c = new ChatState();
+		expect(c.mcpServers).toBeNull();
+		c.handle({
+			type: 'mcp_servers',
+			servers: [
+				{
+					name: 'files',
+					transport: 'stdio',
+					state: 'connected',
+					tools: [{ name: 'read_file', description: 'Read a file' }]
+				},
+				{ name: 'web', transport: 'http', state: 'failed', error: 'boom', tools: [] }
+			]
+		});
+		expect(c.mcpServers).toEqual([
+			{
+				name: 'files',
+				transport: 'stdio',
+				state: 'connected',
+				tools: [{ name: 'read_file', description: 'Read a file' }]
+			},
+			{ name: 'web', transport: 'http', state: 'failed', error: 'boom', tools: [] }
+		]);
+		// A later event replaces the list wholesale.
+		c.handle({ type: 'mcp_servers', servers: [] });
+		expect(c.mcpServers).toEqual([]);
+	});
+
 	it('tracks busy state from engine status', () => {
 		const c = new ChatState();
 		c.handle({ type: 'model_status', state: 'streaming' });
 		expect(c.busy).toBe(true);
 		c.handle({ type: 'status', message: 'ready' });
 		expect(c.busy).toBe(false);
+	});
+});
+
+describe('approval flow (engine-enforced)', () => {
+	it('reduces an approval_request with hunks + subagent into state', () => {
+		const c = new ChatState();
+		c.handle({
+			type: 'approval_request',
+			call_id: 'call_1',
+			name: 'apply_patch',
+			summary: 'src/a.rs',
+			subagent_id: 'agent-7',
+			hunks: [
+				{ id: 'f0h1', file: 'src/a.rs', header: '@@ -1,3 +1,3 @@', lines: [' a', '-b', '+c'] },
+				{ id: 'f0h2', file: 'src/a.rs', header: '@@ -9,2 +9,3 @@', lines: ['+d'] }
+			]
+		});
+		expect(c.pendingApproval).toEqual({
+			callId: 'call_1',
+			name: 'apply_patch',
+			summary: 'src/a.rs',
+			subagentId: 'agent-7',
+			hunks: [
+				{ id: 'f0h1', file: 'src/a.rs', header: '@@ -1,3 +1,3 @@', lines: [' a', '-b', '+c'] },
+				{ id: 'f0h2', file: 'src/a.rs', header: '@@ -9,2 +9,3 @@', lines: ['+d'] }
+			]
+		});
+	});
+
+	it('reduces a hunk-less approval_request with null hunks/subagent', () => {
+		const c = new ChatState();
+		c.handle({ type: 'approval_request', call_id: 'c2', name: 'bash', summary: 'rm -rf /tmp/x', subagent_id: null, hunks: null });
+		expect(c.pendingApproval).toEqual({
+			callId: 'c2',
+			name: 'bash',
+			summary: 'rm -rf /tmp/x',
+			subagentId: null,
+			hunks: null
+		});
+	});
+
+	it('never auto-approves client-side: requests surface in every mode', () => {
+		const c = new ChatState();
+		c.approvalMode = 'all'; // engine decides now — 'all' must not swallow the card
+		c.handle({ type: 'approval_request', call_id: 'c3', name: 'apply_patch', summary: 'x' });
+		expect(c.pendingApproval?.callId).toBe('c3');
+	});
+
+	it("pushes the desktop's persisted mode when the startup announcement diverges", () => {
+		const c = new ChatState();
+		c.approvalMode = 'all'; // persisted preference
+		c.handle({ type: 'startup', model: 'm', cwd: '/', session_id: 's1' });
+		c.handle({ type: 'approval_mode', mode: 'read-only' }); // engine default
+		// desktop mode wins at startup: local state untouched, push requested
+		expect(c.approvalMode).toBe('all');
+		expect(c.pendingModeSync).toBe('full-auto');
+		// the ack after the page sends set_approval_mode reconciles to the same value
+		c.pendingModeSync = null;
+		c.handle({ type: 'approval_mode', mode: 'full-auto' });
+		expect(c.approvalMode).toBe('all');
+		expect(c.pendingModeSync).toBeNull();
+	});
+
+	it('requests no push when the startup announcement already matches', () => {
+		const c = new ChatState();
+		c.approvalMode = 'ask';
+		c.handle({ type: 'startup', model: 'm', cwd: '/', session_id: 's1' });
+		c.handle({ type: 'approval_mode', mode: 'read-only' });
+		expect(c.pendingModeSync).toBeNull();
+		expect(c.approvalMode).toBe('ask');
+	});
+
+	it('reconciles post-startup approval_mode events from the engine (e.g. /approvals)', () => {
+		const c = new ChatState();
+		c.approvalMode = 'ask';
+		c.handle({ type: 'startup', model: 'm', cwd: '/', session_id: 's1' });
+		c.handle({ type: 'approval_mode', mode: 'read-only' }); // startup announcement, in sync
+		c.handle({ type: 'approval_mode', mode: 'auto-edit' }); // user typed /approvals auto-edit
+		expect(c.approvalMode).toBe('edits');
+		expect(c.pendingModeSync).toBeNull();
+		// garbage keeps the current mode
+		c.handle({ type: 'approval_mode', mode: 'bogus' });
+		expect(c.approvalMode).toBe('edits');
+	});
+
+	it('re-arms the startup push after a crash restart', () => {
+		const c = new ChatState();
+		c.approvalMode = 'edits';
+		c.handle({ type: 'startup', model: 'm', cwd: '/', session_id: 's1' });
+		c.handle({ type: 'approval_mode', mode: 'read-only' });
+		expect(c.pendingModeSync).toBe('auto-edit');
+		c.pendingModeSync = null;
+		c.handle({ type: 'approval_mode', mode: 'auto-edit' }); // ack
+		// engine crashes; the restarted engine announces its default again
+		c.handle({ type: 'startup', model: 'm', cwd: '/', session_id: 's1' });
+		c.handle({ type: 'approval_mode', mode: 'read-only' });
+		expect(c.pendingModeSync).toBe('auto-edit');
+		expect(c.approvalMode).toBe('edits');
 	});
 });

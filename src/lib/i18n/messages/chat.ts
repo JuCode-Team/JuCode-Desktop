@@ -44,6 +44,9 @@ const chat = {
 		toolRunning: 'running',
 		toolError: 'error',
 		toolDone: 'done',
+		partialApply: '部分应用 {n}/{m} 块',
+		// ApprovalCard
+		subagentChip: '子代理 {id}',
 		// Indicator
 		phaseConnecting: '连接中',
 		phaseWaiting: '等待响应',
@@ -95,6 +98,9 @@ const chat = {
 		toolRunning: 'running',
 		toolError: 'error',
 		toolDone: 'done',
+		partialApply: 'Partially applied {n}/{m} hunks',
+		// ApprovalCard
+		subagentChip: 'Subagent {id}',
 		// Indicator
 		phaseConnecting: 'Connecting',
 		phaseWaiting: 'Awaiting response',

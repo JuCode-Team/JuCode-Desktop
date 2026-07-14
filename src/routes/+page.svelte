@@ -2,7 +2,7 @@
 	import { onMount, tick, untrack } from 'svelte';
 	import { listen } from '@tauri-apps/api/event';
 	import { getCurrentWebview } from '@tauri-apps/api/webview';
-	import { X, Check, PanelRight, ChevronDown, ChevronUp, ShieldAlert, Search } from 'lucide-svelte';
+	import { X, Check, PanelRight, ChevronDown, ChevronUp, Search } from 'lucide-svelte';
 	import { open, ask, message } from '@tauri-apps/plugin-dialog';
 	import { cycleTheme } from '$lib/theme.svelte';
 	import {
@@ -12,21 +12,24 @@
 	} from '@tauri-apps/plugin-notification';
 	import { ChatState } from '$lib/chat.svelte';
 	import { treeRows } from '$lib/tree';
-	import { shouldAutoApprove } from '$lib/approval';
+	import { buildSetApprovalModeOp, type ApprovalMode, type ApproveOp } from '$lib/approval';
 	import { focusTrap } from '$lib/focusTrap';
 	import {
 		sendOp,
 		readAuthProviders,
 		listProviders,
+		listDir,
 		captureScreenshot,
 		startScreenRecording,
 		stopScreenRecording,
 		processVideo,
 		type EventPayload
 	} from '$lib/protocol';
+	import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
+	import { updater } from '$lib/updater.svelte';
 	import { browser, type WebRef } from '$lib/browser.svelte';
 	import { t } from '$lib/i18n';
-	import { SessionStore } from '$lib/session.svelte';
+	import { SessionStore, type SavedProject } from '$lib/session.svelte';
 	import Settings from '$lib/Settings.svelte';
 	import Setup from '$lib/Setup.svelte';
 	import Marketplace from '$lib/Marketplace.svelte';
@@ -34,12 +37,17 @@
 	import Sidebar from '$lib/Sidebar.svelte';
 	import Composer from '$lib/Composer.svelte';
 	import MessageList from '$lib/MessageList.svelte';
+	import ApprovalCard from '$lib/ApprovalCard.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import CommandPalette from '$lib/CommandPalette.svelte';
-	import type { Project } from '$lib/types';
+	import TaskDialog from '$lib/TaskDialog.svelte';
+	import type { Project, WorktreeMeta } from '$lib/types';
 	import Picker from '$lib/shell/Picker.svelte';
 	import FindBar from '$lib/shell/FindBar.svelte';
+	import EditorPane from '$lib/editor/EditorPane.svelte';
+	import QuickOpen from '$lib/editor/QuickOpen.svelte';
+	import { editorStore } from '$lib/editor/editorStore.svelte';
 
 
 	// Project/session tree + lifecycle lives in the store; the page keeps thin
@@ -55,12 +63,7 @@
 	// instead of an O(n) allSessions.find on every event.
 	const sessionMap = $derived(new Map(allSessions.map((s) => [s.id, s])));
 	// Read the saved layout synchronously, before any effect can overwrite it.
-	const savedProjectsData: Array<{
-		id: string;
-		name: string;
-		path: string;
-		tabs?: Array<{ sid: string; title: string }>;
-	}> = (() => {
+	const savedProjectsData: SavedProject[] = (() => {
 		try {
 			return JSON.parse(localStorage.getItem('jucode-projects') || '[]');
 		} catch (e) {
@@ -122,6 +125,8 @@
 	let showMarket = $state(false);
 	let showSetup = $state(false);
 	let showPalette = $state(false);
+	// 「新建并行任务」对话框：为哪个（主仓库）项目开任务。
+	let taskDialogFor = $state<Project | null>(null);
 
 	function refreshAuth() {
 		readAuthProviders()
@@ -156,6 +161,11 @@
 	let sidebarWidth = $state(248);
 	let resizing = $state(false);
 	let winW = $state(1200);
+	// Built-in editor: a toggleable split right of the chat column (⌘E), with a
+	// ⌘P quick-open picker over the project file index.
+	let showQuickOpen = $state(false);
+	let editorWidth = $state(560);
+	let editorResizing = $state(false);
 
 	// Auto-collapse the right dock when the window gets too narrow for a comfortable
 	// chat column, and restore it when there's room again. Keyed only on width
@@ -199,6 +209,8 @@
 			showMarket ||
 			showSetup ||
 			showPalette ||
+			showQuickOpen ||
+			!!taskDialogFor ||
 			!!chat?.picker ||
 			!!chat?.trustPrompt ||
 			!!chat?.pendingRewind;
@@ -237,6 +249,49 @@
 		};
 		window.addEventListener('pointermove', move);
 		window.addEventListener('pointerup', up);
+	}
+
+	function startEditorResize(e: PointerEvent) {
+		e.preventDefault();
+		editorResizing = true;
+		const startX = e.clientX;
+		const startW = editorWidth;
+		const move = (ev: PointerEvent) => {
+			const max = Math.max(360, winW - sidebarWidth - (showRight ? rightWidth : 0) - 420);
+			editorWidth = Math.min(max, Math.max(360, startW + (startX - ev.clientX)));
+		};
+		const up = () => {
+			editorResizing = false;
+			localStorage.setItem('jucode-editor-width', String(editorWidth));
+			window.removeEventListener('pointermove', move);
+			window.removeEventListener('pointerup', up);
+		};
+		window.addEventListener('pointermove', move);
+		window.addEventListener('pointerup', up);
+	}
+
+	// The editor confines opens / resolves relative engine paths against the
+	// active project's root.
+	$effect(() => {
+		if (activeProject) editorStore.root = activeProject.path;
+	});
+
+	function toggleEditor() {
+		if (!editorStore.visible && editorStore.tabs.length === 0) {
+			// Nothing open yet — go straight to quick-open instead of an empty pane.
+			if (activeProject) showQuickOpen = true;
+			return;
+		}
+		editorStore.visible = !editorStore.visible;
+	}
+
+	// ⌘K in the editor: forward the structured instruction to the active session
+	// engine. Returns false when there's no live session to receive it.
+	function sendAiEdit(content: string): boolean {
+		if (!chat || chat.engineState === 'exited') return false;
+		if (!chat.busy) chat.optimisticUser(content);
+		sendOp(activeId, { op: 'user_message', content });
+		return true;
 	}
 
 	function chooseEffort(ef: string) {
@@ -410,10 +465,94 @@
 			});
 			if (!ok) return;
 		}
+		// Best-effort dirty-tab guard: closing a project with unsaved editor
+		// buffers under its root discards them — confirm first.
+		const projRoot = p.path.replace(/\/+$/, '');
+		const dirtyTabs = editorStore.tabs.filter((tb) => tb.dirty && tb.path.startsWith(projRoot + '/'));
+		if (dirtyTabs.length) {
+			const ok = await ask(t('editor.dirtyProjectConfirm'), {
+				title: t('editor.unsavedTitle'),
+				kind: 'warning'
+			});
+			if (!ok) return;
+			for (const tb of dirtyTabs) editorStore.close(tb.path, true);
+		}
 		store.removeProject(p);
 	}
 	function nav(command: string) {
 		if (chat) sendOp(activeId, { op: 'command', input: command });
+	}
+
+	// ---------- 并行任务（git worktree） ----------
+	/** 把任务 worktree 作为项目打开（已在列表中则聚焦），可携带首条消息（任务描述）。 */
+	function openTaskProject(path: string, meta: WorktreeMeta, description = '') {
+		taskDialogFor = null;
+		const existing = store.projects.find((p) => normPath(p.path) === normPath(path));
+		if (existing) {
+			store.activeId = existing.sessions[0]?.id ?? store.addSession(existing);
+			return;
+		}
+		store.createProject(path, meta, description || undefined);
+	}
+	/** 任务清理完成（worktree 已删除）后，把对应项目从侧边栏移除。 */
+	function closeTaskProject(path: string) {
+		const p = store.projects.find((x) => normPath(x.path) === normPath(path));
+		if (p) store.removeProject(p);
+	}
+	/** 打开「新建并行任务」对话框；worktree 项目上则回落到其主仓库项目。 */
+	function newTask(p: Project | undefined) {
+		if (!p) return;
+		if (p.worktree) {
+			const main = store.projects.find((x) => normPath(x.path) === normPath(p.worktree!.mainRepoPath));
+			taskDialogFor = main ?? { ...p, path: p.worktree.mainRepoPath, name: base(p.worktree.mainRepoPath) };
+			return;
+		}
+		taskDialogFor = p;
+	}
+
+	// ---------- 深链（jucode://） ----------
+	const normPath = (p: string) => p.replace(/\/+$/, '');
+	/** 打开（或聚焦）路径对应的项目；不存在则在目录有效时创建。 */
+	async function openProjectPath(path: string, focusSession = true): Promise<Project | null> {
+		const existing = store.projects.find((p) => normPath(p.path) === normPath(path));
+		if (existing) {
+			if (focusSession) store.activeId = existing.sessions[0]?.id ?? store.addSession(existing);
+			return existing;
+		}
+		// 目录存在才创建项目（listDir 失败说明路径无效/不可访问）。
+		try {
+			await listDir(path);
+		} catch {
+			await message(t('shell.deepLinkBadPath', { path }), { title: 'JuCode', kind: 'error' });
+			return null;
+		}
+		return store.createProject(path);
+	}
+	/**
+	 * 深链路由：
+	 *   jucode://open?project=<绝对路径(urlencoded)>          打开/聚焦该项目（目录存在则创建）
+	 *   jucode://session/<会话id>?project=<绝对路径>          打开项目并恢复该会话
+	 */
+	async function handleDeepLink(raw: string) {
+		let url: URL;
+		try {
+			url = new URL(raw);
+		} catch {
+			return;
+		}
+		if (url.protocol !== 'jucode:') return;
+		const route = url.host || url.pathname.replace(/^\/+/, '').split('/')[0];
+		const projectPath = url.searchParams.get('project') ?? '';
+		if (route === 'open') {
+			if (projectPath) await openProjectPath(projectPath);
+		} else if (route === 'session') {
+			const sid = decodeURIComponent(url.pathname.replace(/^\/+/, ''));
+			if (!sid) return;
+			const proj = projectPath ? await openProjectPath(projectPath, false) : (activeProject ?? projects[0]);
+			if (!proj) return;
+			// 恢复的会话开在新标签里，不覆盖当前会话。
+			store.activeId = store.restoreSession(proj, sid, '');
+		}
 	}
 
 	const isVideo = (p: string) => /\.(mp4|mov|webm|mkv|avi|m4v)$/i.test(p);
@@ -533,17 +672,25 @@
 	function stop() {
 		sendOp(activeId, { op: 'interrupt' });
 	}
-	function respondApproval(decision: string) {
-		const a = chat?.pendingApproval;
-		if (!a) return;
-		sendOp(activeId, { op: 'command', input: `/approve ${a.callId} ${decision}` });
-		if (chat) chat.pendingApproval = null;
+	function respondApproval(op: ApproveOp) {
+		if (!chat?.pendingApproval) return;
+		sendOp(activeId, op);
+		chat.pendingApproval = null;
 	}
-	function autoApprove(c: ChatState, sid: string) {
-		const a = c.pendingApproval;
-		if (!a || !shouldAutoApprove(c.approvalMode, a.name)) return;
-		sendOp(sid, { op: 'command', input: `/approve ${a.callId} allow` });
-		c.pendingApproval = null;
+	// User changed the approval-mode picker: persist locally and push it to this
+	// session's engine (which enforces it and acks with an approval_mode event).
+	function setApprovalMode(m: ApprovalMode) {
+		if (!chat) return;
+		chat.setApprovalMode(m);
+		sendOp(activeId, buildSetApprovalModeOp(m));
+	}
+	// The engine announced its startup approval mode and it diverges from the
+	// desktop's persisted mode (fresh start, crash auto-restart or provider
+	// switch): push ours. Runs off the agent-event stream, per session.
+	function flushModeSync(c: ChatState, sid: string) {
+		if (!c.pendingModeSync) return;
+		sendOp(sid, { op: 'set_approval_mode', mode: c.pendingModeSync });
+		c.pendingModeSync = null;
 	}
 
 	function selectRow(command: string) {
@@ -596,6 +743,9 @@
 		chat.trustPrompt = null;
 	}
 	function onWindowKey(e: KeyboardEvent) {
+		// Something closer to the target already claimed this key (e.g. the code
+		// editor's own ⌘K / ⌘S keymap) — never double-fire an app shortcut on it.
+		if (e.defaultPrevented) return;
 		pickerKey(e);
 		// The setup wizard is a blocking first-run modal — don't fire app shortcuts
 		// under it (e.g. Cmd+K opening the palette behind it).
@@ -621,6 +771,12 @@
 		} else if (e.key === 'b') {
 			e.preventDefault();
 			toggleRight();
+		} else if (e.key === 'e') {
+			e.preventDefault();
+			toggleEditor();
+		} else if (e.key === 'p') {
+			e.preventDefault();
+			if (activeProject) showQuickOpen = !showQuickOpen;
 		}
 	}
 
@@ -700,6 +856,8 @@
 		if (savedW >= 260 && savedW <= 640) rightWidth = savedW;
 		const savedSb = Number(localStorage.getItem('jucode-sidebar-width'));
 		if (savedSb >= 190 && savedSb <= 420) sidebarWidth = savedSb;
+		const savedEd = Number(localStorage.getItem('jucode-editor-width'));
+		if (savedEd >= 360 && savedEd <= 1400) editorWidth = savedEd;
 		const cleanups: Array<() => void> = [];
 		let disposed = false;
 		(async () => {
@@ -712,7 +870,7 @@
 				} catch {
 					/* ignore */
 				}
-				autoApprove(s.chat, s.id);
+				flushModeSync(s.chat, s.id);
 				// Read the current active session at call time (store.activeId is
 				// reactive) — not a value snapshotted when the listener was mounted —
 				// so auto-scroll/notification target the right session after tab switches.
@@ -748,10 +906,19 @@
 					browser.handleEvent(p);
 				}
 			});
-			cleanups.push(unlisten, unexit, undrop, unbrowser);
+			// 托盘菜单「新建会话」：在当前项目（或第一个项目）里开新会话。
+			const untray = await listen('tray-new-session', () => {
+				const p = store.activeProject ?? store.projects[0];
+				if (p) store.addSession(p);
+			});
+			cleanups.push(unlisten, unexit, undrop, unbrowser, untray);
 			// The agent's browser_open tool navigates the embedded browser.
 			ChatState.onBrowserOpen = (url) => browser.open(url);
 			cleanups.push(() => (ChatState.onBrowserOpen = null));
+			// Successful edit-tool completions auto-reload matching editor tabs
+			// (and resolve pending ⌘K AI edits).
+			ChatState.onFilesEdited = (paths) => editorStore.handleEngineEdit(paths);
+			cleanups.push(() => (ChatState.onFilesEdited = null));
 			if (disposed) {
 				cleanups.forEach((f) => f());
 				return;
@@ -759,6 +926,15 @@
 			// Restore saved projects + their open conversations (resume by id), or
 			// seed a default project on first run.
 			await store.restore(savedProjectsData);
+			// 深链在项目恢复完成后再注册，冷启动携带的链接（onOpenUrl 会补发当前
+			// 深链）才能作用于已恢复的项目列表。
+			const undeep = await onOpenUrl((urls) => {
+				for (const u of urls) handleDeepLink(u);
+			});
+			cleanups.push(undeep);
+			// 启动约 5 秒后静默检查一次更新；有新版本时设置入口显示小圆点。
+			const updateTimer = setTimeout(() => updater.check(true), 5000);
+			cleanups.push(() => clearTimeout(updateTimer));
 			loadProviders();
 			readAuthProviders()
 				.then((p) => {
@@ -790,8 +966,10 @@
 		width={sidebarWidth}
 		{loggedIn}
 		providerName={chat?.provider ?? ''}
+		updateAvailable={updater.available}
 		onSelect={(id) => (store.activeId = id)}
 		onNewProject={addProject}
+		onNewTask={newTask}
 		onNewSession={(p) => store.addSession(p)}
 		onCloseSession={(id) => store.removeSession(id)}
 		onCloseProject={removeProject}
@@ -867,22 +1045,10 @@
 				</div>
 			{/if}
 			{#if chat.pendingApproval}
-				{@const isShell = ['bash', 'execute', 'exec_command', 'shell_command'].includes(chat.pendingApproval.name)}
 				<div class="approval-wrap">
-					<div class="approval">
-						<div class="approval-head">
-							<ShieldAlert size={15} />
-							<span>{isShell ? t('shell.approveCommand') : t('shell.approveFile')} · <b>{chat.pendingApproval.name}</b></span>
-						</div>
-						{#if chat.pendingApproval.summary}
-							<pre class="approval-sum" class:cmd={isShell}>{isShell ? `$ ${chat.pendingApproval.summary}` : chat.pendingApproval.summary}</pre>
-						{/if}
-						<div class="approval-actions">
-							<Button variant="primary" size="sm" onclick={() => respondApproval('allow once')}>{t('shell.allowOnce')}</Button>
-							<Button variant="secondary" size="sm" onclick={() => respondApproval('allow always')}>{t('shell.allowAlways')}</Button>
-							<Button variant="danger" size="sm" onclick={() => respondApproval('deny')}>{t('shell.deny')}</Button>
-						</div>
-					</div>
+					{#key chat.pendingApproval.callId}
+						<ApprovalCard approval={chat.pendingApproval} onRespond={respondApproval} />
+					{/key}
 				</div>
 			{/if}
 
@@ -902,6 +1068,7 @@
 				onRecord={toggleRecord}
 				onModel={() => nav('/model')}
 				onEffort={chooseEffort}
+				onApproval={setApprovalMode}
 			/>
 			</div>
 		{:else}
@@ -913,6 +1080,14 @@
 		{/if}
 	</div>
 
+	<!-- EDITOR: toggleable split right of the chat (⌘E) -->
+	{#if editorStore.visible}
+		<div class="resizer" role="separator" aria-label="resize editor" onpointerdown={startEditorResize}></div>
+		<section class="editor-pane" class:resizing={editorResizing} style:width="{editorWidth}px" aria-label={t('editor.title')}>
+			<EditorPane onAiSend={sendAiEdit} />
+		</section>
+	{/if}
+
 	<!-- RIGHT: goal progress -->
 	<div class="resizer" class:hidden={!showRight} role="separator" aria-label="resize panel" onpointerdown={startResize}></div>
 	<aside class="right" class:closed={!showRight} class:resizing style:width={showRight ? `${rightWidth}px` : '0px'}>
@@ -922,13 +1097,16 @@
 				plan={chat?.plan ?? []}
 				cwd={activeProject?.path ?? ''}
 				changed={chat?.changedFiles ?? []}
+				worktree={activeProject?.worktree ?? null}
 				onRevertFile={(p) => chat && (chat.changedFiles = chat.changedFiles.filter((x) => x !== p))}
+				onOpenTask={(path, meta) => openTaskProject(path, meta)}
+				onTaskRemoved={closeTaskProject}
 			/>
 		</div>
 	</aside>
 
 	{#if showSettings}
-		<Settings sessionId={activeId} initialSection={settingsInitial} onAuthChange={refreshAuth} onClose={() => { showSettings = false; settingsInitial = 'overview'; loadProviders(); }} />
+		<Settings sessionId={activeId} {chat} initialSection={settingsInitial} onAuthChange={refreshAuth} onClose={() => { showSettings = false; settingsInitial = 'overview'; loadProviders(); }} />
 	{/if}
 
 	{#if showMarket}
@@ -998,14 +1176,32 @@
 		</div>
 	{/if}
 
+	{#if showQuickOpen && activeProject}
+		{@const qoRoot = activeProject.path}
+		<QuickOpen
+			root={qoRoot}
+			onClose={() => (showQuickOpen = false)}
+			onOpen={(rel) => {
+				showQuickOpen = false;
+				editorStore.open(rel, qoRoot).catch((e) => message(String(e), { title: 'JuCode', kind: 'error' }));
+			}}
+		/>
+	{/if}
+
+	{#if taskDialogFor}
+		<TaskDialog project={taskDialogFor} onClose={() => (taskDialogFor = null)} onCreated={openTaskProject} />
+	{/if}
+
 	{#if showPalette}
 		<CommandPalette
 			{chat}
 			hasProject={!!activeProject}
+			canNewTask={!!activeProject && !activeProject.stale}
 			onClose={() => (showPalette = false)}
 			onRun={(cmd) => nav(cmd)}
 			onNewSession={() => activeProject && store.addSession(activeProject)}
 			onNewProject={addProject}
+			onNewTask={() => newTask(activeProject)}
 			onSettings={() => (showSettings = true)}
 			onMarket={() => (showMarket = true)}
 			onTogglePanel={toggleRight}
@@ -1060,12 +1256,6 @@
 		margin: 0 auto;
 		padding: 0 18px 10px;
 	}
-	.approval {
-		padding: 12px 14px;
-		background: color-mix(in oklab, var(--warn) 9%, var(--panel));
-		border: 1px solid color-mix(in oklab, var(--warn) 38%, transparent);
-		border-radius: var(--r-md);
-	}
 	.enginedown {
 		display: flex;
 		align-items: center;
@@ -1080,39 +1270,6 @@
 		font-size: 13px;
 		color: var(--err);
 		font-weight: 500;
-	}
-	.approval-head {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		font-size: 13px;
-		color: var(--warn);
-	}
-	.approval-head b {
-		font-family: var(--font-mono);
-		color: var(--text);
-	}
-	.approval-sum {
-		margin: 8px 0 0;
-		padding: 8px 10px;
-		background: var(--sidebar);
-		border: 1px solid var(--hairline);
-		border-radius: var(--r-sm);
-		font-family: var(--font-mono);
-		font-size: 12px;
-		white-space: pre-wrap;
-		word-break: break-word;
-		max-height: 120px;
-		overflow-y: auto;
-	}
-	.approval-sum.cmd {
-		color: var(--text);
-		border-left: 2px solid var(--warn);
-	}
-	.approval-actions {
-		display: flex;
-		gap: 8px;
-		margin-top: 10px;
 	}
 	header {
 		display: flex;
@@ -1248,6 +1405,17 @@
 		justify-content: center;
 		gap: 12px;
 	}
+	/* ---------- editor split ---------- */
+	.editor-pane {
+		flex-shrink: 0;
+		min-width: 0;
+		border-left: 1px solid var(--hairline);
+		overflow: hidden;
+	}
+	.editor-pane.resizing {
+		user-select: none;
+	}
+
 	/* ---------- right ---------- */
 	.resizer {
 		width: 5px;

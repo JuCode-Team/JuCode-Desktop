@@ -5,9 +5,25 @@ export interface Session {
 	chat: ChatState;
 }
 
+/** 并行任务（git worktree）项目的元数据，随项目布局持久化。 */
+export interface WorktreeMeta {
+	isWorktree: true;
+	/** 主仓库根目录（merge / worktree remove 等操作在这里执行）。 */
+	mainRepoPath: string;
+	/** 任务分支（task/<slug>）。 */
+	branch: string;
+	/** 创建任务时的基础分支。 */
+	baseBranch: string;
+	slug: string;
+}
+
 export interface Project {
 	id: string;
 	name: string;
 	path: string;
 	sessions: Session[];
+	/** 并行任务 worktree 项目才有；普通项目为 undefined。 */
+	worktree?: WorktreeMeta;
+	/** 恢复时发现 worktree 目录已不存在：只读展示，仅可从列表移除。 */
+	stale?: boolean;
 }

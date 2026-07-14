@@ -47,9 +47,17 @@ jobs:
       # tauri-action runs beforeBuildCommand (pnpm build), bundles the app and
       # uploads the installers to a release named after the tag. The engine is
       # no longer bundled — the app drives the system-installed `jucode` CLI.
+      #
+      # Auto-update: with TAURI_SIGNING_PRIVATE_KEY set (repo secret) and
+      # bundle.createUpdaterArtifacts enabled in tauri.conf.json, tauri-action
+      # additionally signs the updater bundles (.sig files) and generates +
+      # uploads latest.json, which installed clients poll via the endpoint in
+      # plugins.updater. Key generation & setup: see docs/updater.md.
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: ${{ github.ref_name }}

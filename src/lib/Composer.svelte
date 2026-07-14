@@ -13,6 +13,7 @@
 	import AttachmentChips from '$lib/composer/AttachmentChips.svelte';
 	import ContextIndicator from '$lib/composer/ContextIndicator.svelte';
 	import type { ChatState } from '$lib/chat.svelte';
+	import type { ApprovalMode } from '$lib/approval';
 
 	let {
 		chat,
@@ -28,7 +29,8 @@
 		onScreenshot,
 		onRecord,
 		onModel,
-		onEffort
+		onEffort,
+		onApproval
 	}: {
 		chat: ChatState;
 		input: string;
@@ -44,6 +46,7 @@
 		onRecord?: () => void;
 		onModel: () => void;
 		onEffort: (ef: string) => void;
+		onApproval: (mode: ApprovalMode) => void;
 	} = $props();
 
 	let slashIdx = $state(0);
@@ -168,9 +171,10 @@
 		{ value: 'all', label: t('chat.approvalAll') }
 	]);
 	const approvalLabel = $derived(APPROVAL.find((a) => a.value === chat.approvalMode)?.label ?? t('chat.approvalAsk'));
+	// Persisting + pushing the mode to the engine lives with the page (it owns
+	// the session id); the picker only reports the choice.
 	function setApproval(m: string) {
-		chat.approvalMode = m as 'ask' | 'edits' | 'all';
-		localStorage.setItem('jucode-approval-mode', m);
+		onApproval(m as ApprovalMode);
 		showApproval = false;
 	}
 

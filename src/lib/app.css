@@ -32,6 +32,17 @@
 
 	--shadow-pop: 0 12px 30px rgba(0, 0, 0, 0.32);
 	--shadow-modal: 0 24px 60px rgba(0, 0, 0, 0.5);
+
+	/* Code editor syntax palette (CodeMirror highlight style reads these). */
+	--cm-keyword: #c792ea;
+	--cm-string: #a5d6a7;
+	--cm-number: #f2b36b;
+	--cm-comment: #6f6c74;
+	--cm-function: #82aaff;
+	--cm-type: #ffcb6b;
+	--cm-property: #89ceff;
+	--cm-tag: #f07178;
+	--cm-punct: #9d9aa3;
 }
 
 [data-theme='light'] {
@@ -59,6 +70,27 @@
 
 	--shadow-pop: 0 10px 26px rgba(20, 16, 32, 0.12);
 	--shadow-modal: 0 20px 52px rgba(20, 16, 32, 0.18);
+
+	--cm-keyword: #7c3aed;
+	--cm-string: #15803d;
+	--cm-number: #b45309;
+	--cm-comment: #9b98a1;
+	--cm-function: #1d4ed8;
+	--cm-type: #a16207;
+	--cm-property: #2563eb;
+	--cm-tag: #be123c;
+	--cm-punct: #6b6870;
+}
+
+/* ⌘K AI-edit pending pulse (CodeMirror line decoration, outside svelte scope). */
+@keyframes cm-ai-pulse {
+	0%,
+	100% {
+		background-color: color-mix(in oklab, var(--accent) 8%, transparent);
+	}
+	50% {
+		background-color: color-mix(in oklab, var(--accent) 18%, transparent);
+	}
 }
 
 * {

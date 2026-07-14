@@ -11,6 +11,7 @@
 	import BrowserPanel from './BrowserPanel.svelte';
 	import { browser } from '$lib/browser.svelte';
 	import type { Goal, PlanStep } from '$lib/chat.svelte';
+	import type { WorktreeMeta } from '$lib/types';
 	import { t } from '$lib/i18n';
 
 	let {
@@ -18,8 +19,21 @@
 		plan = [],
 		cwd = '',
 		changed = [],
-		onRevertFile
-	}: { goal: Goal | null; plan?: PlanStep[]; cwd?: string; changed?: string[]; onRevertFile?: (p: string) => void } = $props();
+		worktree = null,
+		onRevertFile,
+		onOpenTask,
+		onTaskRemoved
+	}: {
+		goal: Goal | null;
+		plan?: PlanStep[];
+		cwd?: string;
+		changed?: string[];
+		/** 当前激活项目是并行任务 worktree 时的元数据（透传给 Git 面板）。 */
+		worktree?: WorktreeMeta | null;
+		onRevertFile?: (p: string) => void;
+		onOpenTask?: (path: string, meta: WorktreeMeta) => void;
+		onTaskRemoved?: (path: string) => void;
+	} = $props();
 
 	const PANELS = [
 		{ key: 'plan', icon: ListTodo },
@@ -185,7 +199,7 @@
 				{:else if tab.panel === 'goal'}<GoalPanel {goal} />
 				{:else if tab.panel === 'changes'}<ChangesPanel {cwd} files={changed} onRevert={onRevertFile} />
 				{:else if tab.panel === 'files'}<FilesPanel rootDir={cwd} />
-				{:else if tab.panel === 'git'}<GitPanel {cwd} />
+				{:else if tab.panel === 'git'}<GitPanel {cwd} {worktree} {onOpenTask} {onTaskRemoved} />
 				{:else if tab.panel === 'term'}<TerminalPanel {cwd} />
 				{:else if tab.panel === 'browser'}<BrowserPanel />{/if}
 			</div>

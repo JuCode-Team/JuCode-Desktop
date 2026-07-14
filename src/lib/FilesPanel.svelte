@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { Folder, FileText, ArrowUp, RefreshCw, X } from 'lucide-svelte';
-	import { projectRoot, listDir, readText, type FsEntry } from '$lib/protocol';
+	import { projectRoot, listDir, type FsEntry } from '$lib/protocol';
+	import { editorStore } from '$lib/editor/editorStore.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import { t } from '$lib/i18n';
 
@@ -36,8 +37,10 @@
 		if (e.is_dir) {
 			load(e.path);
 		} else {
+			// Text files open in the built-in editor pane; binary/oversized files
+			// keep the lightweight preview overlay (which reports why, as before).
 			try {
-				viewer = { name: e.name, content: await readText(e.path) };
+				await editorStore.open(e.path, root);
 			} catch (err) {
 				viewer = { name: e.name, content: `Error: ${err}` };
 			}

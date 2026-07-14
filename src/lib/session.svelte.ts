@@ -1,7 +1,7 @@
 import { ChatState } from './chat.svelte';
-import { sendOp, createSession, closeSession, projectRoot, writeConfig } from './protocol';
+import { sendOp, createSession, closeSession, projectRoot, writeConfig, git } from './protocol';
 import { t } from '$lib/i18n';
-import type { Project } from './types';
+import type { Project, WorktreeMeta } from './types';
 
 // The persisted shape of a project + its open tabs (engine session id + title).
 export interface SavedProject {
@@ -9,6 +9,8 @@ export interface SavedProject {
 	name: string;
 	path: string;
 	tabs?: { sid: string; title: string }[];
+	/** 并行任务 worktree 项目的元数据（isWorktree/mainRepoPath/branch/baseBranch/slug）。 */
+	worktree?: WorktreeMeta;
 }
 
 const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
@@ -50,13 +52,22 @@ export class SessionStore {
 		chat.messages.push({ kind: 'error', text: t('shell.startFail', { msg: String(e) }) });
 	}
 
-	/** Spawn a fresh session in `project` and make it active. */
-	addSession(project: Project) {
+	/** Spawn a fresh session in `project` and make it active. `firstMessage`
+	 *  (e.g. a parallel task's 任务描述) is sent as the opening user turn once
+	 *  the engine is up. */
+	addSession(project: Project, firstMessage?: string) {
 		const id = this.uid();
 		const chat = new ChatState();
 		project.sessions.push({ id, chat });
 		this.activeId = id;
-		createSession(id, project.path).catch((e) => this.#engineFailed(chat, e));
+		createSession(id, project.path)
+			.then(() => {
+				if (firstMessage) {
+					chat.optimisticUser(firstMessage);
+					sendOp(id, { op: 'user_message', content: firstMessage });
+				}
+			})
+			.catch((e) => this.#engineFailed(chat, e));
 		return id;
 	}
 
@@ -72,11 +83,14 @@ export class SessionStore {
 		return id;
 	}
 
-	/** Create a project from a directory path and seed its first session. */
-	createProject(path: string) {
+	/** Create a project from a directory path and seed its first session.
+	 *  Worktree metadata marks it as a parallel-task project; `firstMessage`
+	 *  opens the seeded session with that user turn. */
+	createProject(path: string, worktree?: WorktreeMeta, firstMessage?: string) {
 		const p: Project = { id: this.uid(), name: base(path), path, sessions: [] };
+		if (worktree) p.worktree = worktree;
 		this.projects.push(p);
-		this.addSession(p);
+		this.addSession(p, firstMessage);
 		return p;
 	}
 
@@ -198,6 +212,7 @@ export class SessionStore {
 			id: p.id,
 			name: p.name,
 			path: p.path,
+			...(p.worktree ? { worktree: p.worktree } : {}),
 			tabs: p.sessions
 				.filter((s) => s.chat.resumable)
 				.map((s) => ({ sid: s.chat.sessionId, title: s.chat.title }))
@@ -205,20 +220,33 @@ export class SessionStore {
 	}
 
 	/** Restore saved projects + their open conversations, or seed a default
-	 *  project on first run. Sets `loaded` when done. */
+	 *  project on first run. Sets `loaded` when done. A worktree project whose
+	 *  directory has vanished (task finished elsewhere / dir deleted) is kept in
+	 *  the list as `stale` — no sessions are spawned into a dead cwd — so the
+	 *  sidebar can offer a remove-from-list affordance instead of crashing. */
 	async restore(saved: SavedProject[]) {
 		let first = '';
 		if (saved.length) {
 			for (const p of saved) {
 				const proj: Project = { id: p.id, name: p.name, path: p.path, sessions: [] };
+				if (p.worktree) {
+					proj.worktree = p.worktree;
+					try {
+						await git(['rev-parse', '--show-toplevel'], p.path);
+					} catch {
+						proj.stale = true;
+					}
+				}
 				this.projects.push(proj);
+				if (proj.stale) continue;
 				for (const t of p.tabs ?? []) {
 					if (!t.sid) continue;
 					const id = this.restoreSession(proj, t.sid, t.title);
 					if (!first) first = id;
 				}
 			}
-			this.activeId = first || (this.projects[0] && this.addSession(this.projects[0])) || '';
+			const firstLive = this.projects.find((p) => !p.stale);
+			this.activeId = first || (firstLive && this.addSession(firstLive)) || '';
 		} else {
 			const root = await projectRoot();
 			this.projects.push({ id: this.uid(), name: base(root), path: root, sessions: [] });

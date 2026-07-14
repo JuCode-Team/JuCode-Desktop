@@ -6,6 +6,7 @@
 	} from 'lucide-svelte';
 	import { openUrl } from '@tauri-apps/plugin-opener';
 	import { sendOp, checkEnvironment, installDependency, type EnvReport } from '$lib/protocol';
+	import { gitInstallUi } from '$lib/setup';
 	import Button from '$lib/ui/Button.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import { focusTrap } from '$lib/focusTrap';
@@ -37,14 +38,13 @@
 	const gitOk = $derived(env?.git.present ?? false);
 	const engineOk = $derived(env?.engine.present ?? false);
 
-	// Platform-specific manual install command (macOS has a one-click button instead).
-	const installCmd = $derived(
-		env?.os === 'windows'
-			? 'winget install --id Git.Git -e'
-			: env?.os === 'linux'
-				? 'sudo apt install git    # Fedora: sudo dnf install git · Arch: sudo pacman -S git'
-				: 'brew install git'
-	);
+	// Platform-aware install presentation, driven by the backend's advice
+	// (auto button / copyable command / download page).
+	const installUi = $derived(gitInstallUi(env?.os, env?.git_install));
+	// install_dependency may answer with a manual command (e.g. after a partial
+	// probe); it overrides the advice-derived command row.
+	let cmdOverride = $state<string | null>(null);
+	const installCmd = $derived(cmdOverride ?? installUi.command);
 
 	async function runCheck() {
 		checking = true;
@@ -62,7 +62,11 @@
 		installing = true;
 		installMsg = '';
 		try {
-			installMsg = await installDependency('git');
+			const outcome = await installDependency('git');
+			installMsg = outcome.message;
+			if (outcome.kind === 'manual-command') cmdOverride = outcome.command;
+			else if (outcome.kind === 'open-url') await openUrl(outcome.url);
+			else if (outcome.kind === 'installed') await runCheck();
 		} catch (e) {
 			installMsg = t('setup.installGit.autoInstallFailed', { e: String(e) });
 		} finally {
@@ -70,7 +74,7 @@
 		}
 	}
 	function copyCmd() {
-		navigator.clipboard?.writeText(installCmd).catch(() => {});
+		if (installCmd) navigator.clipboard?.writeText(installCmd).catch(() => {});
 		copied = true;
 		setTimeout(() => (copied = false), 1400);
 	}
@@ -141,20 +145,21 @@
 				{#if !checking && !gitOk}
 					<div class="fix">
 						<div class="fix-head">{t('setup.installGit.head')}</div>
-						{#if env?.os === 'macos'}
-							<p class="fix-tip">{t('setup.installGit.tipMac')}</p>
+						<p class="fix-tip">{t(`setup.installGit.${installUi.tipKey}`)}</p>
+						{#if installUi.auto}
 							<div class="fix-row">
 								<Button variant="primary" size="sm" disabled={installing} onclick={autoInstall}>
 									{#if installing}<LoaderCircle size={14} class="spin" /> {t('setup.installGit.starting')}{:else}<Download size={14} /> {t('setup.installGit.autoInstall')}{/if}
 								</Button>
-								<Button variant="ghost" size="sm" onclick={() => openUrl('https://git-scm.com/downloads')}><ExternalLink size={14} /> {t('setup.installGit.downloadPage')}</Button>
+								<Button variant="ghost" size="sm" onclick={() => openUrl(installUi.url)}><ExternalLink size={14} /> {t('setup.installGit.downloadPage')}</Button>
 							</div>
-							{#if installMsg}<p class="fix-msg">{installMsg}</p>{/if}
+						{/if}
+						{#if installMsg}<p class="fix-msg">{installMsg}</p>{/if}
+						{#if installCmd}
 							<div class="cmd"><code>{installCmd}</code><IconButton size="sm" onclick={copyCmd} label="copy" title={t('common.copy')}>{#if copied}<Check size={14} />{:else}<Copy size={14} />{/if}</IconButton></div>
-						{:else}
-							<p class="fix-tip">{t('setup.installGit.tipOther')}</p>
-							<div class="cmd"><code>{installCmd}</code><IconButton size="sm" onclick={copyCmd} label="copy" title={t('common.copy')}>{#if copied}<Check size={14} />{:else}<Copy size={14} />{/if}</IconButton></div>
-							<Button variant="ghost" size="sm" onclick={() => openUrl('https://git-scm.com/downloads')}><ExternalLink size={14} /> {t('setup.installGit.officialDownloadPage')}</Button>
+						{/if}
+						{#if !installUi.auto}
+							<Button variant="ghost" size="sm" onclick={() => openUrl(installUi.url)}><ExternalLink size={14} /> {t('setup.installGit.officialDownloadPage')}</Button>
 						{/if}
 					</div>
 				{/if}

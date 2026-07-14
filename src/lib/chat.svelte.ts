@@ -1,6 +1,15 @@
 import type { AgentEvent } from './protocol';
-import { EDIT_TOOLS } from './approval';
+import {
+	EDIT_TOOLS,
+	parseHunks,
+	reconcileMode,
+	toEngineMode,
+	type ApprovalHunk,
+	type ApprovalMode,
+	type EngineApprovalMode
+} from './approval';
 import { recordUsage } from './usageStats';
+import { parseMcpServersEvent, type McpServerView } from './mcp';
 
 export type Msg =
 	| { kind: 'user'; text: string }
@@ -65,6 +74,10 @@ export class ChatState {
 	 *  there's one browser panel regardless of which session's agent asked. */
 	static onBrowserOpen: ((url: string) => void) | null = null;
 
+	/** Set by the page: invoked with the file paths a successful edit tool
+	 *  touched, so the built-in editor can auto-reload open tabs (⌘K flow). */
+	static onFilesEdited: ((paths: string[]) => void) | null = null;
+
 	messages = $state<Msg[]>([]);
 	provider = $state('');
 	model = $state('');
@@ -84,7 +97,13 @@ export class ChatState {
 	trustPrompt = $state<{ cwd: string; repoRoot: string | null } | null>(null);
 	goal = $state<Goal | null>(null);
 	plan = $state<PlanStep[]>([]);
-	pendingApproval = $state<{ callId: string; name: string; summary: string } | null>(null);
+	pendingApproval = $state<{
+		callId: string;
+		name: string;
+		summary: string;
+		subagentId: string | null;
+		hunks: ApprovalHunk[] | null;
+	} | null>(null);
 	subagents = $state<Record<string, { status: string; message: string }>>({});
 	commands = $state<CommandItem[]>([]);
 	totalIn = $state(0);
@@ -93,10 +112,24 @@ export class ChatState {
 	compactionTokens = $state(0);
 	// Files the agent edited this session (drives the Changes panel).
 	changedFiles = $state<string[]>([]);
-	// Approval policy applied client-side: 'ask' surfaces every gated tool,
-	// 'edits' auto-allows file mutations (still asks for shell), 'all' allows
-	// everything. The page reads this to auto-respond to approval_request.
-	approvalMode = $state<'ask' | 'edits' | 'all'>('ask');
+	// Approval policy, enforced engine-side ('ask' ↔ read-only, 'edits' ↔
+	// auto-edit, 'all' ↔ full-auto). The engine is the source of truth: this
+	// mirrors its `approval_mode` events, except right after engine startup where
+	// the desktop pushes its persisted mode (see `pendingModeSync`).
+	approvalMode = $state<ApprovalMode>('ask');
+	// Set when the engine announces its startup approval mode and it differs
+	// from the desktop's persisted mode: the page must send `set_approval_mode`
+	// with this value and clear it. Re-armed on every engine `startup` event, so
+	// crash auto-restarts / provider switches re-push the mode too.
+	pendingModeSync = $state<EngineApprovalMode | null>(null);
+	// Whether this engine incarnation's startup approval_mode was processed;
+	// later approval_mode events are engine-driven changes (e.g. /approvals).
+	#modeSynced = false;
+	// Latest MCP servers view from this session's engine (emitted at startup and
+	// after every state change/mutation). null until the first event arrives.
+	// Settings reads this off the *active* session's ChatState — the engine's MCP
+	// config is global, so any live session's engine is an authoritative source.
+	mcpServers = $state<McpServerView[] | null>(null);
 	// A rewind targeted at a specific rendered user message: the page sets this
 	// before sending `/rewind`, and the checkpoint_view handler resolves it to a
 	// concrete turn id (positional: the i-th user turn matches the i-th user message).
@@ -124,6 +157,18 @@ export class ChatState {
 		try {
 			const saved = localStorage.getItem('jucode-approval-mode');
 			if (saved === 'edits' || saved === 'all') this.approvalMode = saved;
+		} catch {
+			/* no localStorage (e.g. tests) */
+		}
+	}
+
+	/** Set the approval mode locally and persist it (the caller is responsible
+	 *  for pushing it to the engine via `set_approval_mode`). Also invoked by the
+	 *  approval_mode event handler so engine-driven changes persist too. */
+	setApprovalMode(mode: ApprovalMode) {
+		this.approvalMode = mode;
+		try {
+			localStorage.setItem('jucode-approval-mode', mode);
 		} catch {
 			/* no localStorage (e.g. tests) */
 		}
@@ -214,7 +259,27 @@ export class ChatState {
 				this.cwd = str(ev.cwd);
 				if (str(ev.session_id)) this.sessionId = str(ev.session_id);
 				this.contextWindow = num(ev.context_window);
+				// A fresh engine incarnation (first start, crash auto-restart or
+				// provider switch) announces its approval mode next — re-arm the
+				// startup sync so the desktop's persisted mode is pushed again.
+				this.#modeSynced = false;
 				break;
+			case 'approval_mode': {
+				const engineMode = str(ev.mode);
+				if (!this.#modeSynced) {
+					// Startup announcement: the desktop's persisted mode wins — ask the
+					// page to push it if the engine (default read-only) differs.
+					this.#modeSynced = true;
+					if (engineMode !== toEngineMode(this.approvalMode)) {
+						this.pendingModeSync = toEngineMode(this.approvalMode);
+						break;
+					}
+				}
+				// Post-sync the engine is the source of truth (e.g. a manually typed
+				// /approvals, or the ack of our own set_approval_mode).
+				this.setApprovalMode(reconcileMode(this.approvalMode, engineMode));
+				break;
+			}
 			case 'model_status':
 				this.provider = str(ev.provider);
 				this.model = str(ev.model);
@@ -313,9 +378,14 @@ export class ChatState {
 					try {
 						const out = JSON.parse(str(ev.output)) as Record<string, unknown>;
 						const paths = [out.path, ...(Array.isArray(out.paths) ? out.paths : [])];
+						const edited: string[] = [];
 						for (const p of paths) {
-							if (typeof p === 'string' && p && !this.changedFiles.includes(p)) this.changedFiles.push(p);
+							if (typeof p === 'string' && p) {
+								edited.push(p);
+								if (!this.changedFiles.includes(p)) this.changedFiles.push(p);
+							}
 						}
+						if (edited.length) ChatState.onFilesEdited?.(edited);
 					} catch (e) {
 						/* non-JSON output */
 						console.warn('tool_output JSON parse failed', e);
@@ -423,7 +493,9 @@ export class ChatState {
 				this.pendingApproval = {
 					callId: str(ev.call_id),
 					name: str(ev.name),
-					summary: str(ev.summary)
+					summary: str(ev.summary),
+					subagentId: typeof ev.subagent_id === 'string' && ev.subagent_id ? ev.subagent_id : null,
+					hunks: parseHunks(ev.hunks)
 				};
 				break;
 			case 'command_list':
@@ -474,6 +546,9 @@ export class ChatState {
 				}
 				break;
 			}
+			case 'mcp_servers':
+				this.mcpServers = parseMcpServersEvent(ev);
+				break;
 			case 'info':
 				this.messages.push({ kind: 'system', text: str(ev.message) });
 				break;

@@ -18,7 +18,9 @@ const setup = {
 		installGit: {
 			head: '安装 Git',
 			tipMac: '点下方按钮触发系统「命令行工具」安装（含 git），在弹出的对话框中完成后点「重新检查」。',
-			tipOther: '在终端执行以下命令安装，完成后点「重新检查」。',
+			tipWinget: '点下方按钮通过 winget 自动安装 Git（可能弹出系统授权窗口），完成后点「重新检查」。',
+			tipLinux: '出于安全考虑，应用不会自动执行 sudo。请复制以下命令到终端运行，完成后点「重新检查」。',
+			tipDownload: '未检测到可用的自动安装方式，请前往官方下载页安装 Git，完成后点「重新检查」。',
 			starting: '启动安装…',
 			autoInstall: '自动安装',
 			downloadPage: '下载页',
@@ -74,7 +76,9 @@ const setup = {
 		installGit: {
 			head: 'Install Git',
 			tipMac: 'Click the button below to trigger the system "Command Line Tools" install (includes git). After completing it in the dialog, click "Re-check".',
-			tipOther: 'Run the following command in your terminal to install, then click "Re-check".',
+			tipWinget: 'Click the button below to install Git automatically via winget (a system elevation prompt may appear), then click "Re-check".',
+			tipLinux: 'For safety the app never runs sudo itself. Copy the command below into a terminal, then click "Re-check".',
+			tipDownload: 'No automatic install method was detected. Install Git from the official download page, then click "Re-check".',
 			starting: 'Starting install…',
 			autoInstall: 'Auto Install',
 			downloadPage: 'Download page',

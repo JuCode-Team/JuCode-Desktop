@@ -70,6 +70,16 @@
 		});
 	});
 
+	// Partial hunk approval: the engine reports which hunks it applied/rejected
+	// in the edit tool's JSON output. Surface a small "N/M applied" badge when
+	// some hunks were rejected (nothing rejected → normal card).
+	const partialApply = $derived.by(() => {
+		const applied = parsed?.applied_hunks;
+		const rejected = parsed?.rejected_hunks;
+		if (!Array.isArray(applied) || !Array.isArray(rejected) || rejected.length === 0) return null;
+		return { n: applied.length, m: applied.length + rejected.length };
+	});
+
 	const entries = $derived(Array.isArray(parsed?.entries) ? (parsed!.entries as string[]) : []);
 	const hasEntries = $derived(Array.isArray(parsed?.entries));
 	const command = $derived(s(parsed?.command) || s(parsed?.cmd));
@@ -127,6 +137,9 @@
 		{#if target}<span class="target">{target}</span>{/if}
 		{#if exitCode !== null}
 			<span class="exit" class:bad={exitCode !== 0}>exit {exitCode}</span>
+		{/if}
+		{#if partialApply}
+			<span class="partial">{t('chat.partialApply', { n: partialApply.n, m: partialApply.m })}</span>
 		{/if}
 		<span class="state">{running ? t('chat.toolRunning') : isError || errorText ? t('chat.toolError') : t('chat.toolDone')}</span>
 	</button>
@@ -220,6 +233,15 @@
 	}
 	.exit.bad {
 		color: var(--err);
+	}
+	.partial {
+		font-size: 10.5px;
+		color: var(--warn);
+		background: color-mix(in oklab, var(--warn) 12%, transparent);
+		border: 1px solid color-mix(in oklab, var(--warn) 30%, transparent);
+		border-radius: 999px;
+		padding: 0 7px;
+		flex-shrink: 0;
 	}
 	.state {
 		margin-left: auto;

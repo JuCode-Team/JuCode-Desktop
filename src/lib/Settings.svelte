@@ -1,11 +1,14 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
-	import { X, LogIn, LogOut, KeyRound, SlidersHorizontal, Plus, Trash2, Zap, CircleCheck, ChevronDown, Wallet, LayoutDashboard, Mic } from 'lucide-svelte';
+	import { X, LogIn, LogOut, KeyRound, SlidersHorizontal, Plus, Trash2, Zap, CircleCheck, ChevronDown, Wallet, LayoutDashboard, Mic, Puzzle } from 'lucide-svelte';
 	import { readConfig, writeConfig, readAuthProviders, setAuthKey, removeAuthKey, listProviders, sendOp, fetchAccountInfo, fetchDeepseekBalance, type AccountInfo, type DeepseekBalance } from '$lib/protocol';
+	import type { ChatState } from '$lib/chat.svelte';
 	import Vendor from '$lib/Vendor.svelte';
 	import OverviewPanel from '$lib/OverviewPanel.svelte';
 	import ProviderAccountCard from '$lib/settings/ProviderAccountCard.svelte';
 	import CustomProviderForm from '$lib/settings/CustomProviderForm.svelte';
+	import McpSection from '$lib/settings/McpSection.svelte';
+	import UpdateCard from '$lib/settings/UpdateCard.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import TextField from '$lib/ui/TextField.svelte';
 	import Select from '$lib/ui/Select.svelte';
@@ -16,12 +19,16 @@
 
 	let {
 		sessionId,
+		chat,
 		initialSection = 'overview',
 		onClose,
 		onAuthChange
 	}: {
 		sessionId: string;
-		initialSection?: 'overview' | 'account' | 'behavior';
+		/** The active session's ChatState — source of the live `mcp_servers` view.
+		 *  The engine's MCP config is global, so any live session's engine works. */
+		chat?: ChatState;
+		initialSection?: 'overview' | 'account' | 'behavior' | 'extensions';
 		onClose: () => void;
 		onAuthChange?: () => void;
 	} = $props();
@@ -51,7 +58,7 @@
 	let custom = $state<Provider[]>([]);
 	let saved = $state(false);
 	// Capture the opening section once; the prop doesn't change during the modal's life.
-	let section = $state<'overview' | 'account' | 'behavior'>(untrack(() => initialSection));
+	let section = $state<'overview' | 'account' | 'behavior' | 'extensions'>(untrack(() => initialSection));
 
 	// inline editor state
 	let editing = $state<string | null>(null); // provider id, or '__new__'
@@ -68,7 +75,8 @@
 	const NAV = [
 		{ key: 'overview', labelKey: 'settings.nav.overview', icon: LayoutDashboard, subKey: 'settings.nav.overviewSub' },
 		{ key: 'account', labelKey: 'settings.nav.account', icon: KeyRound, subKey: 'settings.nav.accountSub' },
-		{ key: 'behavior', labelKey: 'settings.nav.behavior', icon: SlidersHorizontal, subKey: 'settings.nav.behaviorSub' }
+		{ key: 'behavior', labelKey: 'settings.nav.behavior', icon: SlidersHorizontal, subKey: 'settings.nav.behaviorSub' },
+		{ key: 'extensions', labelKey: 'settings.nav.extensions', icon: Puzzle, subKey: 'settings.nav.extensionsSub' }
 	] as const;
 	const meta = $derived(NAV.find((n) => n.key === section)!);
 
@@ -296,6 +304,7 @@
 
 			<div class="scroll">
 				{#if section === 'overview'}
+					<UpdateCard />
 					<OverviewPanel />
 				{:else if section === 'account'}
 					<div class="group">
@@ -352,6 +361,8 @@
 						</div>
 						{#if keyed.includes('mimo')}<p class="hint mt keyok"><CircleCheck size={13} /> {t('settings.account.keyed')}</p>{/if}
 					</div>
+				{:else if section === 'extensions'}
+					<McpSection {sessionId} {chat} />
 				{:else}
 					<div class="group">
 						<div class="glabel">{t('settings.language')}</div>
@@ -415,7 +426,7 @@
 				{/if}
 			</div>
 
-			{#if section !== 'overview'}
+			{#if section !== 'overview' && section !== 'extensions'}
 				<div class="foot">
 					<span class="foot-hint">{t('settings.footHint')}</span>
 					<Button variant="primary" onclick={save}>{#if saved}<CircleCheck size={15} /> {t('settings.saved')}{:else}{t('settings.saveChanges')}{/if}</Button>

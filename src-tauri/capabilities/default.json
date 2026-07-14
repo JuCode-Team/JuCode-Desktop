@@ -6,8 +6,14 @@
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
+    "core:window:allow-unminimize",
     "opener:default",
     "dialog:default",
-    "notification:default"
+    "notification:default",
+    "updater:default",
+    "process:default",
+    "deep-link:default"
   ]
 }

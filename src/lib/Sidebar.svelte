@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Store, Plus, History, X, LoaderCircle, Command, Moon, Sun, Monitor } from 'lucide-svelte';
+	import { Store, Plus, History, X, LoaderCircle, Command, Moon, Sun, Monitor, GitBranch, GitBranchPlus } from 'lucide-svelte';
 	import { themeState, cycleTheme } from '$lib/theme.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import { t } from '$lib/i18n';
@@ -15,9 +15,11 @@
 		width,
 		loggedIn,
 		providerName,
+		updateAvailable = false,
 		onSelect,
 		onNewProject,
 		onNewSession,
+		onNewTask,
 		onCloseSession,
 		onCloseProject,
 		onHistory,
@@ -30,9 +32,11 @@
 		width: number;
 		loggedIn: boolean;
 		providerName: string;
+		updateAvailable?: boolean;
 		onSelect: (id: string) => void;
 		onNewProject: () => void;
 		onNewSession: (p: Project) => void;
+		onNewTask: (p: Project) => void;
 		onCloseSession: (id: string) => void;
 		onCloseProject: (p: Project) => void;
 		onHistory: (p: Project) => void;
@@ -61,12 +65,25 @@
 	<div class="sess-list">
 		{#each projects as p (p.id)}
 			<div class="group">
-				<span class="group-name" title={p.path}>{p.name}</span>
-				<span class="group-count">{p.sessions.length}</span>
-				<button class="group-add" onclick={() => onHistory(p)} aria-label="history" title={t('shell.history')}><History size={13} /></button>
-				<button class="group-add no-auto" onclick={() => onNewSession(p)} aria-label="new session" title={t('shell.newSessionInProject')}><Plus size={13} /></button>
-				{#if projects.length > 1}
-					<button class="group-x" onclick={() => onCloseProject(p)} aria-label="close project" title={t('shell.closeProject')}><X size={12} /></button>
+				{#if p.worktree}
+					<!-- 并行任务 worktree 项目：分支角标 + 「task/<slug> ← base」提示 -->
+					<span class="wt-mark" class:stale={p.stale} title={t('shell.task.worktreeTip', { branch: p.worktree.branch, base: p.worktree.baseBranch || '?' })}>
+						<GitBranch size={11} />
+					</span>
+				{/if}
+				<span class="group-name" title={p.worktree ? t('shell.task.worktreeTip', { branch: p.worktree.branch, base: p.worktree.baseBranch || '?' }) : p.path}>{p.name}</span>
+				{#if p.stale}
+					<span class="stale-badge" title={p.path}>{t('shell.task.stale')}</span>
+				{:else}
+					<span class="group-count">{p.sessions.length}</span>
+					<button class="group-add" onclick={() => onHistory(p)} aria-label="history" title={t('shell.history')}><History size={13} /></button>
+					{#if !p.worktree}
+						<button class="group-add no-auto" onclick={() => onNewTask(p)} aria-label="new parallel task" title={t('shell.newTask')}><GitBranchPlus size={13} /></button>
+					{/if}
+					<button class="group-add no-auto" onclick={() => onNewSession(p)} aria-label="new session" title={t('shell.newSessionInProject')}><Plus size={13} /></button>
+				{/if}
+				{#if projects.length > 1 || p.stale}
+					<button class="group-x" class:always={p.stale} onclick={() => onCloseProject(p)} aria-label="close project" title={p.stale ? t('shell.task.staleRemove') : t('shell.closeProject')}><X size={12} /></button>
 				{/if}
 			</div>
 			{#each p.sessions as s (s.id)}
@@ -87,7 +104,7 @@
 					>
 				</button>
 			{/each}
-			{#if p.sessions.length === 0}
+			{#if p.sessions.length === 0 && !p.stale}
 				<button class="sess-empty" onclick={() => onNewSession(p)}>{t('shell.newSession')}</button>
 			{/if}
 		{/each}
@@ -97,6 +114,7 @@
 		<span class="acc-dot" class:on={loggedIn}></span>
 		<span class="acc-name">{loggedIn ? providerName : t('shell.notLoggedIn')}</span>
 		<span class="acc-go">{t('shell.settings')}</span>
+		{#if updateAvailable}<span class="upd-dot" title={t('shell.updateAvailable')}></span>{/if}
 	</button>
 	<div class="side-foot">
 		<button class="foot-btn" onclick={onCommandPalette} title={t('shell.commandPalette')}>
@@ -154,6 +172,15 @@
 	.acc-go {
 		color: var(--dim2);
 		font-size: 11px;
+	}
+	/* 有新版本时设置入口右侧的小圆点 */
+	.upd-dot {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: var(--accent-bright);
+		box-shadow: 0 0 0 3px var(--accent-soft);
+		flex-shrink: 0;
 	}
 	.brand {
 		display: flex;
@@ -236,6 +263,27 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+	/* 并行任务 worktree 项目的分支角标 */
+	.wt-mark {
+		display: inline-flex;
+		color: var(--accent-bright);
+		flex-shrink: 0;
+	}
+	.wt-mark.stale {
+		color: var(--dim2);
+	}
+	.stale-badge {
+		font-size: 10px;
+		color: var(--warn);
+		background: color-mix(in oklab, var(--warn) 14%, transparent);
+		border-radius: 999px;
+		padding: 1px 7px;
+		flex-shrink: 0;
+	}
+	.group-x.always {
+		opacity: 1;
+		margin-left: auto;
 	}
 	.group-count {
 		font-size: 10px;

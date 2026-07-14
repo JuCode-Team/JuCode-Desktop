@@ -1,8 +1,9 @@
 <script lang="ts">
-	import { FileDiff, RefreshCw, X, Undo2 } from 'lucide-svelte';
+	import { FileDiff, RefreshCw, X, Undo2, SquarePen } from 'lucide-svelte';
 	import { ask } from '@tauri-apps/plugin-dialog';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import { git } from '$lib/protocol';
+	import { editorStore } from '$lib/editor/editorStore.svelte';
 	import { t } from '$lib/i18n';
 
 	// `files` is the session-tracked set of agent-edited paths; onRevert removes one.
@@ -59,6 +60,16 @@
 		}
 	}
 
+	// Open a changed file in the built-in editor (relative paths resolve
+	// against the project cwd inside the store).
+	async function openInEditor(path: string) {
+		try {
+			await editorStore.open(path, cwd || undefined);
+		} catch (e) {
+			error = String(e);
+		}
+	}
+
 	async function revert(path: string) {
 		const ok = await ask(t('dock.changes.revertConfirm', { path }), { title: t('dock.changes.revertTitle'), kind: 'warning' });
 		if (!ok) return;
@@ -103,6 +114,7 @@
 						<span class="rdir">{f}</span>
 					</button>
 					{#if s}<span class="stat"><span class="add">+{s.add}</span> <span class="del">−{s.del}</span></span>{/if}
+					<IconButton size="sm" onclick={() => openInEditor(f)} label={t('editor.openInEditor')} title={t('editor.openInEditor')}><SquarePen size={13} /></IconButton>
 					<IconButton size="sm" onclick={() => revert(f)} disabled={busy} label={t('dock.changes.revert')} title={t('dock.changes.revertFile')}><Undo2 size={13} /></IconButton>
 				</div>
 			{/each}
