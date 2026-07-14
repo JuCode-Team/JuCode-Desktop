@@ -1,8 +1,8 @@
 <script lang="ts">
-	// Faster ↔ Smarter thinking-effort slider. A slim gradient track with tick
-	// marks and a compact accent handle; the current level's name shows live,
-	// centered above the track, while dragging or on focus. Draggable (pointer
-	// capture), clickable, keyboard-accessible; snaps to the nearest level.
+	// Faster ↔ Smarter thinking-effort slider (thick capsule). The current level's
+	// name shows live and centered. Top tiers recolor: `max` → orange, `ultra` →
+	// purple; reaching them animates a flowing shimmer across the fill. Draggable
+	// (pointer capture), clickable, keyboard-accessible; snaps to the nearest level.
 	import { t } from '$lib/i18n';
 
 	let {
@@ -28,13 +28,20 @@
 	const shownIndex = $derived(dragging ? nearestIndex : activeIndex);
 	const pct = $derived(fracFor(shownIndex) * 100);
 
-	// "xhigh" → "X-High"; otherwise capitalize.
 	function labelFor(v: string): string {
 		if (!v) return '';
-		if (v.toLowerCase() === 'xhigh') return 'X-High';
+		const l = v.toLowerCase();
+		if (l === 'xhigh') return 'X-High';
 		return v.charAt(0).toUpperCase() + v.slice(1);
 	}
 	const currentLabel = $derived(labelFor(options[shownIndex]));
+	// Special top tiers get their own accent + a flowing shimmer.
+	const tier = $derived.by(() => {
+		const v = (options[shownIndex] ?? '').toLowerCase();
+		if (v === 'max') return 'max';
+		if (v === 'ultra') return 'ultra';
+		return '';
+	});
 
 	function fracFromEvent(e: PointerEvent): number {
 		if (!inner) return 0;
@@ -74,7 +81,7 @@
 	}
 </script>
 
-<div class="es">
+<div class="es" data-tier={tier}>
 	<div class="es-head">
 		<span class="edge" class:on={shownIndex === 0}>{t('chat.effortFaster')}</span>
 		<span class="now">{currentLabel}</span>
@@ -96,8 +103,7 @@
 		onkeydown={onKey}
 	>
 		<div class="es-inner" bind:this={inner}>
-			<div class="es-rail"></div>
-			<div class="es-fill" style="width: {pct}%"></div>
+			<div class="es-fill" class:flowing={tier !== ''} style="width: calc({pct}% + 11px)"></div>
 			{#each options as opt, i (opt)}
 				<span
 					class="es-dot"
@@ -107,9 +113,7 @@
 					title={labelFor(opt)}
 				></span>
 			{/each}
-			<div class="es-handle" class:dragging style="left: {pct}%">
-				<span class="es-core"></span>
-			</div>
+			<div class="es-handle" class:dragging style="left: {pct}%"></div>
 		</div>
 	</div>
 </div>
@@ -120,8 +124,22 @@
 		flex-direction: column;
 		gap: 12px;
 		padding: 6px 6px 10px;
-		min-width: 244px;
+		min-width: 248px;
 		user-select: none;
+		/* Tier palette — default accent; overridden per data-tier below. */
+		--eff-a: color-mix(in oklab, var(--accent) 82%, #fff);
+		--eff-b: var(--accent);
+		--eff-solid: var(--accent);
+	}
+	.es[data-tier='max'] {
+		--eff-a: #ffb24d;
+		--eff-b: #f97316;
+		--eff-solid: #f97316;
+	}
+	.es[data-tier='ultra'] {
+		--eff-a: #c79bff;
+		--eff-b: #8b5cf6;
+		--eff-solid: #8b5cf6;
 	}
 	.es-head {
 		display: grid;
@@ -131,10 +149,7 @@
 	}
 	.es-head .edge {
 		color: var(--dim2);
-		transition: color 0.14s ease;
-	}
-	.es-head .edge:first-child {
-		text-align: left;
+		transition: color 0.18s ease;
 	}
 	.es-head .edge:last-child {
 		text-align: right;
@@ -142,110 +157,113 @@
 	.es-head .edge.on {
 		color: var(--text);
 	}
-	/* The live level name — the centered focal point. */
 	.es-head .now {
 		font-size: 13px;
 		font-weight: 600;
 		letter-spacing: 0.01em;
-		color: var(--accent);
+		color: var(--eff-solid);
 		text-align: center;
 		padding: 0 10px;
+		transition: color 0.35s ease;
 	}
+	/* Thick capsule track. */
 	.es-track {
 		position: relative;
-		height: 22px;
-		cursor: pointer;
-		touch-action: none;
-		border-radius: 999px;
-	}
-	.es-track:focus-visible {
-		outline: 2px solid color-mix(in oklab, var(--accent) 50%, transparent);
-		outline-offset: 3px;
-	}
-	/* Coordinate space inset by the handle radius so the handle centre reaches
-	   but never overflows the ends. */
-	.es-inner {
-		position: absolute;
-		inset: 0 9px;
-	}
-	.es-rail {
-		position: absolute;
-		left: -9px;
-		right: -9px;
-		top: 50%;
-		height: 5px;
-		transform: translateY(-50%);
+		height: 24px;
+		padding: 0 11px; /* handle radius room at both ends */
 		border-radius: 999px;
 		background: var(--surface2);
 		box-shadow: inset 0 0 0 1px var(--border);
+		cursor: pointer;
+		touch-action: none;
+	}
+	.es-track:focus-visible {
+		outline: 2px solid color-mix(in oklab, var(--eff-solid) 55%, transparent);
+		outline-offset: 3px;
+	}
+	.es-inner {
+		position: absolute;
+		inset: 0 11px;
 	}
 	.es-fill {
 		position: absolute;
-		left: -9px;
-		top: 50%;
-		height: 5px;
-		transform: translateY(-50%);
+		left: -11px;
+		top: 0;
+		bottom: 0;
 		border-radius: 999px;
-		background: linear-gradient(
-			90deg,
-			color-mix(in oklab, var(--accent) 78%, #fff),
-			var(--accent)
-		);
+		background: linear-gradient(90deg, var(--eff-a), var(--eff-b));
+		/* Animate width (snap between levels) and the color transition (tier swap). */
+		transition:
+			width 0.16s ease,
+			background 0.4s ease;
+	}
+	/* Flowing shimmer for the special tiers: a moving highlight band scrolls
+	   across the fill. */
+	.es-fill.flowing {
+		background:
+			linear-gradient(
+				100deg,
+				transparent 20%,
+				color-mix(in oklab, #fff 45%, transparent) 42%,
+				color-mix(in oklab, #fff 45%, transparent) 50%,
+				transparent 72%
+			),
+			linear-gradient(90deg, var(--eff-a), var(--eff-b));
+		background-size:
+			220% 100%,
+			100% 100%;
+		background-repeat: no-repeat;
+		animation: eff-flow 1.6s linear infinite;
+	}
+	@keyframes eff-flow {
+		from {
+			background-position:
+				160% 0,
+				0 0;
+		}
+		to {
+			background-position:
+				-120% 0,
+				0 0;
+		}
 	}
 	.es-dot {
 		position: absolute;
 		top: 50%;
-		width: 4px;
-		height: 4px;
+		width: 5px;
+		height: 5px;
 		border-radius: 999px;
 		transform: translate(-50%, -50%);
-		background: color-mix(in oklab, var(--dim2) 55%, transparent);
+		background: color-mix(in oklab, var(--dim) 60%, transparent);
 		pointer-events: none;
 		transition:
-			background 0.14s ease,
-			opacity 0.1s ease;
+			background 0.16s ease,
+			opacity 0.12s ease;
 	}
 	.es-dot.filled {
-		background: color-mix(in oklab, white 70%, var(--accent));
+		background: color-mix(in oklab, #fff 82%, transparent);
 	}
 	.es-dot.on {
-		opacity: 0; /* hidden under the handle */
+		opacity: 0; /* under the handle */
 	}
 	.es-handle {
 		position: absolute;
 		top: 50%;
-		width: 18px;
-		height: 18px;
+		width: 20px;
+		height: 20px;
 		border-radius: 999px;
 		transform: translate(-50%, -50%);
-		display: flex;
-		align-items: center;
-		justify-content: center;
 		background: #fff;
 		box-shadow:
 			0 1px 4px rgba(0, 0, 0, 0.35),
 			0 0 0 0.5px rgba(0, 0, 0, 0.12);
 		transition:
-			left 0.14s ease,
-			box-shadow 0.14s ease;
-	}
-	.es-fill {
-		transition: width 0.14s ease;
-	}
-	/* Accent core dot inside the white handle — ties it to the fill color. */
-	.es-core {
-		width: 7px;
-		height: 7px;
-		border-radius: 999px;
-		background: var(--accent);
-		transition: transform 0.14s ease;
+			left 0.16s ease,
+			box-shadow 0.2s ease;
 	}
 	.es-handle.dragging {
 		box-shadow:
-			0 1px 5px rgba(0, 0, 0, 0.4),
-			0 0 0 4px color-mix(in oklab, var(--accent) 26%, transparent);
-	}
-	.es-handle.dragging .es-core {
-		transform: scale(1.15);
+			0 1px 6px rgba(0, 0, 0, 0.4),
+			0 0 0 4px color-mix(in oklab, var(--eff-solid) 28%, transparent);
 	}
 </style>
