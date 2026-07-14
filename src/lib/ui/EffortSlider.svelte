@@ -1,7 +1,7 @@
 <script lang="ts">
-	// Faster ↔ Smarter thinking-effort slider. Draggable handle (pointer capture),
-	// clickable track, keyboard-accessible; snaps to the nearest level on release
-	// and animates when not actively dragging. Styling follows the app tokens.
+	// Faster ↔ Smarter thinking-effort slider: a slim track with tick marks and a
+	// compact accent handle. Draggable (pointer capture), clickable, keyboard-
+	// accessible; snaps to the nearest level on release and animates when settling.
 	import { t } from '$lib/i18n';
 
 	let {
@@ -21,12 +21,11 @@
 	const n = $derived(options.length);
 	const activeIndex = $derived(Math.max(0, options.indexOf(value)));
 	const fracFor = (i: number) => (n > 1 ? i / (n - 1) : 0);
-	// Position shown: the live pointer while dragging, else the active level.
-	const frac = $derived(dragging ? dragFrac : fracFor(activeIndex));
 	const nearestIndex = $derived(n > 1 ? Math.round(dragFrac * (n - 1)) : 0);
-	// Which dots read as filled: follow the pointer while dragging.
-	const filledUpto = $derived(dragging ? nearestIndex : activeIndex);
-	const pct = $derived(frac * 100);
+	// While dragging the handle snaps to the nearest tick (no free-floating), so
+	// the fill, handle and dots stay perfectly aligned to the levels.
+	const shownIndex = $derived(dragging ? nearestIndex : activeIndex);
+	const pct = $derived(fracFor(shownIndex) * 100);
 
 	function fracFromEvent(e: PointerEvent): number {
 		if (!inner) return 0;
@@ -68,8 +67,8 @@
 
 <div class="es">
 	<div class="es-labels">
-		<span>{t('chat.effortFaster')}</span>
-		<span>{t('chat.effortSmarter')}</span>
+		<span class:on={shownIndex === 0}>{t('chat.effortFaster')}</span>
+		<span class:on={shownIndex === n - 1}>{t('chat.effortSmarter')}</span>
 	</div>
 	<div
 		class="es-track"
@@ -79,19 +78,21 @@
 		aria-label={t('chat.effortTitle')}
 		aria-valuemin={0}
 		aria-valuemax={n - 1}
-		aria-valuenow={filledUpto}
-		aria-valuetext={options[filledUpto]}
+		aria-valuenow={shownIndex}
+		aria-valuetext={options[shownIndex]}
 		onpointerdown={onDown}
 		onpointermove={onMove}
 		onpointerup={onUp}
 		onkeydown={onKey}
 	>
 		<div class="es-inner" bind:this={inner}>
+			<div class="es-rail"></div>
 			<div class="es-fill" style="width: {pct}%"></div>
 			{#each options as opt, i (opt)}
 				<span
 					class="es-dot"
-					class:filled={i <= filledUpto}
+					class:filled={i <= shownIndex}
+					class:on={i === shownIndex}
 					style="left: {fracFor(i) * 100}%"
 					title={opt}
 				></span>
@@ -105,80 +106,105 @@
 	.es {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
-		padding: 6px 6px 12px;
-		min-width: 248px;
+		gap: 14px;
+		padding: 4px 4px 8px;
+		min-width: 240px;
 		user-select: none;
 	}
 	.es-labels {
 		display: flex;
 		justify-content: space-between;
-		font-size: 13px;
-		color: var(--dim);
+		font-size: 12px;
+		color: var(--dim2);
 	}
+	.es-labels .on {
+		color: var(--text);
+	}
+	/* The interactive area is generous (easy to grab), but the visible track is a
+	   slim rail — matching the app's restrained control style. */
 	.es-track {
 		position: relative;
-		height: 26px;
-		padding: 0 13px; /* room for the handle radius at both ends */
+		height: 20px;
+		cursor: pointer;
+		touch-action: none;
+		border-radius: 999px;
+	}
+	.es-track:focus-visible {
+		outline: 2px solid color-mix(in oklab, var(--accent) 50%, transparent);
+		outline-offset: 3px;
+	}
+	/* Coordinate space for rail / fill / dots / handle, inset by the handle radius
+	   so the handle centre reaches but never overflows the ends. */
+	.es-inner {
+		position: absolute;
+		inset: 0 8px;
+	}
+	.es-rail {
+		position: absolute;
+		left: -8px;
+		right: -8px;
+		top: 50%;
+		height: 4px;
+		transform: translateY(-50%);
 		border-radius: 999px;
 		background: var(--surface2);
 		box-shadow: inset 0 0 0 1px var(--border);
-		cursor: pointer;
-		touch-action: none;
-	}
-	.es-track:focus-visible {
-		outline: 2px solid color-mix(in oklab, var(--accent) 55%, transparent);
-		outline-offset: 2px;
-	}
-	/* Coordinate space for the fill / dots / handle, inset by the handle radius. */
-	.es-inner {
-		position: absolute;
-		inset: 0 13px;
 	}
 	.es-fill {
 		position: absolute;
-		left: -13px;
-		top: 0;
-		bottom: 0;
-		border-radius: 999px 0 0 999px;
+		left: -8px;
+		top: 50%;
+		height: 4px;
+		transform: translateY(-50%);
+		border-radius: 999px;
 		background: var(--accent);
 	}
 	.es-dot {
 		position: absolute;
 		top: 50%;
-		width: 6px;
-		height: 6px;
+		width: 4px;
+		height: 4px;
 		border-radius: 999px;
 		transform: translate(-50%, -50%);
-		background: color-mix(in oklab, var(--dim) 55%, transparent);
+		background: var(--surface);
+		box-shadow: 0 0 0 1px color-mix(in oklab, var(--dim2) 60%, transparent);
 		pointer-events: none;
 	}
 	.es-dot.filled {
-		background: color-mix(in oklab, white 78%, var(--accent));
+		background: color-mix(in oklab, white 55%, var(--accent));
+		box-shadow: none;
+	}
+	.es-dot.on {
+		opacity: 0; /* hidden under the handle */
 	}
 	.es-handle {
 		position: absolute;
 		top: 50%;
-		width: 22px;
-		height: 22px;
+		width: 16px;
+		height: 16px;
 		border-radius: 999px;
 		transform: translate(-50%, -50%);
-		background: #fff;
+		background: var(--text);
 		box-shadow:
-			0 1px 4px rgba(0, 0, 0, 0.35),
-			0 0 0 0.5px rgba(0, 0, 0, 0.1);
+			0 0 0 3px var(--panel),
+			0 1px 3px rgba(0, 0, 0, 0.3);
 		pointer-events: none;
 	}
-	/* Animate when settling; follow the finger 1:1 while dragging. */
-	.es-track:not(.dragging) .es-fill,
-	.es-track:not(.dragging) .es-handle,
+	/* Animate when settling; the handle already snaps per-tick while dragging, so
+	   even mid-drag it eases smoothly between levels. */
+	.es-fill,
+	.es-handle,
 	.es-dot {
 		transition:
-			width 0.16s ease,
-			left 0.16s ease,
-			background 0.16s ease;
+			width 0.14s ease,
+			left 0.14s ease,
+			background 0.14s ease,
+			opacity 0.1s ease;
 	}
 	.es-track.dragging .es-handle {
-		transform: translate(-50%, -50%) scale(1.08);
+		box-shadow:
+			0 0 0 3px var(--panel),
+			0 0 0 5px color-mix(in oklab, var(--accent) 30%, transparent),
+			0 1px 3px rgba(0, 0, 0, 0.3);
 	}
 </style>
