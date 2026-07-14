@@ -938,6 +938,11 @@ export function createClaudeAdapter(): EngineAdapter {
 				const line = raw.__stderr.replace(/\[[0-9;]*m/g, '').trim();
 				if (!line) return [];
 				if (/^\d{4}-\d{2}-\d{2}T\S+\s+(ERROR|WARN|INFO|DEBUG|TRACE)\b/.test(line)) return [];
+				// A --resume target the CLI can't find (session file gone / never
+				// persisted) makes it exit immediately. Signal it so the store stops
+				// re-resuming the same doomed id in an endless crash-restart loop
+				// (the bootstrap 'ready' otherwise keeps resetting the restart budget).
+				if (/No conversation found with session ID/i.test(line)) return [{ type: 'resume_failed' }];
 				return [{ type: 'info', message: `[claude] ${line}` }];
 			}
 			const msg = rec(raw);

@@ -76,6 +76,23 @@ describe('SessionStore lifecycle', () => {
 		expect(snap[0].tabs).toEqual([{ sid: 'sid-0', title: 'kept', archived: true }]);
 	});
 
+	it('a flagged resume failure makes the next claude restart come up fresh', () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p, undefined, 'claude');
+		const s = p.sessions.find((x) => x.id === id)!;
+		s.chat.sessionId = 'sid-x';
+		s.chat.messages.push({ kind: 'user', text: 'hi' }); // resumable
+		s.chat.resumeBroken = true;
+		vi.clearAllMocks();
+		store.restartSession(id);
+		// Spawned without a resume option, and the one-shot flag is consumed.
+		const call = (createSession as unknown as { mock: { calls: unknown[][] } }).mock.calls.at(-1);
+		expect((call?.[3] as { resume?: string } | undefined)?.resume).toBeUndefined();
+		expect(s.chat.resumeBroken).toBe(false);
+	});
+
 	it('removeProject tears down its sessions and clears a dangling activeId', () => {
 		const store = new SessionStore();
 		const p = proj();

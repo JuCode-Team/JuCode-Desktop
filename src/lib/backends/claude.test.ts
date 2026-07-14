@@ -1143,5 +1143,9 @@ describe('claude adapter: restarts and robustness', () => {
 		// Tracing-formatted engine log lines are dropped as noise.
 		expect(adapter.translate({ __stderr: '2026-07-14T10:00:00.000Z DEBUG hitting cache' })).toEqual([]);
 		expect(adapter.translate({ __stderr: '2026-07-14T10:00:00Z ERROR boom' })).toEqual([]);
+		// A failed --resume signals resume_failed (breaks the crash-restart loop).
+		expect(
+			adapter.translate({ __stderr: 'No conversation found with session ID: e4f0405e-3919-4c10' })
+		).toEqual([{ type: 'resume_failed' }]);
 	});
 });

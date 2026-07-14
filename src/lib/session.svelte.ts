@@ -217,11 +217,13 @@ export class SessionStore {
 		// claude resumes via the --resume spawn option (no /resume command in
 		// stream-json mode); codex resumes via the thread/resume RPC (thread id
 		// through SessionCtx); jucode resumes with the command after the handshake.
-		// A resume target that the engine can't find ("No conversation found …")
-		// makes it exit immediately — which would crash-loop forever re-resuming the
-		// same doomed id. So only resume on the first restart; if that also crashes,
-		// come back up fresh (the desktop transcript is preserved regardless).
-		const mayResume = sid && canResume && s.chat.restarts <= 1;
+		// A resume target the engine can't find ("No conversation found …") makes it
+		// exit immediately, which would crash-loop forever re-resuming the same
+		// doomed id (the bootstrap 'ready' keeps resetting the restart budget). When
+		// the adapter flagged a resume failure, come up fresh instead. One-shot: the
+		// fresh session gets a new id that CAN be resumed on a later crash.
+		const mayResume = sid && canResume && !s.chat.resumeBroken;
+		s.chat.resumeBroken = false;
 		const resumeViaSpawn = s.backendId === 'claude' && mayResume;
 		const resumeViaCtx = s.backendId === 'codex' && mayResume;
 		this.#spawn(

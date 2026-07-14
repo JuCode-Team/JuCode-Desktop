@@ -167,6 +167,10 @@ export class ChatState {
 	// Engine crash auto-restart bookkeeping (driven by the page on agent-exit).
 	restarts = 0;
 	restartWindowStart: number | null = null;
+	// Set when a claude --resume target isn't found: the next restart must NOT
+	// resume the same doomed id (it would crash-loop). One-shot — consumed by the
+	// store's restartSession, which then comes up fresh.
+	resumeBroken = false;
 	// Set while an intentional provider-switch restart is in flight, so the exit it
 	// causes isn't treated as a crash to auto-restart.
 	switching = false;
@@ -592,6 +596,11 @@ export class ChatState {
 				break;
 			case 'retrying':
 				this.messages.push({ kind: 'system', text: `reconnecting… (attempt ${num(ev.attempt)})` });
+				break;
+			case 'resume_failed':
+				// The engine couldn't resume the session id — restart fresh instead of
+				// looping on the same doomed --resume.
+				this.resumeBroken = true;
 				break;
 			case 'compaction_progress':
 				this.compactionTokens = num(ev.output_tokens);
