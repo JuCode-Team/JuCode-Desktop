@@ -417,6 +417,40 @@ describe('claude adapter: turns', () => {
 		]);
 	});
 
+	it('fills a tool card from chunked input_json_delta (streaming, no authoritative frame)', () => {
+		const { lines } = makeIo();
+		const adapter = createClaudeAdapter();
+		boot(adapter, lines);
+		adapter.translate(streamEvent({ type: 'message_start', message: { id: 'm', model: 'x', usage: {} } }));
+		adapter.translate(
+			streamEvent({
+				type: 'content_block_start',
+				index: 0,
+				content_block: { type: 'tool_use', id: 'toolu_s', name: 'Bash', input: {} }
+			})
+		);
+		// The input streams as JSON chunks; a partial chunk doesn't parse yet.
+		expect(
+			adapter.translate(streamEvent({ type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: '{"comm' } }))
+		).toEqual([]);
+		// Completing the JSON refreshes the card with the real command — with NO
+		// authoritative assistant frame (the real stream may never send one).
+		expect(
+			adapter.translate(streamEvent({ type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: 'and":"ls -la"}' } }))
+		).toEqual([{ type: 'tool_update', call_id: 'toolu_s', output: JSON.stringify({ command: 'ls -la' }) }]);
+		// The result still resolves the command from the accumulated input.
+		const result = adapter.translate({
+			type: 'user',
+			message: { role: 'user', content: [{ tool_use_id: 'toolu_s', type: 'tool_result', content: 'a\nb', is_error: false }] },
+			session_id: SID,
+			parent_tool_use_id: null,
+			tool_use_result: { stdout: 'a\nb', stderr: '', interrupted: false }
+		});
+		expect(result).toEqual([
+			{ type: 'tool_output', call_id: 'toolu_s', name: 'bash', output: JSON.stringify({ command: 'ls -la', stdout: 'a\nb' }), is_error: false }
+		]);
+	});
+
 	it('maps Edit/Write to edit-tool cards with path + diff (Changes panel shape)', () => {
 		const { lines } = makeIo();
 		const adapter = createClaudeAdapter();

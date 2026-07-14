@@ -209,6 +209,17 @@ const str = (v: unknown) => (typeof v === 'string' ? v : '');
 const rec = (v: unknown): Record<string, unknown> | null =>
 	typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : null;
 
+/** Parse accumulated tool-input JSON, tolerating incomplete chunks (returns null
+ *  until the streamed partial_json forms a valid object). */
+const tryParseRecord = (text: string): Record<string, unknown> | null => {
+	if (!text.trim()) return null;
+	try {
+		return rec(JSON.parse(text));
+	} catch {
+		return null;
+	}
+};
+
 const prefixLines = (text: string, prefix: string) =>
 	text.length ? text.split('\n').map((l) => `${prefix}${l}`).join('\n') : '';
 
@@ -352,7 +363,10 @@ export function createClaudeAdapter(): EngineAdapter {
 	let tools = new Map<string, ToolMeta>();
 	/** Current API message: per-index streamed char counts + how many blocks the
 	 *  `assistant` completion frames already consumed (dedup of streamed text). */
-	let blocks = new Map<number, { streamed: number }>();
+	// Per stream-index block state. For tool_use blocks the input arrives as
+	// streamed `input_json_delta` chunks (partial_json), NOT in one shot — track the
+	// tool id and accumulate the JSON so the card fills as it streams.
+	let blocks = new Map<number, { streamed: number; toolId?: string; partial?: string }>();
 	let completedBlocks = 0;
 	let lastContext = 0;
 	let activeTurn = false;
@@ -624,10 +638,17 @@ export function createClaudeAdapter(): EngineAdapter {
 			}
 			case 'content_block_start': {
 				const idx = typeof ev.index === 'number' ? ev.index : 0;
-				blocks.set(idx, { streamed: 0 });
 				const block = ev.content_block;
-				if (block?.type === 'text') return [{ type: 'assistant_start' }];
-				if (block?.type === 'tool_use') return toolUseEvents(block, false);
+				if (block?.type === 'text') {
+					blocks.set(idx, { streamed: 0 });
+					return [{ type: 'assistant_start' }];
+				}
+				if (block?.type === 'tool_use') {
+					// input is {} here; it streams via input_json_delta below.
+					blocks.set(idx, { streamed: 0, toolId: str(block.id), partial: '' });
+					return toolUseEvents(block, false);
+				}
+				blocks.set(idx, { streamed: 0 });
 				return []; // thinking (reasoning_delta creates the block lazily)
 			}
 			case 'content_block_delta': {
@@ -644,7 +665,18 @@ export function createClaudeAdapter(): EngineAdapter {
 					if (track) track.streamed += thinking.length;
 					return thinking ? [{ type: 'reasoning_delta', delta: thinking }] : [];
 				}
-				return []; // input_json_delta / signature_delta (full input arrives on the assistant frame)
+				// Accumulate the tool input's streamed JSON; refresh the card once the
+				// accumulated text parses (so command/diff/path fill in live).
+				if (d?.type === 'input_json_delta' && track?.toolId) {
+					track.partial = (track.partial ?? '') + str(d.partial_json);
+					const meta = tools.get(track.toolId);
+					if (!meta) return [];
+					const input = tryParseRecord(track.partial);
+					if (!input) return [];
+					meta.input = input;
+					return [{ type: 'tool_update', call_id: track.toolId, output: toolCardJson(meta.claudeName, input) }];
+				}
+				return []; // signature_delta
 			}
 			case 'message_delta': {
 				const u = ev.usage;
