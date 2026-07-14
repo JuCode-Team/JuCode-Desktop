@@ -101,6 +101,14 @@ export class ChatState {
 	effort = $state('');
 	efforts = $state<string[]>([]);
 	engineState = $state('starting');
+	// True from session creation until the engine emits its first event — i.e.
+	// while the claude/codex/jucode child is still booting. Drives the spawn
+	// loading animation in the empty chat area.
+	booting = $state(true);
+	// Last model catalog seen (from a `model_view`), so the picker popover can open
+	// instantly from cache while a fresh `/model` round-trip refreshes it.
+	modelCatalog = $state<ModelOption[]>([]);
+	modelCatalogEffort = $state('');
 	contextTokens = $state(0);
 	contextWindow = $state(0);
 	contextLimit = $state(0);
@@ -277,6 +285,8 @@ export class ChatState {
 	}
 
 	handle(ev: AgentEvent) {
+		// The engine has spoken — the child is up, so the boot animation ends.
+		this.booting = false;
 		switch (ev.type) {
 			case 'startup':
 				this.model = str(ev.model);
@@ -434,6 +444,8 @@ export class ChatState {
 				this.picker = { kind: 'tree', nodes: arr<TreeNode>(ev.nodes) };
 				break;
 			case 'model_view':
+				this.modelCatalog = arr<ModelOption>(ev.models);
+				this.modelCatalogEffort = str(ev.active_effort);
 				this.picker = {
 					kind: 'model',
 					models: arr<ModelOption>(ev.models),

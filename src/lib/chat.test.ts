@@ -128,6 +128,20 @@ describe('ChatState.handle', () => {
 		expect(c.mcpServers).toEqual([]);
 	});
 
+	it('clears booting on the first engine event and caches the model catalog', () => {
+		const c = new ChatState();
+		expect(c.booting).toBe(true);
+		c.handle({ type: 'model_status', state: 'idle' });
+		expect(c.booting).toBe(false);
+		c.handle({
+			type: 'model_view',
+			models: [{ model: 'opus', active: true, reasoning_efforts: ['high', 'max'] }],
+			active_effort: 'high'
+		});
+		expect(c.modelCatalog).toEqual([{ model: 'opus', active: true, reasoning_efforts: ['high', 'max'] }]);
+		expect(c.modelCatalogEffort).toBe('high');
+	});
+
 	it('tracks busy state from engine status', () => {
 		const c = new ChatState();
 		c.handle({ type: 'model_status', state: 'streaming' });

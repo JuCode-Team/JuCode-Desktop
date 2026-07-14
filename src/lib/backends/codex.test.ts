@@ -256,6 +256,16 @@ describe('codex adapter: turns', () => {
 		).toEqual([{ type: 'status', message: 'ready' }]);
 	});
 
+	it('drops dev/config noise notifications but keeps guardian warnings', () => {
+		const adapter = createCodexAdapter();
+		for (const method of ['warning', 'deprecationNotice', 'configWarning']) {
+			expect(adapter.translate({ method, params: { message: 'noise' } })).toEqual([]);
+		}
+		expect(adapter.translate({ method: 'guardianWarning', params: { message: 'unsafe op' } })).toEqual([
+			{ type: 'info', message: '[codex] unsafe op' }
+		]);
+	});
+
 	it('reports cumulative usage as per-update deltas', () => {
 		const { lines } = makeIo();
 		const adapter = createCodexAdapter();

@@ -49,6 +49,7 @@ const shell = {
 
 		// engine
 		engineDown: '引擎已停止运行',
+		spawning: '正在启动引擎…',
 		restartEngine: '重启引擎',
 
 		// approval
@@ -238,6 +239,7 @@ const shell = {
 
 		// engine
 		engineDown: 'Engine has stopped',
+		spawning: 'Starting engine…',
 		restartEngine: 'Restart engine',
 
 		// approval

@@ -107,7 +107,9 @@
 		onkeydown={onKey}
 	>
 		<div class="es-inner" bind:this={inner}>
-			<div class="es-fill" class:flowing={tier !== ''} style="width: calc({pct}% + 22px)"></div>
+			<div class="es-fill" style="width: calc({pct}% + 22px)">
+				<div class="es-flow" class:on={tier !== ''}></div>
+			</div>
 			{#each options as opt, i (opt)}
 				<span
 					class="es-dot"
@@ -123,6 +125,24 @@
 </div>
 
 <style>
+	/* Register the palette slots as animatable <color>s so swapping tiers morphs
+	   the gradient smoothly instead of hard-cutting (the old `transition: background`
+	   couldn't interpolate a gradient and tore on every change). */
+	@property --eff-a {
+		syntax: '<color>';
+		inherits: true;
+		initial-value: #808791;
+	}
+	@property --eff-b {
+		syntax: '<color>';
+		inherits: true;
+		initial-value: #6b7280;
+	}
+	@property --eff-solid {
+		syntax: '<color>';
+		inherits: true;
+		initial-value: #6b7280;
+	}
 	.es {
 		display: flex;
 		flex-direction: column;
@@ -130,10 +150,14 @@
 		padding: 6px 6px 10px;
 		min-width: 248px;
 		user-select: none;
-		/* Tier palette — default accent; overridden per data-tier below. */
-		--eff-a: color-mix(in oklab, var(--accent) 82%, #fff);
-		--eff-b: var(--accent);
-		--eff-solid: var(--accent);
+		/* Default (every level except the special top tiers): plain gray. */
+		--eff-a: color-mix(in oklab, var(--dim) 78%, var(--text));
+		--eff-b: var(--dim);
+		--eff-solid: var(--dim);
+		transition:
+			--eff-a 0.42s ease,
+			--eff-b 0.42s ease,
+			--eff-solid 0.42s ease;
 	}
 	.es[data-tier='max'] {
 		--eff-a: #ffb24d;
@@ -153,6 +177,7 @@
 	}
 	.es-head .edge {
 		color: var(--dim2);
+		white-space: nowrap;
 		transition: color 0.18s ease;
 	}
 	.es-head .edge:last-child {
@@ -168,6 +193,7 @@
 		color: var(--eff-solid);
 		text-align: center;
 		padding: 0 10px;
+		white-space: nowrap;
 		transition: color 0.35s ease;
 	}
 	/* Thick capsule track. */
@@ -195,40 +221,41 @@
 		top: 0;
 		bottom: 0;
 		border-radius: 999px;
+		overflow: hidden;
+		/* Colors are the registered --eff-* props, so this gradient morphs via the
+		   transition on .es — only width snaps here. No gradient in `transition`. */
 		background: linear-gradient(90deg, var(--eff-a), var(--eff-b));
-		/* Animate width (snap between levels) and the color transition (tier swap). */
-		transition:
-			width 0.16s ease,
-			background 0.4s ease;
+		transition: width 0.16s ease;
 	}
-	/* Flowing shimmer for the special tiers: a moving highlight band scrolls
-	   across the fill. */
-	.es-fill.flowing {
-		background:
-			linear-gradient(
-				100deg,
-				transparent 20%,
-				color-mix(in oklab, #fff 45%, transparent) 42%,
-				color-mix(in oklab, #fff 45%, transparent) 50%,
-				transparent 72%
-			),
-			linear-gradient(90deg, var(--eff-a), var(--eff-b));
-		background-size:
-			220% 100%,
-			100% 100%;
+	/* Flowing shimmer for the special tiers: a separate highlight layer that fades
+	   in (opacity) so entering a tier never swaps the fill's background structure. */
+	.es-flow {
+		position: absolute;
+		inset: 0;
+		border-radius: inherit;
+		opacity: 0;
+		background: linear-gradient(
+			100deg,
+			transparent 20%,
+			color-mix(in oklab, #fff 45%, transparent) 42%,
+			color-mix(in oklab, #fff 45%, transparent) 50%,
+			transparent 72%
+		);
+		background-size: 220% 100%;
 		background-repeat: no-repeat;
 		animation: eff-flow 1.6s linear infinite;
+		transition: opacity 0.42s ease;
+		pointer-events: none;
+	}
+	.es-flow.on {
+		opacity: 1;
 	}
 	@keyframes eff-flow {
 		from {
-			background-position:
-				160% 0,
-				0 0;
+			background-position: 160% 0;
 		}
 		to {
-			background-position:
-				-120% 0,
-				0 0;
+			background-position: -120% 0;
 		}
 	}
 	.es-dot {

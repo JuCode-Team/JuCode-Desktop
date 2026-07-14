@@ -756,9 +756,13 @@ export function createCodexAdapter(): EngineAdapter {
 				return [errorEvent(message, e.error?.codexErrorInfo)];
 			}
 			case 'warning':
-			case 'guardianWarning':
 			case 'deprecationNotice':
-			case 'configWarning': {
+			case 'configWarning':
+				// Internal / config / deprecation chatter — pure noise in the chat
+				// transcript, so we drop it rather than surface a system bubble.
+				return [];
+			case 'guardianWarning': {
+				// Safety-relevant — keep it visible.
 				const message = str(p.message);
 				return message ? [{ type: 'info', message: `[codex] ${message}` }] : [];
 			}

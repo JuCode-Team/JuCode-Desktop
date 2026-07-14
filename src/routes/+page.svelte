@@ -2,7 +2,7 @@
 	import { onMount, tick, untrack } from 'svelte';
 	import { listen } from '@tauri-apps/api/event';
 	import { getCurrentWebview } from '@tauri-apps/api/webview';
-	import { X, Check, PanelRight, ChevronDown, ChevronUp, Search } from 'lucide-svelte';
+	import { X, Check, PanelRight, ChevronDown, ChevronUp, Search, LoaderCircle } from 'lucide-svelte';
 	import { open, ask, message } from '@tauri-apps/plugin-dialog';
 	import { cycleTheme } from '$lib/theme.svelte';
 	import {
@@ -361,8 +361,35 @@
 		return true;
 	}
 
+	// Effort switch is debounced: reflect the pick immediately on the slider
+	// (optimistic chat.effort) so the handle stays put, but only send the actual
+	// `/model` command once the user settles — rapid drags/clicks don't race a
+	// half-dozen switches through the engine.
+	let effortTimer: ReturnType<typeof setTimeout> | undefined;
 	function chooseEffort(ef: string) {
-		if (chat) send({ op: 'command', input: `/model ${chat.model} ${ef}` });
+		if (!chat) return;
+		chat.effort = ef;
+		const model = chat.model;
+		clearTimeout(effortTimer);
+		effortTimer = setTimeout(() => {
+			if (chat) send({ op: 'command', input: `/model ${model} ${ef}` });
+		}, 350);
+	}
+
+	// Open the model picker as a popover. If we already have a cached catalog,
+	// show it instantly and refresh in the background; otherwise fetch first.
+	function openModelPicker() {
+		if (!chat) return;
+		if (chat.modelCatalog.length) {
+			chat.picker = {
+				kind: 'model',
+				models: chat.modelCatalog,
+				activeEffort: chat.modelCatalogEffort || chat.effort
+			};
+			const act = chat.modelCatalog.findIndex((m) => m.active);
+			selIdx = act >= 0 ? act : 0;
+		}
+		nav('/model');
 	}
 
 	// The assistant message that's still streaming: render it as plain text and
@@ -1119,7 +1146,12 @@
 				<div bind:this={contentEl}>
 					<MessageList messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} compactionTokens={chat.compactionTokens} {findActive} {scroller} onEdit={editMessage} onRewind={rewindToMessage} />
 				</div>
-				{#if chat.messages.length === 0 && !chat.busy}
+				{#if chat.booting && chat.engineState !== 'exited'}
+					<div class="welcome spawning">
+						<span class="spawn-spin"><LoaderCircle size={26} /></span>
+						<p class="welcome-tip">{t('shell.spawning')}</p>
+					</div>
+				{:else if chat.messages.length === 0 && !chat.busy}
 					<div class="welcome">
 						<span class="welcome-mark">JuCode</span>
 						<p class="welcome-tip">{t('shell.welcomeTip')}</p>
@@ -1167,7 +1199,7 @@
 				onPick={pickFiles}
 				onScreenshot={screenshot}
 				onRecord={toggleRecord}
-				onModel={() => nav('/model')}
+				onModel={openModelPicker}
 				onModelSelect={selectRow}
 				onModelEffort={setEffort}
 				onModelClose={() => chat?.closePicker()}
@@ -1475,6 +1507,16 @@
 		padding: 24px;
 		text-align: center;
 		animation: rise 0.3s ease both;
+	}
+	.spawn-spin {
+		display: inline-flex;
+		color: var(--accent);
+		animation: spawn-spin 0.8s linear infinite;
+	}
+	@keyframes spawn-spin {
+		to {
+			transform: rotate(360deg);
+		}
 	}
 	.welcome-mark {
 		font-family: var(--font-display);

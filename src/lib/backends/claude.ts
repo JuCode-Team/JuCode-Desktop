@@ -873,8 +873,13 @@ export function createClaudeAdapter(): EngineAdapter {
 		},
 		translate(raw: unknown): NormalizedEvent[] {
 			if (isStderrPayload(raw)) {
-				const line = raw.__stderr.trim();
-				return line ? [{ type: 'info', message: `[claude] ${line}` }] : [];
+				// Strip ANSI, drop tracing-formatted log lines (`2026-…Z ERROR …`) —
+				// routine engine noise that would otherwise spam the transcript.
+				// eslint-disable-next-line no-control-regex
+				const line = raw.__stderr.replace(/\[[0-9;]*m/g, '').trim();
+				if (!line) return [];
+				if (/^\d{4}-\d{2}-\d{2}T\S+\s+(ERROR|WARN|INFO|DEBUG|TRACE)\b/.test(line)) return [];
+				return [{ type: 'info', message: `[claude] ${line}` }];
 			}
 			const msg = rec(raw);
 			if (!msg) return [];

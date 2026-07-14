@@ -1067,5 +1067,8 @@ describe('claude adapter: restarts and robustness', () => {
 			{ type: 'info', message: '[claude] node: warning' }
 		]);
 		expect(adapter.translate({ __stderr: '   ' })).toEqual([]);
+		// Tracing-formatted engine log lines are dropped as noise.
+		expect(adapter.translate({ __stderr: '2026-07-14T10:00:00.000Z DEBUG hitting cache' })).toEqual([]);
+		expect(adapter.translate({ __stderr: '2026-07-14T10:00:00Z ERROR boom' })).toEqual([]);
 	});
 });
