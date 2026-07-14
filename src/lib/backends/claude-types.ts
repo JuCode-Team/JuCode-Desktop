@@ -190,8 +190,10 @@ export interface ClaudeModelInfo {
 	resolvedModel?: string;
 	displayName?: string;
 	description?: string;
-	/** Present when the model supports reasoning-effort levels. The desktop
-	 *  does NOT wire effort for claude (no set-effort control request exists in
-	 *  stream-json mode) — the picker's effort submenu stays hidden. */
+	/** Present when the model supports reasoning-effort levels. Effort IS wired for
+	 *  claude — there's no set-effort control request, so the adapter sends the
+	 *  `/effort <level>` slash command as user text instead (see CLAUDE_EFFORT_LEVELS
+	 *  and encodeOp's /model handler). This per-model list is not consumed yet; the
+	 *  slider uses the shared CLAUDE_EFFORT_LEVELS. */
 	supportedEffortLevels?: string[];
 }
