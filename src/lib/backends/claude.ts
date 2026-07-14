@@ -91,13 +91,16 @@ import type {
 export const CLAUDE_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'];
 const DEFAULT_CLAUDE_EFFORT = 'medium';
 
-/** Compact display name for a claude model row: "claude-opus-4-8[1m]" → "Opus
- *  4.8", "claude-haiku-4-5-20251001" → "Haiku 4.5". The `default`/recommended
- *  alias keeps its own label so it doesn't duplicate the concrete Opus row. */
-export function compactClaudeModel(resolvedModel: string, displayName?: string): string {
-	if (displayName && /default|recommended/i.test(displayName)) return 'Default';
-	let s = (resolvedModel || displayName || '').replace(/^claude-/, '').replace(/\[1m\]$/i, '');
-	if (!s) return displayName || resolvedModel || '';
+/** Compact display name for a claude model: "claude-opus-4-8[1m]" → "Opus 4.8
+ *  (1M)", "claude-haiku-4-5-20251001" → "Haiku 4.5". The `[1m]` long-context
+ *  variant is tagged so it reads as a distinct model from the standard one.
+ *  `rawValue` (the alias, e.g. "opus[1m]") is checked for the 1M marker too,
+ *  since some resolvedModel ids drop it. */
+export function compactClaudeModel(resolvedModel: string, rawValue?: string): string {
+	const id = resolvedModel || rawValue || '';
+	const is1m = /\[1m\]/i.test(rawValue || '') || /\[1m\]/i.test(id);
+	const s = id.replace(/^claude-/, '').replace(/\[1m\]$/i, '');
+	if (!s) return rawValue || '';
 	const parts = s.split('-');
 	const family = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
 	const ver: string[] = [];
@@ -105,7 +108,8 @@ export function compactClaudeModel(resolvedModel: string, displayName?: string):
 		if (!/^\d+$/.test(p) || /^\d{8}$/.test(p)) break; // stop at non-numeric or a date suffix
 		ver.push(p);
 	}
-	return ver.length ? `${family} ${ver.join('.')}` : family;
+	const base = ver.length ? `${family} ${ver.join('.')}` : family;
+	return is1m ? `${base} (1M)` : base;
 }
 
 export const CLAUDE_CAPS: BackendCaps = {
@@ -350,6 +354,8 @@ export function createClaudeAdapter(): EngineAdapter {
 		type: 'model_status',
 		provider: 'anthropic',
 		model,
+		// Compact display name for the composer's model button ("Opus 4.8 (1M)").
+		model_label: model ? compactClaudeModel(model, model) : '',
 		// Thinking effort is switched in place by sending the `/effort <level>`
 		// slash command as stream-json user text (verified live).
 		reasoning_effort: effort,
@@ -380,7 +386,7 @@ export function createClaudeAdapter(): EngineAdapter {
 		const rows = visible.map((m) => ({
 			model: m.value,
 			// Show a compact concrete name ("Opus 4.8") rather than the alias.
-			label: compactClaudeModel(m.resolvedModel || m.value, m.displayName),
+			label: compactClaudeModel(m.resolvedModel || m.value, m.value),
 			// Vendor icon matches on this concrete id (contains "claude").
 			vendor: m.resolvedModel || m.value,
 			active: false,
@@ -396,7 +402,7 @@ export function createClaudeAdapter(): EngineAdapter {
 			// Keep the active model marked even if the catalog doesn't list it.
 			rows.unshift({
 				model,
-				label: compactClaudeModel(model),
+				label: compactClaudeModel(model, model),
 				vendor: model,
 				active: true,
 				context_window: contextWindow,

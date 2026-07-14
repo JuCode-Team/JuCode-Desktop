@@ -160,6 +160,7 @@ describe('claude adapter: startup', () => {
 			type: 'model_status',
 			provider: 'anthropic',
 			model: 'claude-opus-4-8[1m]',
+			model_label: 'Opus 4.8 (1M)',
 			reasoning_effort: 'medium',
 			reasoning_efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
 			context_window: 0,
@@ -283,6 +284,7 @@ describe('claude adapter: turns', () => {
 				type: 'model_status',
 				provider: 'anthropic',
 				model: 'claude-opus-4-8[1m]',
+				model_label: 'Opus 4.8 (1M)',
 				reasoning_effort: 'medium',
 				reasoning_efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
 				context_window: 1000000,
@@ -703,7 +705,7 @@ describe('claude adapter: model picker', () => {
 		// submitted ids stay the concrete aliases.
 		expect(rows.map((r) => r.model)).toEqual(['opus[1m]', 'sonnet', 'haiku']);
 		// The picker shows compact concrete names.
-		expect(rows.map((r) => r.label)).toEqual(['Opus 4.8', 'Sonnet 5', 'Haiku 4.5']);
+		expect(rows.map((r) => r.label)).toEqual(['Opus 4.8 (1M)', 'Sonnet 5', 'Haiku 4.5']);
 		// Vendor id keeps the "claude" keyword so the picker shows the claude icon.
 		expect(rows.every((r) => /claude/.test(r.vendor))).toBe(true);
 		// init model (claude-opus-4-8[1m]) marks the Opus row active.
@@ -740,6 +742,7 @@ describe('claude adapter: model picker', () => {
 				type: 'model_status',
 				provider: 'anthropic',
 				model: 'claude-haiku-4-5-20251001',
+				model_label: 'Haiku 4.5',
 				reasoning_effort: 'medium',
 				reasoning_efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
 				context_window: 200000,

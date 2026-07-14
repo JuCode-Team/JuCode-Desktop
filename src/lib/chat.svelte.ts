@@ -93,6 +93,9 @@ export class ChatState {
 	messages = $state<Msg[]>([]);
 	provider = $state('');
 	model = $state('');
+	/** Compact display name for `model` when a backend provides one (claude's
+	 *  "Opus 4.8 (1M)"); falls back to `model` in the UI when empty. */
+	modelLabel = $state('');
 	cwd = $state('');
 	sessionId = $state('');
 	effort = $state('');
@@ -295,6 +298,7 @@ export class ChatState {
 			case 'model_status':
 				this.provider = str(ev.provider);
 				this.model = str(ev.model);
+				this.modelLabel = str(ev.model_label);
 				this.effort = str(ev.reasoning_effort);
 				this.efforts = arr<string>(ev.reasoning_efforts);
 				this.engineState = str(ev.state) || this.engineState;

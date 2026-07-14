@@ -476,10 +476,10 @@
 			</button>
 			{#if bcaps.modelPicker}
 				<button class="flatbtn model" onclick={onModel} title={t('chat.switchModel')}>
-					<Vendor model={chat.model} size={15} /><span>{chat.model || 'model'}</span>
+					<Vendor model={chat.model} size={15} /><span>{chat.modelLabel || chat.model || 'model'}</span>
 				</button>
 			{:else if chat.model}
-				<span class="flatbtn model static"><Vendor model={chat.model} size={15} /><span>{chat.model}</span></span>
+				<span class="flatbtn model static"><Vendor model={chat.model} size={15} /><span>{chat.modelLabel || chat.model}</span></span>
 			{/if}
 			{#if bcaps.modelPicker && chat.efforts.length}
 				<div class="effortsel">
