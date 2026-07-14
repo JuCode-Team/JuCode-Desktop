@@ -288,8 +288,15 @@ pub fn build_args(kind: BackendKind, opts: &BackendOpts) -> Vec<String> {
             .map(|s| s.to_string())
             .collect();
             if let Some(mode) = &opts.permission_mode {
-                args.push("--permission-mode".to_string());
-                args.push(mode.clone());
+                // bypassPermissions is only honored when the session is launched
+                // with --dangerously-skip-permissions; a plain --permission-mode
+                // bypassPermissions (or a live set) is rejected by the CLI.
+                if mode == "bypassPermissions" {
+                    args.push("--dangerously-skip-permissions".to_string());
+                } else {
+                    args.push("--permission-mode".to_string());
+                    args.push(mode.clone());
+                }
             }
             if let Some(sid) = &opts.resume {
                 args.push("--resume".to_string());
@@ -486,6 +493,29 @@ mod tests {
                 "claude-sonnet-4-5",
             ]
         );
+    }
+
+    #[test]
+    fn bypass_permissions_maps_to_dangerously_skip_flag() {
+        // yolo must launch with --dangerously-skip-permissions, not
+        // --permission-mode bypassPermissions (which the CLI rejects).
+        let opts = validate_opts(
+            BackendKind::Claude,
+            Some(&json!({ "permission_mode": "bypassPermissions" })),
+        )
+        .unwrap();
+        let args = build_args(BackendKind::Claude, &opts);
+        assert!(args.iter().any(|a| a == "--dangerously-skip-permissions"));
+        assert!(!args.iter().any(|a| a == "bypassPermissions"));
+        // A normal mode still maps to --permission-mode <mode>.
+        let opts = validate_opts(
+            BackendKind::Claude,
+            Some(&json!({ "permission_mode": "acceptEdits" })),
+        )
+        .unwrap();
+        let args = build_args(BackendKind::Claude, &opts);
+        let i = args.iter().position(|a| a == "--permission-mode").unwrap();
+        assert_eq!(args[i + 1], "acceptEdits");
     }
 
     #[test]

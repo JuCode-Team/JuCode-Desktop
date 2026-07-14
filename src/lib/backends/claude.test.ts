@@ -110,10 +110,10 @@ describe('claude adapter: caps', () => {
 
 describe('claude adapter: startup', () => {
 	it('onStart pushes the desktop approval mode and prefetches the model catalog', () => {
+		// Non-yolo modes are set live (set_permission_mode) + a model prefetch.
 		for (const [approvalMode, claudeMode] of [
 			['ask', 'default'],
-			['edits', 'acceptEdits'],
-			['all', 'bypassPermissions']
+			['edits', 'acceptEdits']
 		] as const) {
 			const { lines, io } = makeIo();
 			const adapter = createClaudeAdapter();
@@ -122,10 +122,18 @@ describe('claude adapter: startup', () => {
 			const frame = parse(lines[0]);
 			expect(frame.type).toBe('control_request');
 			expect(frame.request).toEqual({ subtype: 'set_permission_mode', mode: claudeMode });
-			// The list_models prefetch works before the first turn (verified live)
-			// so the /model picker opens instantly.
 			expect(parse(lines[1]).request).toEqual({ subtype: 'list_models' });
 		}
+	});
+
+	it('onStart skips the live set for yolo (bypassPermissions is rejected unless launched with the flag)', () => {
+		const { lines, io } = makeIo();
+		const adapter = createClaudeAdapter();
+		adapter.onStart(io, { ...CTX, approvalMode: 'all' });
+		// Only the list_models prefetch — no set_permission_mode (it would error;
+		// the --dangerously-skip-permissions spawn flag already set yolo mode).
+		expect(lines).toHaveLength(1);
+		expect(parse(lines[0]).request).toEqual({ subtype: 'list_models' });
 	});
 
 	it('the list_models prefetch ack seeds the model button before the first turn', () => {

@@ -823,6 +823,7 @@ export function createClaudeAdapter(): EngineAdapter {
 					.filter((m) => typeof m?.value === 'string' && m.value);
 				// tag 'view' = a /model pick request → open the picker.
 				if (tag === 'view') return [modelViewEvent()];
+				const events: NormalizedEvent[] = [];
 				// onStart prefetch: seed the model button before the first turn (the
 				// real model only arrives with the first system/init). Use the
 				// default/recommended alias's concrete resolvedModel (falls back to the
@@ -833,10 +834,20 @@ export function createClaudeAdapter(): EngineAdapter {
 					const resolved = def?.resolvedModel || def?.value;
 					if (resolved) {
 						model = resolved;
-						return [modelStatus()];
+						events.push(modelStatus());
 					}
 				}
-				return [];
+				// tag 'boot' = the yolo bootstrap (no set_permission_mode ack to ride
+				// on): this ack is the readiness signal.
+				if (tag === 'boot') {
+					lastEngineMode = 'bypassPermissions';
+					events.push(
+						{ type: 'approval_mode', mode: 'full-auto' },
+						commandList([]),
+						{ type: 'status', message: 'ready' }
+					);
+				}
+				return events;
 			}
 			case 'set_model': {
 				// Ack of a /model pick: the switch happened in place (verified live —
@@ -907,9 +918,17 @@ export function createClaudeAdapter(): EngineAdapter {
 			// No handshake required (stdin input is accepted immediately). Push the
 			// desktop's persisted mode; the ack doubles as the readiness signal.
 			// Prefetch the model catalog for the picker (works before the first
-			// turn — verified live).
-			send(controlRequest({ subtype: 'set_permission_mode', mode: toClaudeMode(mode) }));
-			send(controlRequest({ subtype: 'list_models' }));
+			// turn — verified live). bypassPermissions can't be set live (it's
+			// rejected unless launched with --dangerously-skip-permissions, which the
+			// spawn already did), so skip that control request and take readiness from
+			// the list_models ack instead (tagged 'boot').
+			const claudeMode = toClaudeMode(mode);
+			if (claudeMode === 'bypassPermissions') {
+				send(controlRequest({ subtype: 'list_models' }, 'boot'));
+			} else {
+				send(controlRequest({ subtype: 'set_permission_mode', mode: claudeMode }));
+				send(controlRequest({ subtype: 'list_models' }));
+			}
 		},
 		translate(raw: unknown): NormalizedEvent[] {
 			if (isStderrPayload(raw)) {
