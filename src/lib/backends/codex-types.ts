@@ -101,6 +101,14 @@ export interface ThreadResumeParams {
 	sandbox?: SandboxMode | null;
 }
 
+/** thread/rollback: drop `numTurns` turns from the end of the thread's history
+ *  (must be >= 1). Per the app-server schema this only rewinds the *conversation*
+ *  — local file changes are the client's responsibility (a git checkpoint). */
+export interface ThreadRollbackParams {
+	threadId: string;
+	numTurns: number;
+}
+
 export type UserInput =
 	| { type: 'text'; text: string; text_elements: unknown[] }
 	| { type: 'localImage'; path: string };

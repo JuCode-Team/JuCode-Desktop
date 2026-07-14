@@ -51,6 +51,22 @@ describe('codex adapter: caps', () => {
 	});
 });
 
+describe('codex adapter: rewind', () => {
+	it('rewinds the conversation with thread/rollback by turn count', () => {
+		const { lines } = makeIo();
+		const adapter = createCodexAdapter();
+		handshake(adapter, lines);
+		const frames = adapter.encodeOp({ op: 'command', input: '/rewind 2' });
+		expect(parse(frames![0])).toMatchObject({
+			method: 'thread/rollback',
+			params: { threadId: 'thread-1', numTurns: 2 }
+		});
+		// A non-positive / missing count is a no-op.
+		expect(adapter.encodeOp({ op: 'command', input: '/rewind 0' })).toEqual([]);
+		expect(adapter.encodeOp({ op: 'command', input: '/rewind' })).toEqual([]);
+	});
+});
+
 describe('codex adapter: handshake', () => {
 	it('onStart sends only the initialize request', () => {
 		const { lines, io } = makeIo();

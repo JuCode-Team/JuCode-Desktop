@@ -74,6 +74,7 @@ import type {
 	ThreadGoalUpdatedParams,
 	ThreadItem,
 	ThreadListParams,
+	ThreadRollbackParams,
 	ThreadListResponse,
 	ThreadResumeParams,
 	ThreadStartResponse,
@@ -93,7 +94,7 @@ export const CODEX_CAPS: BackendCaps = {
 	goals: true, // thread/goal/set|get|clear + thread/goal/updated|cleared
 	skills: false,
 	mcpManage: false,
-	checkpoints: false,
+	checkpoints: true, // conversation rewind via thread/rollback (files handled desktop-side)
 	contextUsage: true, // thread/tokenUsage/updated
 	compact: true, // thread/compact/start + contextCompaction item lifecycle
 	modelPicker: true, // model/list catalog + per-turn model/effort overrides
@@ -920,8 +921,17 @@ export function createCodexAdapter(): EngineAdapter {
 								return [request('thread/goal/set', { threadId, status: 'active' })];
 							return [request('thread/goal/set', { threadId, objective: arg })];
 						}
+						case '/rewind': {
+							// Conversation rewind: drop N turns from the thread history. The
+							// page computes N from the target turn and truncates its own view;
+							// files are the client's job (see checkpoints cap note).
+							const n = parseInt(arg, 10);
+							return threadId && n > 0
+								? [request('thread/rollback', { threadId, numTurns: n } satisfies ThreadRollbackParams)]
+								: [];
+						}
 						default:
-							return null; // /tree, /rewind, … — unsupported, UI notifies
+							return null; // /tree, … — unsupported, UI notifies
 					}
 				}
 				case 'shutdown':

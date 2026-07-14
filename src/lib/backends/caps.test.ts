@@ -55,6 +55,7 @@ describe('caps() gating helper', () => {
 		expect(cx.goals).toBe(true);
 		expect(cx.transcriptReplay).toBe(true);
 		expect(cx.slashCommands).toBe(false);
+		expect(cx.checkpoints).toBe(true); // conversation rewind via thread/rollback
 	});
 
 	it('every backend declares the full flag set', () => {

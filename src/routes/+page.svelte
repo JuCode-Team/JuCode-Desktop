@@ -982,13 +982,27 @@
 	// engine lists user turns in order, so the i-th turn matches the i-th message.
 	function rewindToMessage(text: string, userIndex: number) {
 		if (!chat) return;
+		// codex rewinds its conversation with thread/rollback (by turn count), which
+		// has no checkpoint_view round-trip — confirm directly from the turn index.
+		if (chat.backendId === 'codex') {
+			chat.pendingRewind = { id: `codex:${userIndex}`, text };
+			return;
+		}
 		chat.rewindIntent = { userIndex, text };
 		send({ op: 'command', input: '/rewind' });
 	}
 	function confirmRewind() {
 		const pr = chat?.pendingRewind;
 		if (!pr || !chat) return;
-		send({ op: 'command', input: `/rewind ${pr.id}` });
+		if (pr.id.startsWith('codex:')) {
+			const userIndex = Number(pr.id.slice('codex:'.length));
+			const numTurns = chat.userTurns - userIndex;
+			if (numTurns > 0) send({ op: 'command', input: `/rewind ${numTurns}` });
+			// codex rolls back its own history; mirror it in our projected transcript.
+			chat.truncateToUserTurn(userIndex);
+		} else {
+			send({ op: 'command', input: `/rewind ${pr.id}` });
+		}
 		input = pr.text;
 		chat.pendingRewind = null;
 		composerEl?.focus();

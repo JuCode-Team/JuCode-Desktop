@@ -170,6 +170,19 @@ describe('ChatState.handle', () => {
 		expect(c.cost).toBe(0.42);
 	});
 
+	it('truncateToUserTurn drops the target turn and everything after (codex rewind)', () => {
+		const c = new ChatState();
+		c.handle({ type: 'user_message', content: 'first' });
+		c.handle({ type: 'assistant_delta', delta: 'a1' });
+		c.handle({ type: 'user_message', content: 'second' });
+		c.handle({ type: 'assistant_delta', delta: 'a2' });
+		c.handle({ type: 'user_message', content: 'third' });
+		expect(c.userTurns).toBe(3);
+		c.truncateToUserTurn(1); // rewind to the 2nd user turn
+		expect(userTexts(c)).toEqual(['first']);
+		expect(c.messages.map((m) => m.kind)).toEqual(['user', 'assistant']);
+	});
+
 	it('tracks busy state from engine status', () => {
 		const c = new ChatState();
 		c.handle({ type: 'model_status', state: 'streaming' });

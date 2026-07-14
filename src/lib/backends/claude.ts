@@ -1033,8 +1033,10 @@ export function createClaudeAdapter(): EngineAdapter {
 							];
 						default:
 							// /resume is page-driven for claude (session listing needs fs
-							// access via the claude_sessions command).
-							if (cmd === '/resume') return null;
+							// access via the claude_sessions command); desktop/jucode-only
+							// commands aren't claude CLI commands, so never forward them.
+							if (['/resume', '/rewind', '/tree', '/checkout', '/fork', '/undo'].includes(cmd))
+								return null;
 							// Any other slash command comes from the CLI's own slash_commands
 							// list (built-ins like /context, /doctor or a user's custom
 							// command) — forward it verbatim as stream-json user text for the

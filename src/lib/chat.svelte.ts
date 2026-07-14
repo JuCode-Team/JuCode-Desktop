@@ -240,6 +240,27 @@ export class ChatState {
 		return out;
 	}
 
+	/** Number of user turns in the transcript (one per sent message). */
+	get userTurns() {
+		return this.messages.filter((m) => m.kind === 'user').length;
+	}
+
+	/** Drop the `userIndex`-th user turn and everything after it — used by codex's
+	 *  local view truncation on a thread/rollback rewind (the engine rewinds its
+	 *  own history; we mirror it in the projected transcript). */
+	truncateToUserTurn(userIndex: number) {
+		let count = 0;
+		for (let i = 0; i < this.messages.length; i++) {
+			if (this.messages[i].kind === 'user') {
+				if (count === userIndex) {
+					this.messages = this.messages.slice(0, i);
+					return;
+				}
+				count++;
+			}
+		}
+	}
+
 	/** Whether this session has something the engine actually persisted to resume.
 	 *  A fresh session (id assigned at startup but no user turn yet) was never saved,
 	 *  so `/resume <id>` would fail with "No such file". Gates restart/switch resume
