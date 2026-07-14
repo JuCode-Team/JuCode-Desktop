@@ -517,10 +517,22 @@ export class ChatState {
 				this.totalIn += inn;
 				this.totalOut += out;
 				recordUsage(inn, out, this.provider);
-				if (this.#assistantIdx >= 0) {
-					const m = this.messages[this.#assistantIdx];
-					if (m?.kind === 'assistant') m.tokens = (m.tokens ?? 0) + out;
+				// Prefer the active assistant message (jucode reports usage per
+				// message, mid-turn). When it's already reset — e.g. claude reports
+				// one usage at the end of the turn, after the assistant finished —
+				// fall back to the last assistant message, matching #endTurn's
+				// elapsed stamping so tokens and time land on the same bubble.
+				let m = this.#assistantIdx >= 0 ? this.messages[this.#assistantIdx] : null;
+				if (m?.kind !== 'assistant') {
+					m = null;
+					for (let i = this.messages.length - 1; i >= 0; i--) {
+						if (this.messages[i].kind === 'assistant') {
+							m = this.messages[i];
+							break;
+						}
+					}
 				}
+				if (m?.kind === 'assistant') m.tokens = (m.tokens ?? 0) + out;
 				break;
 			}
 			case 'subagent_lifecycle': {

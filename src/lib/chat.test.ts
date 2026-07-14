@@ -46,6 +46,20 @@ describe('ChatState.handle', () => {
 		expect(userTexts(c)).toEqual(['你好']);
 	});
 
+	it('stamps end-of-turn usage tokens onto the last assistant message (claude)', () => {
+		// claude reports usage once at the end of the turn, after the assistant
+		// finished — #assistantIdx is already reset, so tokens must fall back to
+		// the last assistant message (same bubble the elapsed time lands on).
+		const c = new ChatState();
+		c.optimisticUser('q');
+		c.handle({ type: 'assistant_delta', delta: 'answer' });
+		c.handle({ type: 'assistant_start' }); // resets #assistantIdx to -1
+		c.handle({ type: 'usage', output_tokens: 42, input_tokens: 10 });
+		const last = c.messages[c.messages.length - 1] as { kind: string; tokens?: number };
+		expect(last.kind).toBe('assistant');
+		expect(last.tokens).toBe(42);
+	});
+
 	it('aggregates a tool card by call_id and marks it done', () => {
 		const c = new ChatState();
 		c.handle({ type: 'tool_start', call_id: '1', name: 'read' });
