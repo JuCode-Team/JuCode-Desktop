@@ -43,14 +43,15 @@ describe('SessionStore × backends', () => {
 		const p = proj();
 		store.projects.push(p);
 		const id = store.addSession(p, undefined, 'claude');
-		expect(createSession).toHaveBeenCalledWith(id, p.path, 'claude', {});
+		// claude sessions pin a --session-id (uuid) so the conversation is resumable.
+		expect(createSession).toHaveBeenCalledWith(id, p.path, 'claude', { session_id: expect.any(String) });
 		expect(p.sessions[0].backendId).toBe('claude');
 		expect(adapterFor(id)?.id).toBe('claude');
 		expect(p.lastBackend).toBe('claude');
 		// The next plain addSession inherits the project's last-used backend.
 		const id2 = store.addSession(p);
 		expect(p.sessions[1].backendId).toBe('claude');
-		expect(createSession).toHaveBeenCalledWith(id2, p.path, 'claude', {});
+		expect(createSession).toHaveBeenCalledWith(id2, p.path, 'claude', { session_id: expect.any(String) });
 	});
 
 	it('non-jucode ops route through the adapter as raw lines', async () => {

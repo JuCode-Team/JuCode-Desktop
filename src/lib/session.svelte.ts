@@ -22,6 +22,18 @@ export interface SavedProject {
 
 const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
 
+/** A v4-ish UUID for claude's --session-id (falls back if crypto is unavailable). */
+function newUuid(): string {
+	try {
+		return crypto.randomUUID();
+	} catch {
+		return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+			const r = (Math.random() * 16) | 0;
+			return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+		});
+	}
+}
+
 /**
  * Owns the project/session tree and its lifecycle (spawn, restore, restart,
  * remove) so the page is left with UI glue only. Reactive via Svelte 5 runes;
@@ -116,12 +128,18 @@ export class SessionStore {
 		project.sessions.push(s);
 		project.lastBackend = backendId;
 		this.activeId = s.id;
+		// Pin a session id we control for claude (via --session-id) so the
+		// conversation persists under a known uuid and --resume can restore its
+		// context after a crash/restart — the CLI's own auto-generated id isn't
+		// reliably resumable in gateway setups ("No conversation found").
+		const extra = backendId === 'claude' ? { session_id: newUuid() } : undefined;
+		if (extra) s.chat.sessionId = extra.session_id;
 		this.#spawn(s, project.path, () => {
 			if (firstMessage) {
 				s.chat.optimisticUser(firstMessage);
 				dispatch(s.id, { op: 'user_message', content: firstMessage });
 			}
-		}).catch((e) => this.#engineFailed(s.chat, e));
+		}, extra).catch((e) => this.#engineFailed(s.chat, e));
 		return s.id;
 	}
 
