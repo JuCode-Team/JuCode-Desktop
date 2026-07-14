@@ -4,7 +4,7 @@
 	import { renderMarkdown } from '$lib/markdown';
 	import { t } from '$lib/i18n';
 
-	let { text }: { text: string } = $props();
+	let { text, onFile }: { text: string; onFile?: (href: string) => void } = $props();
 
 	const html = $derived(DOMPurify.sanitize(renderMarkdown(text)));
 
@@ -33,9 +33,12 @@
 		const href = a?.getAttribute('href');
 		if (href) {
 			// Always stop the webview from navigating to a markdown link (it's
-			// LLM/file-supplied), and only hand safe schemes to the system opener.
+			// LLM/file-supplied). Safe external schemes go to the system opener;
+			// in-page anchors are ignored; anything else is treated as a workspace
+			// file path and handed to the host to open (editor / built-in browser).
 			e.preventDefault();
 			if (isSafeExternalHref(href)) openUrl(href).catch(() => {});
+			else if (!href.startsWith('#')) onFile?.(href);
 		}
 	}
 </script>

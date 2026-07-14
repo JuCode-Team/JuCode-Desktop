@@ -16,7 +16,8 @@
 		findActive = null,
 		scroller = null,
 		onEdit,
-		onRewind
+		onRewind,
+		onFile
 	}: {
 		messages: Msg[];
 		streamingMsg: Msg | null;
@@ -29,6 +30,8 @@
 		scroller?: HTMLElement | null;
 		onEdit: (text: string) => void;
 		onRewind: (text: string, userIndex: number) => void;
+		/** Open a workspace file referenced by a chat link (editor / browser). */
+		onFile?: (href: string) => void;
 	} = $props();
 
 	// ── Virtual list (dynamic-height windowing) ─────────────────────────────
@@ -260,7 +263,7 @@
 					{#if si > 0}<Markdown text={rt.slice(0, si)} />{/if}
 					<div class="stream">{rt.slice(si)}</div>
 				{:else}
-					<Markdown text={m.text} />
+					<Markdown text={m.text} {onFile} />
 					<div class="foot">
 						{#if m.elapsed}<span class="mono">{fmtDur(m.elapsed)}</span>{/if}
 						{#if m.tokens}<span class="mono">{t('chat.tokens', { n: m.tokens })}</span>{/if}
@@ -283,7 +286,7 @@
 								<div class="rline">{line || ' '}</div>
 							{/each}
 						{:else}
-							<Markdown text={m.text} />
+							<Markdown text={m.text} {onFile} />
 						{/if}
 					</div>
 				{/if}

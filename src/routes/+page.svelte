@@ -34,6 +34,7 @@
 	import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
 	import { updater } from '$lib/updater.svelte';
 	import { browser, type WebRef } from '$lib/browser.svelte';
+	import { prefs } from '$lib/prefs.svelte';
 	import { t } from '$lib/i18n';
 	import { SessionStore, type SavedProject } from '$lib/session.svelte';
 	import Settings from '$lib/Settings.svelte';
@@ -642,7 +643,7 @@
 		}
 		// 目录存在才创建项目（listDir 失败说明路径无效/不可访问）。
 		try {
-			await listDir(path);
+			await listDir(path, path); // confine to itself: just an existence check
 		} catch {
 			await message(t('shell.deepLinkBadPath', { path }), { title: 'JuCode', kind: 'error' });
 			return null;
@@ -1010,6 +1011,23 @@
 		if (c && cwd && sha) gitCheckpointRestore(cwd, sha).catch((e) => console.error('checkpoint restore failed', e));
 	}
 
+	// Open a workspace file referenced by a chat link. HTML opens in the built-in
+	// browser (rendered) or the editor (source) per preference; everything else
+	// opens in the editor. Paths resolve relative to the active project root.
+	function openChatFile(href: string) {
+		const cwd = activeProject?.path;
+		if (!cwd) return;
+		const rel = href.replace(/^file:\/\//, '').split(/[?#]/)[0].trim();
+		if (!rel) return;
+		const abs = rel.startsWith('/') ? rel : `${cwd.replace(/\/+$/, '')}/${rel.replace(/^\.?\//, '')}`;
+		const ext = abs.split('/').pop()?.split('.').pop()?.toLowerCase() ?? '';
+		if ((ext === 'html' || ext === 'htm') && prefs.htmlOpenInBrowser) {
+			browser.open(`file://${abs}`);
+		} else {
+			editorStore.open(abs, cwd).catch((e) => console.error('open chat file', e));
+		}
+	}
+
 	function rewindToMessage(text: string, userIndex: number) {
 		if (!chat) return;
 		// codex (thread/rollback) and claude (resume-at-uuid respawn) rewind without
@@ -1213,7 +1231,7 @@
 
 			<main bind:this={scroller} onscroll={onScroll}>
 				<div bind:this={contentEl}>
-					<MessageList messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} compactionTokens={chat.compactionTokens} {findActive} {scroller} onEdit={editMessage} onRewind={rewindToMessage} />
+					<MessageList messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} compactionTokens={chat.compactionTokens} {findActive} {scroller} onEdit={editMessage} onRewind={rewindToMessage} onFile={openChatFile} />
 				</div>
 				{#if chat.booting && chat.engineState !== 'exited'}
 					<div class="welcome spawning">

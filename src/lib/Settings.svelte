@@ -4,6 +4,7 @@
 	import { readConfig, writeConfig, readAuthProviders, setAuthKey, removeAuthKey, listProviders, fetchAccountInfo, fetchDeepseekBalance, type AccountInfo, type DeepseekBalance } from '$lib/protocol';
 	import { dispatch } from '$lib/backends/router';
 	import { caps } from '$lib/backends';
+	import { prefs } from '$lib/prefs.svelte';
 	import BackendSection from '$lib/settings/BackendSection.svelte';
 	import type { ChatState } from '$lib/chat.svelte';
 	import Vendor from '$lib/Vendor.svelte';
@@ -376,6 +377,19 @@
 					<div class="group">
 						<div class="glabel">{t('settings.language')}</div>
 						<Segmented value={getLocale()} options={LOCALES.map((l) => ({ value: l, label: LOCALE_LABELS[l] }))} onChange={(v) => setLocale(v as (typeof LOCALES)[number])} />
+					</div>
+
+					<div class="group">
+						<div class="glabel">{t('settings.behavior.htmlOpen')}</div>
+						<Segmented
+							value={prefs.htmlOpenInBrowser ? 'browser' : 'editor'}
+							options={[
+								{ value: 'browser', label: t('settings.behavior.htmlOpenBrowser') },
+								{ value: 'editor', label: t('settings.behavior.htmlOpenEditor') }
+							]}
+							onChange={(v) => prefs.setHtmlOpenInBrowser(v === 'browser')}
+						/>
+						<p class="hint mt">{t('settings.behavior.htmlOpenHint')}</p>
 					</div>
 
 					<BackendSection />

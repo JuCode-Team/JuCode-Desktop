@@ -1024,9 +1024,12 @@ struct FsEntry {
 
 /// Lists a directory (defaults to the project root), directories first.
 #[tauri::command]
-fn list_dir(path: Option<String>) -> Result<Vec<FsEntry>, String> {
+fn list_dir(path: Option<String>, root: Option<String>) -> Result<Vec<FsEntry>, String> {
     let requested = path.map(PathBuf::from).unwrap_or_else(resolve_cwd);
-    let dir = confine_to_root(&requested, None)?;
+    // Confine to the caller's project root (the file browser's rootDir) rather
+    // than the app's launch dir — projects live anywhere on disk.
+    let root_path = root.map(PathBuf::from);
+    let dir = confine_to_root(&requested, root_path.as_deref())?;
     let mut entries = Vec::new();
     for entry in std::fs::read_dir(&dir).map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;

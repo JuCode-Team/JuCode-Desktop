@@ -189,8 +189,8 @@ export interface FsEntry {
 	path: string;
 	is_dir: boolean;
 }
-export function listDir(path?: string): Promise<FsEntry[]> {
-	return invoke('list_dir', { path });
+export function listDir(path?: string, root?: string): Promise<FsEntry[]> {
+	return invoke('list_dir', { path, root });
 }
 export function readText(path: string): Promise<string> {
 	return invoke('read_text', { path });

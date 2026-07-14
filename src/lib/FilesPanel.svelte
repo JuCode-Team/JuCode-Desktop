@@ -18,7 +18,7 @@
 	async function load(path: string) {
 		error = '';
 		try {
-			entries = await listDir(path);
+			entries = await listDir(path, root || rootDir || path);
 			cwd = path;
 		} catch (e) {
 			error = String(e);
