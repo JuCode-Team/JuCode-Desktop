@@ -12,7 +12,7 @@
 	} from '@tauri-apps/plugin-notification';
 	import { ChatState } from '$lib/chat.svelte';
 	import { treeRows } from '$lib/tree';
-	import { buildSetApprovalModeOp, type ApprovalMode, type ApproveOp } from '$lib/approval';
+	import { buildSetApprovalModeOp, needsClaudeYoloRespawn, type ApprovalMode, type ApproveOp } from '$lib/approval';
 	import { focusTrap } from '$lib/focusTrap';
 	import {
 		readAuthProviders,
@@ -752,6 +752,13 @@
 	function setApprovalMode(m: ApprovalMode) {
 		if (!chat) return;
 		chat.setApprovalMode(m);
+		// Switching claude INTO yolo (bypassPermissions) isn't honored at runtime —
+		// respawn the engine with the flag (resumes the conversation) instead of
+		// sending a live control frame that would silently no-op.
+		if (needsClaudeYoloRespawn(chat.backendId, buildSetApprovalModeOp(m).mode)) {
+			store.respawnClaudeYolo(activeId);
+			return;
+		}
 		send(buildSetApprovalModeOp(m));
 	}
 	// The engine announced its startup approval mode and it diverges from the
@@ -759,8 +766,15 @@
 	// switch): push ours. Runs off the agent-event stream, per session.
 	function flushModeSync(c: ChatState, sid: string) {
 		if (!c.pendingModeSync) return;
-		dispatch(sid, { op: 'set_approval_mode', mode: c.pendingModeSync });
+		const mode = c.pendingModeSync;
 		c.pendingModeSync = null;
+		// A persisted claude yolo mode can't be pushed over the wire (runtime
+		// bypassPermissions is ignored) — respawn with the flag instead.
+		if (needsClaudeYoloRespawn(c.backendId, mode)) {
+			store.respawnClaudeYolo(sid);
+			return;
+		}
+		dispatch(sid, { op: 'set_approval_mode', mode });
 	}
 
 	function selectRow(command: string) {

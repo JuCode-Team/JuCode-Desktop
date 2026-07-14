@@ -12,7 +12,7 @@ export type Op =
 	// valid with decision "allow"; `always` is whole-call only (never with hunks).
 	| { op: 'approve'; call_id: string; decision: 'allow' | 'deny'; hunks?: string[]; always?: boolean }
 	// Engine-level auto-approval policy; acknowledged by an `approval_mode` event.
-	| { op: 'set_approval_mode'; mode: 'read-only' | 'auto-edit' | 'full-auto' }
+	| { op: 'set_approval_mode'; mode: 'read-only' | 'plan' | 'auto' | 'auto-edit' | 'full-auto' }
 	// MCP server management (engine config is global; any live session's engine
 	// can answer). Each op is acknowledged by an `mcp_servers` event.
 	| { op: 'mcp_list' }

@@ -85,6 +85,7 @@ import type {
 
 export const CODEX_CAPS: BackendCaps = {
 	approvalModes: true, // thread/start approvalPolicy+sandbox, per-turn overrides
+	extendedApprovalModes: false, // codex has no plan/auto modes
 	hunkApproval: false, // codex approvals are whole-patch accept/decline
 	steer: false,
 	interrupt: true, // turn/interrupt

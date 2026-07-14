@@ -34,6 +34,9 @@ export function normalizeBackendId(v: unknown): BackendId {
 export interface BackendCaps {
 	/** Engine-enforced auto-approval policy (set_approval_mode / approval_mode). */
 	approvalModes: boolean;
+	/** Backend exposes claude's extra approval modes ('plan' + 'auto') in the
+	 *  picker, on top of the shared ask/edits/all trio. */
+	extendedApprovalModes: boolean;
 	/** Per-hunk partial approval of edit tools (approve op with `hunks`). */
 	hunkApproval: boolean;
 	/** Queue-jumping a busy turn (steer op + queued-messages strip). */

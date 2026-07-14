@@ -257,6 +257,15 @@ export class ChatState {
 		}
 	}
 
+	/** Clear the running flag on any tool card still marked running once a turn
+	 *  ends — guards against a permanent spinner when a tool_output is never
+	 *  delivered (see the `status` handler). */
+	#finishStuckTools() {
+		for (const m of this.messages) {
+			if (m.kind === 'tool' && m.running) m.running = false;
+		}
+	}
+
 	#tool(callId: string): Extract<Msg, { kind: 'tool' }> | undefined {
 		const hit = this.#toolsByCallId.get(callId);
 		if (hit) return hit;
@@ -576,6 +585,10 @@ export class ChatState {
 					this.#endTurn();
 					this.#resetCurrent();
 					this.pendingApproval = null;
+					// Safety net: a lost tool_output (e.g. a subagent frame whose
+					// tool_result never mapped) would otherwise leave a card spinning
+					// forever — the turn is over, so nothing is still running.
+					this.#finishStuckTools();
 				}
 				break;
 			}

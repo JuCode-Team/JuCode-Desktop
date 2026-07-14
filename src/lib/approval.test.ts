@@ -4,6 +4,7 @@ import {
 	buildApproveOp,
 	buildSetApprovalModeOp,
 	fromEngineMode,
+	needsClaudeYoloRespawn,
 	parseHunks,
 	reconcileMode,
 	selectionState,
@@ -21,11 +22,24 @@ const HUNKS: ApprovalHunk[] = [
 
 describe('approval mode mapping', () => {
 	it('maps each desktop mode to its engine mode and back (round trip)', () => {
-		const modes: ApprovalMode[] = ['ask', 'edits', 'all'];
+		const modes: ApprovalMode[] = ['ask', 'plan', 'auto', 'edits', 'all'];
 		for (const m of modes) expect(fromEngineMode(toEngineMode(m))).toBe(m);
 		expect(toEngineMode('ask')).toBe('read-only');
+		expect(toEngineMode('plan')).toBe('plan');
+		expect(toEngineMode('auto')).toBe('auto');
 		expect(toEngineMode('edits')).toBe('auto-edit');
 		expect(toEngineMode('all')).toBe('full-auto');
+	});
+
+	it('routes only a claude switch to full-auto through a respawn', () => {
+		// claude's runtime bypassPermissions switch is ignored → respawn.
+		expect(needsClaudeYoloRespawn('claude', 'full-auto')).toBe(true);
+		// Every other claude mode switches live.
+		for (const m of ['read-only', 'plan', 'auto', 'auto-edit'] as const)
+			expect(needsClaudeYoloRespawn('claude', m)).toBe(false);
+		// Other backends never respawn.
+		expect(needsClaudeYoloRespawn('jucode', 'full-auto')).toBe(false);
+		expect(needsClaudeYoloRespawn('codex', 'full-auto')).toBe(false);
 	});
 
 	it('returns null for an unknown engine mode', () => {

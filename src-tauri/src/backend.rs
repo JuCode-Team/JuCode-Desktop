@@ -122,7 +122,8 @@ const MAX_CUSTOM_ENV_VARS: usize = 50;
 const MAX_CUSTOM_ENV_VALUE_LEN: usize = 4096;
 
 /// Claude Code permission modes the desktop is allowed to request.
-const CLAUDE_PERMISSION_MODES: &[&str] = &["default", "plan", "acceptEdits", "bypassPermissions"];
+const CLAUDE_PERMISSION_MODES: &[&str] =
+    &["default", "plan", "auto", "acceptEdits", "bypassPermissions"];
 
 fn expect_string(key: &str, v: &serde_json::Value) -> Result<String, String> {
     v.as_str()

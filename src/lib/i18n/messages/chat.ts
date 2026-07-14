@@ -7,6 +7,8 @@ const chat = {
 		tokens: '{n} tokens',
 		// Composer
 		approvalAsk: '谨慎',
+		approvalPlan: '计划',
+		approvalAuto: '自动',
 		approvalEdits: '自动改文件',
 		approvalAll: '全自动',
 		slashMenuLabel: '命令补全',
@@ -63,6 +65,8 @@ const chat = {
 		tokens: '{n} tokens',
 		// Composer
 		approvalAsk: 'Cautious',
+		approvalPlan: 'Plan',
+		approvalAuto: 'Auto',
 		approvalEdits: 'Auto-edit files',
 		approvalAll: 'Full auto',
 		slashMenuLabel: 'Command completion',

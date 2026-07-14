@@ -170,11 +170,23 @@
 		if (document.activeElement === el) caretToEnd();
 	});
 
-	const APPROVAL = $derived([
-		{ value: 'ask', label: t('chat.approvalAsk') },
-		{ value: 'edits', label: t('chat.approvalEdits') },
-		{ value: 'all', label: t('chat.approvalAll') }
-	]);
+	// Claude exposes two extra native modes (plan / auto) between ask and edits;
+	// other backends keep the shared three (gated by extendedApprovalModes).
+	const APPROVAL = $derived(
+		bcaps.extendedApprovalModes
+			? [
+					{ value: 'ask', label: t('chat.approvalAsk') },
+					{ value: 'plan', label: t('chat.approvalPlan') },
+					{ value: 'auto', label: t('chat.approvalAuto') },
+					{ value: 'edits', label: t('chat.approvalEdits') },
+					{ value: 'all', label: t('chat.approvalAll') }
+				]
+			: [
+					{ value: 'ask', label: t('chat.approvalAsk') },
+					{ value: 'edits', label: t('chat.approvalEdits') },
+					{ value: 'all', label: t('chat.approvalAll') }
+				]
+	);
 	const approvalLabel = $derived(APPROVAL.find((a) => a.value === chat.approvalMode)?.label ?? t('chat.approvalAsk'));
 	// Persisting + pushing the mode to the engine lives with the page (it owns
 	// the session id); the picker only reports the choice.

@@ -7,6 +7,7 @@ import type { BackendCaps, EngineAdapter, NormalizedEvent } from './types';
 
 export const JUCODE_CAPS: BackendCaps = {
 	approvalModes: true,
+	extendedApprovalModes: false,
 	hunkApproval: true,
 	steer: true,
 	interrupt: true,

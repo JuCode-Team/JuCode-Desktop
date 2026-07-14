@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createClaudeAdapter, CLAUDE_CAPS } from './claude';
+import { createClaudeAdapter, CLAUDE_CAPS, toClaudeMode, fromClaudeMode } from './claude';
 import type { EngineAdapter, SessionCtx } from './types';
 
 // Fixtures below are condensed from live `claude --print --input-format
@@ -126,6 +126,41 @@ describe('claude adapter: startup', () => {
 			// so the /model picker opens instantly.
 			expect(parse(lines[1]).request).toEqual({ subtype: 'list_models' });
 		}
+	});
+
+	it('the list_models prefetch ack seeds the model button before the first turn', () => {
+		// Bug: a new claude session showed the "model" placeholder until the first
+		// message, because the real model only arrives with the first system/init.
+		// The onStart list_models prefetch now seeds it from the default alias.
+		const { lines, io } = makeIo();
+		const adapter = createClaudeAdapter();
+		adapter.onStart(io, CTX);
+		adapter.translate({
+			type: 'control_response',
+			response: { subtype: 'success', request_id: parse(lines[0]).request_id, response: { mode: 'default' } }
+		});
+		const seeded = adapter.translate({
+			type: 'control_response',
+			response: { subtype: 'success', request_id: parse(lines[1]).request_id, response: { models: CATALOG } }
+		});
+		expect(seeded).toEqual([
+			{
+				type: 'model_status',
+				provider: 'anthropic',
+				// The default/recommended alias's concrete resolvedModel + compact label.
+				model: 'claude-opus-4-8[1m]',
+				model_label: 'Opus 4.8 (1M)',
+				reasoning_effort: 'medium',
+				reasoning_efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+				context_window: 0,
+				context_limit: 0
+			}
+		]);
+		// The first init reports the same resolved model → no duplicate model_status
+		// (init still emits the full startup sequence regardless).
+		const init = adapter.translate(initFrame());
+		expect(init).toHaveLength(5);
+		expect(init[0]).toMatchObject({ type: 'startup', model: 'claude-opus-4-8[1m]' });
 	});
 
 	it('the bootstrap ack doubles as the readiness signal (init only arrives with the first turn)', () => {
@@ -448,10 +483,11 @@ describe('claude adapter: turns', () => {
 		expect(JSON.parse(String(denied[0].output))).toEqual({ path: '/etc/x', error: 'probe denies this' });
 	});
 
-	it('drops Task-subagent frames (parent_tool_use_id) and synthetic user notices', () => {
+	it('drops Task-subagent chatter (text/reasoning) and synthetic user notices', () => {
 		const { lines } = makeIo();
 		const adapter = createClaudeAdapter();
 		boot(adapter, lines);
+		// Subagent text stream is dropped (we don't render subagent chatter).
 		expect(
 			adapter.translate(
 				{ ...streamEvent({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'inner' } }), parent_tool_use_id: 'toolu_task' }
@@ -465,6 +501,56 @@ describe('claude adapter: turns', () => {
 				parent_tool_use_id: null
 			})
 		).toEqual([]);
+	});
+
+	it('surfaces a Task-subagent tool so its card fills and completes (bug: stuck running)', () => {
+		// A subagent's inner tool frames carry a non-null parent_tool_use_id. The
+		// old guard dropped EVERY such frame, so the card never filled its input and
+		// never completed — empty + spinning forever. Now the tool activity is
+		// surfaced (its assistant text / reasoning / user echoes stay dropped).
+		const { lines } = makeIo();
+		const adapter = createClaudeAdapter();
+		boot(adapter, lines);
+		// The subagent's streamed tool_use start (non-authoritative, empty input).
+		const start = adapter.translate({
+			...streamEvent({
+				type: 'content_block_start',
+				index: 0,
+				content_block: { type: 'tool_use', id: 'toolu_sub', name: 'Read', input: {} }
+			}),
+			parent_tool_use_id: 'toolu_task'
+		});
+		expect(start).toEqual([
+			{ type: 'tool_start', call_id: 'toolu_sub', name: 'read' },
+			{ type: 'tool_update', call_id: 'toolu_sub', output: JSON.stringify({ path: '' }) }
+		]);
+		// The authoritative assistant tool_use frame fills the input.
+		const filled = adapter.translate({
+			type: 'assistant',
+			message: {
+				id: 'm',
+				model: 'x',
+				content: [{ type: 'tool_use', id: 'toolu_sub', name: 'Read', input: { file_path: '/proj/x.ts' } }]
+			},
+			session_id: SID,
+			parent_tool_use_id: 'toolu_task'
+		});
+		expect(filled).toEqual([
+			{ type: 'tool_update', call_id: 'toolu_sub', output: JSON.stringify({ path: '/proj/x.ts' }) }
+		]);
+		// The subagent's tool_result completes the card.
+		const done = adapter.translate({
+			type: 'user',
+			message: {
+				role: 'user',
+				content: [{ type: 'tool_result', tool_use_id: 'toolu_sub', content: 'file body', is_error: false }]
+			},
+			session_id: SID,
+			parent_tool_use_id: 'toolu_task'
+		});
+		expect(done).toEqual([
+			{ type: 'tool_output', call_id: 'toolu_sub', name: 'read', output: JSON.stringify({ path: '/proj/x.ts' }), is_error: false }
+		]);
 	});
 });
 
@@ -634,6 +720,41 @@ describe('claude adapter: interrupt / modes / results', () => {
 		expect(
 			adapter.translate({ type: 'system', subtype: 'status', status: null, permissionMode: 'bypassPermissions', session_id: SID })
 		).toEqual([{ type: 'approval_mode', mode: 'full-auto' }]);
+	});
+
+	it('maps all five approval modes to claude permission modes and back', () => {
+		expect(toClaudeMode('read-only')).toBe('default');
+		expect(toClaudeMode('plan')).toBe('plan');
+		expect(toClaudeMode('auto')).toBe('auto');
+		expect(toClaudeMode('auto-edit')).toBe('acceptEdits');
+		expect(toClaudeMode('full-auto')).toBe('bypassPermissions');
+		for (const m of ['read-only', 'plan', 'auto', 'auto-edit', 'full-auto'] as const)
+			expect(fromClaudeMode(toClaudeMode(m))).toBe(m);
+		// Aliases the CLI may report.
+		expect(fromClaudeMode('manual')).toBe('read-only');
+		expect(fromClaudeMode('dontAsk')).toBe('full-auto');
+		// plan no longer collapses to read-only (the old bug).
+		expect(fromClaudeMode('plan')).toBe('plan');
+	});
+
+	it('plan and auto switch live via set_permission_mode + status ack', () => {
+		for (const [engineMode, claudeMode] of [
+			['plan', 'plan'],
+			['auto', 'auto']
+		] as const) {
+			const { lines } = makeIo();
+			const adapter = createClaudeAdapter();
+			boot(adapter, lines);
+			const frames = adapter.encodeOp({ op: 'set_approval_mode', mode: engineMode });
+			expect(parse(frames![0]).request).toEqual({ subtype: 'set_permission_mode', mode: claudeMode });
+			expect(
+				adapter.translate({ type: 'system', subtype: 'status', status: null, permissionMode: claudeMode, session_id: SID })
+			).toEqual([{ type: 'approval_mode', mode: engineMode }]);
+		}
+	});
+
+	it('extendedApprovalModes cap gates the claude-only plan/auto picker options', () => {
+		expect(CLAUDE_CAPS.extendedApprovalModes).toBe(true);
 	});
 
 	it('surfaces failed results as error + ready, with login guidance on auth failures', () => {

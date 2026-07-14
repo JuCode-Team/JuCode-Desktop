@@ -114,6 +114,7 @@ export function compactClaudeModel(resolvedModel: string, rawValue?: string): st
 
 export const CLAUDE_CAPS: BackendCaps = {
 	approvalModes: true, // set_permission_mode control request (live, acked)
+	extendedApprovalModes: true, // native plan + auto permission modes
 	hunkApproval: false, // can_use_tool is whole-call allow/deny
 	steer: false, // stdin is already a queue: mid-turn messages run as the next turn
 	interrupt: true, // control_request subtype interrupt
@@ -139,6 +140,10 @@ export const CLAUDE_CAPS: BackendCaps = {
 /** Desktop engine-mode → claude --permission-mode / set_permission_mode value. */
 export function toClaudeMode(mode: EngineApprovalMode): string {
 	switch (mode) {
+		case 'plan':
+			return 'plan';
+		case 'auto':
+			return 'auto';
 		case 'auto-edit':
 			return 'acceptEdits';
 		case 'full-auto':
@@ -148,16 +153,19 @@ export function toClaudeMode(mode: EngineApprovalMode): string {
 	}
 }
 
-/** Claude permissionMode → desktop engine mode ('plan' and unknowns → read-only). */
+/** Claude permissionMode → desktop engine mode (unknowns → read-only). */
 export function fromClaudeMode(mode: string): EngineApprovalMode {
 	switch (mode) {
-		case 'acceptEdits':
+		case 'plan':
+			return 'plan';
 		case 'auto':
+			return 'auto';
+		case 'acceptEdits':
 			return 'auto-edit';
 		case 'bypassPermissions':
 		case 'dontAsk':
 			return 'full-auto';
-		default: // 'default' | 'plan' | 'manual' | …
+		default: // 'default' | 'manual' | …
 			return 'read-only';
 	}
 }
@@ -473,6 +481,37 @@ export function createClaudeAdapter(): EngineAdapter {
 		return [{ type: 'tool_output', call_id: id, name: meta.name, output, is_error: isError }];
 	}
 
+	/** A frame from a Task subagent's inner stream (non-null parent_tool_use_id).
+	 *  Surface only its TOOL activity so its cards fill (authoritative assistant
+	 *  tool_use frame) and complete (user tool_result frame) — otherwise the outer
+	 *  card that spawned the subagent shows empty and spins forever. The subagent's
+	 *  own assistant text / reasoning / user echoes are dropped: we don't render
+	 *  subagent chatter (caps.subagents = false). */
+	function subagentFrame(msg: Record<string, unknown>): NormalizedEvent[] {
+		if (msg.type === 'stream_event') {
+			const ev = (msg as unknown as StreamEventFrame).event;
+			if (ev?.type === 'content_block_start' && ev.content_block?.type === 'tool_use')
+				return toolUseEvents(ev.content_block, false);
+			return [];
+		}
+		if (msg.type === 'assistant') {
+			const content = (msg as unknown as AssistantFrame).message?.content;
+			const list = Array.isArray(content) ? (content as ContentBlock[]) : [];
+			return list
+				.filter((b): b is ToolUseBlock => b.type === 'tool_use')
+				.flatMap((b) => toolUseEvents(b, true));
+		}
+		if (msg.type === 'user') {
+			const frame = msg as unknown as UserFrame;
+			const content = frame.message?.content;
+			if (!Array.isArray(content)) return [];
+			return (content as ContentBlock[])
+				.filter((b): b is ToolResultBlock => b.type === 'tool_result')
+				.flatMap((b) => toolResultEvents(b, frame.tool_use_result));
+		}
+		return [];
+	}
+
 	// --- frame handlers ----------------------------------------------------------
 
 	function onInit(frame: SystemInitFrame): NormalizedEvent[] {
@@ -742,8 +781,22 @@ export function createClaudeAdapter(): EngineAdapter {
 				catalog = (Array.isArray(models) ? models : [])
 					.map((m) => m as ClaudeModelInfo)
 					.filter((m) => typeof m?.value === 'string' && m.value);
-				// tag 'view' = a /model pick request; the onStart prefetch is silent.
-				return tag === 'view' ? [modelViewEvent()] : [];
+				// tag 'view' = a /model pick request → open the picker.
+				if (tag === 'view') return [modelViewEvent()];
+				// onStart prefetch: seed the model button before the first turn (the
+				// real model only arrives with the first system/init). Use the
+				// default/recommended alias's concrete resolvedModel (falls back to the
+				// first concrete row). Only when we don't already have a model — onInit
+				// later sets the real one and stays silent if it matches.
+				if (!model) {
+					const def = catalog.find((m) => /default|recommended/i.test(m.displayName || m.value)) ?? catalog[0];
+					const resolved = def?.resolvedModel || def?.value;
+					if (resolved) {
+						model = resolved;
+						return [modelStatus()];
+					}
+				}
+				return [];
 			}
 			case 'set_model': {
 				// Ack of a /model pick: the switch happened in place (verified live —
@@ -788,10 +841,11 @@ export function createClaudeAdapter(): EngineAdapter {
 		onStart(io_: AdapterIO, ctx_: SessionCtx) {
 			// Full per-process reset: pending approvals/requests died with the child.
 			io = io_;
-			mode =
-				ctx_.approvalMode === 'edits' || ctx_.approvalMode === 'all'
-					? toEngineMode(ctx_.approvalMode)
-					: 'read-only';
+			mode = (['ask', 'plan', 'auto', 'edits', 'all'] as const).includes(
+				ctx_.approvalMode as 'ask' | 'plan' | 'auto' | 'edits' | 'all'
+			)
+				? toEngineMode(ctx_.approvalMode as 'ask' | 'plan' | 'auto' | 'edits' | 'all')
+				: 'read-only';
 			requestSeq = 0;
 			pendingCtl = new Map();
 			started = false;
@@ -826,8 +880,9 @@ export function createClaudeAdapter(): EngineAdapter {
 			if (!msg) return [];
 			try {
 				// Frames tagged with a parent tool id belong to a Task subagent's
-				// inner stream — skip them (caps.subagents = false).
-				if (str(msg.parent_tool_use_id)) return [];
+				// inner stream: surface their tool activity (so the spawning card
+				// fills + completes) but drop their chatter (caps.subagents = false).
+				if (str(msg.parent_tool_use_id)) return subagentFrame(msg);
 				switch (msg.type) {
 					case 'system': {
 						if (msg.subtype === 'init') return onInit(msg as unknown as SystemInitFrame);

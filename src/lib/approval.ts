@@ -4,8 +4,12 @@
 // engine's, reconciles from `approval_mode` events, and builds structured
 // `approve` ops — including per-hunk partial approvals for edit tools.
 
-export type ApprovalMode = 'ask' | 'edits' | 'all';
-export type EngineApprovalMode = 'read-only' | 'auto-edit' | 'full-auto';
+// The shared 3-mode enum drives jucode/codex; claude additionally exposes
+// 'plan' (read-only planning) and 'auto' (model auto-approves tool calls),
+// gated behind BackendCaps.extendedApprovalModes so only the claude picker
+// offers them. plan/auto map 1:1 between the UI and engine layers.
+export type ApprovalMode = 'ask' | 'plan' | 'auto' | 'edits' | 'all';
+export type EngineApprovalMode = 'read-only' | 'plan' | 'auto' | 'auto-edit' | 'full-auto';
 
 // File-mutating tools the engine gates (the rest it gates are shell tools).
 // Still used by ChatState to feed the Changes panel from tool_output events.
@@ -13,11 +17,15 @@ export const EDIT_TOOLS = ['write', 'edit', 'str_replace', 'hashline_edit', 'app
 
 const UI_TO_ENGINE: Record<ApprovalMode, EngineApprovalMode> = {
 	ask: 'read-only',
+	plan: 'plan',
+	auto: 'auto',
 	edits: 'auto-edit',
 	all: 'full-auto'
 };
 const ENGINE_TO_UI: Record<EngineApprovalMode, ApprovalMode> = {
 	'read-only': 'ask',
+	plan: 'plan',
+	auto: 'auto',
 	'auto-edit': 'edits',
 	'full-auto': 'all'
 };
@@ -43,6 +51,16 @@ export function buildSetApprovalModeOp(mode: ApprovalMode): {
 	mode: EngineApprovalMode;
 } {
 	return { op: 'set_approval_mode', mode: toEngineMode(mode) };
+}
+
+/** Whether a claude approval-mode change to `mode` must go through an engine
+ *  respawn (spawned with `--permission-mode bypassPermissions` + `--resume`)
+ *  rather than a live `set_permission_mode` control frame: claude does not honor
+ *  a runtime switch INTO bypassPermissions (no system/status follow-up, so the
+ *  UI never reconciles). Every other mode switches live. Non-claude backends
+ *  never respawn. */
+export function needsClaudeYoloRespawn(backendId: string, mode: EngineApprovalMode): boolean {
+	return backendId === 'claude' && mode === 'full-auto';
 }
 
 // --- per-hunk approval ------------------------------------------------------

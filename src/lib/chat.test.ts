@@ -68,6 +68,16 @@ describe('ChatState.handle', () => {
 		expect(tool).toMatchObject({ kind: 'tool', name: 'read', running: false, isError: false });
 	});
 
+	it('sweeps a still-running tool card to done when the turn ends (lost tool_output)', () => {
+		const c = new ChatState();
+		c.handle({ type: 'tool_start', call_id: 'lost', name: 'read' });
+		// No tool_output arrives (e.g. a subagent frame whose tool_result never
+		// mapped). The turn ending must not leave the card spinning forever.
+		c.handle({ type: 'status', message: 'ready' });
+		const tool = c.messages.find((m) => m.kind === 'tool');
+		expect(tool).toMatchObject({ kind: 'tool', name: 'read', running: false });
+	});
+
 	it('resolves a pencil rewind intent from checkpoint_view by position', () => {
 		const c = new ChatState();
 		c.rewindIntent = { userIndex: 1, text: 'edit me' };

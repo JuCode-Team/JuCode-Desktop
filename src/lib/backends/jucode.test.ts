@@ -7,9 +7,14 @@ describe('jucode adapter (passthrough)', () => {
 
 	it('declares every capability', () => {
 		expect(adapter.id).toBe('jucode');
+		// extendedApprovalModes is a claude-only quirk (its native plan/auto
+		// permission modes), not a superset capability — the native engine uses the
+		// shared read-only/auto-edit/full-auto trio, so it is legitimately false.
 		for (const [key, value] of Object.entries(JUCODE_CAPS)) {
+			if (key === 'extendedApprovalModes') continue;
 			expect(value, `cap ${key} must be true for the native engine`).toBe(true);
 		}
+		expect(JUCODE_CAPS.extendedApprovalModes).toBe(false);
 		expect(adapter.caps).toEqual(JUCODE_CAPS);
 	});
 

@@ -273,6 +273,34 @@ export class SessionStore {
 		}
 	}
 
+	/**
+	 * Switch a claude session INTO yolo (bypassPermissions) via a respawn: the
+	 * runtime `set_permission_mode bypassPermissions` control frame isn't honored
+	 * (no system/status follow-up), so we restart the child with
+	 * `--permission-mode bypassPermissions`, resuming the conversation with
+	 * `--resume <session-id>` when there is one to preserve context. Every other
+	 * mode switches live and never comes here (see approval.needsClaudeYoloRespawn).
+	 */
+	async respawnClaudeYolo(id: string) {
+		const s = this.allSessions.find((x) => x.id === id);
+		if (!s || s.backendId !== 'claude') return;
+		const sid = s.chat.sessionId;
+		const canResume = s.chat.resumable;
+		// The close below is intentional — don't let handleExit treat it as a crash.
+		s.chat.switching = true;
+		s.chat.engineState = 'connecting';
+		try {
+			await closeSession(id);
+			await this.#spawn(s, this.projectPathOf(id), undefined, {
+				permission_mode: 'bypassPermissions',
+				...(sid && canResume ? { resume: sid } : {})
+			});
+		} catch (e) {
+			s.chat.switching = false;
+			this.#engineFailed(s.chat, e);
+		}
+	}
+
 	removeSession(id: string) {
 		closeSession(id).catch(() => {});
 		unregisterAdapter(id);
