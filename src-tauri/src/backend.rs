@@ -268,6 +268,7 @@ pub fn build_args(kind: BackendKind, opts: &BackendOpts) -> Vec<String> {
         BackendKind::Jucode => vec!["serve".to_string()],
         BackendKind::Codex => vec!["app-server".to_string()],
         BackendKind::Claude => {
+            let yolo = opts.permission_mode.as_deref() == Some("bypassPermissions");
             let mut args: Vec<String> = [
                 "--print",
                 "--input-format",
@@ -277,23 +278,25 @@ pub fn build_args(kind: BackendKind, opts: &BackendOpts) -> Vec<String> {
                 "--include-partial-messages",
                 "--verbose",
                 "--replay-user-messages",
-                // Route interactive permission prompts over stdio as
-                // `control_request` frames (subtype can_use_tool). Verified
-                // against claude 2.1.208: without this flag the CLI silently
-                // auto-denies gated tools in --print mode instead of asking.
-                "--permission-prompt-tool",
-                "stdio",
             ]
             .iter()
             .map(|s| s.to_string())
             .collect();
-            if let Some(mode) = &opts.permission_mode {
-                // bypassPermissions is only honored when the session is launched
-                // with --dangerously-skip-permissions; a plain --permission-mode
-                // bypassPermissions (or a live set) is rejected by the CLI.
-                if mode == "bypassPermissions" {
-                    args.push("--dangerously-skip-permissions".to_string());
-                } else {
+            if yolo {
+                // Full bypass: nothing prompts. This is honored only when launched
+                // with --dangerously-skip-permissions (a plain --permission-mode
+                // bypassPermissions, or a live set, is rejected). It also conflicts
+                // with --permission-prompt-tool (the CLI errors "error_during_
+                // execution"), so that flag is omitted here.
+                args.push("--dangerously-skip-permissions".to_string());
+            } else {
+                // Route interactive permission prompts over stdio as
+                // `control_request` frames (subtype can_use_tool). Verified against
+                // claude 2.1.208: without this flag the CLI silently auto-denies
+                // gated tools in --print mode instead of asking.
+                args.push("--permission-prompt-tool".to_string());
+                args.push("stdio".to_string());
+                if let Some(mode) = &opts.permission_mode {
                     args.push("--permission-mode".to_string());
                     args.push(mode.clone());
                 }
@@ -507,6 +510,9 @@ mod tests {
         let args = build_args(BackendKind::Claude, &opts);
         assert!(args.iter().any(|a| a == "--dangerously-skip-permissions"));
         assert!(!args.iter().any(|a| a == "bypassPermissions"));
+        // yolo omits --permission-prompt-tool: pairing it with the skip flag makes
+        // the CLI error "error_during_execution".
+        assert!(!args.iter().any(|a| a == "--permission-prompt-tool"));
         // A normal mode still maps to --permission-mode <mode>.
         let opts = validate_opts(
             BackendKind::Claude,
