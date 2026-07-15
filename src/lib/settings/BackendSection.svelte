@@ -244,7 +244,7 @@
 		justify-content: center;
 		width: 30px;
 		height: 30px;
-		border-radius: 8px;
+		border-radius: var(--r-sm);
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
 		flex-shrink: 0;
@@ -305,7 +305,7 @@
 		font-size: 12px;
 		font-family: var(--font-mono);
 		outline: none;
-		transition: border-color 0.12s;
+		transition: border-color var(--t-fast) var(--ease-out);
 	}
 	.tf::placeholder {
 		color: var(--dim2);
@@ -360,7 +360,7 @@
 	}
 	.chev {
 		display: inline-flex;
-		transition: transform 0.12s;
+		transition: transform var(--t-med) var(--ease-spring);
 	}
 	.chev.open {
 		transform: rotate(90deg);

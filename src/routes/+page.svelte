@@ -2,7 +2,7 @@
 	import { onMount, tick, untrack } from 'svelte';
 	import { listen } from '@tauri-apps/api/event';
 	import { getCurrentWebview } from '@tauri-apps/api/webview';
-	import { X, Check, PanelRight, ChevronDown, ChevronUp, Search, LoaderCircle } from 'lucide-svelte';
+	import { X, Check, PanelRight, PanelLeft, ChevronDown, ChevronUp, Search, LoaderCircle } from 'lucide-svelte';
 	import { open, ask, message } from '@tauri-apps/plugin-dialog';
 	import { cycleTheme } from '$lib/theme.svelte';
 	import {
@@ -29,8 +29,7 @@
 		type Op
 	} from '$lib/protocol';
 	import { dispatch } from '$lib/backends/router';
-	import { caps, type BackendId } from '$lib/backends';
-	import BackendPicker from '$lib/shell/BackendPicker.svelte';
+	import { caps } from '$lib/backends';
 	import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
 	import { updater } from '$lib/updater.svelte';
 	import { browser, type WebRef } from '$lib/browser.svelte';
@@ -136,8 +135,6 @@
 	let showPalette = $state(false);
 	// 「新建并行任务」对话框：为哪个（主仓库）项目开任务。
 	let taskDialogFor = $state<Project | null>(null);
-	// 「新建会话」后端选择：为哪个项目开新会话（null = 关闭）。
-	let backendPickFor = $state<Project | null>(null);
 
 	// Ops flow through the active session's backend adapter; an unsupported op
 	// (non-jucode stub backends) surfaces as an inline system notice.
@@ -186,16 +183,16 @@
 			c.messages.push({ kind: 'system', text: t('shell.backend.claudeHistoryFail', { msg: String(e) }) });
 		}
 	}
-	// New-session flow: pick the engine backend first (default = the project's
-	// last-used backend, falling back to the settings default).
+	// New-session flow: create the session immediately with the project's
+	// last-used backend (falling back to the settings default) — the composer's
+	// backend selector lets the user switch until the first message is sent.
 	function newSessionFlow(p: Project) {
-		backendPickFor = p;
+		store.addSession(p);
 	}
-	function pickBackend(b: BackendId) {
-		const p = backendPickFor;
-		backendPickFor = null;
-		if (p) store.addSession(p, undefined, b);
-	}
+
+	// The backend is only switchable while the session is virgin: no user turn
+	// yet (an optimistic push counts) and not a resumed conversation.
+	const backendLocked = $derived(!active || !!active.restored || (chat?.userTurns ?? 0) > 0);
 
 	function refreshAuth() {
 		readAuthProviders()
@@ -241,9 +238,11 @@
 		if (!model) return null;
 		return { provider: pick.id, baseUrl: pick.base_url, format: pick.format, model };
 	});
-	let showRight = $state(true);
+	let showRight = $state(false);
 	let rightWidth = $state(340);
 	let sidebarWidth = $state(248);
+	let showSidebar = $state(true);
+	let sbResizing = $state(false);
 	let resizing = $state(false);
 	let winW = $state(1200);
 	// Built-in editor: a toggleable split right of the chat column (⌘E), with a
@@ -276,6 +275,11 @@
 		autoCollapsedRight = false;
 	}
 
+	function toggleSidebar() {
+		showSidebar = !showSidebar;
+		localStorage.setItem('jucode-sidebar-visible', showSidebar ? '1' : '0');
+	}
+
 	// Opening a page in the embedded browser (agent tool / element pick / typed
 	// URL) must reveal the right dock, or the webview has nowhere to render.
 	$effect(() => {
@@ -296,7 +300,6 @@
 			showPalette ||
 			showQuickOpen ||
 			!!taskDialogFor ||
-			!!backendPickFor ||
 			// The model picker is now an in-composer popover (like effort/approval),
 			// not a centered overlay, so it needn't collapse the browser webview.
 			(!!chat?.picker && chat.picker.kind !== 'model') ||
@@ -309,10 +312,12 @@
 		e.preventDefault();
 		const startX = e.clientX;
 		const startW = sidebarWidth;
+		sbResizing = true;
 		const move = (ev: PointerEvent) => {
 			sidebarWidth = Math.min(420, Math.max(190, startW + (ev.clientX - startX)));
 		};
 		const up = () => {
+			sbResizing = false;
 			localStorage.setItem('jucode-sidebar-width', String(sidebarWidth));
 			window.removeEventListener('pointermove', move);
 			window.removeEventListener('pointerup', up);
@@ -1068,6 +1073,7 @@
 		if (savedW >= 260 && savedW <= 640) rightWidth = savedW;
 		const savedSb = Number(localStorage.getItem('jucode-sidebar-width'));
 		if (savedSb >= 190 && savedSb <= 420) sidebarWidth = savedSb;
+		if (localStorage.getItem('jucode-sidebar-visible') === '0') showSidebar = false;
 		const savedEd = Number(localStorage.getItem('jucode-editor-width'));
 		if (savedEd >= 360 && savedEd <= 1400) editorWidth = savedEd;
 		const cleanups: Array<() => void> = [];
@@ -1195,11 +1201,16 @@
 <svelte:window onkeydown={onWindowKey} bind:innerWidth={winW} />
 
 <div class="app">
+	<!-- Sits right of the macOS traffic lights, above everything: toggles the session list. -->
+	<button class="sb-toggle" class:on={showSidebar} onclick={toggleSidebar} aria-label="toggle sidebar" title={t('shell.toggleSidebar')}>
+		<PanelLeft size={16} />
+	</button>
 	<!-- LEFT: navigation + sessions -->
 	<Sidebar
 		{projects}
 		{activeId}
-		width={sidebarWidth}
+		width={showSidebar ? sidebarWidth : 0}
+		resizing={sbResizing}
 		{loggedIn}
 		providerName={chat?.provider ?? ''}
 		updateAvailable={updater.available}
@@ -1213,15 +1224,13 @@
 		onUnarchiveSession={(id) => store.unarchiveSession(id)}
 		onHistory={(p) => store.openHistory(p)}
 		onSettings={() => (showSettings = true)}
-		onMarket={() => (showMarket = true)}
-		onCommandPalette={() => (showPalette = true)}
 	/>
-	<div class="resizer side" role="separator" aria-label="resize sidebar" onpointerdown={startSidebarResize}></div>
+	<div class="resizer side" class:hidden={!showSidebar} role="separator" aria-label="resize sidebar" onpointerdown={startSidebarResize}></div>
 
 	<!-- CENTER: chat -->
 	<div class="center">
 		{#if chat}
-			<header data-tauri-drag-region>
+			<header data-tauri-drag-region class:shifted={!showSidebar}>
 				<div class="htitle" data-tauri-drag-region>
 					<span class="hname">{chat.title}</span>
 					<span class="hcrumb">{project}</span>
@@ -1323,6 +1332,8 @@
 				modelActive={activeModel}
 				modelTitle={pickerTitle}
 				modelSearch={showPickerSearch}
+				{backendLocked}
+				onBackend={(b) => store.switchBackend(activeId, b)}
 				bind:pickerQuery
 				bind:pickerSelIdx={selIdx}
 				onEffort={chooseEffort}
@@ -1369,7 +1380,7 @@
 	</aside>
 
 	{#if showSettings}
-		<Settings sessionId={activeId} {chat} initialSection={settingsInitial} onAuthChange={refreshAuth} onClose={() => { showSettings = false; settingsInitial = 'overview'; loadProviders(); }} />
+		<Settings sessionId={activeId} {chat} initialSection={settingsInitial} onAuthChange={refreshAuth} onMarket={() => { showSettings = false; showMarket = true; }} onClose={() => { showSettings = false; settingsInitial = 'overview'; loadProviders(); }} />
 	{/if}
 
 	{#if showMarket}
@@ -1451,10 +1462,6 @@
 		/>
 	{/if}
 
-	{#if backendPickFor}
-		<BackendPicker lastUsed={backendPickFor.lastBackend} onPick={pickBackend} onClose={() => (backendPickFor = null)} />
-	{/if}
-
 	{#if taskDialogFor}
 		<TaskDialog project={taskDialogFor} onClose={() => (taskDialogFor = null)} onCreated={openTaskProject} />
 	{/if}
@@ -1484,6 +1491,37 @@
 		height: 100vh;
 		overflow: hidden;
 	}
+	/* Session-list toggle, pinned right of the macOS traffic lights. Centered on
+	 * their measured macOS 26 metrics: 13.5pt circles with centerline at
+	 * y≈15.75pt, green light's right edge at x≈68.5pt, 9.5pt gaps between
+	 * lights — so top + height/2 ≈ 15.75, and left continues the lights' gap. */
+	.sb-toggle {
+		position: fixed;
+		top: 2.75px;
+		left: 78px;
+		z-index: 30;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 26px;
+		height: 26px;
+		border: none;
+		border-radius: var(--r-sm);
+		background: none;
+		color: var(--dim);
+		cursor: pointer;
+		transition:
+			background var(--t-fast) var(--ease-out),
+			color var(--t-fast) var(--ease-out),
+			transform var(--t-fast) var(--ease-spring);
+	}
+	.sb-toggle:hover {
+		background: var(--surface2);
+		color: var(--text);
+	}
+	.sb-toggle:active {
+		transform: scale(0.9);
+	}
 
 	/* ---------- center ---------- */
 	.center {
@@ -1511,9 +1549,30 @@
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
 		cursor: pointer;
 		z-index: 10;
+		animation: jump-in var(--t-med) var(--ease-spring);
+		transition:
+			background var(--t-fast) var(--ease-out),
+			transform var(--t-fast) var(--ease-spring),
+			box-shadow var(--t-med) var(--ease-out);
+	}
+	/* pop-in variant that keeps the horizontal centering transform */
+	@keyframes jump-in {
+		from {
+			opacity: 0;
+			transform: translateX(-50%) translateY(6px) scale(0.9);
+		}
+		to {
+			opacity: 1;
+			transform: translateX(-50%);
+		}
 	}
 	.jump:hover {
 		background: var(--surface2);
+		transform: translateX(-50%) translateY(-1px);
+		box-shadow: 0 6px 20px rgba(0, 0, 0, 0.32);
+	}
+	.jump:active {
+		transform: translateX(-50%) scale(0.92);
 	}
 	/* Match the composer's outer frame (max-width 880, 18px side padding) so the
 	   approval box lines up flush with the input box. */
@@ -1544,6 +1603,12 @@
 		gap: 12px;
 		padding: 14px 18px;
 		border-bottom: 1px solid var(--hairline);
+		transition: padding-left var(--t-med) var(--ease-out);
+	}
+	/* Sidebar hidden → the traffic lights + sidebar toggle overlay the header;
+	   shift the title clear of them. */
+	header.shifted {
+		padding-left: 122px;
 	}
 	.htitle {
 		display: flex;
@@ -1575,10 +1640,17 @@
 		background: none;
 		color: var(--dim);
 		cursor: pointer;
+		transition:
+			background var(--t-fast) var(--ease-out),
+			color var(--t-fast) var(--ease-out),
+			transform var(--t-fast) var(--ease-spring);
 	}
 	.hicon:hover {
 		background: var(--surface2);
 		color: var(--text);
+	}
+	.hicon:active {
+		transform: scale(0.9);
 	}
 	.hicon.on {
 		color: var(--accent-bright);
@@ -1626,7 +1698,7 @@
 		gap: 10px;
 		padding: 24px;
 		text-align: center;
-		animation: rise 0.3s ease both;
+		animation: rise var(--t-slow) var(--ease-out) both;
 	}
 	.spawn-spin {
 		display: inline-flex;
@@ -1701,6 +1773,7 @@
 		background: transparent;
 		margin-left: -3px;
 		z-index: 5;
+		transition: background var(--t-med) var(--ease-out);
 	}
 	.resizer:hover {
 		background: var(--accent-soft);
@@ -1720,7 +1793,7 @@
 		background: var(--bg);
 		border-left: 1px solid var(--hairline);
 		overflow: hidden;
-		transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+		transition: width var(--t-med) var(--ease-out);
 	}
 	.right.resizing {
 		transition: none;
@@ -1741,6 +1814,7 @@
 		align-items: center;
 		justify-content: center;
 		z-index: 50;
+		animation: fade var(--t-fast) var(--ease-out);
 	}
 	.modal {
 		width: min(560px, 92vw);
@@ -1752,6 +1826,7 @@
 		border-radius: var(--r-lg);
 		box-shadow: var(--shadow-modal);
 		overflow: hidden;
+		animation: pop-in var(--t-med) var(--ease-spring);
 	}
 	.modal-head {
 		display: flex;
@@ -1784,7 +1859,7 @@
 		color: var(--dim);
 		background: var(--surface2);
 		border: 1px solid var(--border);
-		border-radius: 7px;
+		border-radius: var(--r-sm);
 		padding: 8px 10px;
 		word-break: break-all;
 	}
@@ -1802,9 +1877,16 @@
 		background: var(--surface2);
 		color: var(--text);
 		cursor: pointer;
+		transition:
+			background var(--t-fast) var(--ease-out),
+			border-color var(--t-fast) var(--ease-out),
+			transform var(--t-fast) var(--ease-spring);
 	}
 	.btn:hover {
 		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
+	}
+	.btn:active {
+		transform: scale(0.97);
 	}
 	.btn.ghost {
 		color: var(--dim);

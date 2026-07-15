@@ -311,7 +311,7 @@
 	/* keep the tab's close button quiet until the tab is hovered or active */
 	.tab :global(.ib) {
 		opacity: 0;
-		transition: opacity 0.12s;
+		transition: opacity var(--t-fast) var(--ease-out);
 	}
 	.tab:hover :global(.ib),
 	.tab.on :global(.ib) {
@@ -359,7 +359,8 @@
 		border: 1px solid var(--border);
 		border-radius: var(--r-md);
 		box-shadow: var(--shadow-pop);
-		animation: rise 0.12s ease;
+		transform-origin: bottom left;
+		animation: pop-in var(--t-med) var(--ease-spring);
 	}
 	.add-item {
 		text-align: left;
@@ -429,7 +430,7 @@
 		color: var(--dim);
 		font-size: 12.5px;
 		cursor: pointer;
-		transition: border-color 0.12s, color 0.12s, background 0.12s;
+		transition: border-color var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out);
 	}
 	.pcardbtn:hover {
 		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));

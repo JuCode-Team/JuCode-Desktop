@@ -435,7 +435,7 @@
 	.chev {
 		display: inline-flex;
 		color: var(--dim2);
-		transition: transform 0.15s;
+		transition: transform var(--t-med) var(--ease-spring);
 		flex-shrink: 0;
 	}
 	.chev.up {
@@ -579,7 +579,7 @@
 		font-size: 12.5px;
 		font-family: var(--font-mono);
 		outline: none;
-		transition: border-color 0.12s;
+		transition: border-color var(--t-fast) var(--ease-out);
 	}
 	.ta::placeholder {
 		color: var(--dim2);

@@ -93,6 +93,40 @@ describe('SessionStore lifecycle', () => {
 		expect(s.chat.resumeBroken).toBe(false);
 	});
 
+	it('switchBackend swaps a virgin session in place (same id, new engine)', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p);
+		expect(p.sessions[0].backendId).toBe('jucode');
+		await store.switchBackend(id, 'claude');
+		const s = p.sessions[0];
+		expect(s.id).toBe(id); // same tab
+		expect(s.backendId).toBe('claude');
+		expect(s.chat.backendId).toBe('claude');
+		expect(s.adapter.id).toBe('claude');
+		expect(p.lastBackend).toBe('claude');
+		// claude spawns pin a resumable session uuid.
+		const call = (createSession as unknown as { mock: { calls: unknown[][] } }).mock.calls.at(-1)!;
+		expect(call[2]).toBe('claude');
+		expect((call[3] as { session_id?: string }).session_id).toBe(s.chat.sessionId);
+		expect(s.chat.sessionId).not.toBe('');
+	});
+
+	it('switchBackend refuses once the first user turn exists or the session was restored', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p);
+		p.sessions[0].chat.messages.push({ kind: 'user', text: 'hi' });
+		await store.switchBackend(id, 'codex');
+		expect(p.sessions[0].backendId).toBe('jucode');
+
+		const rid = store.restoreSession(p, 'sid-1', 'old', 'jucode');
+		await store.switchBackend(rid, 'codex');
+		expect(p.sessions.find((s) => s.id === rid)?.backendId).toBe('jucode');
+	});
+
 	it('removeProject tears down its sessions and clears a dangling activeId', () => {
 		const store = new SessionStore();
 		const p = proj();

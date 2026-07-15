@@ -5,6 +5,14 @@ const settings = {
 		title: '设置',
 		language: '语言',
 		theme: '主题',
+		themeSystem: '跟随系统',
+		themeLight: '浅色',
+		themeDark: '深色',
+		market: {
+			groupLabel: '扩展市场',
+			hint: '浏览并安装技能扩展。',
+			open: '打开市场'
+		},
 		nav: {
 			overview: '概览',
 			overviewSub: 'Token 用量统计',
@@ -236,6 +244,14 @@ const settings = {
 		title: 'Settings',
 		language: 'Language',
 		theme: 'Theme',
+		themeSystem: 'System',
+		themeLight: 'Light',
+		themeDark: 'Dark',
+		market: {
+			groupLabel: 'Extension market',
+			hint: 'Browse and install skill extensions.',
+			open: 'Open marketplace'
+		},
 		nav: {
 			overview: 'Overview',
 			overviewSub: 'Token usage stats',

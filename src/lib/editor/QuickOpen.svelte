@@ -104,7 +104,7 @@
 		border-radius: var(--r-lg);
 		box-shadow: var(--shadow-modal);
 		overflow: hidden;
-		animation: rise 0.14s ease;
+		animation: pop-in var(--t-med) var(--ease-spring);
 	}
 	.qhead {
 		display: flex;

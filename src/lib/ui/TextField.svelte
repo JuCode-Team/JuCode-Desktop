@@ -36,7 +36,7 @@
 		font-size: 13px;
 		font-family: var(--font-sans);
 		outline: none;
-		transition: border-color 0.12s;
+		transition: border-color var(--t-fast) var(--ease-out);
 	}
 	.tf.mono {
 		font-family: var(--font-mono);

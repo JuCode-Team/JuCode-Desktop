@@ -268,6 +268,7 @@
 		background: color-mix(in oklab, var(--warn) 9%, var(--panel));
 		border: 1px solid color-mix(in oklab, var(--warn) 38%, transparent);
 		border-radius: var(--r-md);
+		animation: rise var(--t-slow) var(--ease-out) both;
 	}
 	/* AskUserQuestion uses the accent (not the warn) palette — it's a prompt. */
 	.approval.ask {
@@ -349,7 +350,13 @@
 		background: var(--sidebar);
 		color: var(--text);
 		cursor: pointer;
-		transition: border-color 0.12s ease, background 0.12s ease;
+		transition:
+			border-color var(--t-fast) var(--ease-out),
+			background var(--t-fast) var(--ease-out),
+			transform var(--t-fast) var(--ease-spring);
+	}
+	.q-opt:active {
+		transform: scale(0.99);
 	}
 	.q-opt:hover {
 		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
@@ -502,7 +509,7 @@
 	}
 	.chev {
 		display: inline-flex;
-		transition: transform 0.12s;
+		transition: transform var(--t-med) var(--ease-spring);
 	}
 	.chev.open {
 		transform: rotate(90deg);

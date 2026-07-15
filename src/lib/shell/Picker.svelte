@@ -133,7 +133,8 @@
 		max-height: min(60vh, 420px);
 		border-radius: var(--r-md);
 		box-shadow: var(--shadow-pop);
-		animation: rise 0.12s ease;
+		transform-origin: bottom left;
+		animation: pop-in var(--t-med) var(--ease-spring);
 	}
 	@keyframes rise {
 		from {

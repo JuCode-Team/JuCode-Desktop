@@ -1,11 +1,12 @@
 <script lang="ts">
-	import { Send, Square, Paperclip, FastForward, ShieldCheck, Camera, Video, CircleStop, Mic, LoaderCircle } from 'lucide-svelte';
+	import { Send, Square, Paperclip, FastForward, ShieldCheck, Camera, Video, CircleStop, Mic, LoaderCircle, Check, ChevronDown } from 'lucide-svelte';
 	import { message } from '@tauri-apps/plugin-dialog';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Vendor from '$lib/Vendor.svelte';
+	import BackendIcon from '$lib/BackendIcon.svelte';
 	import Segmented from '$lib/ui/Segmented.svelte';
 	import EffortSlider from '$lib/ui/EffortSlider.svelte';
-	import { listFiles, saveTempImage, transcribeAudio } from '$lib/protocol';
+	import { checkBackend, listFiles, saveTempImage, transcribeAudio } from '$lib/protocol';
 	import { VoiceRecorder } from '$lib/audio';
 	import { buildEntries, mentionMatches, type AtEntry } from '$lib/mention';
 	import { t } from '$lib/i18n';
@@ -16,7 +17,8 @@
 	import Picker from '$lib/shell/Picker.svelte';
 	import type { ChatState } from '$lib/chat.svelte';
 	import type { ApprovalMode } from '$lib/approval';
-	import { caps } from '$lib/backends';
+	import { caps, BACKEND_IDS, BACKEND_LABELS, type BackendId } from '$lib/backends';
+	import { loadBackendSettings, versionLabel } from '$lib/backends/settings';
 
 	type PickerRow = {
 		id: string;
@@ -41,6 +43,8 @@
 		modelActive,
 		modelTitle = '',
 		modelSearch = false,
+		backendLocked = true,
+		onBackend,
 		onSubmit,
 		onStop,
 		onSteer,
@@ -66,6 +70,10 @@
 		modelActive?: { model: string; reasoning_efforts: string[]; active: boolean };
 		modelTitle?: string;
 		modelSearch?: boolean;
+		/** False only while the session is still virgin (no user turn) — the
+		 *  backend selector is interactive then and a fixed label afterwards. */
+		backendLocked?: boolean;
+		onBackend?: (b: BackendId) => void;
 		onSubmit: () => void;
 		onStop: () => void;
 		onSteer: () => void;
@@ -83,6 +91,27 @@
 	let slashIdx = $state(0);
 	let showEffort = $state(false);
 	let showApproval = $state(false);
+
+	// Backend selector (new sessions only — locked after the first user turn).
+	// Availability is probed best-effort on first open, same as the old modal.
+	let showBackend = $state(false);
+	let backendProbe = $state<Partial<Record<BackendId, { found: boolean; version: string }>>>({});
+	let probed = false;
+	function toggleBackend() {
+		showBackend = !showBackend;
+		if (!showBackend || probed) return;
+		probed = true;
+		const settings = loadBackendSettings();
+		for (const id of BACKEND_IDS) {
+			checkBackend(id, settings.paths[id])
+				.then((s) => (backendProbe[id] = { found: s.found, version: versionLabel(s) }))
+				.catch(() => {});
+		}
+	}
+	function pickBackend(id: BackendId) {
+		showBackend = false;
+		if (id !== chat.backendId) onBackend?.(id);
+	}
 
 	// Capability gating for the session's engine backend (jucode = everything).
 	const bcaps = $derived(caps(chat));
@@ -519,6 +548,37 @@
 			>
 				{#if voice === 'busy'}<span class="vspin"><LoaderCircle size={16} /></span>{:else if voice === 'rec'}<CircleStop size={16} />{:else}<Mic size={16} />{/if}
 			</button>
+			<!-- Engine backend: interactive picker until the first message locks it. -->
+			<div class="effortsel">
+				{#if backendLocked}
+					<span class="flatbtn bkd static" title={t('chat.backendLocked')}>
+						<BackendIcon backend={chat.backendId} size={14} /><span>{BACKEND_LABELS[chat.backendId]}</span>
+					</span>
+				{:else}
+					<button class="flatbtn bkd" onclick={toggleBackend} title={t('chat.switchBackend')}>
+						<BackendIcon backend={chat.backendId} size={14} /><span>{BACKEND_LABELS[chat.backendId]}</span>
+						<span class="bkd-chev"><ChevronDown size={12} /></span>
+					</button>
+					{#if showBackend}
+						<button class="pop-backdrop" aria-label="close" onclick={() => (showBackend = false)}></button>
+						<div class="effort-pop bkd-pop">
+							{#each BACKEND_IDS as id (id)}
+								{@const probe = backendProbe[id]}
+								<button class="bkd-row" class:on={id === chat.backendId} onclick={() => pickBackend(id)}>
+									<BackendIcon backend={id} size={14} />
+									<span class="bkd-name">{BACKEND_LABELS[id]}</span>
+									{#if probe && !probe.found}
+										<span class="bkd-miss">{t('shell.backend.notFound')}</span>
+									{:else if probe?.version}
+										<span class="bkd-ver">{probe.version}</span>
+									{/if}
+									{#if id === chat.backendId}<span class="bkd-check"><Check size={13} /></span>{/if}
+								</button>
+							{/each}
+						</div>
+					{/if}
+				{/if}
+			</div>
 			{#if bcaps.modelPicker}
 				<div class="effortsel">
 					<button
@@ -578,7 +638,7 @@
 				<ContextIndicator pct={ctxPct} atThreshold={ctxAtThreshold} contextTokens={chat.contextTokens} contextLimit={ctxLimit} totalIn={chat.totalIn} totalOut={chat.totalOut} cost={chat.cost} />
 			{/if}
 			{#if chat.busy}
-				<button class="cact stop" onclick={onStop} aria-label="stop" title={t('chat.stopTitle')}><Square size={15} /></button>
+				<button class="cact stop" onclick={onStop} aria-label="stop" title={t('chat.stopTitle')}><Square size={16} /></button>
 			{:else}
 				<button class="cact send" onclick={onSubmit} disabled={!input.trim() && !attachments.length && !videos.length} aria-label="send" title={t('chat.sendTitle')}><Send size={16} /></button>
 			{/if}
@@ -595,13 +655,13 @@
 	}
 	.composer {
 		background: var(--panel);
-		border: 1px solid var(--border);
-		border-radius: var(--r-lg);
+		border: 1px solid var(--hairline);
+		border-radius: var(--r-xl);
 		padding: 12px 14px 10px;
-		box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+		transition: border-color var(--t-med) var(--ease-out);
 	}
 	.composer:focus-within {
-		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
+		border-color: color-mix(in oklab, var(--accent) 40%, var(--hairline));
 	}
 	.rich {
 		width: 100%;
@@ -665,13 +725,76 @@
 		font-size: 13px;
 		font-family: var(--font-sans);
 		cursor: pointer;
+		transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
 	}
 	.flatbtn:hover {
 		background: var(--surface2);
 	}
+	.flatbtn:active:not(.static) {
+		transform: scale(0.97);
+	}
 	.flatbtn.model span {
 		font-family: var(--font-mono);
 		font-size: 12px;
+	}
+	.flatbtn.bkd span {
+		font-size: 12px;
+	}
+	.bkd-chev {
+		display: inline-flex;
+		color: var(--dim2);
+	}
+	/* Backend popover rows (mirrors the effort/approval popover pattern). */
+	.bkd-pop {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 210px;
+	}
+	.bkd-row {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		width: 100%;
+		text-align: left;
+		padding: 7px 9px;
+		border: none;
+		border-radius: var(--r-sm);
+		background: none;
+		color: var(--text);
+		font-size: 12.5px;
+		cursor: pointer;
+		transition: background var(--t-fast) var(--ease-out);
+	}
+	.bkd-row:hover,
+	.bkd-row.on {
+		background: var(--surface2);
+	}
+	.bkd-name {
+		flex: 1;
+		white-space: nowrap;
+	}
+	.bkd-ver {
+		font-size: 10.5px;
+		font-family: var(--font-mono);
+		color: var(--dim2);
+		max-width: 110px;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.bkd-miss {
+		font-size: 10px;
+		color: var(--warn);
+		border: 1px solid color-mix(in oklab, var(--warn) 35%, transparent);
+		border-radius: 4px;
+		padding: 0 5px;
+		flex-shrink: 0;
+	}
+	.bkd-check {
+		display: inline-flex;
+		color: var(--accent-bright);
+		flex-shrink: 0;
 	}
 	/* read-only model label for backends without an in-chat model picker */
 	.flatbtn.static {
@@ -679,6 +802,9 @@
 	}
 	.flatbtn.static:hover {
 		background: none;
+	}
+	.flatbtn.static:active {
+		transform: none;
 	}
 	.flatbtn.appr span {
 		font-size: 12px;
@@ -708,11 +834,11 @@
 		border: 1px solid var(--border);
 		border-radius: var(--r-md);
 		box-shadow: var(--shadow-pop);
-		animation: rise 0.12s ease;
+		transform-origin: bottom left;
+		animation: pop-in var(--t-med) var(--ease-spring);
 	}
 	.effort-pop.wide {
 		padding: 12px 14px 8px;
-		border-radius: 14px;
 	}
 	.cspace {
 		flex: 1;
@@ -723,25 +849,42 @@
 		justify-content: center;
 		width: 38px;
 		height: 38px;
-		border-radius: var(--r-md);
+		border-radius: var(--r-full);
 		border: none;
 		cursor: pointer;
 		flex-shrink: 0;
+		transition:
+			transform var(--t-fast) var(--ease-spring),
+			box-shadow var(--t-med) var(--ease-out),
+			background var(--t-fast) var(--ease-out),
+			opacity var(--t-med) var(--ease-out);
 	}
+	.cact:active:not(:disabled) {
+		transform: scale(0.9);
+	}
+	/* Flat send: white (text color) when ready, quiet gray when there's nothing
+	   to send. No gradients, no borders, no glow. */
 	.cact.send {
-		background: linear-gradient(145deg, var(--accent-bright), var(--accent));
-		color: var(--on-accent);
-		box-shadow: 0 4px 14px var(--accent-soft);
+		background: var(--text);
+		color: var(--panel);
+	}
+	.cact.send:hover:not(:disabled) {
+		opacity: 0.85;
+	}
+	.cact.send:active:not(:disabled) {
+		transform: scale(0.9);
 	}
 	.cact.send:disabled {
-		opacity: 0.4;
-		box-shadow: none;
+		background: var(--surface2);
+		color: var(--dim2);
 		cursor: default;
 	}
 	.cact.stop {
-		background: var(--surface2);
-		border: 1px solid var(--border);
+		background: color-mix(in oklab, var(--err) 14%, transparent);
 		color: var(--err);
+	}
+	.cact.stop:hover {
+		background: color-mix(in oklab, var(--err) 22%, transparent);
 	}
 	.recbtn {
 		display: inline-flex;
@@ -753,10 +896,14 @@
 		background: none;
 		color: var(--dim);
 		cursor: pointer;
+		transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
 	}
 	.recbtn:hover {
 		background: var(--surface2);
 		color: var(--text);
+	}
+	.recbtn:active:not(:disabled) {
+		transform: scale(0.92);
 	}
 	.recbtn.on {
 		color: var(--err);
@@ -801,8 +948,9 @@
 		color: var(--dim);
 		background: var(--surface2);
 		border: 1px solid var(--border);
-		border-radius: 7px;
+		border-radius: var(--r-sm);
 		padding: 3px 9px;
+		animation: rise var(--t-med) var(--ease-out);
 	}
 	.qsteer {
 		display: inline-flex;
@@ -813,12 +961,16 @@
 		color: var(--accent-bright);
 		background: none;
 		border: 1px solid color-mix(in oklab, var(--accent) 40%, transparent);
-		border-radius: 7px;
+		border-radius: var(--r-sm);
 		padding: 3px 9px;
 		cursor: pointer;
 		flex-shrink: 0;
+		transition: background var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
 	}
 	.qsteer:hover {
 		background: var(--accent-soft);
+	}
+	.qsteer:active {
+		transform: scale(0.97);
 	}
 </style>

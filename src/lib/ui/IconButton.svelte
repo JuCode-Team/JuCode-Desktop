@@ -32,7 +32,13 @@
 		border-radius: var(--r-sm);
 		cursor: pointer;
 		flex-shrink: 0;
-		transition: background 0.12s, color 0.12s;
+		transition:
+			background var(--t-fast) var(--ease-out),
+			color var(--t-fast) var(--ease-out),
+			transform var(--t-fast) var(--ease-spring);
+	}
+	.ib:active:not(:disabled) {
+		transform: scale(0.9);
 	}
 	.md {
 		padding: 7px;

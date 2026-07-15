@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "JuCode",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "identifier": "com.jucode.desktop",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -10,7 +10,6 @@
     "frontendDist": "../build"
   },
   "app": {
-    "macOSPrivateApi": true,
     "windows": [
       {
         "title": "JuCode",
@@ -19,8 +18,7 @@
         "minWidth": 820,
         "minHeight": 560,
         "titleBarStyle": "Overlay",
-        "hiddenTitle": true,
-        "transparent": true
+        "hiddenTitle": true
       }
     ],
     "security": {

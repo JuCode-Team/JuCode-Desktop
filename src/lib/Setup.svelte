@@ -230,7 +230,7 @@
 		align-items: center;
 		justify-content: center;
 		z-index: 80;
-		animation: fade 0.16s ease;
+		animation: fade var(--t-fast) var(--ease-out);
 	}
 	@keyframes fade {
 		from {

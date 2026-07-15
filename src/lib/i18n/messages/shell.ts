@@ -31,6 +31,7 @@ const shell = {
 
 		// header / panel
 		togglePanel: '侧边面板 · ⌘B',
+		toggleSidebar: '会话列表',
 
 		// find bar
 		findPlaceholder: '在对话中查找…',
@@ -113,7 +114,7 @@ const shell = {
 		archive: '归档对话',
 		unarchive: '取消归档',
 		archived: '已归档',
-		newSession: '+ 新建对话',
+		newSession: '新建对话',
 		newTask: '新建并行任务',
 		task: {
 			dialogTitle: '新建并行任务',
@@ -237,6 +238,7 @@ const shell = {
 
 		// header / panel
 		togglePanel: 'Side panel · ⌘B',
+		toggleSidebar: 'Session list',
 
 		// find bar
 		findPlaceholder: 'Find in conversation…',
@@ -319,7 +321,7 @@ const shell = {
 		archive: 'Archive thread',
 		unarchive: 'Unarchive',
 		archived: 'Archived',
-		newSession: '+ New conversation',
+		newSession: 'New conversation',
 		newTask: 'New parallel task',
 		task: {
 			dialogTitle: 'New parallel task',

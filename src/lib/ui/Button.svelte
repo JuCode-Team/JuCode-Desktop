@@ -30,7 +30,16 @@
 		cursor: pointer;
 		font-family: var(--font-sans);
 		white-space: nowrap;
-		transition: background 0.12s, border-color 0.12s, opacity 0.12s;
+		transition:
+			background var(--t-fast) var(--ease-out),
+			border-color var(--t-fast) var(--ease-out),
+			color var(--t-fast) var(--ease-out),
+			opacity var(--t-fast) var(--ease-out),
+			transform var(--t-fast) var(--ease-spring),
+			box-shadow var(--t-med) var(--ease-out);
+	}
+	.b:active:not(:disabled) {
+		transform: scale(0.97);
 	}
 	.md {
 		font-size: 13px;
@@ -63,6 +72,7 @@
 	.primary:hover:not(:disabled) {
 		background: color-mix(in oklab, var(--accent) 88%, #fff);
 		border-color: transparent;
+		box-shadow: 0 3px 12px var(--accent-soft);
 	}
 	.ghost {
 		background: none;

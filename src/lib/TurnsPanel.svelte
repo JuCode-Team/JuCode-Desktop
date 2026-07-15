@@ -92,7 +92,7 @@
 	.chev {
 		display: inline-flex;
 		color: var(--dim);
-		transition: transform 0.12s;
+		transition: transform var(--t-med) var(--ease-spring);
 		flex-shrink: 0;
 	}
 	.chev.open {

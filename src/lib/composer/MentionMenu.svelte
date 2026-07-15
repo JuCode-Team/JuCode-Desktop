@@ -58,6 +58,8 @@
 		border-radius: var(--r-md);
 		overflow: hidden;
 		box-shadow: var(--shadow-pop);
+		transform-origin: bottom center;
+		animation: pop-in var(--t-med) var(--ease-spring);
 	}
 	.slash-item {
 		display: flex;
@@ -71,9 +73,10 @@
 		color: var(--text);
 		cursor: pointer;
 		font-size: 13px;
+		transition: background var(--t-fast) var(--ease-out);
 	}
 	.slash-item.sel {
-		background: var(--surface2);
+		background: var(--accent-soft);
 	}
 	.at-name {
 		font-family: var(--font-mono);

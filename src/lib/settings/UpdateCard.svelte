@@ -120,6 +120,6 @@
 		height: 100%;
 		border-radius: 999px;
 		background: var(--accent-bright);
-		transition: width 0.2s ease;
+		transition: width var(--t-med) var(--ease-out);
 	}
 </style>

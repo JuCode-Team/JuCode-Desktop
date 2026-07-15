@@ -463,7 +463,7 @@
 	}
 	.etab :global(.ib) {
 		opacity: 0;
-		transition: opacity 0.12s;
+		transition: opacity var(--t-fast) var(--ease-out);
 	}
 	.etab:hover :global(.ib),
 	.etab.on :global(.ib) {

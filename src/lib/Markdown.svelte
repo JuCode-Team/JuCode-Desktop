@@ -160,7 +160,8 @@
 		font-size: 11px;
 		cursor: pointer;
 		padding: 2px 7px;
-		border-radius: 5px;
+		border-radius: 6px;
+		transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
 	}
 	.md :global(.cb-copy:hover) {
 		background: var(--panel);

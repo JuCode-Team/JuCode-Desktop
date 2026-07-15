@@ -935,7 +935,7 @@
 	}
 	.rvtoggle .chev {
 		display: inline-flex;
-		transition: transform 0.12s;
+		transition: transform var(--t-med) var(--ease-spring);
 	}
 	.rvtoggle .chev.open {
 		transform: rotate(0deg);

@@ -11,6 +11,9 @@ export interface Session {
 	/** Archived threads are hidden from the sidebar by default (persisted); the
 	 *  conversation isn't deleted and can be unarchived. */
 	archived?: boolean;
+	/** Opened by resuming a persisted conversation — the engine already holds
+	 *  context, so the backend is locked even before any visible user turn. */
+	restored?: boolean;
 }
 
 /** 并行任务（git worktree）项目的元数据，随项目布局持久化。 */

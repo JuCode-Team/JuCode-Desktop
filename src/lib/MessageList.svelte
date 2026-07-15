@@ -248,7 +248,7 @@
 	{#each windowRows as m, k (m)}
 		{@const i = range.first + k}
 		{#if shown(m)}
-			<div class="mwrap" class:hit={i === findActive} bind:this={rowEls[i]} use:measure={m}>
+			<div class="mwrap" class:animate={!virtual} class:hit={i === findActive} bind:this={rowEls[i]} use:measure={m}>
 				{#if m.kind === 'user'}
 			{@const drop = userOrdinal.size - (userOrdinal.get(m) ?? 0)}
 			<div class="row user">
@@ -279,8 +279,8 @@
 		{:else if m.kind === 'reasoning'}
 			<div class="reason" class:open={!m.collapsed}>
 				<button class="reason-head" onclick={() => (m.collapsed = !m.collapsed)}>
-					<span class="rchev"><ChevronRight size={13} /></span>
 					<span>{t('chat.reasoning')}</span>
+					<span class="rchev"><ChevronRight size={13} /></span>
 				</button>
 				{#if !m.collapsed}
 					<div class="reason-body" transition:slide={{ duration: 180 }}>
@@ -317,8 +317,12 @@
 		flex-shrink: 0;
 	}
 	.mwrap {
-		border-radius: 10px;
-		transition: background 0.3s ease, box-shadow 0.3s ease;
+		border-radius: var(--r-md);
+		transition: background var(--t-slow) var(--ease-out), box-shadow var(--t-slow) var(--ease-out);
+	}
+	/* New rows rise in; suppressed under windowing so re-entering rows don't replay. */
+	.mwrap.animate {
+		animation: rise var(--t-slow) var(--ease-out) both;
 	}
 	.mwrap.hit {
 		background: var(--accent-soft);
@@ -334,21 +338,32 @@
 	}
 	.uedit {
 		opacity: 0;
+		transform: translateX(4px);
 		display: inline-flex;
 		padding: 4px;
 		border: none;
 		background: none;
 		color: var(--dim2);
-		border-radius: 5px;
+		border-radius: 6px;
 		cursor: pointer;
 		flex-shrink: 0;
+		transition:
+			opacity var(--t-med) var(--ease-out),
+			transform var(--t-med) var(--ease-out),
+			background var(--t-fast) var(--ease-out),
+			color var(--t-fast) var(--ease-out);
 	}
-	.row.user:hover .uedit {
+	.row.user:hover .uedit,
+	.uedit:focus-visible {
 		opacity: 1;
+		transform: translateX(0);
 	}
 	.uedit:hover {
 		background: var(--surface2);
 		color: var(--text);
+	}
+	.uedit:active {
+		transform: scale(0.9);
 	}
 	.uedit.rewind {
 		gap: 2px;
@@ -360,9 +375,9 @@
 		line-height: 1;
 	}
 	.bubble {
-		background: var(--surface2);
-		border: 1px solid var(--hairline);
-		border-radius: 14px 14px 4px 14px;
+		background: color-mix(in oklab, var(--accent) 10%, var(--panel));
+		border: 1px solid color-mix(in oklab, var(--accent) 22%, transparent);
+		border-radius: var(--r-lg) var(--r-lg) 6px var(--r-lg);
 		padding: 11px 14px;
 		line-height: 1.6;
 		white-space: pre-wrap;
@@ -397,13 +412,17 @@
 		background: none;
 		color: var(--dim2);
 		cursor: pointer;
-		padding: 2px 4px;
-		border-radius: 5px;
+		padding: 2px 6px;
+		border-radius: 6px;
 		font-size: 11px;
+		transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
 	}
 	.copy:hover {
 		background: var(--surface2);
 		color: var(--text);
+	}
+	.copy:active {
+		transform: scale(0.94);
 	}
 	.reason {
 		border-left: 2px solid var(--hairline);
@@ -421,13 +440,16 @@
 		font-weight: 600;
 		cursor: pointer;
 	}
+	.reason-head {
+		transition: color var(--t-fast) var(--ease-out);
+	}
 	.reason-head:hover {
 		color: var(--text);
 	}
 	.rchev {
 		display: inline-flex;
 		color: var(--dim2);
-		transition: transform 0.12s;
+		transition: transform var(--t-med) var(--ease-spring);
 	}
 	.reason.open .rchev {
 		transform: rotate(90deg);
@@ -461,6 +483,6 @@
 		background: color-mix(in oklab, var(--err) 12%, transparent);
 		border: 1px solid color-mix(in oklab, var(--err) 32%, transparent);
 		padding: 9px 12px;
-		border-radius: var(--r-sm);
+		border-radius: var(--r-md);
 	}
 </style>

@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
-	import { X, LogIn, LogOut, KeyRound, SlidersHorizontal, Plus, Trash2, Zap, CircleCheck, ChevronDown, Wallet, LayoutDashboard, Mic, Puzzle } from 'lucide-svelte';
+	import { X, LogIn, LogOut, KeyRound, SlidersHorizontal, Plus, Trash2, Zap, CircleCheck, ChevronDown, Wallet, LayoutDashboard, Mic, Puzzle, Store } from 'lucide-svelte';
 	import { readConfig, writeConfig, readAuthProviders, setAuthKey, removeAuthKey, listProviders, fetchAccountInfo, fetchDeepseekBalance, type AccountInfo, type DeepseekBalance } from '$lib/protocol';
 	import { dispatch } from '$lib/backends/router';
 	import { caps } from '$lib/backends';
 	import { prefs, vibrancySupported } from '$lib/prefs.svelte';
+	import { themeState, setTheme, type ThemePref } from '$lib/theme.svelte';
 	import BackendSection from '$lib/settings/BackendSection.svelte';
 	import type { ChatState } from '$lib/chat.svelte';
 	import Vendor from '$lib/Vendor.svelte';
@@ -26,7 +27,8 @@
 		chat,
 		initialSection = 'overview',
 		onClose,
-		onAuthChange
+		onAuthChange,
+		onMarket
 	}: {
 		sessionId: string;
 		/** The active session's ChatState — source of the live `mcp_servers` view.
@@ -35,6 +37,8 @@
 		initialSection?: 'overview' | 'account' | 'behavior' | 'extensions';
 		onClose: () => void;
 		onAuthChange?: () => void;
+		/** Open the skill marketplace (closes the settings sheet). */
+		onMarket?: () => void;
 	} = $props();
 
 	interface ModelCfg {
@@ -366,6 +370,13 @@
 						{#if keyed.includes('mimo')}<p class="hint mt keyok"><CircleCheck size={13} /> {t('settings.account.keyed')}</p>{/if}
 					</div>
 				{:else if section === 'extensions'}
+					{#if onMarket}
+						<div class="group">
+							<div class="glabel"><Store size={12} /> {t('settings.market.groupLabel')}</div>
+							<p class="hint">{t('settings.market.hint')}</p>
+							<Button size="sm" onclick={onMarket}><Store size={14} /> {t('settings.market.open')}</Button>
+						</div>
+					{/if}
 					{#if caps(chat).mcpManage}
 						<McpSection {sessionId} {chat} />
 					{:else if chat?.mcpServers?.length}
@@ -392,6 +403,19 @@
 					<div class="group">
 						<div class="glabel">{t('settings.language')}</div>
 						<Segmented value={getLocale()} options={LOCALES.map((l) => ({ value: l, label: LOCALE_LABELS[l] }))} onChange={(v) => setLocale(v as (typeof LOCALES)[number])} />
+					</div>
+
+					<div class="group">
+						<div class="glabel">{t('settings.theme')}</div>
+						<Segmented
+							value={themeState.pref}
+							options={[
+								{ value: 'system', label: t('settings.themeSystem') },
+								{ value: 'light', label: t('settings.themeLight') },
+								{ value: 'dark', label: t('settings.themeDark') }
+							]}
+							onChange={(v) => setTheme(v as ThemePref)}
+						/>
 					</div>
 
 					<div class="group">
@@ -501,7 +525,7 @@
 		align-items: center;
 		justify-content: center;
 		z-index: 60;
-		animation: fade 0.14s ease;
+		animation: fade var(--t-fast) var(--ease-out);
 	}
 	@keyframes fade {
 		from {
@@ -517,7 +541,7 @@
 		border-radius: var(--r-lg);
 		box-shadow: var(--shadow-modal);
 		overflow: hidden;
-		animation: pop 0.16s cubic-bezier(0.2, 0.9, 0.3, 1);
+		animation: pop var(--t-med) var(--ease-spring);
 	}
 	@keyframes pop {
 		from {
@@ -695,7 +719,7 @@
 		justify-content: center;
 		width: 34px;
 		height: 34px;
-		border-radius: 9px;
+		border-radius: var(--r-md);
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
 		flex-shrink: 0;
@@ -746,7 +770,7 @@
 	}
 	:global(.pcard .chev) {
 		color: var(--dim2);
-		transition: transform 0.15s;
+		transition: transform var(--t-med) var(--ease-spring);
 	}
 	:global(.pcard .chev.up) {
 		transform: rotate(180deg);

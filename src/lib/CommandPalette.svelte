@@ -169,7 +169,7 @@
 		justify-content: center;
 		padding-top: 14vh;
 		z-index: 70;
-		animation: fade 0.12s ease;
+		animation: fade var(--t-fast) var(--ease-out);
 	}
 	@keyframes fade {
 		from {
@@ -186,7 +186,7 @@
 		border-radius: var(--r-lg);
 		box-shadow: var(--shadow-modal);
 		overflow: hidden;
-		animation: pop 0.14s cubic-bezier(0.2, 0.9, 0.3, 1);
+		animation: pop var(--t-med) var(--ease-spring);
 	}
 	@keyframes pop {
 		from {

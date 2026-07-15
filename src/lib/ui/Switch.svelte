@@ -21,7 +21,7 @@
 		padding: 0;
 		position: relative;
 		flex-shrink: 0;
-		transition: background 0.15s;
+		transition: background var(--t-fast) var(--ease-out);
 	}
 	.sw.on {
 		background: var(--accent);
@@ -35,7 +35,7 @@
 		height: 18px;
 		border-radius: 50%;
 		background: #fff;
-		transition: transform 0.16s cubic-bezier(0.2, 0.9, 0.3, 1);
+		transition: transform var(--t-med) var(--ease-spring);
 	}
 	.sw.on .knob {
 		transform: translateX(18px);

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { LoaderCircle, ChevronRight } from 'lucide-svelte';
+	import { slide } from 'svelte/transition';
 	import { t } from '$lib/i18n';
 
 	let { name, output, running, isError }: { name: string; output: string; running: boolean; isError: boolean } =
@@ -142,26 +143,26 @@
 
 <div class="tool" class:err={isError || !!errorText}>
 	<button class="head" class:static={isRead} onclick={() => !isRead && (collapsed = !collapsed)}>
-		{#if running}
-			<LoaderCircle size={13} class="spin" />
-		{:else if !isRead}
-			<span class="chev" class:open={!collapsed}><ChevronRight size={13} /></span>
-		{:else}
-			<span class="chev-spacer"></span>
-		{/if}
 		<span class="verb">{verb}</span>
 		{#if target}<span class="target">{target}</span>{/if}
-		{#if exitCode !== null}
-			<span class="exit" class:bad={exitCode !== 0}>exit {exitCode}</span>
+		{#if exitCode !== null && exitCode !== 0}
+			<span class="exit bad">exit {exitCode}</span>
 		{/if}
 		{#if partialApply}
 			<span class="partial">{t('chat.partialApply', { n: partialApply.n, m: partialApply.m })}</span>
 		{/if}
-		<span class="state">{running ? t('chat.toolRunning') : isError || errorText ? t('chat.toolError') : t('chat.toolDone')}</span>
+		{#if isError || errorText}
+			<span class="fail">{t('chat.toolError')}</span>
+		{/if}
+		{#if running}
+			<LoaderCircle size={12} class="spin" />
+		{:else if !isRead}
+			<span class="chev" class:open={!collapsed}><ChevronRight size={13} /></span>
+		{/if}
 	</button>
 
 	{#if !collapsed && !isRead}
-		<div class="body">
+		<div class="body" transition:slide={{ duration: 180 }}>
 			{#if errorText}
 				<div class="err-text">{errorText}</div>
 			{:else if !parsed}
@@ -196,50 +197,45 @@
 </div>
 
 <style>
-	.tool {
-		border: 1px solid var(--border);
-		border-radius: 9px;
-		background: var(--panel);
-		overflow: hidden;
-	}
-	.tool.err {
-		border-color: color-mix(in oklch, var(--err) 40%, transparent);
-	}
+	/* Flat, card-less row: a muted one-line label with a trailing chevron,
+	 * matching the reasoning header's aesthetic. The expanded body hangs below
+	 * behind a hairline left rule instead of inside a bordered box. */
 	.head {
-		display: flex;
+		display: inline-flex;
 		align-items: center;
-		gap: 7px;
-		width: 100%;
+		gap: 6px;
+		max-width: 100%;
 		text-align: left;
-		padding: 5px 10px;
-		font-size: 11.5px;
-		background: var(--surface2);
+		padding: 2px 0;
+		font-size: 12.5px;
+		background: none;
 		border: none;
-		color: var(--text);
+		color: var(--dim);
 		cursor: pointer;
+		transition: color var(--t-fast) var(--ease-out);
+	}
+	.head:hover:not(.static) {
+		color: var(--text);
 	}
 	.head.static {
 		cursor: default;
 	}
 	.chev {
 		display: inline-flex;
-		color: var(--dim);
-		transition: transform 0.12s;
+		color: var(--dim2);
+		transition: transform var(--t-med) var(--ease-spring);
 		flex-shrink: 0;
 	}
 	.chev.open {
 		transform: rotate(90deg);
 	}
-	.chev-spacer {
-		width: 13px;
-		flex-shrink: 0;
-	}
 	.verb {
-		font-weight: 600;
+		font-weight: 500;
+		flex-shrink: 0;
 	}
 	.target {
 		font-family: var(--font-mono);
-		color: var(--dim);
+		font-size: 11.5px;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -247,10 +243,23 @@
 	.exit {
 		font-family: var(--font-mono);
 		font-size: 11px;
-		color: var(--dim);
+		flex-shrink: 0;
 	}
 	.exit.bad {
 		color: var(--err);
+	}
+	.fail {
+		font-size: 11px;
+		color: var(--err);
+		flex-shrink: 0;
+	}
+	.tool.err .head {
+		color: color-mix(in oklab, var(--err) 70%, var(--dim));
+	}
+	.body {
+		margin-top: 4px;
+		border-left: 2px solid var(--hairline);
+		padding-left: 12px;
 	}
 	.partial {
 		font-size: 10.5px;
@@ -261,15 +270,9 @@
 		padding: 0 7px;
 		flex-shrink: 0;
 	}
-	.state {
-		margin-left: auto;
-		color: var(--dim);
-		font-size: 11px;
-		flex-shrink: 0;
-	}
 	.body pre {
 		margin: 0;
-		padding: 7px 10px;
+		padding: 4px 0;
 		font-family: var(--font-mono);
 		font-size: 11px;
 		line-height: 1.45;
@@ -280,7 +283,7 @@
 		word-break: break-word;
 	}
 	.cmd {
-		padding: 7px 10px 0;
+		padding: 4px 0 0;
 		font-family: var(--font-mono);
 		font-size: 11.5px;
 		color: var(--text);
@@ -294,14 +297,14 @@
 		color: var(--text) !important;
 	}
 	.err-text {
-		padding: 7px 10px;
+		padding: 4px 0;
 		font-family: var(--font-mono);
 		font-size: 11.5px;
 		color: var(--err);
 		white-space: pre-wrap;
 	}
 	.meta {
-		padding: 6px 10px;
+		padding: 4px 0;
 		font-family: var(--font-mono);
 		font-size: 11.5px;
 		color: var(--dim);
@@ -310,8 +313,8 @@
 		display: block;
 		max-width: 100%;
 		max-height: 320px;
-		margin: 10px 12px;
-		border-radius: 6px;
+		margin: 8px 0;
+		border-radius: var(--r-sm);
 		border: 1px solid var(--border);
 	}
 	.diff {

@@ -122,7 +122,7 @@
 		border-radius: var(--r-md);
 		background: var(--surface);
 		overflow: hidden;
-		transition: border-color 0.12s, background 0.12s;
+		transition: border-color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out);
 	}
 	.pcard.def {
 		border-color: color-mix(in oklab, var(--accent) 45%, transparent);
@@ -149,7 +149,7 @@
 		justify-content: center;
 		width: 34px;
 		height: 34px;
-		border-radius: 9px;
+		border-radius: var(--r-md);
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
 		flex-shrink: 0;
@@ -230,7 +230,7 @@
 	}
 	:global(.pcard .chev) {
 		color: var(--dim2);
-		transition: transform 0.15s;
+		transition: transform var(--t-med) var(--ease-spring);
 	}
 	:global(.pcard .chev.up) {
 		transform: rotate(180deg);

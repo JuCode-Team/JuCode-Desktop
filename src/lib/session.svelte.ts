@@ -143,6 +143,47 @@ export class SessionStore {
 		return s.id;
 	}
 
+	/**
+	 * Switch a fresh session (no user turn yet) to a different engine backend,
+	 * in place: same tab, same session id. There is no conversation to carry
+	 * over, so the old engine is torn down and a new adapter + child is brought
+	 * up; ChatState is rebuilt because everything it holds is engine-specific
+	 * (model catalog, commands, session id…). No-op once the first user message
+	 * has been sent — the conversation can't move engines.
+	 */
+	async switchBackend(id: string, backend: BackendId) {
+		const s = this.allSessions.find((x) => x.id === id);
+		if (!s || s.backendId === backend) return;
+		if (s.chat.userTurns > 0 || s.restored) return;
+		const project = this.projects.find((pr) => pr.sessions.some((x) => x.id === id));
+		// Swap the projection + adapter BEFORE the old child exits, so the exit
+		// event lands on the new ChatState with `switching` set and isn't treated
+		// as a crash to auto-restart (handleExit resolves chat via the session).
+		const chat = new ChatState();
+		chat.backendId = backend;
+		chat.switching = true;
+		unregisterAdapter(id);
+		const adapter = createAdapter(backend);
+		registerAdapter(id, adapter);
+		s.chat = chat;
+		s.backendId = backend;
+		s.adapter = adapter;
+		if (project) project.lastBackend = backend;
+		try {
+			await closeSession(id);
+		} catch {
+			/* old child may already be gone */
+		}
+		// Same rationale as addSession: pin a resumable uuid for claude.
+		const extra = backend === 'claude' ? { session_id: newUuid() } : undefined;
+		if (extra) chat.sessionId = extra.session_id;
+		try {
+			await this.#spawn(s, project?.path, undefined, extra);
+		} catch (e) {
+			this.#engineFailed(chat, e);
+		}
+	}
+
 	/** Archive a thread: hide it from the sidebar by default without closing or
 	 *  deleting it. If it was active, move focus to a live non-archived sibling. */
 	archiveSession(id: string) {
@@ -174,6 +215,9 @@ export class SessionStore {
 		const s = this.#newSession(backend);
 		if (title) s.chat.title = title;
 		s.archived = archived;
+		// The engine resumes persisted context — the backend can't be switched
+		// even while the replayed transcript is still empty.
+		s.restored = true;
 		project.sessions.push(s);
 		if (backend === 'claude' || backend === 'codex') s.chat.sessionId = sid;
 		const spawned =

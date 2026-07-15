@@ -23,7 +23,7 @@
 		color: var(--dim);
 		cursor: pointer;
 		white-space: nowrap;
-		transition: background 0.12s, color 0.12s, border-color 0.12s;
+		transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out);
 	}
 	.chip:hover {
 		color: var(--text);

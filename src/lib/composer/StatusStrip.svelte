@@ -62,8 +62,8 @@
 		font-family: var(--font-sans);
 		cursor: pointer;
 		transition:
-			background 0.15s ease,
-			color 0.15s ease;
+			background var(--t-fast) var(--ease-out),
+			color var(--t-fast) var(--ease-out);
 	}
 	.pill:hover,
 	.pill.on {
@@ -92,7 +92,7 @@
 		display: inline-flex;
 		flex-shrink: 0;
 		color: var(--dim2);
-		transition: transform 0.15s ease;
+		transition: transform var(--t-med) var(--ease-spring);
 	}
 	.pchev.up {
 		transform: rotate(180deg);

@@ -66,9 +66,14 @@
 		font-family: var(--font-mono);
 		background: var(--surface2);
 		border: 1px solid var(--border);
-		border-radius: 7px;
+		border-radius: var(--r-sm);
 		padding: 3px 5px 3px 8px;
 		max-width: 200px;
+		animation: rise var(--t-med) var(--ease-out);
+		transition: border-color var(--t-fast) var(--ease-out);
+	}
+	.chip:hover {
+		border-color: color-mix(in oklab, var(--text) 12%, var(--border));
 	}
 	.chip.imgchip,
 	.chip.videochip {

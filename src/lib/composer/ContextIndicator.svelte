@@ -53,13 +53,14 @@
 		border-radius: var(--r-md);
 		box-shadow: var(--shadow-pop);
 		opacity: 0;
-		transform: translateY(4px);
+		transform: translateY(4px) scale(0.97);
+		transform-origin: bottom right;
 		pointer-events: none;
-		transition: opacity 0.13s, transform 0.13s;
+		transition: opacity var(--t-med) var(--ease-out), transform var(--t-med) var(--ease-spring);
 	}
 	.ctxwrap:hover .ctx-pop {
 		opacity: 1;
-		transform: translateY(0);
+		transform: none;
 	}
 	.ctx-row {
 		display: flex;
@@ -88,6 +89,7 @@
 		height: 100%;
 		border-radius: 999px;
 		background: var(--accent);
+		transition: width var(--t-slow) var(--ease-out), background var(--t-med) var(--ease-out);
 	}
 	.ctx-fill.warn {
 		background: var(--warn);

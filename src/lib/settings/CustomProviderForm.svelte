@@ -115,7 +115,7 @@
 		font-family: var(--font-mono);
 		font-size: 12px;
 		padding: 3px 5px 3px 9px;
-		border-radius: 7px;
+		border-radius: var(--r-sm);
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
 	}

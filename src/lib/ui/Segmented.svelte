@@ -24,7 +24,7 @@
 		gap: 2px;
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
-		border-radius: 10px;
+		border-radius: var(--r-md);
 	}
 	.opt {
 		flex: 1;
@@ -34,13 +34,20 @@
 		color: var(--dim);
 		font-size: 12.5px;
 		font-family: var(--font-sans);
-		border-radius: 7px;
+		border-radius: 9px;
 		cursor: pointer;
 		white-space: nowrap;
-		transition: color 0.12s, background 0.12s;
+		transition:
+			color var(--t-fast) var(--ease-out),
+			background var(--t-fast) var(--ease-out),
+			box-shadow var(--t-med) var(--ease-out),
+			transform var(--t-fast) var(--ease-spring);
 	}
 	.opt:hover {
 		color: var(--text);
+	}
+	.opt:active {
+		transform: scale(0.96);
 	}
 	.opt.on {
 		background: var(--panel);

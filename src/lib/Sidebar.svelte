@@ -1,20 +1,15 @@
 <script lang="ts">
-	import { Store, Plus, History, X, LoaderCircle, Command, Moon, Sun, Monitor, GitBranch, GitBranchPlus, Archive, ArchiveRestore, ChevronRight } from 'lucide-svelte';
-	import { themeState, cycleTheme } from '$lib/theme.svelte';
-	import IconButton from '$lib/ui/IconButton.svelte';
+	import { Plus, History, X, LoaderCircle, GitBranch, GitBranchPlus, Archive, ArchiveRestore, ChevronRight, Settings } from 'lucide-svelte';
 	import { t } from '$lib/i18n';
 	import { BACKEND_LABELS } from '$lib/backends';
 	import BackendIcon from '$lib/BackendIcon.svelte';
 	import type { Project } from '$lib/types';
 
-	const themeLabel = $derived(
-		themeState.pref === 'system' ? t('shell.theme.system') : themeState.pref === 'light' ? t('shell.theme.light') : t('shell.theme.dark')
-	);
-
 	let {
 		projects,
 		activeId,
 		width,
+		resizing = false,
 		loggedIn,
 		providerName,
 		updateAvailable = false,
@@ -27,13 +22,13 @@
 		onArchiveSession,
 		onUnarchiveSession,
 		onHistory,
-		onSettings,
-		onMarket,
-		onCommandPalette
+		onSettings
 	}: {
 		projects: Project[];
 		activeId: string;
 		width: number;
+		/** True while the user drags the resizer — disables the width transition. */
+		resizing?: boolean;
 		loggedIn: boolean;
 		providerName: string;
 		updateAvailable?: boolean;
@@ -47,21 +42,27 @@
 		onUnarchiveSession: (id: string) => void;
 		onHistory: (p: Project) => void;
 		onSettings: () => void;
-		onMarket: () => void;
-		onCommandPalette: () => void;
 	} = $props();
 
 	// Which projects have their archived section expanded (collapsed by default).
 	let showArchived = $state<Record<string, boolean>>({});
+
+	// "New session" targets the active session's project (fallback: first project);
+	// with no project open it falls through to the new-project flow.
+	function newSessionHere() {
+		const p = projects.find((pr) => pr.sessions.some((s) => s.id === activeId)) ?? projects[0];
+		if (p) onNewSession(p);
+		else onNewProject();
+	}
 </script>
 
-<aside class="sidebar" style:width="{width}px">
+<aside class="sidebar" class:resizing style:width="{width}px">
 	<div class="brand" data-tauri-drag-region>
 		<span class="word">JuCode</span>
 	</div>
 
 	<div class="nav">
-		<button class="navcard" onclick={onMarket}><Store size={14} /><span>{t('shell.market')}</span></button>
+		<button class="navcard" onclick={newSessionHere}><Plus size={14} /><span>{t('shell.newSession')}</span></button>
 	</div>
 
 	<div class="sess-head">
@@ -158,19 +159,12 @@
 	</div>
 
 	<button class="account" onclick={onSettings} title={t('shell.accountSettings')}>
+		<Settings size={14} class="acc-gear" />
 		<span class="acc-dot" class:on={loggedIn}></span>
 		<span class="acc-name">{loggedIn ? providerName : t('shell.notLoggedIn')}</span>
 		<span class="acc-go">{t('shell.settings')}</span>
 		{#if updateAvailable}<span class="upd-dot" title={t('shell.updateAvailable')}></span>{/if}
 	</button>
-	<div class="side-foot">
-		<button class="foot-btn" onclick={onCommandPalette} title={t('shell.commandPalette')}>
-			<Command size={15} /><span>{t('shell.commandPalette')}</span><kbd class="foot-kbd">⌘K</kbd>
-		</button>
-		<IconButton onclick={cycleTheme} label={t('shell.toggleTheme')} title={themeLabel}>
-			{#if themeState.pref === 'system'}<Monitor size={15} />{:else if themeState.pref === 'light'}<Sun size={15} />{:else}<Moon size={15} />{/if}
-		</IconButton>
-	</div>
 </aside>
 
 <style>
@@ -181,27 +175,38 @@
 		background: var(--sidebar);
 		border-right: 1px solid var(--hairline);
 		min-width: 0;
+		overflow: hidden;
+		transition: width var(--t-med) var(--ease-out);
+	}
+	.sidebar.resizing {
+		transition: none;
 	}
 	/* Under macOS vibrancy the sidebar becomes translucent so the native frost
 	 * shows through; everywhere else it stays fully opaque. */
 	:global(:root[data-vibrancy='on']) .sidebar {
 		background: var(--vibrancy-tint);
 	}
+	/* Bottom-left settings entry. */
 	.account {
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		margin: 0 8px;
-		padding: 8px 10px;
+		margin: 8px 10px 10px;
+		padding: 9px 11px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r-md);
 		background: var(--surface);
 		color: var(--text);
 		cursor: pointer;
 		font-size: 12px;
+		transition: background var(--t-fast) var(--ease-out);
 	}
 	.account:hover {
 		background: var(--surface2);
+	}
+	.account :global(.acc-gear) {
+		color: var(--dim);
+		flex-shrink: 0;
 	}
 	.acc-dot {
 		width: 7px;
@@ -238,8 +243,8 @@
 		display: flex;
 		align-items: center;
 		gap: 9px;
-		/* extra top inset clears the macOS traffic lights (overlay title bar) */
-		padding: 32px 18px 14px;
+		/* extra top inset clears the macOS traffic lights + sidebar-toggle row */
+		padding: 48px 18px 12px;
 	}
 	.word {
 		font-family: var(--font-display);
@@ -258,17 +263,25 @@
 		align-items: center;
 		justify-content: center;
 		gap: 6px;
-		padding: 6px 0;
-		border-radius: var(--r-sm);
-		border: 1px solid var(--hairline);
-		background: none;
+		padding: 7px 0;
+		border-radius: var(--r-md);
+		border: none;
+		background: var(--surface);
 		color: var(--dim);
 		font-size: 12px;
 		cursor: pointer;
+		transition:
+			background var(--t-fast) var(--ease-out),
+			color var(--t-fast) var(--ease-out),
+			border-color var(--t-fast) var(--ease-out),
+			transform var(--t-fast) var(--ease-spring);
 	}
 	.navcard:hover {
 		background: var(--surface2);
 		color: var(--text);
+	}
+	.navcard:active {
+		transform: scale(0.97);
 	}
 	.sess-head {
 		display: flex;
@@ -291,6 +304,7 @@
 		color: var(--dim);
 		border-radius: 6px;
 		cursor: pointer;
+		transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
 	}
 	.sess-actions button:hover:not(:disabled) {
 		background: var(--surface2);
@@ -356,6 +370,10 @@
 		cursor: pointer;
 		flex-shrink: 0;
 		opacity: 0;
+		transition:
+			opacity var(--t-fast) var(--ease-out),
+			background var(--t-fast) var(--ease-out),
+			color var(--t-fast) var(--ease-out);
 	}
 	.group-add {
 		margin-left: auto;
@@ -383,7 +401,8 @@
 		color: var(--dim2);
 		font-size: 12px;
 		cursor: pointer;
-		border-radius: var(--r-sm);
+		border-radius: var(--r-md);
+		transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
 	}
 	.sess-empty:hover {
 		background: var(--surface);
@@ -395,20 +414,20 @@
 		gap: 9px;
 		width: 100%;
 		text-align: left;
-		padding: 8px 9px;
+		padding: 8px 10px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r-md);
 		background: none;
 		color: var(--text);
 		cursor: pointer;
 		font-size: 13px;
+		transition: background var(--t-fast) var(--ease-out);
 	}
 	.sess:hover {
 		background: var(--surface);
 	}
 	.sess.on {
 		background: var(--surface2);
-		box-shadow: inset 0 0 0 1px var(--hairline);
 	}
 	.sess-dot {
 		width: 7px;
@@ -460,6 +479,7 @@
 		color: var(--dim2);
 		opacity: 0;
 		border-radius: 4px;
+		transition: opacity var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
 	}
 	.sess:hover .sess-x,
 	.sess:hover .sess-act {
@@ -484,49 +504,16 @@
 		color: var(--dim2);
 		font-size: 11.5px;
 		cursor: pointer;
+		transition: color var(--t-fast) var(--ease-out);
 	}
 	.arch-head:hover {
 		color: var(--text);
 	}
 	.arch-chev {
 		display: inline-flex;
-		transition: transform 0.14s ease;
+		transition: transform var(--t-med) var(--ease-spring);
 	}
 	.arch-chev.open {
 		transform: rotate(90deg);
 	}
-	.side-foot {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		padding: 10px 12px;
-		border-top: 1px solid var(--hairline);
-	}
-	.foot-btn {
-		flex: 1;
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		padding: 8px 10px;
-		border: none;
-		background: none;
-		color: var(--dim);
-		border-radius: var(--r-sm);
-		cursor: pointer;
-		font-size: 13px;
-	}
-	.foot-btn:hover {
-		background: var(--surface2);
-		color: var(--text);
-	}
-	.foot-kbd {
-		margin-left: auto;
-		font-family: var(--font-mono);
-		font-size: 10.5px;
-		color: var(--dim2);
-		background: var(--surface2);
-		border: 1px solid var(--hairline);
-		border-radius: 5px;
-		padding: 1px 5px;
-	}
-</style>
+	</style>

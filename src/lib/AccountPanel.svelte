@@ -166,7 +166,7 @@
 		gap: 2px 10px;
 		padding: 12px 14px;
 		border: 1px solid var(--border);
-		border-radius: 10px;
+		border-radius: var(--r-md);
 		background: var(--surface);
 	}
 	.ci {

@@ -69,7 +69,7 @@
 		font-size: 13px;
 		cursor: pointer;
 		text-align: left;
-		transition: border-color 0.12s;
+		transition: border-color var(--t-fast) var(--ease-out);
 	}
 	.trigger:hover,
 	.trigger.open {
@@ -90,7 +90,7 @@
 		display: inline-flex;
 		color: var(--dim);
 		flex-shrink: 0;
-		transition: transform 0.14s;
+		transition: transform var(--t-med) var(--ease-spring);
 	}
 	.chev.up {
 		transform: rotate(180deg);
@@ -116,7 +116,8 @@
 		border: 1px solid var(--border);
 		border-radius: var(--r-md);
 		box-shadow: var(--shadow-pop);
-		animation: rise 0.12s ease;
+		transform-origin: bottom left;
+		animation: pop-in var(--t-med) var(--ease-spring);
 	}
 	.opt {
 		display: flex;
