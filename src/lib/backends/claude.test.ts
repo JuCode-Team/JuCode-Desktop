@@ -97,7 +97,7 @@ describe('claude adapter: caps', () => {
 		expect(adapter.caps.interrupt).toBe(true);
 		expect(adapter.caps.contextUsage).toBe(true);
 		expect(adapter.caps.steer).toBe(false);
-		expect(adapter.caps.hunkApproval).toBe(false);
+		expect(adapter.caps.hunkApproval).toBe(true);
 		// list_models/set_model control requests, /compact over stream-json text,
 		// claude_sessions-driven resume picker + session-file transcript replay.
 		expect(adapter.caps.modelPicker).toBe(true);
@@ -755,6 +755,63 @@ describe('claude adapter: approvals', () => {
 		// The plan is passed through in full (not truncated to SUMMARY_CAP) so the
 		// card's copy/download actions get the complete text.
 		expect(String(approval.summary)).toBe(plan);
+	});
+
+	it('MultiEdit splits into per-edit hunks and approves only the selected ones', () => {
+		const { lines } = makeIo();
+		const adapter = createClaudeAdapter();
+		boot(adapter, lines);
+		const edits = [
+			{ old_string: 'a', new_string: 'A' },
+			{ old_string: 'b', new_string: 'B' },
+			{ old_string: 'c', new_string: 'C' }
+		];
+		const events = adapter.translate({
+			type: 'control_request',
+			request_id: 'req-me',
+			request: {
+				subtype: 'can_use_tool',
+				tool_name: 'MultiEdit',
+				input: { file_path: '/proj/x.ts', edits },
+				tool_use_id: 'toolu_me'
+			}
+		});
+		const approval = events.find((e) => e.type === 'approval_request')!;
+		expect(Array.isArray(approval.hunks)).toBe(true);
+		expect(approval.hunks).toHaveLength(3);
+		expect((approval.hunks as Array<Record<string, unknown>>)[0]).toMatchObject({ id: 'e0', file: '/proj/x.ts' });
+
+		// Approve only the first and third edit → updatedInput keeps just those.
+		const frames = adapter.encodeOp({
+			op: 'approve',
+			call_id: String(approval.call_id),
+			decision: 'allow',
+			hunks: ['e0', 'e2']
+		});
+		const resp = parse(frames![0]).response.response;
+		expect(resp.behavior).toBe('allow');
+		expect(resp.updatedInput.edits).toEqual([
+			{ old_string: 'a', new_string: 'A' },
+			{ old_string: 'c', new_string: 'C' }
+		]);
+	});
+
+	it('a single Edit stays whole-call (no hunks)', () => {
+		const { lines } = makeIo();
+		const adapter = createClaudeAdapter();
+		boot(adapter, lines);
+		const events = adapter.translate({
+			type: 'control_request',
+			request_id: 'req-e1',
+			request: {
+				subtype: 'can_use_tool',
+				tool_name: 'Edit',
+				input: { file_path: '/proj/x.ts', old_string: 'a', new_string: 'A' },
+				tool_use_id: 'toolu_e1'
+			}
+		});
+		const approval = events.find((e) => e.type === 'approval_request')!;
+		expect(approval.hunks).toBeNull();
 	});
 
 	it('deny sends behavior:deny with a message', () => {

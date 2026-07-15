@@ -124,7 +124,7 @@ export function compactClaudeModel(resolvedModel: string, rawValue?: string): st
 export const CLAUDE_CAPS: BackendCaps = {
 	approvalModes: true, // set_permission_mode control request (live, acked)
 	extendedApprovalModes: true, // native plan + auto permission modes
-	hunkApproval: false, // can_use_tool is whole-call allow/deny
+	hunkApproval: true, // MultiEdit splits into per-edit hunks (single Edit stays whole-call)
 	steer: false, // stdin is already a queue: mid-turn messages run as the next turn
 	interrupt: true, // control_request subtype interrupt
 	branchTree: false,
@@ -248,6 +248,36 @@ export function editDiff(claudeName: string, input: Record<string, unknown>): st
 }
 
 const editPath = (input: Record<string, unknown>) => str(input.file_path) || str(input.notebook_path);
+
+/** Split a MultiEdit into one selectable hunk per edit so the approval card can
+ *  approve/reject each replacement individually. Only MultiEdit (an explicit
+ *  array of edits) maps cleanly to hunks — a single Edit/Write stays whole-call
+ *  (returns null → the card shows the normal allow/deny). */
+export function claudeEditHunks(claudeName: string, input: Record<string, unknown>): ApprovalHunkOut[] | null {
+	if (claudeName !== 'MultiEdit') return null;
+	const edits = Array.isArray(input.edits) ? input.edits : [];
+	if (edits.length < 2) return null; // a lone edit isn't worth per-hunk UI
+	const file = editPath(input);
+	const hunks: ApprovalHunkOut[] = [];
+	edits.forEach((e, i) => {
+		const m = rec(e);
+		if (!m) return;
+		const lines = [prefixLines(str(m.old_string), '-'), prefixLines(str(m.new_string), '+')]
+			.filter(Boolean)
+			.join('\n')
+			.split('\n');
+		hunks.push({ id: `e${i}`, file, header: `edit ${i + 1}/${edits.length}`, lines });
+	});
+	return hunks.length ? hunks : null;
+}
+
+/** The hunk shape emitted on approval_request (mirrors approval.ts ApprovalHunk). */
+export interface ApprovalHunkOut {
+	id: string;
+	file: string;
+	header: string;
+	lines: string[];
+}
 
 /** Tool-card JSON synthesized from a claude tool input (the shapes ToolCard /
  *  ChangesPanel already understand: command/stdout, path/paths/diff, pattern…). */
@@ -953,7 +983,7 @@ export function createClaudeAdapter(): EngineAdapter {
 				name: mapToolName(str(r.tool_name)),
 				summary: approvalSummary(r),
 				subagent_id: null,
-				hunks: null
+				hunks: claudeEditHunks(str(r.tool_name), rec(r.input) ?? {})
 			});
 			return events;
 		}
@@ -1216,10 +1246,15 @@ export function createClaudeAdapter(): EngineAdapter {
 					// AskUserQuestion: inject the user's picks as updatedInput.answers
 					// (keyed by full question text) — the CLI feeds this back to the model
 					// as the tool result (without it the tool is "not enabled").
-					const updatedInput =
-						op.answers && str(entry.request.tool_name) === 'AskUserQuestion'
-							? { questions: input.questions, answers: op.answers }
-							: input;
+					let updatedInput: Record<string, unknown> = input;
+					if (op.answers && str(entry.request.tool_name) === 'AskUserQuestion') {
+						updatedInput = { questions: input.questions, answers: op.answers };
+					} else if (op.hunks && str(entry.request.tool_name) === 'MultiEdit' && Array.isArray(input.edits)) {
+						// Per-hunk approval of a MultiEdit: keep only the selected edits
+						// (hunk id `e${index}`) so the CLI applies just those replacements.
+						const keep = new Set(op.hunks);
+						updatedInput = { ...input, edits: input.edits.filter((_, i) => keep.has(`e${i}`)) };
+					}
 					const result: PermissionResult =
 						op.decision === 'deny'
 							? { behavior: 'deny', message: 'The user denied this tool use.' }
