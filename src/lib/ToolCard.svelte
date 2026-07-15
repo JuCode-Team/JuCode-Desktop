@@ -55,6 +55,22 @@
 
 	const kind = $derived(s(parsed?.kind));
 	const errorText = $derived(s(parsed?.error));
+	// Readable body for tools we don't render specially (Task, MCP tools, unknown):
+	// prefer a few common text fields, else a pretty-printed object.
+	const fallbackText = $derived.by(() => {
+		if (!parsed || typeof parsed !== 'object') return '';
+		const p = parsed as Record<string, unknown>;
+		const notable = ['description', 'prompt', 'query', 'summary', 'subagent_type', 'plan']
+			.map((k) => (typeof p[k] === 'string' ? (p[k] as string) : ''))
+			.filter(Boolean);
+		if (notable.length) return notable.join('\n\n').slice(0, 4000);
+		try {
+			const json = JSON.stringify(p, null, 2);
+			return json === '{}' ? '' : json.slice(0, 4000);
+		} catch {
+			return '';
+		}
+	});
 	const diff = $derived(s(parsed?.diff));
 	const exitCode = $derived(typeof parsed?.exit_code === 'number' ? (parsed!.exit_code as number) : null);
 
@@ -172,6 +188,8 @@
 				{#if content}<pre>{content}</pre>{:else}<div class="meta">{t('chat.emptyFile')}</div>{/if}
 			{:else if bytes !== null || truncated}
 				<div class="meta">{[bytes !== null ? fmtBytes(bytes) : '', truncated ? t('chat.truncated') : ''].filter(Boolean).join(' · ')}</div>
+			{:else if fallbackText}
+				<pre>{fallbackText}</pre>
 			{/if}
 		</div>
 	{/if}
