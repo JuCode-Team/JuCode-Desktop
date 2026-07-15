@@ -137,6 +137,9 @@ export class ChatState {
 		questions?: Question[] | null;
 	} | null>(null);
 	subagents = $state<Record<string, { status: string; message: string }>>({});
+	// Latest engine rate-limit / quota notice, shown as a persistent banner until
+	// the engine reports the limit cleared (status back to normal). null = no limit.
+	rateLimit = $state<{ level: 'warning' | 'limited'; message: string; resetsAt: number | null } | null>(null);
 	commands = $state<CommandItem[]>([]);
 	totalIn = $state(0);
 	totalOut = $state(0);
@@ -664,6 +667,16 @@ export class ChatState {
 			case 'subagent_lifecycle': {
 				const path = str(ev.path);
 				if (path) this.subagents[path] = { status: str(ev.status), message: str(ev.message) };
+				break;
+			}
+			case 'rate_limit': {
+				const level = ev.level === 'limited' ? 'limited' : ev.level === 'warning' ? 'warning' : null;
+				if (!level) {
+					this.rateLimit = null; // limit cleared → drop the banner
+					break;
+				}
+				const resetsAt = typeof ev.resets_at === 'number' && ev.resets_at > 0 ? ev.resets_at : null;
+				this.rateLimit = { level, message: str(ev.message), resetsAt };
 				break;
 			}
 			case 'connecting':

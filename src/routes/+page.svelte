@@ -46,6 +46,7 @@
 	import MessageList from '$lib/MessageList.svelte';
 	import StatusStrip from '$lib/composer/StatusStrip.svelte';
 	import ApprovalCard from '$lib/ApprovalCard.svelte';
+	import RateLimitBanner from '$lib/RateLimitBanner.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import CommandPalette from '$lib/CommandPalette.svelte';
@@ -1270,6 +1271,10 @@
 						<ApprovalCard approval={chat.pendingApproval} onRespond={respondApproval} />
 					{/key}
 				</div>
+			{/if}
+
+			{#if chat.rateLimit}
+				<RateLimitBanner rateLimit={chat.rateLimit} onDismiss={() => (chat.rateLimit = null)} />
 			{/if}
 
 			<StatusStrip items={chat.statusLog} />

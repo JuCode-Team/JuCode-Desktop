@@ -279,6 +279,35 @@ export interface ApprovalHunkOut {
 	lines: string[];
 }
 
+/** Normalize a claude `rate_limit_event` into a persistent `rate_limit` banner
+ *  event. The CLI's exact shape varies by version, so fields are probed
+ *  defensively: `status` (allowed / allowed_warning / rejected) drives the
+ *  level, and a reset timestamp is read from several candidate keys. A normal
+ *  "allowed" status clears any existing banner. */
+export function rateLimitEvents(msg: Record<string, unknown>): NormalizedEvent[] {
+	const s = rec(msg.rate_limit) ?? msg;
+	const status = (str(s.status) || str(msg.status)).toLowerCase();
+	// Reset time may be seconds or ms epoch, or a retry-after delta — normalize to
+	// ms epoch when it looks like an absolute time; leave deltas as null (the
+	// banner then just shows the message without a countdown).
+	const resetRaw = num(s.resetsAt) || num(s.resets_at) || num(s.resetAt) || num(msg.resetsAt);
+	const resetsAt = resetRaw > 1e12 ? resetRaw : resetRaw > 1e9 ? resetRaw * 1000 : null;
+	const message = str(s.message) || str(msg.message) || status;
+	// Anything explicitly rejected/exceeded → hard limit; a warning → soft; a
+	// plain "allowed" (or unknown-but-benign) clears the banner.
+	if (/reject|exceed|limit_reached|throttl/.test(status)) {
+		return [{ type: 'rate_limit', level: 'limited', message, resets_at: resetsAt }];
+	}
+	if (/warning|approaching|warn/.test(status)) {
+		return [{ type: 'rate_limit', level: 'warning', message, resets_at: resetsAt }];
+	}
+	// An explicit "allowed" clears any banner; an empty/unknown event says nothing.
+	if (/allow|ok|normal/.test(status)) return [{ type: 'rate_limit', level: 'ok', message: '', resets_at: null }];
+	return [];
+}
+
+const num = (v: unknown): number => (typeof v === 'number' && isFinite(v) ? v : 0);
+
 /** Tool-card JSON synthesized from a claude tool input (the shapes ToolCard /
  *  ChangesPanel already understand: command/stdout, path/paths/diff, pattern…). */
 function toolCardJson(claudeName: string, input: Record<string, unknown>): string {
@@ -1213,12 +1242,10 @@ export function createClaudeAdapter(): EngineAdapter {
 					case 'control_response':
 						return onControlResponse(msg as unknown as ControlResponseFrame);
 					default:
-						// Rate-limit notices are otherwise a silent black hole.
-						if (msg.type === 'rate_limit_event') {
-							const s = rec(msg.rate_limit) ?? msg;
-							const detail = str(s.status) || str(s.message) || str(msg.status);
-							return detail ? [{ type: 'info', message: `[claude] rate limit: ${detail}` }] : [];
-						}
+						// Rate-limit notices are otherwise a silent black hole. Surface
+						// them as a persistent banner (rate_limit event) so the quota state
+						// stays visible, degrading gracefully across CLI shape variants.
+						if (msg.type === 'rate_limit_event') return rateLimitEvents(msg);
 						return []; // tool_progress, tool_use_summary, auth_status — silent
 				}
 			} catch (e) {

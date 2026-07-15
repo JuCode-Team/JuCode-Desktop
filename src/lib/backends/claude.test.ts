@@ -1406,6 +1406,25 @@ describe('claude adapter: restarts and robustness', () => {
 		expect(adapter.translate({ type: 'control_response', response: { subtype: 'success', request_id: 'not-ours' } })).toEqual([]);
 	});
 
+	it('rate_limit_event → a persistent rate_limit banner event', () => {
+		const { lines } = makeIo();
+		const adapter = createClaudeAdapter();
+		boot(adapter, lines);
+		// A rejection with a seconds-epoch reset → limited banner, ms-epoch reset.
+		expect(
+			adapter.translate({ type: 'rate_limit_event', rate_limit: { status: 'rejected', message: 'slow down', resetsAt: 2_000_000_000 } })
+		).toEqual([{ type: 'rate_limit', level: 'limited', message: 'slow down', resets_at: 2_000_000_000_000 }]);
+		// A warning surfaces as the soft level.
+		expect(
+			adapter.translate({ type: 'rate_limit_event', rate_limit: { status: 'allowed_warning' } })[0]
+		).toMatchObject({ type: 'rate_limit', level: 'warning' });
+		// An explicit allowed clears the banner; an empty/unknown event says nothing.
+		expect(adapter.translate({ type: 'rate_limit_event', rate_limit: { status: 'allowed' } })).toEqual([
+			{ type: 'rate_limit', level: 'ok', message: '', resets_at: null }
+		]);
+		expect(adapter.translate({ type: 'rate_limit_event' })).toEqual([]);
+	});
+
 	it('surfaces stderr lines as info events', () => {
 		const adapter = createClaudeAdapter();
 		expect(adapter.translate({ __stderr: 'node: warning' })).toEqual([
