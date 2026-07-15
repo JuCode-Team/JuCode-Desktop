@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { ShieldAlert, ChevronRight, Bot, MessageCircleQuestion, Check } from 'lucide-svelte';
+	import { ShieldAlert, ChevronRight, Bot, MessageCircleQuestion, Check, ClipboardList, Copy, Download } from 'lucide-svelte';
 	import { t } from '$lib/i18n';
 	import Button from '$lib/ui/Button.svelte';
+	import Markdown from '$lib/Markdown.svelte';
 	import {
 		allHunkIds,
 		buildApproveOp,
@@ -53,6 +54,28 @@
 	const isShell = $derived(
 		['bash', 'execute', 'exec_command', 'shell_command'].includes(approval.name)
 	);
+	// ExitPlanMode: the model is proposing a plan and asking to leave plan mode.
+	// Render the plan markdown with copy/download actions instead of a raw diff.
+	const isPlan = $derived(approval.name === 'ExitPlanMode' || approval.name === 'update_plan');
+	let copied = $state(false);
+	async function copyPlan() {
+		try {
+			await navigator.clipboard.writeText(approval.summary);
+			copied = true;
+			setTimeout(() => (copied = false), 1400);
+		} catch {
+			/* clipboard blocked — ignore */
+		}
+	}
+	function downloadPlan() {
+		const blob = new Blob([approval.summary], { type: 'text/markdown' });
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement('a');
+		a.href = url;
+		a.download = 'plan.md';
+		a.click();
+		URL.revokeObjectURL(url);
+	}
 	// Per-hunk selection only kicks in for multi-hunk edits; a single hunk (or a
 	// non-edit tool) keeps the whole-call card, incl. 始终允许 (the engine rejects
 	// always+hunks, so the hunk card never offers it).
@@ -86,11 +109,14 @@
 		line.startsWith('+') ? 'add' : line.startsWith('-') ? 'del' : 'ctx';
 </script>
 
-<div class="approval" class:ask={!!questions}>
+<div class="approval" class:ask={!!questions} class:plan={isPlan}>
 	<div class="approval-head">
 		{#if questions}
 			<MessageCircleQuestion size={15} />
 			<span>{t('shell.askQuestion')}</span>
+		{:else if isPlan}
+			<ClipboardList size={15} />
+			<span>{t('shell.proposePlan')}</span>
 		{:else}
 			<ShieldAlert size={15} />
 			<span
@@ -131,6 +157,29 @@
 		<div class="approval-actions">
 			<Button variant="primary" size="sm" disabled={!answersReady} onclick={submitAnswers}>{t('shell.answerSubmit')}</Button>
 			<Button variant="danger" size="sm" onclick={() => onRespond(buildApproveOp(approval.callId, 'deny'))}>{t('shell.answerCancel')}</Button>
+		</div>
+	{:else if isPlan}
+		<div class="plan-body">
+			<Markdown text={approval.summary} />
+		</div>
+		<div class="approval-actions">
+			<Button
+				variant="primary"
+				size="sm"
+				onclick={() => onRespond(buildApproveOp(approval.callId, 'allow'))}
+				>{t('shell.approvePlan')}</Button
+			>
+			<Button
+				variant="danger"
+				size="sm"
+				onclick={() => onRespond(buildApproveOp(approval.callId, 'deny'))}
+				>{t('shell.keepPlanning')}</Button
+			>
+			<span class="plan-spacer"></span>
+			<button class="plan-util" onclick={copyPlan}>
+				{#if copied}<Check size={13} />{t('shell.copiedPlan')}{:else}<Copy size={13} />{t('shell.copyPlan')}{/if}
+			</button>
+			<button class="plan-util" onclick={downloadPlan}><Download size={13} />{t('shell.downloadPlan')}</button>
 		</div>
 	{:else if multiHunk}
 		<div class="hunks">
@@ -227,6 +276,42 @@
 	}
 	.approval.ask .approval-head {
 		color: var(--accent-bright);
+	}
+	.approval.plan {
+		background: color-mix(in oklab, var(--accent) 6%, var(--panel));
+		border-color: color-mix(in oklab, var(--accent) 32%, transparent);
+	}
+	.approval.plan .approval-head {
+		color: var(--accent-bright);
+	}
+	.plan-body {
+		margin-top: 10px;
+		padding: 10px 12px;
+		background: var(--sidebar);
+		border: 1px solid var(--hairline);
+		border-radius: var(--r-sm);
+		font-size: 13px;
+		max-height: 340px;
+		overflow-y: auto;
+	}
+	.plan-spacer {
+		flex: 1;
+	}
+	.plan-util {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		padding: 4px 8px;
+		font-size: 11.5px;
+		color: var(--dim);
+		background: none;
+		border: 1px solid var(--hairline);
+		border-radius: var(--r-sm);
+		cursor: pointer;
+	}
+	.plan-util:hover {
+		color: var(--text);
+		background: var(--surface2);
 	}
 	.approval-head {
 		display: flex;

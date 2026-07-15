@@ -313,8 +313,9 @@ function approvalSummary(req: CanUseToolRequest): string {
 		case 'Read':
 			return str(input.file_path);
 		case 'ExitPlanMode':
-			// Plan mode: show the proposed plan markdown, not raw JSON.
-			return cap(str(input.plan) || JSON.stringify(req.input));
+			// Plan mode: show the proposed plan markdown in full (not capped) so the
+			// actionable plan card can copy/download the complete text.
+			return str(input.plan) || JSON.stringify(req.input);
 		case 'Task': {
 			// Subagent dispatch: "<subagent_type>: <description|prompt>".
 			const who = str(input.subagent_type);
@@ -530,6 +531,12 @@ export function createClaudeAdapter(): EngineAdapter {
 			tools.set(id, { claudeName: block.name, name: 'todo', input });
 			return todoPlanEvents(input);
 		}
+		// ExitPlanMode is surfaced as an actionable plan approval card, not a tool
+		// card — register it (for parent/result tracking) but emit no card events.
+		if (block.name === 'ExitPlanMode') {
+			tools.set(id, { claudeName: block.name, name: 'ExitPlanMode', input });
+			return [];
+		}
 		const known = tools.get(id);
 		if (known && !authoritative) return [];
 		const name = mapToolName(block.name);
@@ -557,6 +564,7 @@ export function createClaudeAdapter(): EngineAdapter {
 		if (!input) return [];
 		meta.input = input;
 		if (meta.claudeName === 'TodoWrite') return todoPlanEvents(input);
+		if (meta.claudeName === 'ExitPlanMode') return []; // rendered as a plan card, not a tool card
 		return [{ type: 'tool_update', call_id: track.toolId, output: toolCardJson(meta.claudeName, input) }];
 	}
 
@@ -565,6 +573,9 @@ export function createClaudeAdapter(): EngineAdapter {
 		const meta = tools.get(id);
 		if (!meta) return []; // stale (restart) or untracked
 		tools.delete(id);
+		// ExitPlanMode never opened a tool card (it's an approval plan card), so its
+		// result has no card to close.
+		if (meta.claudeName === 'ExitPlanMode') return [];
 		const isError = block.is_error === true;
 		const text = resultText(block.content);
 		let output: string;
@@ -923,7 +934,9 @@ export function createClaudeAdapter(): EngineAdapter {
 			// The approval request carries the tool's FULL input — fill the tool card
 			// from it (in ask mode the streamed input may not have reached the card),
 			// creating the card if the assistant stream hasn't shown it yet.
-			const tid = str(r.tool_use_id);
+			// ExitPlanMode renders as an actionable plan card (below) — skip the
+			// redundant tool card so the plan isn't shown twice during approval.
+			const tid = str(r.tool_name) === 'ExitPlanMode' ? '' : str(r.tool_use_id);
 			if (tid) {
 				const input = rec(r.input) ?? {};
 				const name = mapToolName(str(r.tool_name));

@@ -733,6 +733,30 @@ describe('claude adapter: approvals', () => {
 		expect(adapter.encodeOp({ op: 'approve', call_id: 'approval-1', decision: 'allow' })).toBeNull();
 	});
 
+	it('ExitPlanMode surfaces the full plan as an approval card and skips the tool card', () => {
+		const { lines } = makeIo();
+		const adapter = createClaudeAdapter();
+		boot(adapter, lines);
+		const plan = '# Plan\n\n' + '- step\n'.repeat(2000); // > SUMMARY_CAP (4000 chars)
+		const events = adapter.translate({
+			type: 'control_request',
+			request_id: 'req-plan',
+			request: {
+				subtype: 'can_use_tool',
+				tool_name: 'ExitPlanMode',
+				input: { plan },
+				tool_use_id: 'toolu_plan'
+			}
+		});
+		// No tool card is created — the plan lives on the approval card instead.
+		expect(events.some((e) => e.type === 'tool_start')).toBe(false);
+		const approval = events.find((e) => e.type === 'approval_request')!;
+		expect(approval).toMatchObject({ name: 'ExitPlanMode', hunks: null });
+		// The plan is passed through in full (not truncated to SUMMARY_CAP) so the
+		// card's copy/download actions get the complete text.
+		expect(String(approval.summary)).toBe(plan);
+	});
+
 	it('deny sends behavior:deny with a message', () => {
 		const { lines } = makeIo();
 		const adapter = createClaudeAdapter();
