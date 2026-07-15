@@ -784,6 +784,15 @@ export function createCodexAdapter(): EngineAdapter {
 				// Deprecated duplicate of the contextCompaction item lifecycle; only
 				// meaningful on versions that don't emit the item.
 				return sawCompactionItem ? [] : [{ type: 'compaction_end' }];
+			case 'model/rerouted': {
+				// The engine swapped the model mid-turn (e.g. a downgrade under load) —
+				// surface it so cost/behavior changes aren't silent.
+				const to = str(p.toModel) || str(p.model) || str(p.to);
+				const from = str(p.fromModel) || str(p.from);
+				const reason = str(p.reason);
+				const desc = [from && to ? `${from} → ${to}` : to || from, reason].filter(Boolean).join(' · ');
+				return desc ? [{ type: 'info', message: `[codex] model rerouted: ${desc}` }] : [];
+			}
 			case 'thread/goal/updated': {
 				const g = (p as unknown as ThreadGoalUpdatedParams).goal;
 				return g ? [goalEvent(g)] : [];

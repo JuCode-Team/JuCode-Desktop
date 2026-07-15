@@ -650,9 +650,16 @@ export function createClaudeAdapter(): EngineAdapter {
 			// init is re-emitted at every turn start: only surface actual changes.
 			const events: NormalizedEvent[] = [];
 			if (newModel && newModel !== model) {
+				const from = model;
 				model = newModel;
 				contextWindow = modelWindows.get(newModel) ?? contextWindow;
 				events.push(modelStatus());
+				// A user /model switch already updated `model` via the set_model ack, so
+				// an unexpected change here is an engine reroute/downgrade.
+				events.push({
+					type: 'info',
+					message: `[claude] model rerouted: ${from ? `${compactClaudeModel(from, from)} → ` : ''}${compactClaudeModel(newModel, newModel)}`
+				});
 			} else if (effortDirty) {
 				// A `/effort` switch has no ack of its own — surface the new level
 				// via the model_status of the turn it produced.
