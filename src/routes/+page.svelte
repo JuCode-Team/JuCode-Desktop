@@ -1334,9 +1334,11 @@
 				plan={chat?.plan ?? []}
 				cwd={activeProject?.path ?? ''}
 				changed={chat?.changedFiles ?? []}
+				turns={chat?.turnTimeline ?? []}
 				worktree={activeProject?.worktree ?? null}
 				llm={llmTarget}
 				onRevertFile={(p) => chat && (chat.changedFiles = chat.changedFiles.filter((x) => x !== p))}
+				onOpenFile={openChatFile}
 				onOpenTask={(path, meta) => openTaskProject(path, meta)}
 				onTaskRemoved={closeTaskProject}
 			/>

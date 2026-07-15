@@ -78,6 +78,27 @@ const str = (v: unknown) => (typeof v === 'string' ? v : '');
 const num = (v: unknown) => (typeof v === 'number' ? v : 0);
 const arr = <T>(v: unknown) => (Array.isArray(v) ? (v as T[]) : []);
 
+/** Count added/removed lines in a unified-diff-ish string (ignoring +++/--- file
+ *  headers). Used to attribute an edit's line delta to its turn. */
+export function countDiffLines(diff: string): { added: number; removed: number } {
+	let added = 0;
+	let removed = 0;
+	for (const line of diff.split('\n')) {
+		if (line.startsWith('+') && !line.startsWith('+++')) added++;
+		else if (line.startsWith('-') && !line.startsWith('---')) removed++;
+	}
+	return { added, removed };
+}
+
+/** One user turn's worth of file edits, for the turn-level diff timeline. */
+export interface TurnDiff {
+	index: number;
+	text: string;
+	files: { path: string; added: number; removed: number }[];
+	added: number;
+	removed: number;
+}
+
 /** Reactive chat state projected from the engine's AgentEvent stream. */
 export class ChatState {
 	/** Set by the page: invoked when the agent's `browser_open` tool succeeds,
@@ -147,6 +168,9 @@ export class ChatState {
 	compactionTokens = $state(0);
 	// Files the agent edited this session (drives the Changes panel).
 	changedFiles = $state<string[]>([]);
+	// Per user-turn file edits (path → added/removed line counts), keyed by the
+	// 0-based user-turn index — drives the turn-level diff timeline.
+	turnEdits = $state<Record<number, Record<string, { added: number; removed: number }>>>({});
 	// Approval policy, enforced engine-side ('ask' ↔ read-only, 'edits' ↔
 	// auto-edit, 'all' ↔ full-auto). The engine is the source of truth: this
 	// mirrors its `approval_mode` events, except right after engine startup where
@@ -260,6 +284,27 @@ export class ChatState {
 		return this.messages.filter((m) => m.kind === 'user').length;
 	}
 
+	/** Per-turn file-change timeline: one entry per user turn that edited files,
+	 *  newest first, with the turn's prompt and its files' ±line counts. */
+	get turnTimeline(): TurnDiff[] {
+		const userTexts: string[] = [];
+		for (const m of this.messages) if (m.kind === 'user') userTexts.push(m.text);
+		const out: TurnDiff[] = [];
+		for (const [key, bucket] of Object.entries(this.turnEdits)) {
+			const index = Number(key);
+			const files = Object.entries(bucket).map(([path, c]) => ({ path, added: c.added, removed: c.removed }));
+			if (!files.length) continue;
+			out.push({
+				index,
+				text: userTexts[index] ?? '',
+				files,
+				added: files.reduce((s, f) => s + f.added, 0),
+				removed: files.reduce((s, f) => s + f.removed, 0)
+			});
+		}
+		return out.sort((a, b) => b.index - a.index);
+	}
+
 	/** For a claude rewind to the `userIndex`-th user turn: the transcript uuid of
 	 *  the assistant message ending the previous turn — the `--resume-session-at`
 	 *  target. Null when rewinding to the first turn (restart fresh). */
@@ -281,6 +326,10 @@ export class ChatState {
 	 *  local view truncation on a thread/rollback rewind (the engine rewinds its
 	 *  own history; we mirror it in the projected transcript). */
 	truncateToUserTurn(userIndex: number) {
+		// Drop per-turn diffs for the dropped turns (index >= userIndex).
+		for (const key of Object.keys(this.turnEdits)) {
+			if (Number(key) >= userIndex) delete this.turnEdits[Number(key)];
+		}
 		let count = 0;
 		for (let i = 0; i < this.messages.length; i++) {
 			if (this.messages[i].kind === 'user') {
@@ -493,7 +542,20 @@ export class ChatState {
 								if (!this.changedFiles.includes(p)) this.changedFiles.push(p);
 							}
 						}
-						if (edited.length) ChatState.onFilesEdited?.(edited);
+						// Attribute the edit's ±line counts to the current user turn.
+						if (edited.length) {
+							const turn = this.userTurns - 1;
+							if (turn >= 0) {
+								const { added, removed } = countDiffLines(str(out.diff));
+								const bucket = (this.turnEdits[turn] ??= {});
+								for (const p of edited) {
+									const cur = (bucket[p] ??= { added: 0, removed: 0 });
+									cur.added += added;
+									cur.removed += removed;
+								}
+							}
+							ChatState.onFilesEdited?.(edited);
+						}
 					} catch (e) {
 						/* non-JSON output */
 						console.warn('tool_output JSON parse failed', e);

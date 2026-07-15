@@ -1,8 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { ChatState } from './chat.svelte';
+import { ChatState, countDiffLines } from './chat.svelte';
 
 const userTexts = (c: ChatState) =>
 	c.messages.filter((m) => m.kind === 'user').map((m) => (m.kind === 'user' ? m.text : ''));
+
+describe('countDiffLines', () => {
+	it('counts +/- lines, ignoring +++/--- headers', () => {
+		expect(countDiffLines('--- a\n+++ b\n@@\n-old\n+new\n ctx')).toEqual({ added: 1, removed: 1 });
+	});
+	it('handles pure additions', () => {
+		expect(countDiffLines('+a\n+b\n+c')).toEqual({ added: 3, removed: 0 });
+	});
+});
 
 describe('ChatState.handle', () => {
 	it('projects a user message and streamed assistant deltas', () => {
@@ -58,6 +67,45 @@ describe('ChatState.handle', () => {
 		const last = c.messages[c.messages.length - 1] as { kind: string; tokens?: number };
 		expect(last.kind).toBe('assistant');
 		expect(last.tokens).toBe(42);
+	});
+
+	it('builds a per-turn diff timeline from edit tool outputs', () => {
+		const c = new ChatState();
+		// Turn 1: edit a.ts (+2/-1)
+		c.handle({ type: 'user_message', content: 'edit a' });
+		c.handle({ type: 'tool_start', call_id: 't1', name: 'str_replace' });
+		c.handle({
+			type: 'tool_output',
+			call_id: 't1',
+			name: 'str_replace',
+			output: JSON.stringify({ path: '/proj/a.ts', diff: '-old\n+new1\n+new2' })
+		});
+		// Turn 2: edit b.ts (+1/-0)
+		c.handle({ type: 'user_message', content: 'edit b' });
+		c.handle({ type: 'tool_start', call_id: 't2', name: 'write' });
+		c.handle({
+			type: 'tool_output',
+			call_id: 't2',
+			name: 'write',
+			output: JSON.stringify({ path: '/proj/b.ts', diff: '+only' })
+		});
+		const tl = c.turnTimeline;
+		expect(tl.map((t) => t.index)).toEqual([1, 0]); // newest first
+		expect(tl[1]).toMatchObject({ index: 0, text: 'edit a', added: 2, removed: 1 });
+		expect(tl[1].files).toEqual([{ path: '/proj/a.ts', added: 2, removed: 1 }]);
+		expect(tl[0]).toMatchObject({ index: 1, text: 'edit b', added: 1, removed: 0 });
+	});
+
+	it('drops per-turn diffs when truncating to an earlier turn', () => {
+		const c = new ChatState();
+		c.handle({ type: 'user_message', content: 'edit a' });
+		c.handle({ type: 'tool_start', call_id: 't1', name: 'write' });
+		c.handle({ type: 'tool_output', call_id: 't1', name: 'write', output: JSON.stringify({ path: '/a', diff: '+x' }) });
+		c.handle({ type: 'user_message', content: 'edit b' });
+		c.handle({ type: 'tool_start', call_id: 't2', name: 'write' });
+		c.handle({ type: 'tool_output', call_id: 't2', name: 'write', output: JSON.stringify({ path: '/b', diff: '+y' }) });
+		c.truncateToUserTurn(1); // drop turn 2 (index 1)
+		expect(c.turnTimeline.map((t) => t.index)).toEqual([0]);
 	});
 
 	it('aggregates a tool card by call_id and marks it done', () => {

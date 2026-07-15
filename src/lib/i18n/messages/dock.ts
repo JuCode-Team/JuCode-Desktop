@@ -6,6 +6,7 @@ const dock = {
 			plan: '计划',
 			goal: '目标',
 			changes: '改动',
+			turns: '回合',
 			files: '文件',
 			git: 'Git',
 			term: '终端',
@@ -14,6 +15,11 @@ const dock = {
 		dock: {
 			empty: '没有打开的面板',
 			hint: '选一个面板打开，或点右上角'
+		},
+		turns: {
+			empty: '本会话还没有文件改动',
+			turnN: '第 {n} 回合',
+			foot: '{n} 个有改动的回合'
 		},
 		browser: {
 			urlPlaceholder: '输入网址，回车打开',
@@ -145,6 +151,7 @@ const dock = {
 			plan: 'Plan',
 			goal: 'Goal',
 			changes: 'Changes',
+			turns: 'Turns',
 			files: 'Files',
 			git: 'Git',
 			term: 'Terminal',
@@ -153,6 +160,11 @@ const dock = {
 		dock: {
 			empty: 'No open panels',
 			hint: 'Pick a panel to open, or click the top-right'
+		},
+		turns: {
+			empty: 'No file changes in this session yet',
+			turnN: 'Turn {n}',
+			foot: '{n} turns with changes'
 		},
 		browser: {
 			urlPlaceholder: 'Enter a URL and press Enter',

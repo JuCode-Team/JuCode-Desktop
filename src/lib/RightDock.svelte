@@ -1,16 +1,17 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { X, Plus, ListTodo, Target, FileDiff, FolderTree, GitBranch, Terminal, Globe } from 'lucide-svelte';
+	import { X, Plus, ListTodo, Target, FileDiff, FolderTree, GitBranch, Terminal, Globe, History } from 'lucide-svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import GoalPanel from './GoalPanel.svelte';
 	import PlanPanel from './PlanPanel.svelte';
 	import FilesPanel from './FilesPanel.svelte';
 	import GitPanel from './GitPanel.svelte';
 	import ChangesPanel from './ChangesPanel.svelte';
+	import TurnsPanel from './TurnsPanel.svelte';
 	import TerminalPanel from './TerminalPanel.svelte';
 	import BrowserPanel from './BrowserPanel.svelte';
 	import { browser } from '$lib/browser.svelte';
-	import type { Goal, PlanStep } from '$lib/chat.svelte';
+	import type { Goal, PlanStep, TurnDiff } from '$lib/chat.svelte';
 	import type { WorktreeMeta } from '$lib/types';
 	import { t } from '$lib/i18n';
 
@@ -19,10 +20,12 @@
 		plan = [],
 		cwd = '',
 		changed = [],
+		turns = [],
 		worktree = null,
 		goalsEnabled = true,
 		llm = null,
 		onRevertFile,
+		onOpenFile,
 		onOpenTask,
 		onTaskRemoved
 	}: {
@@ -30,6 +33,7 @@
 		plan?: PlanStep[];
 		cwd?: string;
 		changed?: string[];
+		turns?: TurnDiff[];
 		/** 当前激活项目是并行任务 worktree 时的元数据（透传给 Git 面板）。 */
 		worktree?: WorktreeMeta | null;
 		/** 一次性文案生成的目标端点（provider/base_url/format/model），透传给 Git 面板。 */
@@ -37,6 +41,7 @@
 		/** 当前会话引擎是否支持 goal/plan（不支持时隐藏这两个标签页）。 */
 		goalsEnabled?: boolean;
 		onRevertFile?: (p: string) => void;
+		onOpenFile?: (p: string) => void;
 		onOpenTask?: (path: string, meta: WorktreeMeta) => void;
 		onTaskRemoved?: (path: string) => void;
 	} = $props();
@@ -45,6 +50,7 @@
 		{ key: 'plan', icon: ListTodo },
 		{ key: 'goal', icon: Target },
 		{ key: 'changes', icon: FileDiff },
+		{ key: 'turns', icon: History },
 		{ key: 'files', icon: FolderTree },
 		{ key: 'git', icon: GitBranch },
 		{ key: 'term', icon: Terminal },
@@ -225,6 +231,7 @@
 				{#if tab.panel === 'plan'}<PlanPanel {plan} />
 				{:else if tab.panel === 'goal'}<GoalPanel {goal} />
 				{:else if tab.panel === 'changes'}<ChangesPanel {cwd} files={changed} onRevert={onRevertFile} />
+				{:else if tab.panel === 'turns'}<TurnsPanel {turns} onOpenFile={onOpenFile} />
 				{:else if tab.panel === 'files'}<FilesPanel rootDir={cwd} />
 				{:else if tab.panel === 'git'}<GitPanel {cwd} {worktree} {llm} {onOpenTask} {onTaskRemoved} />
 				{:else if tab.panel === 'term'}<TerminalPanel {cwd} />
