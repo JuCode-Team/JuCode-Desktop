@@ -50,7 +50,8 @@
 
 	let copied = $state(false);
 	async function copyAll() {
-		const text = groups.map((g) => `## ${g.title}\n${g.rows.map(([k, v]) => `${k}: ${v}`).join('\n')}`).join('\n\n');
+		let text = groups.map((g) => `## ${g.title}\n${g.rows.map(([k, v]) => `${k}: ${v}`).join('\n')}`).join('\n\n');
+		if (frames.length) text += `\n\n## ${t('dock.diag.frames')}\n${frames.slice(-120).join('\n')}`;
 		try {
 			await navigator.clipboard.writeText(text);
 			copied = true;
@@ -61,6 +62,7 @@
 	}
 
 	const trace = $derived(chat?.statusLog ?? []);
+	const frames = $derived(chat?.frameTrace ?? []);
 </script>
 
 <div class="diag">
@@ -81,6 +83,17 @@
 			{:else}
 				{#each trace.slice(-40) as line, i (i)}
 					<div class="tline">{line}</div>
+				{/each}
+			{/if}
+		</div>
+
+		<div class="grp">
+			<div class="grp-title">{t('dock.diag.frames')} <span class="badge">{frames.length}</span></div>
+			{#if frames.length === 0}
+				<div class="empty">{t('dock.diag.traceEmpty')}</div>
+			{:else}
+				{#each frames.slice(-60) as line, i (i)}
+					<div class="fline" class:warn={line.startsWith('⚠')}>{line}</div>
 				{/each}
 			{/if}
 		</div>
@@ -164,6 +177,17 @@
 		margin-bottom: 2px;
 		white-space: pre-wrap;
 		word-break: break-word;
+	}
+	.fline {
+		font-family: var(--font-mono);
+		font-size: 10.5px;
+		color: var(--dim2);
+		padding: 1px 4px;
+		white-space: pre-wrap;
+		word-break: break-word;
+	}
+	.fline.warn {
+		color: var(--err);
 	}
 	.foot {
 		display: flex;

@@ -161,6 +161,9 @@ export class ChatState {
 	// Latest engine rate-limit / quota notice, shown as a persistent banner until
 	// the engine reports the limit cleared (status back to normal). null = no limit.
 	rateLimit = $state<{ level: 'warning' | 'limited'; message: string; resetsAt: number | null } | null>(null);
+	// Compact ring buffer of the most recent raw engine frames (summarized), for the
+	// diagnostics trace — lets a mis-parsed / dropped tool frame be inspected.
+	frameTrace = $state<string[]>([]);
 	commands = $state<CommandItem[]>([]);
 	totalIn = $state(0);
 	totalOut = $state(0);
@@ -411,6 +414,42 @@ export class ChatState {
 		for (const m of this.messages) {
 			if (m.kind === 'tool' && m.running) m.running = false;
 		}
+	}
+
+	/** Summarize a raw engine frame into one trace line and keep the last 200.
+	 *  Deliberately compact (type + the few fields that matter for tool tracking)
+	 *  so the diagnostics trace stays readable and cheap. */
+	captureFrame(raw: string) {
+		let summary: string;
+		try {
+			const o = JSON.parse(raw) as Record<string, unknown>;
+			const type = typeof o.type === 'string' ? o.type : '?';
+			if (type === 'stream_event') {
+				const ev = (o.event ?? {}) as Record<string, unknown>;
+				const et = str(ev.type);
+				const cb = (ev.content_block ?? {}) as Record<string, unknown>;
+				const d = (ev.delta ?? {}) as Record<string, unknown>;
+				const detail = cb.type ? `${str(cb.type)}${cb.name ? `:${str(cb.name)}` : ''}` : str(d.type);
+				summary = `stream_event/${et}${detail ? ` ${detail}` : ''}`;
+			} else if (type === 'user') {
+				const content = ((o.message as Record<string, unknown>)?.content ?? []) as unknown;
+				const tr = Array.isArray(content) ? content.find((b) => (b as Record<string, unknown>)?.type === 'tool_result') : null;
+				summary = tr ? `user/tool_result ${str((tr as Record<string, unknown>).tool_use_id)}` : 'user/message';
+			} else if (type === 'assistant') {
+				const content = ((o.message as Record<string, unknown>)?.content ?? []) as unknown[];
+				const kinds = Array.isArray(content) ? content.map((b) => str((b as Record<string, unknown>).type)).join(',') : '';
+				summary = `assistant [${kinds}]`;
+			} else if (type === 'system') {
+				summary = `system/${str(o.subtype)}`;
+			} else {
+				summary = `${type}${o.subtype ? `/${str(o.subtype)}` : ''}`;
+			}
+			if (o.parent_tool_use_id) summary += ' ⤷sub';
+		} catch {
+			summary = `⚠ unparseable (${raw.length}b): ${raw.slice(0, 60)}`;
+		}
+		this.frameTrace.push(summary);
+		if (this.frameTrace.length > 200) this.frameTrace.splice(0, this.frameTrace.length - 200);
 	}
 
 	#tool(callId: string): Extract<Msg, { kind: 'tool' }> | undefined {

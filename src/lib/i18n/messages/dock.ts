@@ -42,6 +42,7 @@ const dock = {
 			meanTime: '平均每回合',
 			trace: '事件日志',
 			traceEmpty: '暂无事件',
+			frames: '原始帧',
 			copy: '复制诊断',
 			copied: '已复制'
 		},
@@ -211,6 +212,7 @@ const dock = {
 			meanTime: 'Mean / turn',
 			trace: 'Event log',
 			traceEmpty: 'No events yet',
+			frames: 'Raw frames',
 			copy: 'Copy diagnostics',
 			copied: 'Copied'
 		},

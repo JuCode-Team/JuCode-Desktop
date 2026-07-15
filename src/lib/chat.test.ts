@@ -108,6 +108,25 @@ describe('ChatState.handle', () => {
 		expect(c.turnTimeline.map((t) => t.index)).toEqual([0]);
 	});
 
+	it('summarizes raw frames for the diagnostics trace (incl. unparseable)', () => {
+		const c = new ChatState();
+		c.captureFrame(JSON.stringify({ type: 'stream_event', event: { type: 'content_block_start', content_block: { type: 'tool_use', name: 'Bash' } } }));
+		c.captureFrame(JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_9' }] } }));
+		c.captureFrame(JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use' }] }, parent_tool_use_id: 'toolu_p' }));
+		c.captureFrame('{not json');
+		expect(c.frameTrace[0]).toBe('stream_event/content_block_start tool_use:Bash');
+		expect(c.frameTrace[1]).toBe('user/tool_result toolu_9');
+		expect(c.frameTrace[2]).toContain('⤷sub');
+		expect(c.frameTrace[3]).toMatch(/^⚠ unparseable/);
+	});
+
+	it('caps the frame trace ring buffer at 200', () => {
+		const c = new ChatState();
+		for (let i = 0; i < 250; i++) c.captureFrame(JSON.stringify({ type: 'system', subtype: `s${i}` }));
+		expect(c.frameTrace.length).toBe(200);
+		expect(c.frameTrace[c.frameTrace.length - 1]).toBe('system/s249');
+	});
+
 	it('aggregates turn timing and message stats for diagnostics', () => {
 		const c = new ChatState();
 		const a1 = { kind: 'assistant', text: 'x', elapsed: 1000 } as const;

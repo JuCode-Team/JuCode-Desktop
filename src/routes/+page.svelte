@@ -1077,12 +1077,34 @@
 				const s = sessionMap.get(e.payload.session);
 				if (!s) return;
 				const wasBusy = s.chat.busy;
+				// Capture the raw frame for the diagnostics trace so a mis-parsed or
+				// dropped tool frame is inspectable after the fact.
+				s.chat.captureFrame(e.payload.data);
+				// Route the raw line through the session's backend adapter; jucode's is
+				// the identity, codex/claude translate to the jucode dialect. Parse,
+				// translate and each handle() are isolated so one bad frame or event
+				// can't silently drop the sibling events that follow it (e.g. a tool's
+				// completion riding in the same frame as something that threw).
+				let frame: unknown;
 				try {
-					// Route the raw line through the session's backend adapter; jucode's
-					// is the identity, codex/claude translate to the jucode dialect.
-					for (const ev of s.adapter.translate(JSON.parse(e.payload.data))) s.chat.handle(ev);
-				} catch {
-					/* ignore */
+					frame = JSON.parse(e.payload.data);
+				} catch (err) {
+					console.error('[agent-event] JSON parse failed', err, e.payload.data.slice(0, 300));
+					return;
+				}
+				let translated: ReturnType<typeof s.adapter.translate>;
+				try {
+					translated = s.adapter.translate(frame);
+				} catch (err) {
+					console.error('[agent-event] adapter.translate threw', err, frame);
+					return;
+				}
+				for (const ev of translated) {
+					try {
+						s.chat.handle(ev);
+					} catch (err) {
+						console.error('[agent-event] chat.handle threw', (ev as { type?: string })?.type, err);
+					}
 				}
 				flushModeSync(s.chat, s.id);
 				// Read the current active session at call time (store.activeId is
