@@ -19,6 +19,26 @@ export function parseBranches(out: string): string[] {
 		.filter((b) => !b.startsWith('(')); // 跳过 detached HEAD 行
 }
 
+/** One changed file from `git diff --numstat` (tab-separated `added\tremoved\tpath`).
+ *  Binary files report `-` for both counts → added/removed = -1. */
+export interface RangeFile {
+	path: string;
+	added: number;
+	removed: number;
+}
+
+export function parseNumstat(out: string): RangeFile[] {
+	return out
+		.split('\n')
+		.filter(Boolean)
+		.map((l) => {
+			const [a, r, ...rest] = l.split('\t');
+			const path = rest.join('\t'); // paths may contain tabs? keep the remainder intact
+			return { path, added: a === '-' ? -1 : parseInt(a, 10) || 0, removed: r === '-' ? -1 : parseInt(r, 10) || 0 };
+		})
+		.filter((f) => f.path);
+}
+
 export interface SyncInfo {
 	upstream: string | null;
 	ahead: number;

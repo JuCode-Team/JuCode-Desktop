@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
 	isValidBranchName,
 	parseBranches,
+	parseNumstat,
 	parseSyncStatus,
 	parseGhVersion,
 	hasGitHubRemote,
@@ -46,6 +47,21 @@ describe('parseBranches', () => {
 
 	it('skips detached HEAD entries', () => {
 		expect(parseBranches('(HEAD detached at 1a2b3c)\nmain\n')).toEqual(['main']);
+	});
+});
+
+describe('parseNumstat', () => {
+	it('parses added/removed counts and paths', () => {
+		expect(parseNumstat('3\t1\tsrc/a.ts\n10\t0\tsrc/b.ts\n')).toEqual([
+			{ path: 'src/a.ts', added: 3, removed: 1 },
+			{ path: 'src/b.ts', added: 10, removed: 0 }
+		]);
+	});
+	it('marks binary files (- counts) as -1', () => {
+		expect(parseNumstat('-\t-\tassets/logo.png\n')).toEqual([{ path: 'assets/logo.png', added: -1, removed: -1 }]);
+	});
+	it('ignores blank lines and rows without a path', () => {
+		expect(parseNumstat('\n2\t2\n5\t5\tx.ts\n')).toEqual([{ path: 'x.ts', added: 5, removed: 5 }]);
 	});
 });
 

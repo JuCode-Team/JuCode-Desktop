@@ -15,8 +15,10 @@
 		parsePrView,
 		extractPrUrl,
 		defaultBaseBranch,
+		parseNumstat,
 		type SyncInfo,
-		type PrInfo
+		type PrInfo,
+		type RangeFile
 	} from '$lib/gitops';
 	import { t } from '$lib/i18n';
 	import ParallelTasks from '$lib/ParallelTasks.svelte';
@@ -178,6 +180,48 @@
 			prError = String(e);
 		} finally {
 			genning = '';
+		}
+	}
+
+	// --- 分支区间 diff 审查（对标 PR 视图：base...HEAD 的全部改动）---
+	let compareOpen = $state(false);
+	let compareBase = $state('');
+	let compareFiles = $state<RangeFile[]>([]);
+	let compareBusy = $state(false);
+	let compareLoaded = $state(false);
+	const compareBaseRef = () => compareBase || defaultBaseBranch(branches, branch);
+
+	async function loadCompare() {
+		if (compareBusy) return;
+		compareBusy = true;
+		error = '';
+		try {
+			const base = compareBaseRef();
+			compareBase = base;
+			// `base...HEAD` (three-dot) = changes on HEAD since it diverged from base,
+			// i.e. exactly what a PR against `base` would show.
+			compareFiles = parseNumstat(await git(['diff', '--numstat', '--no-color', `${base}...HEAD`], dir()));
+			compareLoaded = true;
+		} catch (e) {
+			error = String(e);
+		} finally {
+			compareBusy = false;
+		}
+	}
+	function toggleCompare() {
+		compareOpen = !compareOpen;
+		if (compareOpen && !compareLoaded) loadCompare();
+	}
+	function pickCompareBase(b: string) {
+		compareBase = b;
+		loadCompare();
+	}
+	async function showRangeDiff(path: string) {
+		try {
+			const text = await git(['diff', '--no-color', `${compareBaseRef()}...HEAD`, '--', path], dir());
+			diff = { path, lines: classify(text || t('dock.git.noDiff')) };
+		} catch (e) {
+			diff = { path, lines: classify(String(e)) };
 		}
 	}
 
@@ -394,6 +438,35 @@
 				</div>
 			{/each}
 			{#if changes.length === 0}<div class="clean">{t('dock.git.clean')}</div>{/if}
+
+			<div class="sec">
+				<button class="rvtoggle" onclick={toggleCompare} aria-expanded={compareOpen}>
+					<span class="chev" class:open={compareOpen}><ChevronDown size={12} /></span>
+					{t('dock.git.review')}
+				</button>
+				{#if compareOpen}
+					{#if compareBusy}<LoaderCircle size={12} class="gspin" />{:else}<span class="count">{compareFiles.length}</span>{/if}
+				{/if}
+			</div>
+			{#if compareOpen}
+				<div class="rvbar">
+					<span class="rvlabel">{t('dock.git.reviewBase')}</span>
+					<select class="rvbase" value={compareBaseRef()} onchange={(e) => pickCompareBase(e.currentTarget.value)} disabled={compareBusy}>
+						{#each branches.filter((b) => b !== branch) as b (b)}<option value={b}>{b}</option>{/each}
+					</select>
+					<span class="rvhead">…HEAD</span>
+					<IconButton size="sm" onclick={loadCompare} label="refresh-review" title={t('dock.git.refresh')}><RefreshCw size={12} /></IconButton>
+				</div>
+				{#each compareFiles as f (f.path)}
+					<div class="chg">
+						<span class="rvstat">
+							{#if f.added < 0}<span class="rvbin">bin</span>{:else}<span class="rvadd">+{f.added}</span><span class="rvdel">−{f.removed}</span>{/if}
+						</span>
+						<button class="cpath" onclick={() => showRangeDiff(f.path)} title={f.path}>{f.path}</button>
+					</div>
+				{/each}
+				{#if compareLoaded && compareFiles.length === 0 && !compareBusy}<div class="clean">{t('dock.git.reviewEmpty')}</div>{/if}
+			{/if}
 
 			<div class="sec">{t('dock.git.pr')}</div>
 			{#if ghState === 'checking'}
@@ -846,6 +919,79 @@
 	.seclink:disabled {
 		opacity: 0.5;
 		cursor: default;
+	}
+	.rvtoggle {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		border: none;
+		background: none;
+		color: inherit;
+		font: inherit;
+		text-transform: inherit;
+		letter-spacing: inherit;
+		cursor: pointer;
+		padding: 0;
+	}
+	.rvtoggle .chev {
+		display: inline-flex;
+		transition: transform 0.12s;
+	}
+	.rvtoggle .chev.open {
+		transform: rotate(0deg);
+	}
+	.rvtoggle .chev:not(.open) {
+		transform: rotate(-90deg);
+	}
+	.rvbar {
+		display: flex;
+		align-items: center;
+		gap: 7px;
+		padding: 2px 9px 6px;
+	}
+	.rvlabel {
+		font-size: 11px;
+		color: var(--dim2);
+		font-family: var(--font-mono);
+	}
+	.rvbase {
+		flex: 1;
+		min-width: 0;
+		border: 1px solid var(--border);
+		border-radius: var(--r-sm);
+		background: var(--surface2);
+		color: var(--text);
+		font-family: var(--font-mono);
+		font-size: 12px;
+		padding: 3px 6px;
+		outline: none;
+	}
+	.rvbase:focus {
+		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
+	}
+	.rvhead {
+		font-family: var(--font-mono);
+		font-size: 11px;
+		color: var(--dim2);
+		flex-shrink: 0;
+	}
+	.rvstat {
+		display: inline-flex;
+		gap: 5px;
+		width: 64px;
+		flex-shrink: 0;
+		font-family: var(--font-mono);
+		font-size: 11px;
+		justify-content: flex-end;
+	}
+	.rvadd {
+		color: var(--ok);
+	}
+	.rvdel {
+		color: var(--err);
+	}
+	.rvbin {
+		color: var(--dim2);
 	}
 	.chg {
 		display: flex;
