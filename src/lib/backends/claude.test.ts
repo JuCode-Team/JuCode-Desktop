@@ -1112,13 +1112,14 @@ describe('claude adapter: model picker', () => {
 		expect(String(events[0].message)).toContain('bogus-model-xyz');
 	});
 
-	it('a mid-session init reporting a new model emits model_status (external /model)', () => {
+	it('a mid-session init reporting a new model emits model_status + a reroute notice', () => {
 		const { lines } = makeIo();
 		const adapter = createClaudeAdapter();
 		boot(adapter, lines);
 		const events = adapter.translate(initFrame({ model: 'claude-sonnet-5' }));
-		expect(events).toHaveLength(1);
 		expect(events[0]).toMatchObject({ type: 'model_status', model: 'claude-sonnet-5' });
+		// An engine-initiated model change (not a user /model switch) is a reroute.
+		expect(events.find((e) => e.type === 'info' && String(e.message).includes('rerouted'))).toBeTruthy();
 	});
 });
 
