@@ -279,6 +279,21 @@ function toolCardJson(claudeName: string, input: Record<string, unknown>): strin
 const SUMMARY_CAP = 4000;
 const cap = (s: string) => (s.length > SUMMARY_CAP ? `${s.slice(0, SUMMARY_CAP)}…` : s);
 
+/** TodoWrite input → a `plan` event. Its statuses (pending/in_progress/completed)
+ *  map 1:1 to the plan panel, so the checklist shows there instead of as repeated
+ *  per-call tool cards. */
+function todoPlanEvents(input: Record<string, unknown>): NormalizedEvent[] {
+	const todos = Array.isArray(input.todos) ? input.todos : [];
+	const plan = todos
+		.map((raw) => {
+			const m = rec(raw);
+			const step = m ? str(m.content) || str(m.activeForm) : '';
+			return step ? { step, status: str(m?.status) || 'pending' } : null;
+		})
+		.filter((p): p is { step: string; status: string } => !!p);
+	return plan.length ? [{ type: 'plan', plan }] : [];
+}
+
 /** Human-readable approval summary from a can_use_tool request. */
 function approvalSummary(req: CanUseToolRequest): string {
 	const input = rec(req.input) ?? {};
@@ -509,6 +524,12 @@ export function createClaudeAdapter(): EngineAdapter {
 		const id = str(block.id);
 		if (!id) return [];
 		const input = rec(block.input) ?? {};
+		// TodoWrite drives the plan panel, not a per-call tool card (the agent
+		// rewrites the whole list each step — cards would pile up).
+		if (block.name === 'TodoWrite') {
+			tools.set(id, { claudeName: block.name, name: 'todo', input });
+			return todoPlanEvents(input);
+		}
 		const known = tools.get(id);
 		if (known && !authoritative) return [];
 		const name = mapToolName(block.name);
@@ -724,6 +745,7 @@ export function createClaudeAdapter(): EngineAdapter {
 					const input = tryParseRecord(track.partial);
 					if (!input) return [];
 					meta.input = input;
+					if (meta.claudeName === 'TodoWrite') return todoPlanEvents(input);
 					return [{ type: 'tool_update', call_id: track.toolId, output: toolCardJson(meta.claudeName, input) }];
 				}
 				return []; // signature_delta

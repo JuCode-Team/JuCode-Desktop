@@ -50,9 +50,16 @@
 		{ key: 'term', icon: Terminal },
 		{ key: 'browser', icon: Globe }
 	];
-	// Plan/Goal are engine features — hide them when the session's backend
-	// doesn't report goals (capability-gated by the page via `caps()`).
-	const PANELS = $derived(ALL_PANELS.filter((p) => goalsEnabled || (p.key !== 'plan' && p.key !== 'goal')));
+	// Plan/Goal are engine features. Goal stays gated by the backend cap; the plan
+	// tab also appears whenever there's an actual plan (e.g. claude's TodoWrite),
+	// even on backends that don't advertise goals.
+	const PANELS = $derived(
+		ALL_PANELS.filter((p) => {
+			if (p.key === 'goal') return goalsEnabled;
+			if (p.key === 'plan') return goalsEnabled || plan.length > 0;
+			return true;
+		})
+	);
 	const labelOf = (key: string) => (ALL_PANELS.some((p) => p.key === key) ? t(`dock.tabs.${key}`) : key);
 
 	// A tab is an *instance* of a panel, so several tabs can share a panel type

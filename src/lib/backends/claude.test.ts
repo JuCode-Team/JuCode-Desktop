@@ -451,6 +451,35 @@ describe('claude adapter: turns', () => {
 		]);
 	});
 
+	it('turns TodoWrite into a plan event (not a per-call tool card)', () => {
+		const { lines } = makeIo();
+		const adapter = createClaudeAdapter();
+		boot(adapter, lines);
+		const todos = [
+			{ content: 'Read files', status: 'completed' },
+			{ content: 'Write blog', status: 'in_progress' },
+			{ content: 'Verify', status: 'pending' }
+		];
+		const events = adapter.translate({
+			type: 'assistant',
+			message: { id: 'm', model: 'x', content: [{ type: 'tool_use', id: 'toolu_td', name: 'TodoWrite', input: { todos } }] },
+			session_id: SID,
+			parent_tool_use_id: null
+		});
+		expect(events).toEqual([
+			{
+				type: 'plan',
+				plan: [
+					{ step: 'Read files', status: 'completed' },
+					{ step: 'Write blog', status: 'in_progress' },
+					{ step: 'Verify', status: 'pending' }
+				]
+			}
+		]);
+		// No tool_start card for TodoWrite.
+		expect(events.some((e) => e.type === 'tool_start')).toBe(false);
+	});
+
 	it('creates tool cards for server_tool_use / mcp_tool_use blocks (not just tool_use)', () => {
 		const { lines } = makeIo();
 		const adapter = createClaudeAdapter();
