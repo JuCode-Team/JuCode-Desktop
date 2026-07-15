@@ -368,6 +368,21 @@
 				{:else if section === 'extensions'}
 					{#if caps(chat).mcpManage}
 						<McpSection {sessionId} {chat} />
+					{:else if chat?.mcpServers?.length}
+						<!-- Read-only: claude configures MCP in its own settings; we can
+						     only list what the engine reports at startup. -->
+						<div class="group">
+							<p class="hint">{t('settings.mcp.readonlyHint')}</p>
+							<div class="mcp-ro">
+								{#each chat.mcpServers as s (s.name)}
+									<div class="mcp-ro-row">
+										<span class="mcp-ro-dot" class:ok={s.state === 'connected'} class:bad={s.state === 'failed'}></span>
+										<span class="mcp-ro-name">{s.name}</span>
+										<span class="mcp-ro-state">{s.state}</span>
+									</div>
+								{/each}
+							</div>
+						</div>
 					{:else}
 						<div class="group">
 							<p class="hint">{t('settings.backend.mcpUnsupported')}</p>
@@ -621,6 +636,43 @@
 	}
 	.hint.mt {
 		margin-top: 8px;
+	}
+	.mcp-ro {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+	.mcp-ro-row {
+		display: flex;
+		align-items: center;
+		gap: 9px;
+		padding: 8px 10px;
+		border: 1px solid var(--hairline);
+		border-radius: var(--r-sm);
+		background: var(--sidebar);
+	}
+	.mcp-ro-dot {
+		width: 7px;
+		height: 7px;
+		border-radius: 999px;
+		background: var(--dim2);
+		flex-shrink: 0;
+	}
+	.mcp-ro-dot.ok {
+		background: var(--ok);
+	}
+	.mcp-ro-dot.bad {
+		background: var(--err);
+	}
+	.mcp-ro-name {
+		flex: 1;
+		font-family: var(--font-mono);
+		font-size: 12.5px;
+		color: var(--text);
+	}
+	.mcp-ro-state {
+		font-size: 11px;
+		color: var(--dim);
 	}
 	.tile {
 		display: inline-flex;

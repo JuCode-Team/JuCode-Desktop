@@ -22,7 +22,10 @@ export interface ThinkingBlock {
 }
 
 export interface ToolUseBlock {
-	type: 'tool_use';
+	// Claude's built-in tools stream as `tool_use`; server-executed tools
+	// (WebSearch/WebFetch) as `server_tool_use`; MCP tools as `mcp_tool_use`.
+	// All three share the id/name/input shape and render as tool cards.
+	type: 'tool_use' | 'server_tool_use' | 'mcp_tool_use';
 	id: string;
 	name: string;
 	input: Record<string, unknown>;
@@ -59,6 +62,8 @@ export interface SystemInitFrame {
 	slash_commands: string[];
 	claude_code_version: string;
 	apiKeySource: string;
+	/** Connected MCP servers (name + status), for the MCP panel. */
+	mcp_servers?: { name: string; status?: string }[];
 }
 
 /** Turn-lifecycle status ("requesting" while an API call is in flight,

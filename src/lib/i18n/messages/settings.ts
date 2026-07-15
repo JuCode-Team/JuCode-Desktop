@@ -103,6 +103,7 @@ const settings = {
 		},
 		mcp: {
 			groupLabel: 'MCP 服务器',
+			readonlyHint: '此后端在自身配置里管理 MCP，这里仅展示引擎上报的已连接服务器（只读）。',
 			hint: '管理 Model Context Protocol 服务器。更改会写入 ~/.jucode/config.json，对所有会话生效。',
 			empty: 'MCP 让智能体接入外部工具（文件、搜索、数据库等标准化服务器）。',
 			addServer: '添加服务器',
@@ -329,6 +330,7 @@ const settings = {
 		},
 		mcp: {
 			groupLabel: 'MCP servers',
+			readonlyHint: 'This backend manages MCP in its own settings; this is a read-only list of the servers the engine reports as connected.',
 			hint: 'Manage Model Context Protocol servers. Changes are written to ~/.jucode/config.json and apply to all sessions.',
 			empty: 'MCP lets the agent use external tools (files, search, databases and other standardized servers).',
 			addServer: 'Add server',

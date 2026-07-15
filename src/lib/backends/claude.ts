@@ -209,6 +209,11 @@ const str = (v: unknown) => (typeof v === 'string' ? v : '');
 const rec = (v: unknown): Record<string, unknown> | null =>
 	typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : null;
 
+/** tool_use, server_tool_use (WebSearch/WebFetch) and mcp_tool_use all carry the
+ *  id/name/input shape and render as tool cards. */
+const isToolUse = (b: { type?: string } | null | undefined): b is ToolUseBlock =>
+	b?.type === 'tool_use' || b?.type === 'server_tool_use' || b?.type === 'mcp_tool_use';
+
 /** Parse accumulated tool-input JSON, tolerating incomplete chunks (returns null
  *  until the streamed partial_json forms a valid object). */
 const tryParseRecord = (text: string): Record<string, unknown> | null => {
@@ -292,6 +297,15 @@ function approvalSummary(req: CanUseToolRequest): string {
 		}
 		case 'Read':
 			return str(input.file_path);
+		case 'ExitPlanMode':
+			// Plan mode: show the proposed plan markdown, not raw JSON.
+			return cap(str(input.plan) || JSON.stringify(req.input));
+		case 'Task': {
+			// Subagent dispatch: "<subagent_type>: <description|prompt>".
+			const who = str(input.subagent_type);
+			const what = str(input.description) || str(input.prompt);
+			return cap([who, what].filter(Boolean).join(': ') || JSON.stringify(req.input));
+		}
 		case 'AskUserQuestion': {
 			// The model asking the user a multiple-choice question — render the
 			// question(s) + options readably instead of dumping raw JSON.
@@ -558,16 +572,14 @@ export function createClaudeAdapter(): EngineAdapter {
 	function subagentFrame(msg: Record<string, unknown>): NormalizedEvent[] {
 		if (msg.type === 'stream_event') {
 			const ev = (msg as unknown as StreamEventFrame).event;
-			if (ev?.type === 'content_block_start' && ev.content_block?.type === 'tool_use')
+			if (ev?.type === 'content_block_start' && isToolUse(ev.content_block))
 				return toolUseEvents(ev.content_block, false);
 			return [];
 		}
 		if (msg.type === 'assistant') {
 			const content = (msg as unknown as AssistantFrame).message?.content;
 			const list = Array.isArray(content) ? (content as ContentBlock[]) : [];
-			return list
-				.filter((b): b is ToolUseBlock => b.type === 'tool_use')
-				.flatMap((b) => toolUseEvents(b, true));
+			return list.filter(isToolUse).flatMap((b) => toolUseEvents(b, true));
 		}
 		if (msg.type === 'user') {
 			const frame = msg as unknown as UserFrame;
@@ -608,7 +620,7 @@ export function createClaudeAdapter(): EngineAdapter {
 		started = true;
 		model = newModel;
 		lastEngineMode = engineMode;
-		return [
+		const events: NormalizedEvent[] = [
 			{
 				type: 'startup',
 				model,
@@ -618,9 +630,24 @@ export function createClaudeAdapter(): EngineAdapter {
 			},
 			modelStatus(),
 			commandList(Array.isArray(frame.slash_commands) ? frame.slash_commands : []),
-			{ type: 'approval_mode', mode: fromClaudeMode(engineMode) },
-			{ type: 'status', message: 'ready' }
+			{ type: 'approval_mode', mode: fromClaudeMode(engineMode) }
 		];
+		// Surface the CLI's MCP servers (init frame carries name + status) so the MCP
+		// panel isn't empty for claude. It has no transport/tools detail — map status
+		// to the reducer's state shape.
+		if (Array.isArray(frame.mcp_servers) && frame.mcp_servers.length) {
+			events.push({
+				type: 'mcp_servers',
+				servers: frame.mcp_servers.map((s) => ({
+					name: str(s.name),
+					transport: 'stdio',
+					state: str(s.status) === 'connected' ? 'connected' : str(s.status) || 'connecting',
+					tools: []
+				}))
+			});
+		}
+		events.push({ type: 'status', message: 'ready' });
+		return events;
 	}
 
 	function onStatus(frame: SystemStatusFrame): NormalizedEvent[] {
@@ -666,7 +693,7 @@ export function createClaudeAdapter(): EngineAdapter {
 					blocks.set(idx, { streamed: 0 });
 					return [{ type: 'assistant_start' }];
 				}
-				if (block?.type === 'tool_use') {
+				if (isToolUse(block)) {
 					// input is {} here; it streams via input_json_delta below.
 					blocks.set(idx, { streamed: 0, toolId: str(block.id), partial: '' });
 					return toolUseEvents(block, false);
@@ -739,6 +766,8 @@ export function createClaudeAdapter(): EngineAdapter {
 					break;
 				}
 				case 'tool_use':
+				case 'server_tool_use':
+				case 'mcp_tool_use':
 					events.push(...toolUseEvents(block, true));
 					break;
 				default:
@@ -1052,9 +1081,30 @@ export function createClaudeAdapter(): EngineAdapter {
 				if (str(msg.parent_tool_use_id)) return subagentFrame(msg);
 				switch (msg.type) {
 					case 'system': {
-						if (msg.subtype === 'init') return onInit(msg as unknown as SystemInitFrame);
-						if (msg.subtype === 'status') return onStatus(msg as unknown as SystemStatusFrame);
-						if (msg.subtype === 'compact_boundary') return [{ type: 'compaction_end' }];
+						const sub = str(msg.subtype);
+						if (sub === 'init') return onInit(msg as unknown as SystemInitFrame);
+						if (sub === 'status') return onStatus(msg as unknown as SystemStatusFrame);
+						if (sub === 'compact_boundary') return [{ type: 'compaction_end' }];
+						// A tool blocked by a permission rule — otherwise the user just
+						// sees nothing happen.
+						if (sub === 'permission_denied') {
+							const reason = str(msg.reason);
+							return [{ type: 'info', message: `[claude] ${mapToolName(str(msg.tool_name))} denied${reason ? `: ${reason}` : ''}` }];
+						}
+						// Persisted artifacts / files the run produced.
+						if (sub === 'files_persisted') {
+							const names = (Array.isArray(msg.files) ? msg.files : [])
+								.map((f) => str(rec(f)?.filename) || str(rec(f)?.fileId))
+								.filter(Boolean);
+							return names.length ? [{ type: 'info', message: `[claude] saved: ${names.join(', ')}` }] : [];
+						}
+						// A failed hook (SessionStart/PreTool/…): surface stderr so a broken
+						// hook isn't invisible. Successful hooks stay silent.
+						if (sub === 'hook_response' && typeof msg.exit_code === 'number' && msg.exit_code !== 0) {
+							const detail = str(msg.stderr) || str(msg.output) || `exit ${msg.exit_code}`;
+							return [{ type: 'info', message: `[claude] hook ${str(msg.hook_name)} failed: ${detail}` }];
+						}
+						if (sub === 'mirror_error') return [errorEvent(str(msg.error) || 'workspace mirror error')];
 						return [];
 					}
 					case 'stream_event':
@@ -1070,7 +1120,13 @@ export function createClaudeAdapter(): EngineAdapter {
 					case 'control_response':
 						return onControlResponse(msg as unknown as ControlResponseFrame);
 					default:
-						return []; // rate_limit_event, tool_progress, …
+						// Rate-limit notices are otherwise a silent black hole.
+						if (msg.type === 'rate_limit_event') {
+							const s = rec(msg.rate_limit) ?? msg;
+							const detail = str(s.status) || str(s.message) || str(msg.status);
+							return detail ? [{ type: 'info', message: `[claude] rate limit: ${detail}` }] : [];
+						}
+						return []; // tool_progress, tool_use_summary, auth_status — silent
 				}
 			} catch (e) {
 				console.warn('[claude] translate failed', e, raw);

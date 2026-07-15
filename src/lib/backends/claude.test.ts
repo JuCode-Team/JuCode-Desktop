@@ -451,6 +451,46 @@ describe('claude adapter: turns', () => {
 		]);
 	});
 
+	it('creates tool cards for server_tool_use / mcp_tool_use blocks (not just tool_use)', () => {
+		const { lines } = makeIo();
+		const adapter = createClaudeAdapter();
+		boot(adapter, lines);
+		adapter.translate(streamEvent({ type: 'message_start', message: { id: 'm', model: 'x', usage: {} } }));
+		// WebSearch arrives as server_tool_use — previously dropped → no card.
+		const started = adapter.translate(
+			streamEvent({
+				type: 'content_block_start',
+				index: 0,
+				content_block: { type: 'server_tool_use', id: 'srv_1', name: 'WebSearch', input: {} }
+			})
+		);
+		expect(started).toContainEqual({ type: 'tool_start', call_id: 'srv_1', name: 'web_search' });
+		// mcp_tool_use likewise.
+		const mcp = adapter.translate(
+			streamEvent({
+				type: 'content_block_start',
+				index: 1,
+				content_block: { type: 'mcp_tool_use', id: 'mcp_1', name: 'mcp__ctx7__query', input: {} }
+			})
+		);
+		expect(mcp.some((e) => e.type === 'tool_start' && e.call_id === 'mcp_1')).toBe(true);
+	});
+
+	it('surfaces the init frame mcp_servers and a permission_denied notice', () => {
+		const { lines } = makeIo();
+		const adapter = createClaudeAdapter();
+		const events = adapter.translate({
+			...initFrame(),
+			mcp_servers: [{ name: 'context7', status: 'connected' }]
+		});
+		expect(events).toContainEqual({
+			type: 'mcp_servers',
+			servers: [{ name: 'context7', transport: 'stdio', state: 'connected', tools: [] }]
+		});
+		const denied = adapter.translate({ type: 'system', subtype: 'permission_denied', tool_name: 'Bash', reason: 'blocked by rule' });
+		expect(denied).toEqual([{ type: 'info', message: '[claude] bash denied: blocked by rule' }]);
+	});
+
 	it('maps Edit/Write to edit-tool cards with path + diff (Changes panel shape)', () => {
 		const { lines } = makeIo();
 		const adapter = createClaudeAdapter();
