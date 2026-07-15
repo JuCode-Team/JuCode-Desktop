@@ -2170,6 +2170,18 @@ pub fn run() {
         .setup(|app| {
             // 异步捕获登录 shell 环境快照（不阻塞启动；见 shell_env.rs）。
             shell_env::init_async();
+            // macOS：给主窗口铺一层原生磨砂（NSVisualEffectView）。前端把主区域画成
+            // 不透明、只让侧栏半透明，于是磨砂只在侧栏透出（见 app.css 的 [data-vibrancy]）。
+            #[cfg(target_os = "macos")]
+            if let Some(win) = app.get_webview_window("main") {
+                use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial, NSVisualEffectState};
+                let _ = apply_vibrancy(
+                    &win,
+                    NSVisualEffectMaterial::Sidebar,
+                    Some(NSVisualEffectState::Active),
+                    None,
+                );
+            }
             #[cfg(desktop)]
             {
                 use tauri_plugin_deep_link::DeepLinkExt;

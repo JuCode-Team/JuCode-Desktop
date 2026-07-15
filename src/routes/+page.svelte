@@ -1715,6 +1715,9 @@
 	.right {
 		flex-shrink: 0;
 		min-width: 0;
+		/* Opaque so the macOS vibrancy behind the transparent webview only shows in
+		   the sidebar, never through the dock (incl. during the width transition). */
+		background: var(--bg);
 		border-left: 1px solid var(--hairline);
 		overflow: hidden;
 		transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1);

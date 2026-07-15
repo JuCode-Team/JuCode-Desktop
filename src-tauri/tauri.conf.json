@@ -10,6 +10,7 @@
     "frontendDist": "../build"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
         "title": "JuCode",
@@ -18,7 +19,8 @@
         "minWidth": 820,
         "minHeight": 560,
         "titleBarStyle": "Overlay",
-        "hiddenTitle": true
+        "hiddenTitle": true,
+        "transparent": true
       }
     ],
     "security": {

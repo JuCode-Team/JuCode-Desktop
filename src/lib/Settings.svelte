@@ -4,7 +4,7 @@
 	import { readConfig, writeConfig, readAuthProviders, setAuthKey, removeAuthKey, listProviders, fetchAccountInfo, fetchDeepseekBalance, type AccountInfo, type DeepseekBalance } from '$lib/protocol';
 	import { dispatch } from '$lib/backends/router';
 	import { caps } from '$lib/backends';
-	import { prefs } from '$lib/prefs.svelte';
+	import { prefs, vibrancySupported } from '$lib/prefs.svelte';
 	import BackendSection from '$lib/settings/BackendSection.svelte';
 	import type { ChatState } from '$lib/chat.svelte';
 	import Vendor from '$lib/Vendor.svelte';
@@ -406,6 +406,21 @@
 						/>
 						<p class="hint mt">{t('settings.behavior.htmlOpenHint')}</p>
 					</div>
+
+					{#if vibrancySupported()}
+						<div class="group">
+							<div class="glabel">{t('settings.behavior.vibrancy')}</div>
+							<Segmented
+								value={prefs.sidebarVibrancy ? 'on' : 'off'}
+								options={[
+									{ value: 'on', label: t('settings.behavior.vibrancyOn') },
+									{ value: 'off', label: t('settings.behavior.vibrancyOff') }
+								]}
+								onChange={(v) => prefs.setSidebarVibrancy(v === 'on')}
+							/>
+							<p class="hint mt">{t('settings.behavior.vibrancyHint')}</p>
+						</div>
+					{/if}
 
 					<BackendSection />
 

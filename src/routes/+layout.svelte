@@ -8,6 +8,7 @@
 	let { children } = $props();
 	onMount(() => {
 		initTheme();
+		// prefs.init() also reflects the macOS sidebar-vibrancy choice onto the root.
 		prefs.init();
 		// Persist detection + reflect the active locale on <html lang> for a11y.
 		setLocale(getLocale());

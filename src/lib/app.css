@@ -122,6 +122,21 @@ body {
 	-moz-osx-font-smoothing: grayscale;
 }
 
+/* macOS vibrancy: a native NSVisualEffectView (frosted) sits behind a transparent
+ * webview. The body goes transparent so the effect can show; the sidebar is made
+ * translucent (see Sidebar.svelte) so the frost reads only there, while the main
+ * content and right dock stay opaque and cover the effect. --vibrancy-tint is the
+ * translucent sidebar fill, tuned per theme. */
+:root[data-vibrancy='on'] {
+	--vibrancy-tint: color-mix(in oklab, var(--sidebar) 42%, transparent);
+}
+:root[data-vibrancy='on'] body {
+	background: transparent;
+}
+[data-theme='light']:root[data-vibrancy='on'] {
+	--vibrancy-tint: color-mix(in oklab, var(--sidebar) 55%, transparent);
+}
+
 ::-webkit-scrollbar {
 	width: 10px;
 	height: 10px;

@@ -182,6 +182,11 @@
 		border-right: 1px solid var(--hairline);
 		min-width: 0;
 	}
+	/* Under macOS vibrancy the sidebar becomes translucent so the native frost
+	 * shows through; everywhere else it stays fully opaque. */
+	:global(:root[data-vibrancy='on']) .sidebar {
+		background: var(--vibrancy-tint);
+	}
 	.account {
 		display: flex;
 		align-items: center;
