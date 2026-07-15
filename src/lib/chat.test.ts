@@ -108,6 +108,15 @@ describe('ChatState.handle', () => {
 		expect(c.turnTimeline.map((t) => t.index)).toEqual([0]);
 	});
 
+	it('aggregates turn timing and message stats for diagnostics', () => {
+		const c = new ChatState();
+		const a1 = { kind: 'assistant', text: 'x', elapsed: 1000 } as const;
+		const a2 = { kind: 'assistant', text: 'y', elapsed: 3000 } as const;
+		c.messages.push({ kind: 'user', text: 'q1' }, { ...a1 }, { kind: 'user', text: 'q2' }, { ...a2 });
+		expect(c.turnTiming).toEqual({ turns: 2, totalMs: 4000, meanMs: 2000 });
+		expect(c.messageStats).toMatchObject({ user: 2, assistant: 2 });
+	});
+
 	it('aggregates a tool card by call_id and marks it done', () => {
 		const c = new ChatState();
 		c.handle({ type: 'tool_start', call_id: '1', name: 'read' });

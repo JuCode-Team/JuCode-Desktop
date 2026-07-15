@@ -10,7 +10,8 @@ const dock = {
 			files: '文件',
 			git: 'Git',
 			term: '终端',
-			browser: '浏览器'
+			browser: '浏览器',
+			diag: '诊断'
 		},
 		dock: {
 			empty: '没有打开的面板',
@@ -20,6 +21,29 @@ const dock = {
 			empty: '本会话还没有文件改动',
 			turnN: '第 {n} 回合',
 			foot: '{n} 个有改动的回合'
+		},
+		diag: {
+			engine: '引擎',
+			backend: '后端',
+			provider: '提供方',
+			model: '模型',
+			state: '状态',
+			session: '会话 ID',
+			restarts: '重启次数',
+			usage: '用量',
+			tokensIn: '输入 tokens',
+			tokensOut: '输出 tokens',
+			tokensTotal: '合计 tokens',
+			context: '上下文',
+			cost: '成本',
+			timing: '耗时',
+			turns: '完成回合',
+			totalTime: '总耗时',
+			meanTime: '平均每回合',
+			trace: '事件日志',
+			traceEmpty: '暂无事件',
+			copy: '复制诊断',
+			copied: '已复制'
 		},
 		browser: {
 			urlPlaceholder: '输入网址，回车打开',
@@ -155,7 +179,8 @@ const dock = {
 			files: 'Files',
 			git: 'Git',
 			term: 'Terminal',
-			browser: 'Browser'
+			browser: 'Browser',
+			diag: 'Diagnostics'
 		},
 		dock: {
 			empty: 'No open panels',
@@ -165,6 +190,29 @@ const dock = {
 			empty: 'No file changes in this session yet',
 			turnN: 'Turn {n}',
 			foot: '{n} turns with changes'
+		},
+		diag: {
+			engine: 'Engine',
+			backend: 'Backend',
+			provider: 'Provider',
+			model: 'Model',
+			state: 'State',
+			session: 'Session ID',
+			restarts: 'Restarts',
+			usage: 'Usage',
+			tokensIn: 'Tokens in',
+			tokensOut: 'Tokens out',
+			tokensTotal: 'Tokens total',
+			context: 'Context',
+			cost: 'Cost',
+			timing: 'Timing',
+			turns: 'Turns done',
+			totalTime: 'Total time',
+			meanTime: 'Mean / turn',
+			trace: 'Event log',
+			traceEmpty: 'No events yet',
+			copy: 'Copy diagnostics',
+			copied: 'Copied'
 		},
 		browser: {
 			urlPlaceholder: 'Enter a URL and press Enter',

@@ -1335,6 +1335,7 @@
 				cwd={activeProject?.path ?? ''}
 				changed={chat?.changedFiles ?? []}
 				turns={chat?.turnTimeline ?? []}
+				{chat}
 				worktree={activeProject?.worktree ?? null}
 				llm={llmTarget}
 				onRevertFile={(p) => chat && (chat.changedFiles = chat.changedFiles.filter((x) => x !== p))}

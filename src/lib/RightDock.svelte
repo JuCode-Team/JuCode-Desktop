@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { X, Plus, ListTodo, Target, FileDiff, FolderTree, GitBranch, Terminal, Globe, History } from 'lucide-svelte';
+	import { X, Plus, ListTodo, Target, FileDiff, FolderTree, GitBranch, Terminal, Globe, History, Activity } from 'lucide-svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import GoalPanel from './GoalPanel.svelte';
 	import PlanPanel from './PlanPanel.svelte';
@@ -8,10 +8,11 @@
 	import GitPanel from './GitPanel.svelte';
 	import ChangesPanel from './ChangesPanel.svelte';
 	import TurnsPanel from './TurnsPanel.svelte';
+	import DiagnosticsPanel from './DiagnosticsPanel.svelte';
 	import TerminalPanel from './TerminalPanel.svelte';
 	import BrowserPanel from './BrowserPanel.svelte';
 	import { browser } from '$lib/browser.svelte';
-	import type { Goal, PlanStep, TurnDiff } from '$lib/chat.svelte';
+	import type { Goal, PlanStep, TurnDiff, ChatState } from '$lib/chat.svelte';
 	import type { WorktreeMeta } from '$lib/types';
 	import { t } from '$lib/i18n';
 
@@ -21,6 +22,7 @@
 		cwd = '',
 		changed = [],
 		turns = [],
+		chat = null,
 		worktree = null,
 		goalsEnabled = true,
 		llm = null,
@@ -34,6 +36,7 @@
 		cwd?: string;
 		changed?: string[];
 		turns?: TurnDiff[];
+		chat?: ChatState | null;
 		/** 当前激活项目是并行任务 worktree 时的元数据（透传给 Git 面板）。 */
 		worktree?: WorktreeMeta | null;
 		/** 一次性文案生成的目标端点（provider/base_url/format/model），透传给 Git 面板。 */
@@ -54,7 +57,8 @@
 		{ key: 'files', icon: FolderTree },
 		{ key: 'git', icon: GitBranch },
 		{ key: 'term', icon: Terminal },
-		{ key: 'browser', icon: Globe }
+		{ key: 'browser', icon: Globe },
+		{ key: 'diag', icon: Activity }
 	];
 	// Plan/Goal are engine features. Goal stays gated by the backend cap; the plan
 	// tab also appears whenever there's an actual plan (e.g. claude's TodoWrite),
@@ -235,7 +239,8 @@
 				{:else if tab.panel === 'files'}<FilesPanel rootDir={cwd} />
 				{:else if tab.panel === 'git'}<GitPanel {cwd} {worktree} {llm} {onOpenTask} {onTaskRemoved} />
 				{:else if tab.panel === 'term'}<TerminalPanel {cwd} />
-				{:else if tab.panel === 'browser'}<BrowserPanel />{/if}
+				{:else if tab.panel === 'browser'}<BrowserPanel />
+				{:else if tab.panel === 'diag'}<DiagnosticsPanel {chat} />{/if}
 			</div>
 		{/each}
 		{#if visibleTabs.length === 0}

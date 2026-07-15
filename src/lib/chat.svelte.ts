@@ -196,7 +196,8 @@ export class ChatState {
 	pendingRewind = $state<{ id: string; text: string } | null>(null);
 
 	// Engine crash auto-restart bookkeeping (driven by the page on agent-exit).
-	restarts = 0;
+	// $state so the diagnostics panel reflects restarts live.
+	restarts = $state(0);
 	restartWindowStart: number | null = null;
 	// Set when a claude --resume target isn't found: the next restart must NOT
 	// resume the same doomed id (it would crash-loop). One-shot — consumed by the
@@ -282,6 +283,27 @@ export class ChatState {
 	/** Number of user turns in the transcript (one per sent message). */
 	get userTurns() {
 		return this.messages.filter((m) => m.kind === 'user').length;
+	}
+
+	/** Aggregate turn-timing stats (from assistant `elapsed` stamps) for the
+	 *  diagnostics panel: completed turns, total and mean wall-clock. */
+	get turnTiming(): { turns: number; totalMs: number; meanMs: number } {
+		let turns = 0;
+		let totalMs = 0;
+		for (const m of this.messages) {
+			if (m.kind === 'assistant' && typeof m.elapsed === 'number') {
+				turns++;
+				totalMs += m.elapsed;
+			}
+		}
+		return { turns, totalMs, meanMs: turns ? Math.round(totalMs / turns) : 0 };
+	}
+
+	/** Message-kind histogram for the diagnostics panel. */
+	get messageStats(): Record<string, number> {
+		const out: Record<string, number> = {};
+		for (const m of this.messages) out[m.kind] = (out[m.kind] ?? 0) + 1;
+		return out;
 	}
 
 	/** Per-turn file-change timeline: one entry per user turn that edited files,
