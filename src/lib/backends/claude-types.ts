@@ -138,6 +138,8 @@ export interface ResultFrame {
 	usage?: ApiUsage;
 	modelUsage?: Record<string, { contextWindow?: number; inputTokens?: number; outputTokens?: number }>;
 	permission_denials?: unknown[];
+	/** Turn-level error strings (e.g. a failed --resume: "No conversation found …"). */
+	errors?: string[];
 }
 
 // --- control protocol ----------------------------------------------------------

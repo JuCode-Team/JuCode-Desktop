@@ -871,6 +871,26 @@ describe('claude adapter: interrupt / modes / results', () => {
 		expect(String(auth[0].message)).toContain('/login');
 	});
 
+	it('a failed --resume result becomes resume_failed, not a scary error card', () => {
+		const { lines } = makeIo();
+		const adapter = createClaudeAdapter();
+		boot(adapter, lines);
+		// yolo respawn with --resume of an unpersisted session: the CLI emits an
+		// error_during_execution result carrying "No conversation found …" then exits.
+		const ev = adapter.translate({
+			type: 'result',
+			subtype: 'error_during_execution',
+			is_error: true,
+			errors: ['No conversation found with session ID: 00000000-1111-2222-3333-444444444444'],
+			num_turns: 0,
+			session_id: SID
+		});
+		expect(ev).toEqual([
+			{ type: 'resume_failed' },
+			{ type: 'status', message: 'ready' }
+		]);
+	});
+
 	it('shutdown is accepted silently; unsupported ops are refused', () => {
 		const { lines } = makeIo();
 		const adapter = createClaudeAdapter();

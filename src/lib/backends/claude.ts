@@ -801,7 +801,16 @@ export function createClaudeAdapter(): EngineAdapter {
 			events.push({ type: 'context_usage', tokens: lastContext, cost: frame.total_cost_usd });
 		}
 		if ((frame.is_error || frame.subtype !== 'success') && !wasInterrupting) {
-			events.push(errorEvent(str(frame.result) || frame.subtype || 'error'));
+			const detail =
+				str(frame.result) ||
+				(Array.isArray(frame.errors) ? frame.errors.map(str).filter(Boolean).join('; ') : '') ||
+				frame.subtype ||
+				'error';
+			// A failed --resume surfaces here (error_during_execution + "No conversation
+			// found …") right before the child exits. Treat it as a resume failure so
+			// the store restarts fresh instead of showing a scary error card + looping.
+			if (/No conversation found with session ID/i.test(detail)) events.push({ type: 'resume_failed' });
+			else events.push(errorEvent(detail));
 		}
 		events.push({ type: 'status', message: 'ready' });
 		return events;
