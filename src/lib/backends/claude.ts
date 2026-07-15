@@ -292,6 +292,29 @@ function approvalSummary(req: CanUseToolRequest): string {
 		}
 		case 'Read':
 			return str(input.file_path);
+		case 'AskUserQuestion': {
+			// The model asking the user a multiple-choice question — render the
+			// question(s) + options readably instead of dumping raw JSON.
+			const questions = Array.isArray(input.questions) ? input.questions : [];
+			const text = questions
+				.map((q) => {
+					const m = rec(q);
+					if (!m) return '';
+					const opts = (Array.isArray(m.options) ? m.options : [])
+						.map((o) => {
+							const om = rec(o);
+							if (!om) return '';
+							const d = str(om.description);
+							return `  • ${str(om.label)}${d ? ` — ${d}` : ''}`;
+						})
+						.filter(Boolean)
+						.join('\n');
+					return [str(m.question), opts].filter(Boolean).join('\n');
+				})
+				.filter(Boolean)
+				.join('\n\n');
+			return cap(text || JSON.stringify(req.input));
+		}
 		default: {
 			const detail = str(req.description) || JSON.stringify(req.input);
 			return cap(`${req.tool_name}: ${detail}`);
@@ -788,18 +811,30 @@ export function createClaudeAdapter(): EngineAdapter {
 		const req = frame.request;
 		if (req?.subtype === 'can_use_tool') {
 			const r = req as unknown as CanUseToolRequest;
+			const events: NormalizedEvent[] = [];
+			// The approval request carries the tool's FULL input — fill the tool card
+			// from it (in ask mode the streamed input may not have reached the card),
+			// creating the card if the assistant stream hasn't shown it yet.
+			const tid = str(r.tool_use_id);
+			if (tid) {
+				const input = rec(r.input) ?? {};
+				const name = mapToolName(str(r.tool_name));
+				const known = tools.get(tid);
+				tools.set(tid, { claudeName: str(r.tool_name), name, input });
+				if (!known) events.push({ type: 'tool_start', call_id: tid, name });
+				events.push({ type: 'tool_update', call_id: tid, output: toolCardJson(str(r.tool_name), input) });
+			}
 			const callId = `approval-${++approvalSeq}`;
 			approvals.set(callId, { requestId: str(frame.request_id), request: r });
-			return [
-				{
-					type: 'approval_request',
-					call_id: callId,
-					name: mapToolName(str(r.tool_name)),
-					summary: approvalSummary(r),
-					subagent_id: null,
-					hunks: null
-				}
-			];
+			events.push({
+				type: 'approval_request',
+				call_id: callId,
+				name: mapToolName(str(r.tool_name)),
+				summary: approvalSummary(r),
+				subagent_id: null,
+				hunks: null
+			});
+			return events;
 		}
 		// Unsupported CLI→client request (request_user_dialog, elicitation, …):
 		// answer with an error so the CLI can resolve it instead of hanging.

@@ -621,15 +621,19 @@ describe('claude adapter: approvals', () => {
 		const adapter = createClaudeAdapter();
 		boot(adapter, lines);
 		const events = adapter.translate(canUseBash);
-		expect(events).toHaveLength(1);
-		expect(events[0]).toMatchObject({
+		// The approval request also fills the tool card from its input (so the card
+		// shows the command even in ask mode, before it streams/completes).
+		expect(events).toContainEqual({ type: 'tool_start', call_id: 'toolu_01UET', name: 'bash' });
+		expect(events).toContainEqual({ type: 'tool_update', call_id: 'toolu_01UET', output: JSON.stringify({ command: 'mkdir probe-dir' }) });
+		const approval = events.find((e) => e.type === 'approval_request')!;
+		expect(approval).toMatchObject({
 			type: 'approval_request',
 			call_id: 'approval-1',
 			name: 'bash',
 			subagent_id: null,
 			hunks: null
 		});
-		expect(String(events[0].summary)).toContain('mkdir probe-dir');
+		expect(String(approval.summary)).toContain('mkdir probe-dir');
 
 		const frames = adapter.encodeOp({ op: 'approve', call_id: 'approval-1', decision: 'allow' });
 		expect(frames).toHaveLength(1);
@@ -702,8 +706,45 @@ describe('claude adapter: approvals', () => {
 				tool_use_id: 'toolu_w2'
 			}
 		});
-		expect(events[0]).toMatchObject({ type: 'approval_request', name: 'write' });
-		expect(String(events[0].summary)).toBe('/proj/probe-note.txt\n+hello');
+		// The card is filled from the request; the approval_request follows.
+		expect(events).toContainEqual({ type: 'tool_start', call_id: 'toolu_w2', name: 'write' });
+		const approval = events.find((e) => e.type === 'approval_request')!;
+		expect(approval).toMatchObject({ type: 'approval_request', name: 'write' });
+		expect(String(approval.summary)).toBe('/proj/probe-note.txt\n+hello');
+	});
+
+	it('renders an AskUserQuestion prompt as readable question + options (not raw JSON)', () => {
+		const { lines } = makeIo();
+		const adapter = createClaudeAdapter();
+		boot(adapter, lines);
+		const events = adapter.translate({
+			type: 'control_request',
+			request_id: 'req-q',
+			request: {
+				subtype: 'can_use_tool',
+				tool_name: 'AskUserQuestion',
+				tool_use_id: 'toolu_q',
+				input: {
+					questions: [
+						{
+							question: 'How to handle the existing index.html?',
+							header: 'How',
+							options: [
+								{ label: 'New file', description: 'keep index.html, write blog.html' },
+								{ label: 'Overwrite', description: 'replace index.html' }
+							],
+							multiSelect: false
+						}
+					]
+				}
+			}
+		});
+		const approval = events.find((e) => e.type === 'approval_request')!;
+		const summary = String(approval.summary);
+		expect(summary).toContain('How to handle the existing index.html?');
+		expect(summary).toContain('• New file — keep index.html, write blog.html');
+		expect(summary).toContain('• Overwrite — replace index.html');
+		expect(summary).not.toContain('{"questions"'); // no raw JSON
 	});
 
 	it('answers unsupported control requests with an error instead of hanging', () => {
