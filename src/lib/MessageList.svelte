@@ -250,8 +250,11 @@
 		{#if shown(m)}
 			<div class="mwrap" class:hit={i === findActive} bind:this={rowEls[i]} use:measure={m}>
 				{#if m.kind === 'user'}
+			{@const drop = userOrdinal.size - (userOrdinal.get(m) ?? 0)}
 			<div class="row user">
-				<button class="uedit" onclick={() => onRewind(m.text, userOrdinal.get(m) ?? 0)} aria-label="rewind" title={t('chat.rewindTitle')}><RotateCcw size={12} /></button>
+				<button class="uedit rewind" onclick={() => onRewind(m.text, userOrdinal.get(m) ?? 0)} aria-label="rewind" title={t('chat.rewindTitleN', { n: drop })}>
+					<RotateCcw size={12} />{#if drop > 1}<span class="rwn">{drop}</span>{/if}
+				</button>
 				<button class="uedit" onclick={() => onEdit(m.text)} aria-label="quote" title={t('chat.quoteTitle')}><Pencil size={12} /></button>
 				<div class="bubble">{m.text}</div>
 			</div>
@@ -346,6 +349,15 @@
 	.uedit:hover {
 		background: var(--surface2);
 		color: var(--text);
+	}
+	.uedit.rewind {
+		gap: 2px;
+		align-items: center;
+	}
+	.rwn {
+		font-size: 9.5px;
+		font-variant-numeric: tabular-nums;
+		line-height: 1;
 	}
 	.bubble {
 		background: var(--surface2);

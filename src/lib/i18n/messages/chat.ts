@@ -3,6 +3,7 @@ const chat = {
 	zh: {
 		reasoning: '推理',
 		rewindTitle: '回退到此轮并重写（会还原文件改动）',
+		rewindTitleN: '回退到此轮并重写（还原文件改动，丢弃后面 {n} 轮）',
 		quoteTitle: '引用到输入框',
 		tokens: '{n} tokens',
 		// Composer
