@@ -114,6 +114,44 @@ export interface ApproveOp {
 	decision: 'allow' | 'deny';
 	hunks?: string[];
 	always?: boolean;
+	/** AskUserQuestion answers, keyed by the full question text → picked label(s).
+	 *  Fed back to the model as the tool result via the permission response. */
+	answers?: Record<string, string>;
+}
+
+/** A claude AskUserQuestion prompt (the model asking the user to choose). */
+export interface Question {
+	question: string;
+	header?: string;
+	options: { label: string; description?: string }[];
+	multiSelect: boolean;
+}
+
+/** Parse the `questions` field of an AskUserQuestion approval_request. */
+export function parseQuestions(raw: unknown): Question[] | null {
+	if (!Array.isArray(raw)) return null;
+	const out: Question[] = [];
+	for (const q of raw) {
+		const m = q && typeof q === 'object' ? (q as Record<string, unknown>) : null;
+		if (!m || typeof m.question !== 'string') continue;
+		const options: Question['options'] = [];
+		for (const o of Array.isArray(m.options) ? m.options : []) {
+			const om = o && typeof o === 'object' ? (o as Record<string, unknown>) : null;
+			if (om && typeof om.label === 'string') {
+				options.push({
+					label: om.label,
+					...(typeof om.description === 'string' ? { description: om.description } : {})
+				});
+			}
+		}
+		out.push({
+			question: m.question,
+			...(typeof m.header === 'string' ? { header: m.header } : {}),
+			options,
+			multiSelect: m.multiSelect === true
+		});
+	}
+	return out.length ? out : null;
 }
 
 /**

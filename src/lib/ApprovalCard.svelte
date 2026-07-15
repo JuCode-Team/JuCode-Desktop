@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ShieldAlert, ChevronRight, Bot } from 'lucide-svelte';
+	import { ShieldAlert, ChevronRight, Bot, MessageCircleQuestion, Check } from 'lucide-svelte';
 	import { t } from '$lib/i18n';
 	import Button from '$lib/ui/Button.svelte';
 	import {
@@ -8,7 +8,8 @@
 		selectionState,
 		toggleHunk,
 		type ApprovalHunk,
-		type ApproveOp
+		type ApproveOp,
+		type Question
 	} from '$lib/approval';
 
 	let {
@@ -21,9 +22,33 @@
 			summary: string;
 			subagentId: string | null;
 			hunks: ApprovalHunk[] | null;
+			questions?: Question[] | null;
 		};
 		onRespond: (op: ApproveOp) => void;
 	} = $props();
+
+	// --- AskUserQuestion: an interactive picker instead of allow/deny ---
+	const questions = $derived(approval.questions ?? null);
+	let picks = $state<Record<number, string[]>>({});
+	// svelte-ignore state_referenced_locally -- deliberate: tracks the last-seen request identity
+	let seenQCallId = approval.callId;
+	$effect.pre(() => {
+		if (approval.callId === seenQCallId) return;
+		seenQCallId = approval.callId;
+		picks = {};
+	});
+	function pickOption(qi: number, label: string, multi: boolean) {
+		const cur = picks[qi] ?? [];
+		if (multi) picks[qi] = cur.includes(label) ? cur.filter((l) => l !== label) : [...cur, label];
+		else picks[qi] = [label];
+	}
+	const answersReady = $derived(!!questions && questions.every((_, i) => (picks[i]?.length ?? 0) > 0));
+	function submitAnswers() {
+		if (!questions || !answersReady) return;
+		const answers: Record<string, string> = {};
+		for (let i = 0; i < questions.length; i++) answers[questions[i].question] = (picks[i] ?? []).join(', ');
+		onRespond({ op: 'approve', call_id: approval.callId, decision: 'allow', answers });
+	}
 
 	const isShell = $derived(
 		['bash', 'execute', 'exec_command', 'shell_command'].includes(approval.name)
@@ -61,13 +86,18 @@
 		line.startsWith('+') ? 'add' : line.startsWith('-') ? 'del' : 'ctx';
 </script>
 
-<div class="approval">
+<div class="approval" class:ask={!!questions}>
 	<div class="approval-head">
-		<ShieldAlert size={15} />
-		<span
-			>{isShell ? t('shell.approveCommand') : t('shell.approveFile')} · <b>{approval.name}</b
-			></span
-		>
+		{#if questions}
+			<MessageCircleQuestion size={15} />
+			<span>{t('shell.askQuestion')}</span>
+		{:else}
+			<ShieldAlert size={15} />
+			<span
+				>{isShell ? t('shell.approveCommand') : t('shell.approveFile')} · <b>{approval.name}</b
+				></span
+			>
+		{/if}
 		{#if multiHunk}
 			<span class="hunk-count">{t('shell.hunkCount', { n: hunks.length })}</span>
 		{/if}
@@ -78,7 +108,31 @@
 		{/if}
 	</div>
 
-	{#if multiHunk}
+	{#if questions}
+		<div class="questions">
+			{#each questions as q, qi (qi)}
+				<div class="q">
+					<div class="q-text">{q.question}</div>
+					<div class="q-opts">
+						{#each q.options as o (o.label)}
+							{@const on = (picks[qi] ?? []).includes(o.label)}
+							<button class="q-opt" class:on onclick={() => pickOption(qi, o.label, q.multiSelect)}>
+								<span class="q-mark" class:multi={q.multiSelect}>{#if on}<Check size={12} />{/if}</span>
+								<span class="q-body">
+									<span class="q-label">{o.label}</span>
+									{#if o.description}<span class="q-desc">{o.description}</span>{/if}
+								</span>
+							</button>
+						{/each}
+					</div>
+				</div>
+			{/each}
+		</div>
+		<div class="approval-actions">
+			<Button variant="primary" size="sm" disabled={!answersReady} onclick={submitAnswers}>{t('shell.answerSubmit')}</Button>
+			<Button variant="danger" size="sm" onclick={() => onRespond(buildApproveOp(approval.callId, 'deny'))}>{t('shell.answerCancel')}</Button>
+		</div>
+	{:else if multiHunk}
 		<div class="hunks">
 			{#each hunks as h (h.id)}
 				<div class="hunk" class:off={!selected.includes(h.id)}>
@@ -166,12 +220,92 @@
 		border: 1px solid color-mix(in oklab, var(--warn) 38%, transparent);
 		border-radius: var(--r-md);
 	}
+	/* AskUserQuestion uses the accent (not the warn) palette — it's a prompt. */
+	.approval.ask {
+		background: color-mix(in oklab, var(--accent) 8%, var(--panel));
+		border-color: color-mix(in oklab, var(--accent) 38%, transparent);
+	}
+	.approval.ask .approval-head {
+		color: var(--accent-bright);
+	}
 	.approval-head {
 		display: flex;
 		align-items: center;
 		gap: 8px;
 		font-size: 13px;
 		color: var(--warn);
+	}
+	.questions {
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
+		margin-top: 10px;
+	}
+	.q-text {
+		font-size: 13px;
+		font-weight: 600;
+		color: var(--text);
+		margin-bottom: 7px;
+	}
+	.q-opts {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+	.q-opt {
+		display: flex;
+		align-items: flex-start;
+		gap: 9px;
+		width: 100%;
+		text-align: left;
+		padding: 8px 10px;
+		border: 1px solid var(--border);
+		border-radius: var(--r-sm);
+		background: var(--sidebar);
+		color: var(--text);
+		cursor: pointer;
+		transition: border-color 0.12s ease, background 0.12s ease;
+	}
+	.q-opt:hover {
+		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
+	}
+	.q-opt.on {
+		border-color: var(--accent);
+		background: color-mix(in oklab, var(--accent) 12%, var(--sidebar));
+	}
+	.q-mark {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 16px;
+		height: 16px;
+		flex-shrink: 0;
+		margin-top: 1px;
+		border: 1.5px solid var(--border);
+		border-radius: 999px;
+		color: var(--on-accent);
+	}
+	.q-mark.multi {
+		border-radius: 4px;
+	}
+	.q-opt.on .q-mark {
+		background: var(--accent);
+		border-color: var(--accent);
+	}
+	.q-body {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
+	}
+	.q-label {
+		font-size: 13px;
+		font-weight: 500;
+	}
+	.q-desc {
+		font-size: 12px;
+		color: var(--dim);
+		line-height: 1.4;
 	}
 	.approval-head b {
 		font-family: var(--font-mono);

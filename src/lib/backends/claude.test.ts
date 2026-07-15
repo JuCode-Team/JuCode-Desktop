@@ -713,38 +713,41 @@ describe('claude adapter: approvals', () => {
 		expect(String(approval.summary)).toBe('/proj/probe-note.txt\n+hello');
 	});
 
-	it('renders an AskUserQuestion prompt as readable question + options (not raw JSON)', () => {
+	it('surfaces AskUserQuestion as an interactive picker and feeds the answer back', () => {
 		const { lines } = makeIo();
 		const adapter = createClaudeAdapter();
 		boot(adapter, lines);
+		const questions = [
+			{
+				question: 'How to handle the existing index.html?',
+				header: 'How',
+				options: [
+					{ label: 'New file', description: 'keep index.html, write blog.html' },
+					{ label: 'Overwrite', description: 'replace index.html' }
+				],
+				multiSelect: false
+			}
+		];
 		const events = adapter.translate({
 			type: 'control_request',
 			request_id: 'req-q',
-			request: {
-				subtype: 'can_use_tool',
-				tool_name: 'AskUserQuestion',
-				tool_use_id: 'toolu_q',
-				input: {
-					questions: [
-						{
-							question: 'How to handle the existing index.html?',
-							header: 'How',
-							options: [
-								{ label: 'New file', description: 'keep index.html, write blog.html' },
-								{ label: 'Overwrite', description: 'replace index.html' }
-							],
-							multiSelect: false
-						}
-					]
-				}
-			}
+			request: { subtype: 'can_use_tool', tool_name: 'AskUserQuestion', tool_use_id: 'toolu_q', input: { questions } }
 		});
-		const approval = events.find((e) => e.type === 'approval_request')!;
-		const summary = String(approval.summary);
-		expect(summary).toContain('How to handle the existing index.html?');
-		expect(summary).toContain('• New file — keep index.html, write blog.html');
-		expect(summary).toContain('• Overwrite — replace index.html');
-		expect(summary).not.toContain('{"questions"'); // no raw JSON
+		// It's a question card, not an allow/deny approval, and carries the questions.
+		expect(events).toHaveLength(1);
+		expect(events[0]).toMatchObject({ type: 'approval_request', name: 'ask_question', call_id: 'approval-1', questions });
+		// The picked answer rides back on the permission response's updatedInput.answers
+		// (keyed by the full question text) — this is what makes the tool run.
+		const frames = adapter.encodeOp({
+			op: 'approve',
+			call_id: 'approval-1',
+			decision: 'allow',
+			answers: { 'How to handle the existing index.html?': 'New file' }
+		});
+		expect(parse(frames![0]).response.response).toEqual({
+			behavior: 'allow',
+			updatedInput: { questions, answers: { 'How to handle the existing index.html?': 'New file' } }
+		});
 	});
 
 	it('answers unsupported control requests with an error instead of hanging', () => {

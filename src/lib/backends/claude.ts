@@ -811,6 +811,26 @@ export function createClaudeAdapter(): EngineAdapter {
 		const req = frame.request;
 		if (req?.subtype === 'can_use_tool') {
 			const r = req as unknown as CanUseToolRequest;
+			// AskUserQuestion is the model asking the user to pick — surface it as an
+			// interactive question card (not an allow/deny approval). The user's
+			// choice rides back on the permission response's updatedInput.answers,
+			// which is what actually makes the tool run in headless mode (otherwise
+			// the CLI reports "not enabled in this context").
+			if (str(r.tool_name) === 'AskUserQuestion') {
+				const callId = `approval-${++approvalSeq}`;
+				approvals.set(callId, { requestId: str(frame.request_id), request: r });
+				return [
+					{
+						type: 'approval_request',
+						call_id: callId,
+						name: 'ask_question',
+						summary: approvalSummary(r),
+						subagent_id: null,
+						hunks: null,
+						questions: (rec(r.input)?.questions as unknown) ?? []
+					}
+				];
+			}
 			const events: NormalizedEvent[] = [];
 			// The approval request carries the tool's FULL input — fill the tool card
 			// from it (in ask mode the streamed input may not have reached the card),
@@ -1064,12 +1084,20 @@ export function createClaudeAdapter(): EngineAdapter {
 					const entry = approvals.get(op.call_id);
 					if (!entry) return null; // stale (restart) or already answered
 					approvals.delete(op.call_id);
+					const input = rec(entry.request.input) ?? {};
+					// AskUserQuestion: inject the user's picks as updatedInput.answers
+					// (keyed by full question text) — the CLI feeds this back to the model
+					// as the tool result (without it the tool is "not enabled").
+					const updatedInput =
+						op.answers && str(entry.request.tool_name) === 'AskUserQuestion'
+							? { questions: input.questions, answers: op.answers }
+							: input;
 					const result: PermissionResult =
 						op.decision === 'deny'
 							? { behavior: 'deny', message: 'The user denied this tool use.' }
 							: {
 									behavior: 'allow',
-									updatedInput: rec(entry.request.input) ?? {},
+									updatedInput,
 									...(op.always ? { updatedPermissions: alwaysPermissions(entry.request) } : {})
 								};
 					return [

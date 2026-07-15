@@ -55,6 +55,9 @@ const shell = {
 		// approval
 		approveCommand: '允许执行命令',
 		approveFile: '允许修改文件',
+		askQuestion: '请选择',
+		answerSubmit: '提交',
+		answerCancel: '取消',
 		allowOnce: '允许一次',
 		allowAlways: '本会话始终允许',
 		deny: '拒绝',
@@ -248,6 +251,9 @@ const shell = {
 		// approval
 		approveCommand: 'Allow running command',
 		approveFile: 'Allow file changes',
+		askQuestion: 'Choose an option',
+		answerSubmit: 'Submit',
+		answerCancel: 'Cancel',
 		allowOnce: 'Allow once',
 		allowAlways: 'Always allow this session',
 		deny: 'Deny',

@@ -229,7 +229,8 @@ describe('approval flow (engine-enforced)', () => {
 			hunks: [
 				{ id: 'f0h1', file: 'src/a.rs', header: '@@ -1,3 +1,3 @@', lines: [' a', '-b', '+c'] },
 				{ id: 'f0h2', file: 'src/a.rs', header: '@@ -9,2 +9,3 @@', lines: ['+d'] }
-			]
+			],
+			questions: null
 		});
 	});
 
@@ -241,7 +242,8 @@ describe('approval flow (engine-enforced)', () => {
 			name: 'bash',
 			summary: 'rm -rf /tmp/x',
 			subagentId: null,
-			hunks: null
+			hunks: null,
+			questions: null
 		});
 	});
 

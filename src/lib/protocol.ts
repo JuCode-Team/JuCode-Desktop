@@ -10,7 +10,7 @@ export type Op =
 	| { op: 'shutdown' }
 	// Structured approval answer: `hunks` (edit tools, partial approval) is only
 	// valid with decision "allow"; `always` is whole-call only (never with hunks).
-	| { op: 'approve'; call_id: string; decision: 'allow' | 'deny'; hunks?: string[]; always?: boolean }
+	| { op: 'approve'; call_id: string; decision: 'allow' | 'deny'; hunks?: string[]; always?: boolean; answers?: Record<string, string> }
 	// Engine-level auto-approval policy; acknowledged by an `approval_mode` event.
 	| { op: 'set_approval_mode'; mode: 'read-only' | 'plan' | 'auto' | 'auto-edit' | 'full-auto' }
 	// MCP server management (engine config is global; any live session's engine

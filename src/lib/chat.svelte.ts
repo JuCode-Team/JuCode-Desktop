@@ -3,11 +3,13 @@ import type { BackendId } from './backends/types';
 import {
 	EDIT_TOOLS,
 	parseHunks,
+	parseQuestions,
 	reconcileMode,
 	toEngineMode,
 	type ApprovalHunk,
 	type ApprovalMode,
-	type EngineApprovalMode
+	type EngineApprovalMode,
+	type Question
 } from './approval';
 import { recordUsage } from './usageStats';
 import { costUsd } from './pricing';
@@ -131,6 +133,8 @@ export class ChatState {
 		summary: string;
 		subagentId: string | null;
 		hunks: ApprovalHunk[] | null;
+		/** Present for a claude AskUserQuestion — render an interactive picker. */
+		questions?: Question[] | null;
 	} | null>(null);
 	subagents = $state<Record<string, { status: string; message: string }>>({});
 	commands = $state<CommandItem[]>([]);
@@ -624,7 +628,8 @@ export class ChatState {
 					name: str(ev.name),
 					summary: str(ev.summary),
 					subagentId: typeof ev.subagent_id === 'string' && ev.subagent_id ? ev.subagent_id : null,
-					hunks: parseHunks(ev.hunks)
+					hunks: parseHunks(ev.hunks),
+					questions: parseQuestions(ev.questions)
 				};
 				break;
 			case 'command_list':
