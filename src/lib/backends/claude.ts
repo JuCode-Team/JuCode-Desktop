@@ -538,6 +538,28 @@ export function createClaudeAdapter(): EngineAdapter {
 		return known ? [update] : [{ type: 'tool_start', call_id: id, name }, update];
 	}
 
+	/** content_block_start for a tool_use: open the block's input accumulator and
+	 *  create the card. Shared by the main stream and subagent streams. */
+	function toolBlockStart(block: ToolUseBlock, idx: number): NormalizedEvent[] {
+		blocks.set(idx, { streamed: 0, toolId: str(block.id), partial: '' });
+		return toolUseEvents(block, false);
+	}
+
+	/** A streamed input_json_delta chunk: accumulate and refresh the card once the
+	 *  JSON parses (TodoWrite refreshes the plan instead). Shared main/subagent. */
+	function toolInputDeltaEvents(idx: number, partialJson: string): NormalizedEvent[] {
+		const track = blocks.get(idx);
+		if (!track?.toolId) return [];
+		track.partial = (track.partial ?? '') + partialJson;
+		const meta = tools.get(track.toolId);
+		if (!meta) return [];
+		const input = tryParseRecord(track.partial);
+		if (!input) return [];
+		meta.input = input;
+		if (meta.claudeName === 'TodoWrite') return todoPlanEvents(input);
+		return [{ type: 'tool_update', call_id: track.toolId, output: toolCardJson(meta.claudeName, input) }];
+	}
+
 	function toolResultEvents(block: ToolResultBlock, structured: unknown): NormalizedEvent[] {
 		const id = str(block.tool_use_id);
 		const meta = tools.get(id);
@@ -593,8 +615,13 @@ export function createClaudeAdapter(): EngineAdapter {
 	function subagentFrame(msg: Record<string, unknown>): NormalizedEvent[] {
 		if (msg.type === 'stream_event') {
 			const ev = (msg as unknown as StreamEventFrame).event;
+			const idx = typeof ev?.index === 'number' ? ev.index : 0;
 			if (ev?.type === 'content_block_start' && isToolUse(ev.content_block))
-				return toolUseEvents(ev.content_block, false);
+				return toolBlockStart(ev.content_block, idx);
+			// The subagent's inner tool inputs stream the same way — accumulate them so
+			// its tool cards fill (previously only the authoritative frame did).
+			if (ev?.type === 'content_block_delta' && ev.delta?.type === 'input_json_delta')
+				return toolInputDeltaEvents(idx, str(ev.delta.partial_json));
 			return [];
 		}
 		if (msg.type === 'assistant') {
@@ -716,8 +743,7 @@ export function createClaudeAdapter(): EngineAdapter {
 				}
 				if (isToolUse(block)) {
 					// input is {} here; it streams via input_json_delta below.
-					blocks.set(idx, { streamed: 0, toolId: str(block.id), partial: '' });
-					return toolUseEvents(block, false);
+					return toolBlockStart(block, idx);
 				}
 				blocks.set(idx, { streamed: 0 });
 				return []; // thinking (reasoning_delta creates the block lazily)
@@ -738,16 +764,7 @@ export function createClaudeAdapter(): EngineAdapter {
 				}
 				// Accumulate the tool input's streamed JSON; refresh the card once the
 				// accumulated text parses (so command/diff/path fill in live).
-				if (d?.type === 'input_json_delta' && track?.toolId) {
-					track.partial = (track.partial ?? '') + str(d.partial_json);
-					const meta = tools.get(track.toolId);
-					if (!meta) return [];
-					const input = tryParseRecord(track.partial);
-					if (!input) return [];
-					meta.input = input;
-					if (meta.claudeName === 'TodoWrite') return todoPlanEvents(input);
-					return [{ type: 'tool_update', call_id: track.toolId, output: toolCardJson(meta.claudeName, input) }];
-				}
+				if (d?.type === 'input_json_delta') return toolInputDeltaEvents(idx, str(d.partial_json));
 				return []; // signature_delta
 			}
 			case 'message_delta': {
@@ -851,7 +868,11 @@ export function createClaudeAdapter(): EngineAdapter {
 			// overwrites rather than accumulates desktop-side.
 			events.push({ type: 'context_usage', tokens: lastContext, cost: frame.total_cost_usd });
 		}
-		if ((frame.is_error || frame.subtype !== 'success') && !wasInterrupting) {
+		// Only genuine failures get an error card: is_error, or an error_* subtype.
+		// Benign non-success ends (cancelled, interrupted, …) shouldn't look like
+		// crashes.
+		const isFailure = frame.is_error === true || /^error/i.test(str(frame.subtype));
+		if (isFailure && !wasInterrupting) {
 			const detail =
 				str(frame.result) ||
 				(Array.isArray(frame.errors) ? frame.errors.map(str).filter(Boolean).join('; ') : '') ||

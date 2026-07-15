@@ -663,6 +663,21 @@ describe('claude adapter: turns', () => {
 			{ type: 'tool_output', call_id: 'toolu_sub', name: 'read', output: JSON.stringify({ path: '/proj/x.ts' }), is_error: false }
 		]);
 	});
+
+	it('fills a subagent inner tool card from its streamed input_json_delta', () => {
+		const { lines } = makeIo();
+		const adapter = createClaudeAdapter();
+		boot(adapter, lines);
+		const sub = (event: Record<string, unknown>) => ({ ...streamEvent(event), parent_tool_use_id: 'toolu_task' });
+		adapter.translate(
+			sub({ type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'toolu_si', name: 'Bash', input: {} } })
+		);
+		// The subagent's inner tool input streams the same way the main agent's does.
+		expect(adapter.translate(sub({ type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: '{"comm' } }))).toEqual([]);
+		expect(
+			adapter.translate(sub({ type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: 'and":"ls"}' } }))
+		).toEqual([{ type: 'tool_update', call_id: 'toolu_si', output: JSON.stringify({ command: 'ls' }) }]);
+	});
 });
 
 describe('claude adapter: approvals', () => {
@@ -938,6 +953,14 @@ describe('claude adapter: interrupt / modes / results', () => {
 		});
 		expect(auth[0].type).toBe('error');
 		expect(String(auth[0].message)).toContain('/login');
+	});
+
+	it('does not error-card a benign non-success result (cancelled)', () => {
+		const { lines } = makeIo();
+		const adapter = createClaudeAdapter();
+		boot(adapter, lines);
+		const ev = adapter.translate({ type: 'result', subtype: 'cancelled', is_error: false, num_turns: 1, session_id: SID });
+		expect(ev).toEqual([{ type: 'status', message: 'ready' }]);
 	});
 
 	it('a failed --resume result becomes resume_failed, not a scary error card', () => {
