@@ -309,6 +309,9 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    // 快照重建仅在非 Windows 生效（见 apply_to_command 的 `!cfg!(windows)`），
+    // Windows 上一律回退继承环境，故这条快照优先级断言只在非 Windows 有意义。
+    #[cfg(not(windows))]
     #[test]
     fn apply_precedence_snapshot_then_custom_explicit_wins() {
         // 直接对 Command 环境断言：优先级 快照 < custom < explicit(最终断言)。

@@ -15,6 +15,21 @@ mod shell_env;
 
 use backend::BackendKind;
 
+/// On Windows, suppress the console window that a GUI-subsystem app would
+/// otherwise pop when it spawns a console program — a brief flash for one-shot
+/// commands (git / gh), a window that stays open for the whole session for the
+/// long-lived engine children. No-op on other platforms.
+pub(crate) fn no_window(cmd: &mut Command) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    #[cfg(not(windows))]
+    let _ = cmd;
+}
+
 /// One `jucode serve` child process backing a single GUI session.
 struct Session {
     stdin: Mutex<ChildStdin>,
@@ -119,6 +134,7 @@ fn create_session(
         .filter(|p| p.is_dir())
         .unwrap_or_else(resolve_cwd);
     let mut cmd = Command::new(bin);
+    no_window(&mut cmd);
     cmd.args(&args)
         .current_dir(dir)
         .stdin(Stdio::piped())
@@ -291,6 +307,7 @@ fn check_backend(backend: String, bin_override: Option<String>) -> Result<Backen
         });
     };
     let mut cmd = Command::new(&path);
+    no_window(&mut cmd);
     cmd.arg("--version");
     let version = run_with_timeout(cmd, std::time::Duration::from_secs(15))
         .ok()
@@ -781,17 +798,59 @@ pub(crate) fn which(cmd: &str) -> Option<PathBuf> {
     which_in(cmd, std::env::var_os("PATH")?)
 }
 
+/// Executable extensions to try for a bare command name on Windows, from
+/// `PATHEXT` (the OS-configured resolution order), with a sane fallback. This is
+/// what makes a bare `codex` resolve to `codex.cmd` — npm installs both an
+/// extensionless POSIX-shell shim and a `.cmd` next to each other, and only the
+/// `.cmd` is launchable by `CreateProcess`.
+#[cfg(windows)]
+fn windows_path_exts() -> Vec<String> {
+    std::env::var("PATHEXT")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| {
+            s.split(';')
+                .map(str::trim)
+                .filter(|e| !e.is_empty())
+                .map(|e| e.to_string())
+                .collect()
+        })
+        .unwrap_or_else(|| {
+            [".COM", ".EXE", ".BAT", ".CMD"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect()
+        })
+}
+
 fn which_in(cmd: &str, path: std::ffi::OsString) -> Option<PathBuf> {
     for dir in std::env::split_paths(&path) {
-        let candidate = dir.join(cmd);
-        if candidate.is_file() {
-            return Some(candidate);
-        }
         #[cfg(windows)]
         {
-            let exe = dir.join(format!("{cmd}.exe"));
-            if exe.is_file() {
-                return Some(exe);
+            // Windows resolves a bare name through PATHEXT. A file with no
+            // executable extension (e.g. npm's POSIX-shell `codex` shim sitting
+            // next to `codex.cmd`) can't be launched by CreateProcess, so it must
+            // never shadow the real `.exe`/`.cmd`; only accept the bare name when
+            // it already carries an extension.
+            if Path::new(cmd).extension().is_some() {
+                let candidate = dir.join(cmd);
+                if candidate.is_file() {
+                    return Some(candidate);
+                }
+            } else {
+                for ext in windows_path_exts() {
+                    let candidate = dir.join(format!("{cmd}{ext}"));
+                    if candidate.is_file() {
+                        return Some(candidate);
+                    }
+                }
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            let candidate = dir.join(cmd);
+            if candidate.is_file() {
+                return Some(candidate);
             }
         }
     }
@@ -892,7 +951,9 @@ struct EnvReport {
 /// binary be resolved? Drives the setup wizard.
 #[tauri::command(async)]
 fn check_environment() -> EnvReport {
-    let git = match Command::new("git").arg("--version").output() {
+    let mut git_cmd = Command::new("git");
+    no_window(&mut git_cmd);
+    let git = match git_cmd.arg("--version").output() {
         Ok(out) if out.status.success() => DepStatus {
             present: true,
             detail: String::from_utf8_lossy(&out.stdout).trim().to_string(),
@@ -972,7 +1033,9 @@ fn install_dependency(name: String) -> Result<InstallOutcome, String> {
         "windows" => {
             if which("winget").is_some() {
                 // Long-running; run detached and let the user re-check when done.
-                Command::new("winget")
+                let mut winget = Command::new("winget");
+                no_window(&mut winget);
+                winget
                     .args([
                         "install",
                         "--id",
@@ -1051,7 +1114,9 @@ fn list_dir(path: Option<String>, root: Option<String>) -> Result<Vec<FsEntry>, 
 /// Built-in providers (id + default base_url) from the engine, for the settings picker.
 #[tauri::command(async)]
 fn list_providers() -> Result<serde_json::Value, String> {
-    let out = Command::new(resolve_bin())
+    let mut cmd = Command::new(resolve_bin());
+    no_window(&mut cmd);
+    let out = cmd
         .arg("providers")
         .output()
         .map_err(|e| e.to_string())?;
@@ -1269,7 +1334,9 @@ fn is_valid_repo_relpath(s: &str) -> bool {
 fn git_head_text(path: String, cwd: Option<String>) -> Result<String, String> {
     let root = cwd.map(PathBuf::from).unwrap_or_else(resolve_cwd);
     let safe = confine_to_root(&PathBuf::from(&path), Some(&root))?;
-    let top_out = Command::new("git")
+    let mut top_cmd = Command::new("git");
+    no_window(&mut top_cmd);
+    let top_out = top_cmd
         .args(["rev-parse", "--show-toplevel"])
         .current_dir(&root)
         .output()
@@ -1288,7 +1355,9 @@ fn git_head_text(path: String, cwd: Option<String>) -> Result<String, String> {
     if !is_valid_repo_relpath(&rel) {
         return Err(format!("invalid repository path: {rel}"));
     }
-    let out = Command::new("git")
+    let mut show_cmd = Command::new("git");
+    no_window(&mut show_cmd);
+    let out = show_cmd
         .arg("show")
         .arg(format!("HEAD:{rel}"))
         .current_dir(&top)
@@ -1704,6 +1773,7 @@ fn git(args: Vec<String>, cwd: Option<String>) -> Result<String, String> {
         .first()
         .is_some_and(|s| GIT_REMOTE_SUBCOMMANDS.contains(&s.as_str()));
     let mut cmd = Command::new("git");
+    no_window(&mut cmd);
     // 远程操作需要终端环境（SSH agent、凭据助手的 PATH 等）——合并快照但
     // 不清空，协议性变量随后显式覆盖。
     shell_env::merge_into(&mut cmd);
@@ -1738,6 +1808,7 @@ fn git(args: Vec<String>, cwd: Option<String>) -> Result<String, String> {
 /// repo without a configured user. Returns trimmed stdout on success.
 fn git_plumb(dir: &Path, index: Option<&Path>, args: &[&str]) -> Result<String, String> {
     let mut cmd = Command::new("git");
+    no_window(&mut cmd);
     shell_env::merge_into(&mut cmd);
     cmd.args(args)
         .current_dir(dir)
@@ -1898,6 +1969,7 @@ fn gh(args: Vec<String>, cwd: Option<String>) -> Result<String, String> {
     validate_gh_args(&args)?;
     let dir = cwd.map(PathBuf::from).unwrap_or_else(resolve_cwd);
     let mut cmd = Command::new(resolve_gh());
+    no_window(&mut cmd);
     // gh 的登录态/配置常依赖终端环境（GH_CONFIG_DIR、代理等）。
     shell_env::merge_into(&mut cmd);
     cmd.args(&args)
@@ -2289,6 +2361,31 @@ mod tests {
     fn missing_file_is_empty_object() {
         let p = tmp("missing.json");
         assert_eq!(read_json_strict(&p).unwrap(), serde_json::json!({}));
+    }
+
+    // On Windows, npm installs a binary as both an extensionless POSIX-shell shim
+    // and a `.cmd`. Only the `.cmd` is launchable, so resolution must prefer it and
+    // never return the extensionless file (which CreateProcess cannot execute).
+    #[cfg(windows)]
+    #[test]
+    fn which_prefers_cmd_over_extensionless_shim() {
+        use super::which_in;
+        let dir = std::env::temp_dir().join(format!("jucode-which-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("codex"), b"#!/bin/sh\n").unwrap();
+        std::fs::write(dir.join("codex.cmd"), b"@echo off\n").unwrap();
+
+        let resolved = which_in("codex", dir.clone().into_os_string()).unwrap();
+        let ext = resolved
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or_default();
+        assert!(
+            ext.eq_ignore_ascii_case("cmd"),
+            "must resolve codex.cmd, not the extensionless POSIX shim (got {resolved:?})"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
