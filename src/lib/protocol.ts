@@ -254,6 +254,44 @@ export function installDependency(name: string): Promise<InstallOutcome> {
 	return invoke('install_dependency', { name });
 }
 
+// --- external tool dependencies (node/npm, ffmpeg, codex, jucode, claude) ---
+
+// What installing a tool entails on this machine (mirrors installer::Plan).
+export type InstallPlan =
+	| { kind: 'run'; program: string; args: string[] }
+	| { kind: 'manual'; command: string }
+	| { kind: 'open-url'; url: string }
+	| { kind: 'needs-prereq'; prereq: string };
+export interface DepReport {
+	id: string;
+	present: boolean;
+	detail: string;
+	plan: InstallPlan;
+}
+export function checkDependencies(): Promise<DepReport[]> {
+	return invoke('check_dependencies');
+}
+// Outcome of triggering run_install. 'running' → the app is streaming output
+// via install-output events and will emit install-done when finished.
+export type InstallStart =
+	| { kind: 'running' }
+	| { kind: 'manual-command'; command: string }
+	| { kind: 'open-url'; url: string }
+	| { kind: 'needs-prereq'; prereq: string };
+export function runInstall(name: string): Promise<InstallStart> {
+	return invoke('run_install', { name });
+}
+export interface InstallOutputEvent {
+	id: string;
+	line: string;
+	stream: 'stdout' | 'stderr';
+}
+export interface InstallDoneEvent {
+	id: string;
+	success: boolean;
+	code: number | null;
+}
+
 export function listFiles(cwd?: string): Promise<string[]> {
 	return invoke('list_files', { cwd });
 }

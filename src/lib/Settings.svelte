@@ -7,6 +7,7 @@
 	import { prefs, vibrancySupported } from '$lib/prefs.svelte';
 	import { themeState, setTheme, type ThemePref } from '$lib/theme.svelte';
 	import BackendSection from '$lib/settings/BackendSection.svelte';
+	import Dependencies from '$lib/Dependencies.svelte';
 	import type { ChatState } from '$lib/chat.svelte';
 	import Vendor from '$lib/Vendor.svelte';
 	import OverviewPanel from '$lib/OverviewPanel.svelte';
@@ -370,6 +371,9 @@
 						{#if keyed.includes('mimo')}<p class="hint mt keyok"><CircleCheck size={13} /> {t('settings.account.keyed')}</p>{/if}
 					</div>
 				{:else if section === 'extensions'}
+					<div class="group">
+						<Dependencies />
+					</div>
 					{#if onMarket}
 						<div class="group">
 							<div class="glabel"><Store size={12} /> {t('settings.market.groupLabel')}</div>

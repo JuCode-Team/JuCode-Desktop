@@ -27,6 +27,31 @@ const setup = {
 			officialDownloadPage: '官方下载页',
 			autoInstallFailed: '自动安装不可用：{e}。请用下方命令手动安装。'
 		},
+		deps: {
+			title: '运行工具',
+			sub: '这些外部工具支持不同引擎与录屏等功能，可一键自动安装。',
+			recheck: '重新检测',
+			installed: '已安装',
+			notInstalled: '未安装',
+			install: '安装',
+			installing: '安装中…',
+			retry: '重试',
+			needsNode: '需先安装 Node.js（提供 npm）',
+			manualHint: '出于安全考虑不会自动执行 sudo，请复制命令到终端运行，完成后点「重新检测」。',
+			copy: '复制命令',
+			openPage: '打开下载页',
+			logTitle: '安装输出',
+			doneOk: '安装完成，正在重新检测…',
+			doneFail: '安装失败（退出码 {code}）',
+			startFailed: '无法启动安装：{e}',
+			tools: {
+				node: { name: 'Node.js / npm', desc: 'codex、jucode 等 CLI 的运行时' },
+				ffmpeg: { name: 'FFmpeg', desc: '录屏与视频关键帧提取' },
+				claude: { name: 'Claude Code', desc: 'Anthropic Claude Code 引擎' },
+				codex: { name: 'Codex', desc: 'OpenAI Codex CLI 引擎' },
+				jucode: { name: 'JuCode CLI', desc: '默认引擎（@jucode/cli）' }
+			}
+		},
 		engineMissing: {
 			head: '未找到 JuCode 引擎',
 			tip: '正式安装包内置引擎；若你在开发环境，请设置 {bin} 或在同级目录构建 JuCode-CLI。'
@@ -84,6 +109,31 @@ const setup = {
 			downloadPage: 'Download page',
 			officialDownloadPage: 'Official download page',
 			autoInstallFailed: 'Auto install unavailable: {e}. Please install manually using the command below.'
+		},
+		deps: {
+			title: 'CLI Tools',
+			sub: 'These external tools power the different engines and screen recording — install them with one click.',
+			recheck: 'Re-check',
+			installed: 'Installed',
+			notInstalled: 'Not installed',
+			install: 'Install',
+			installing: 'Installing…',
+			retry: 'Retry',
+			needsNode: 'Install Node.js first (provides npm)',
+			manualHint: 'For safety the app never runs sudo itself. Copy the command into a terminal, then click "Re-check".',
+			copy: 'Copy command',
+			openPage: 'Open download page',
+			logTitle: 'Install output',
+			doneOk: 'Install complete, re-checking…',
+			doneFail: 'Install failed (exit code {code})',
+			startFailed: 'Could not start install: {e}',
+			tools: {
+				node: { name: 'Node.js / npm', desc: 'Runtime for the codex / jucode CLIs' },
+				ffmpeg: { name: 'FFmpeg', desc: 'Screen recording and video keyframes' },
+				claude: { name: 'Claude Code', desc: 'Anthropic Claude Code engine' },
+				codex: { name: 'Codex', desc: 'OpenAI Codex CLI engine' },
+				jucode: { name: 'JuCode CLI', desc: 'Default engine (@jucode/cli)' }
+			}
 		},
 		engineMissing: {
 			head: 'JuCode Engine Not Found',

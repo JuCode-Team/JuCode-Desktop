@@ -11,6 +11,7 @@ mod backend;
 mod browser;
 mod capture;
 mod claude_history;
+mod installer;
 mod shell_env;
 
 use backend::BackendKind;
@@ -1076,6 +1077,156 @@ fn install_dependency(name: String) -> Result<InstallOutcome, String> {
             message: "当前平台不支持自动安装，请从官方下载页安装 Git。 / Auto-install is not supported on this platform — install Git from the official download page.".to_string(),
         }),
     }
+}
+
+// --- external tool dependencies (node/npm, ffmpeg, codex, jucode, claude) ---
+
+/// Presence + install plan for one tool (drives the dependencies panel).
+#[derive(Serialize)]
+struct DepReport {
+    /// Stable id (`node` / `ffmpeg` / `codex` / `jucode` / `claude`).
+    id: String,
+    present: bool,
+    /// Resolved binary path when present, else empty.
+    detail: String,
+    /// What the install button will do on this machine.
+    plan: installer::Plan,
+}
+
+/// The tools reported to the dependencies panel, in install order (node first —
+/// it provides npm for codex/jucode).
+const DEPS: [installer::Dep; 5] = [
+    installer::Dep::Node,
+    installer::Dep::Ffmpeg,
+    installer::Dep::Claude,
+    installer::Dep::Codex,
+    installer::Dep::Jucode,
+];
+
+/// Status of every external tool: presence (resolved via PATH) and the
+/// platform-specific install plan.
+#[tauri::command(async)]
+fn check_dependencies() -> Vec<DepReport> {
+    let os = std::env::consts::OS;
+    let has = |c: &str| which(c).is_some();
+    DEPS.iter()
+        .map(|&dep| {
+            let path = which(dep.bin());
+            DepReport {
+                id: dep.id().to_string(),
+                present: path.is_some(),
+                detail: path.map(|p| p.display().to_string()).unwrap_or_default(),
+                plan: installer::plan(dep, os, &has),
+            }
+        })
+        .collect()
+}
+
+/// Outcome of triggering an install (see `run_install`).
+#[derive(Serialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+enum InstallStart {
+    /// The app spawned the installer; watch `install-output` / `install-done`.
+    Running,
+    /// Linux system package — show this copyable command (GUI never runs sudo).
+    ManualCommand { command: String },
+    /// No automated path; open this download page.
+    OpenUrl { url: String },
+    /// A prerequisite is missing — install `prereq` first.
+    NeedsPrereq { prereq: String },
+}
+
+/// One line of installer output, streamed to the webview.
+#[derive(Clone, Serialize)]
+struct InstallOutput {
+    id: String,
+    line: String,
+    /// `"stdout"` or `"stderr"`.
+    stream: String,
+}
+
+/// Terminal frame for an install run.
+#[derive(Clone, Serialize)]
+struct InstallDone {
+    id: String,
+    success: bool,
+    code: Option<i32>,
+}
+
+/// Pump a child stream to the webview as `install-output` events.
+fn pump_install_stream<R: Read + Send + 'static>(
+    reader: R,
+    id: String,
+    stream: &'static str,
+    app: AppHandle,
+) -> std::thread::JoinHandle<()> {
+    std::thread::spawn(move || {
+        let buf = BufReader::new(reader);
+        for line in buf.lines() {
+            match line {
+                Ok(line) => {
+                    let _ = app.emit(
+                        "install-output",
+                        InstallOutput {
+                            id: id.clone(),
+                            line,
+                            stream: stream.to_string(),
+                        },
+                    );
+                }
+                Err(_) => break,
+            }
+        }
+    })
+}
+
+/// Installs a tool by id. For run-capable plans the app spawns the installer and
+/// streams its output (`install-output` events, then a final `install-done`);
+/// otherwise it returns a manual command / download page / missing prerequisite
+/// for the UI to surface. The argv is a fixed per-tool template — never
+/// user-controlled (see `installer::plan`).
+#[tauri::command(async)]
+fn run_install(name: String, app: AppHandle) -> Result<InstallStart, String> {
+    let dep = installer::Dep::parse(&name).ok_or_else(|| format!("unknown dependency: {name}"))?;
+    let plan = installer::plan(dep, std::env::consts::OS, &|c| which(c).is_some());
+    let (program, args) = match plan {
+        installer::Plan::Manual { command } => return Ok(InstallStart::ManualCommand { command }),
+        installer::Plan::OpenUrl { url } => return Ok(InstallStart::OpenUrl { url }),
+        installer::Plan::NeedsPrereq { prereq } => {
+            return Ok(InstallStart::NeedsPrereq { prereq })
+        }
+        installer::Plan::Run { program, args } => (program, args),
+    };
+    // Resolve the logical program name through PATH (e.g. `npm` → `npm.cmd`).
+    let bin = which(&program).unwrap_or_else(|| PathBuf::from(&program));
+    let mut cmd = Command::new(bin);
+    no_window(&mut cmd);
+    // Installers lean on the terminal environment (proxies, credential helpers,
+    // the user's npm prefix / PATH) — merge the snapshot without clearing.
+    shell_env::merge_into(&mut cmd);
+    cmd.args(&args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("failed to start installer for {name}: {e}"))?;
+    let out = child.stdout.take().ok_or("failed to capture stdout")?;
+    let err = child.stderr.take().ok_or("failed to capture stderr")?;
+    let id = dep.id().to_string();
+    let out_join = pump_install_stream(out, id.clone(), "stdout", app.clone());
+    let err_join = pump_install_stream(err, id.clone(), "stderr", app.clone());
+    std::thread::spawn(move || {
+        let status = child.wait();
+        let _ = out_join.join();
+        let _ = err_join.join();
+        let (success, code) = match status {
+            Ok(s) => (s.success(), s.code()),
+            Err(_) => (false, None),
+        };
+        let _ = app.emit("install-done", InstallDone { id, success, code });
+    });
+    Ok(InstallStart::Running)
 }
 
 #[derive(Serialize)]
@@ -2314,6 +2465,8 @@ pub fn run() {
             save_temp_image,
             check_environment,
             install_dependency,
+            check_dependencies,
+            run_install,
             git,
             gh,
             worktree_base,

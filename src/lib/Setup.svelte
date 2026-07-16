@@ -8,6 +8,7 @@
 	import { checkEnvironment, installDependency, type EnvReport } from '$lib/protocol';
 	import { dispatch } from '$lib/backends/router';
 	import { gitInstallUi } from '$lib/setup';
+	import Dependencies from '$lib/Dependencies.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import { focusTrap } from '$lib/focusTrap';
@@ -171,6 +172,8 @@
 						<p class="fix-tip">{@html t('setup.engineMissing.tip', { bin: '<code>JUCODE_BIN</code>' })}</p>
 					</div>
 				{/if}
+
+				<div class="deps-block"><Dependencies /></div>
 			{:else if step === 1}
 				<h2>{t('setup.loginOauth.title')}</h2>
 				<p class="sub">{t('setup.loginOauth.sub')}</p>
@@ -540,5 +543,10 @@
 	}
 	.spacer {
 		flex: 1;
+	}
+	.deps-block {
+		margin-top: 18px;
+		padding-top: 16px;
+		border-top: 1px solid var(--hairline);
 	}
 </style>
