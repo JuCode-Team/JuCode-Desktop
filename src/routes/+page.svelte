@@ -1522,6 +1522,14 @@
 	.sb-toggle:active {
 		transform: scale(0.9);
 	}
+	/* Windows/Linux have a native title bar and no traffic lights, so drop the
+	 * macOS traffic-light offsets: sit the toggle at the sidebar's content edge,
+	 * vertically level with the chat header's right-hand toggle. */
+	:global(:root[data-os='windows']) .sb-toggle,
+	:global(:root[data-os='linux']) .sb-toggle {
+		top: 18px;
+		left: 14px;
+	}
 
 	/* ---------- center ---------- */
 	.center {
@@ -1609,6 +1617,11 @@
 	   shift the title clear of them. */
 	header.shifted {
 		padding-left: 122px;
+	}
+	/* Windows/Linux: no traffic lights, so only the toggle overlays the header. */
+	:global(:root[data-os='windows']) header.shifted,
+	:global(:root[data-os='linux']) header.shifted {
+		padding-left: 52px;
 	}
 	.htitle {
 		display: flex;
