@@ -866,7 +866,7 @@ fn transcribe_audio(
         .get("providers")
         .and_then(|providers| providers.get(config.provider.auth_key))
         .and_then(|value| value.as_str())
-        .map(str::trim)
+        .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .ok_or_else(|| format!(
             "No API key configured for {} (Settings → Account → Speech recognition)",
@@ -881,7 +881,7 @@ fn transcribe_audio(
     let mime = mime.unwrap_or_else(|| "audio/wav".to_string());
     let language = language.unwrap_or_else(|| "auto".to_string());
     let boundary = format!("jucode-asr-{}", std::process::id());
-    let request = build_asr_request(&config, key, &audio, &mime, &language, &boundary)?;
+    let request = build_asr_request(&config, &key, &audio, &mime, &language, &boundary)?;
     let mut http = ureq::post(&request.url).timeout(std::time::Duration::from_secs(120));
     for (name, value) in &request.headers {
         http = http.set(name, value);
