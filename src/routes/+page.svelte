@@ -35,7 +35,8 @@
 	import { browser, type WebRef } from '$lib/browser.svelte';
 	import { prefs } from '$lib/prefs.svelte';
 	import { t } from '$lib/i18n';
-	import { SessionStore, type SavedProject } from '$lib/session.svelte';
+	import { SessionStore } from '$lib/session.svelte';
+	import { workspaces } from '$lib/workbench/workspaceStore.svelte';
 	import Settings from '$lib/Settings.svelte';
 	import Setup from '$lib/Setup.svelte';
 	import Marketplace from '$lib/Marketplace.svelte';
@@ -70,15 +71,6 @@
 	// O(1) session lookup for the hot agent-event path (fires per stream chunk),
 	// instead of an O(n) allSessions.find on every event.
 	const sessionMap = $derived(new Map(allSessions.map((s) => [s.id, s])));
-	// Read the saved layout synchronously, before any effect can overwrite it.
-	const savedProjectsData: SavedProject[] = (() => {
-		try {
-			return JSON.parse(localStorage.getItem('jucode-projects') || '[]');
-		} catch (e) {
-			console.error('failed to restore jucode-projects', e);
-			return [];
-		}
-	})();
 	let input = $state('');
 	let attachments = $state<{ path: string; image: boolean }[]>([]);
 	// Videos attach as extracted keyframes (images) + a text description — the
@@ -245,8 +237,9 @@
 	let sbResizing = $state(false);
 	let resizing = $state(false);
 	let winW = $state(1200);
-	// Built-in editor: a toggleable split right of the chat column (⌘E), with a
-	// ⌘P quick-open picker over the project file index.
+	// Audit pane: a CodeMirror diff/review split right of the chat column.
+	// Hidden by default — it only opens on user interaction (clicking a changed
+	// file, a chat file link, ⌘P quick-open, or ⌘E on the current change).
 	let showQuickOpen = $state(false);
 	let editorWidth = $state(560);
 	let editorResizing = $state(false);
@@ -369,13 +362,23 @@
 		if (activeProject) editorStore.root = activeProject.path;
 	});
 
-	function toggleEditor() {
-		if (!editorStore.visible && editorStore.tabs.length === 0) {
-			// Nothing open yet — go straight to quick-open instead of an empty pane.
-			if (activeProject) showQuickOpen = true;
+	// ⌘E audits the current change instead of opening a blank IDE: it reveals
+	// the audit pane on the session's most recently changed file (or re-shows /
+	// hides files already under review). With nothing changed and nothing open
+	// it does nothing — the pane has no empty-editor mode.
+	function toggleAudit() {
+		if (editorStore.visible) {
+			editorStore.visible = false;
 			return;
 		}
-		editorStore.visible = !editorStore.visible;
+		if (editorStore.tabs.length) {
+			editorStore.visible = true;
+			return;
+		}
+		const cwd = activeProject?.path;
+		const changed = chat?.changedFiles ?? [];
+		if (!cwd || !changed.length) return;
+		editorStore.open(changed[changed.length - 1], cwd).catch((e) => console.error('open audit', e));
 	}
 
 	// ⌘K in the editor: forward the structured instruction to the active session
@@ -459,12 +462,14 @@
 		findIdx = 0;
 	});
 
-	// Persist the project layout + open tabs (engine session id + title) whenever
-	// they change. Gated on `loaded` so it can't clobber the saved data before the
-	// initial restore has run.
+	// Persist the project layout + open tabs (engine session id + title) into the
+	// active workspace (app-data file, not localStorage) whenever they change.
+	// Gated on `loaded` so it can't clobber the saved data before the initial
+	// restore has run; untracked write so the effect only follows the session tree.
 	$effect(() => {
 		if (!store.loaded) return;
-		localStorage.setItem('jucode-projects', JSON.stringify(store.serialize()));
+		const saved = store.serialize();
+		untrack(() => workspaces.updateProjects(saved));
 	});
 
 	const fmtTokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
@@ -579,6 +584,24 @@
 			chat.pendingFill = null;
 		}
 	});
+
+	// ---------- workspaces ----------
+	// A workspace is a saved set of projects + dock layout. Switching swaps the
+	// whole session tree: snapshot the current one into its workspace, close all
+	// live engine sessions, then restore the target's projects (resume by id).
+	async function switchWorkspace(id: string) {
+		if (id === workspaces.activeId) return;
+		workspaces.updateProjects(store.serialize());
+		const entry = workspaces.setActive(id);
+		if (!entry) return;
+		for (const p of [...store.projects]) store.removeProject(p);
+		store.loaded = false; // re-gate the persist effect during the swap
+		await store.restore(entry.projects);
+	}
+	async function newWorkspace() {
+		const entry = workspaces.create(t('shell.workspace.nth', { n: workspaces.workspaces.length + 1 }));
+		if (entry) await switchWorkspace(entry.id);
+	}
 
 	async function addProject() {
 		const path = await open({ directory: true, title: t('shell.pickDirTitle') });
@@ -931,7 +954,7 @@
 			toggleRight();
 		} else if (e.key === 'e') {
 			e.preventDefault();
-			toggleEditor();
+			toggleAudit();
 		} else if (e.key === 'p') {
 			e.preventDefault();
 			if (activeProject) showQuickOpen = !showQuickOpen;
@@ -1165,9 +1188,12 @@
 				cleanups.forEach((f) => f());
 				return;
 			}
-			// Restore saved projects + their open conversations (resume by id), or
-			// seed a default project on first run.
-			await store.restore(savedProjectsData);
+			// Load the workspaces file (migrating a pre-workspace localStorage
+			// layout on first run), then restore the active workspace's projects
+			// + their open conversations (resume by id), or seed a default
+			// project on first run.
+			const entry = await workspaces.load(t('shell.workspace.default'));
+			await store.restore(entry.projects);
 			// 深链在项目恢复完成后再注册，冷启动携带的链接（onOpenUrl 会补发当前
 			// 深链）才能作用于已恢复的项目列表。
 			const undeep = await onOpenUrl((urls) => {
@@ -1214,6 +1240,10 @@
 		{loggedIn}
 		providerName={chat?.provider ?? ''}
 		updateAvailable={updater.available}
+		workspaceList={workspaces.workspaces.map((w) => ({ id: w.id, name: w.name }))}
+		activeWorkspace={workspaces.activeId}
+		onSwitchWorkspace={switchWorkspace}
+		onNewWorkspace={newWorkspace}
 		onSelect={(id) => (store.activeId = id)}
 		onNewProject={addProject}
 		onNewTask={newTask}
@@ -1349,7 +1379,7 @@
 		{/if}
 	</div>
 
-	<!-- EDITOR: toggleable split right of the chat (⌘E) -->
+	<!-- AUDIT: diff/review split right of the chat; hidden until the user opens a file -->
 	{#if editorStore.visible}
 		<div class="resizer" role="separator" aria-label="resize editor" onpointerdown={startEditorResize}></div>
 		<section class="editor-pane" class:resizing={editorResizing} style:width="{editorWidth}px" aria-label={t('editor.title')}>

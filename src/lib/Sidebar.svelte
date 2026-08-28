@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Plus, History, X, LoaderCircle, GitBranch, GitBranchPlus, Archive, ArchiveRestore, ChevronRight, Settings } from 'lucide-svelte';
+	import { Plus, History, X, LoaderCircle, GitBranch, GitBranchPlus, Archive, ArchiveRestore, ChevronRight, ChevronsUpDown, Check, Layers, Settings } from 'lucide-svelte';
 	import { t } from '$lib/i18n';
 	import { BACKEND_LABELS } from '$lib/backends';
 	import BackendIcon from '$lib/BackendIcon.svelte';
@@ -13,6 +13,10 @@
 		loggedIn,
 		providerName,
 		updateAvailable = false,
+		workspaceList = [],
+		activeWorkspace = '',
+		onSwitchWorkspace,
+		onNewWorkspace,
 		onSelect,
 		onNewProject,
 		onNewSession,
@@ -32,6 +36,11 @@
 		loggedIn: boolean;
 		providerName: string;
 		updateAvailable?: boolean;
+		/** Workspaces to offer in the switcher (hidden while empty/loading). */
+		workspaceList?: { id: string; name: string }[];
+		activeWorkspace?: string;
+		onSwitchWorkspace?: (id: string) => void;
+		onNewWorkspace?: () => void;
 		onSelect: (id: string) => void;
 		onNewProject: () => void;
 		onNewSession: (p: Project) => void;
@@ -46,6 +55,9 @@
 
 	// Which projects have their archived section expanded (collapsed by default).
 	let showArchived = $state<Record<string, boolean>>({});
+	// Workspace switcher popover.
+	let wsOpen = $state(false);
+	const wsName = $derived(workspaceList.find((w) => w.id === activeWorkspace)?.name ?? '');
 
 	// "New session" targets the active session's project (fallback: first project);
 	// with no project open it falls through to the new-project flow.
@@ -60,6 +72,45 @@
 	<div class="brand" data-tauri-drag-region>
 		<span class="word">JuCode</span>
 	</div>
+
+	{#if workspaceList.length}
+		<div class="ws">
+			<button class="ws-btn" onclick={() => (wsOpen = !wsOpen)} title={t('shell.workspace.switch')}>
+				<Layers size={13} class="ws-icon" />
+				<span class="ws-name">{wsName || t('shell.workspace.label')}</span>
+				<ChevronsUpDown size={12} class="ws-chev" />
+			</button>
+			{#if wsOpen}
+				<button class="ws-backdrop" aria-label="close" onclick={() => (wsOpen = false)}></button>
+				<div class="ws-menu">
+					{#each workspaceList as w (w.id)}
+						<button
+							class="ws-item"
+							class:on={w.id === activeWorkspace}
+							onclick={() => {
+								wsOpen = false;
+								onSwitchWorkspace?.(w.id);
+							}}
+						>
+							<span class="ws-item-name">{w.name}</span>
+							{#if w.id === activeWorkspace}<Check size={13} />{/if}
+						</button>
+					{/each}
+					<div class="ws-sep"></div>
+					<button
+						class="ws-item"
+						onclick={() => {
+							wsOpen = false;
+							onNewWorkspace?.();
+						}}
+					>
+						<Plus size={13} />
+						<span class="ws-item-name">{t('shell.workspace.new')}</span>
+					</button>
+				</div>
+			{/if}
+		</div>
+	{/if}
 
 	<div class="nav">
 		<button class="navcard" onclick={newSessionHere}><Plus size={14} /><span>{t('shell.newSession')}</span></button>
@@ -251,6 +302,100 @@
 		font-weight: 800;
 		font-size: 17px;
 		letter-spacing: -0.01em;
+	}
+	/* Workspace switcher: a quiet row between the brand and the actions. */
+	.ws {
+		position: relative;
+		padding: 0 14px 8px;
+	}
+	.ws-btn {
+		display: flex;
+		align-items: center;
+		gap: 7px;
+		width: 100%;
+		padding: 6px 9px;
+		border: none;
+		border-radius: var(--r-md);
+		background: none;
+		color: var(--dim);
+		font-size: 12px;
+		cursor: pointer;
+		transition:
+			background var(--t-fast) var(--ease-out),
+			color var(--t-fast) var(--ease-out);
+	}
+	.ws-btn:hover {
+		background: var(--surface);
+		color: var(--text);
+	}
+	.ws :global(.ws-icon) {
+		color: var(--dim2);
+		flex-shrink: 0;
+	}
+	.ws :global(.ws-chev) {
+		color: var(--dim2);
+		flex-shrink: 0;
+	}
+	.ws-name {
+		flex: 1;
+		text-align: left;
+		font-weight: 600;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.ws-backdrop {
+		position: fixed;
+		inset: 0;
+		z-index: 80;
+		border: none;
+		background: none;
+		cursor: default;
+	}
+	.ws-menu {
+		position: absolute;
+		top: calc(100% - 4px);
+		left: 14px;
+		right: 14px;
+		z-index: 81;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		padding: 5px;
+		background: var(--panel);
+		border: 1px solid var(--border);
+		border-radius: var(--r-md);
+		box-shadow: var(--shadow-pop);
+	}
+	.ws-item {
+		display: flex;
+		align-items: center;
+		gap: 7px;
+		text-align: left;
+		padding: 7px 9px;
+		border: none;
+		background: none;
+		border-radius: var(--r-sm);
+		color: var(--text);
+		font-size: 12.5px;
+		cursor: pointer;
+	}
+	.ws-item:hover {
+		background: var(--surface2);
+	}
+	.ws-item.on {
+		color: var(--accent-bright);
+	}
+	.ws-item-name {
+		flex: 1;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.ws-sep {
+		height: 1px;
+		margin: 3px 6px;
+		background: var(--hairline);
 	}
 	.nav {
 		display: flex;
