@@ -1,6 +1,8 @@
 # IM 桥设计（IM Bridge）
 
 > 配套阅读：`docs/workbench-plan.md` §3.7。定位：IM 是 JuCode Desktop 唯一的第三方集成方向。
+>
+> **Owner 决策（2026-08-28，已锁定）**：IM 使用独立 agent；v1 优先接 OpenClaw 网关并默认 confirm-before-assign；不做 always-on daemon，后续有明确需要再评估。
 
 ## 1. 形态：独立 IM agent
 
@@ -41,7 +43,7 @@ IM 渠道 ── OpenClaw 网关 ── IM agent ── MCP(localhost+token) ─
 
 ## 4. 渠道接入
 
-统一经 **OpenClaw / Cloudbot 网关** 接入，不在应用内手写 5 套渠道 SDK（待拍板项见 `docs/desktop-gap-checklist.md`）：
+v1 统一经 **OpenClaw / Cloudbot 网关** 接入，不在应用内手写 5 套渠道 SDK：
 
 | 渠道 | 接入方式 | 说明 |
 | --- | --- | --- |
@@ -52,5 +54,5 @@ IM 渠道 ── OpenClaw 网关 ── IM agent ── MCP(localhost+token) ─
 
 ## 5. 边界与后续
 
-- **应用退出后 IM 是否在线**：当前设计下 MCP server 随桌面应用生命周期存在，应用退出即离线；若要求 always-on，需要独立 daemon（待拍板，见 checklist）。
+- **应用退出后 IM 离线**：v1 的 MCP server 与 IM agent 均随桌面应用生命周期运行，不安装 always-on daemon 或系统服务。仅在后续出现明确需求并重新决策后，才评估独立 daemon。
 - v1 通知走轮询/事件订阅二选一实现即可，不引入消息队列等重依赖（遵循 AGENTS.md 轻量原则）。

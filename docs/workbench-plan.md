@@ -2,6 +2,22 @@
 
 > 基准代码：`main@6f83aa4`。定位声明：JuCode Desktop 是一个 **终端 / TUI 编码代理管理器**，不是完整的 AI IDE。本文给出从当前代码到北极星目标的架构方案。
 
+## Owner decisions（2026-08-28，已锁定）
+
+- 布局使用手写二叉 TileTree，**不引入 dockview**。
+- Workspace 与布局持久化到 **app-data 文件**，不使用 `localStorage` 作为持久层。
+- 密钥继续保存在 JSON 中并做简单加密，**不接 OS keychain**。
+- CodeMirror 不扩展为编辑器：只用于 **AUDIT/diff**，默认隐藏，仅在用户交互后打开。
+- 内嵌浏览器保留元素拾取器；它只做用户控制的 **preview + pick**，不是 browser-use 自动化。
+- GitHub PR 能力作为 **插件** 实现，不进入 core。
+- 保留 MiMo ASR，并扩展更多 ASR 协议/provider。
+- ACP 是新增 backend；保留原生 jucode / codex / claude backend。
+- 模型选择器使用四分组。
+- IM 是独立 agent：OpenClaw 网关优先、confirm-before-assign；v1 不做 always-on daemon，后续有明确需要再评估。
+- 技能源为官方 JuCode 技能 + [anthropics/skills](https://github.com/anthropics/skills)。
+- Provider 目录使用 models.dev 快照 + BYOK + OpenRouter featured；不引入 LiteLLM。
+- 不做 memory、computer-use、内置 browser-use。
+
 ## 1. 现状（已核实事实）
 
 以下每条均在 `6f83aa4` 上核实过，附代码出处：
@@ -46,6 +62,7 @@ Workspace ─┬─ Project A ─┬─ Session(GUI, jucode)
 
 - `SessionStore`（`src/lib/session.svelte.ts`）当前直接持有 `projects: Project[]`；新增 `WorkspaceStore` 持有 `workspaces: Workspace[]`，每个 Workspace 引用一组 project id + 一棵布局树。
 - **迁移**：首次启动时把现有全部 `SavedProject[]` 包进一个名为"默认工作区"的 Workspace，序列化格式加 `version` 字段。现有 `serialize()/restore()`（`session.svelte.ts:459/482`）保持兼容读取。
+- **持久化**：Workspace、TileTree 与标签状态统一写入 app-data 下的版本化文件；`localStorage` 只可保留非关键、可丢弃的 UI 偏好，不作为 Workspace/布局事实来源。
 
 ### 3.2 布局：手写二叉平铺树（不引入 dockview）
 
@@ -75,27 +92,35 @@ Workspace ─┬─ Project A ─┬─ Session(GUI, jucode)
   - 内置一份 [models.dev](https://models.dev) 目录快照（构建期生成的 JSON），提供 provider → base_url / 模型清单的预填；用户只填 API key，落到现有自定义 OpenAI 兼容 provider 通道。
   - OpenRouter 作为 featured 条目置顶（一个 key 覆盖长尾模型）。
   - **不在桌面端内嵌 LiteLLM**：那是一个 Python 代理服务，与"轻量桌面应用"冲突；聚合应发生在 jucode 后端或用户自己的网关。
+- MiMo 保留为 ASR provider，并把语音输入层抽象到更多 ASR 协议/provider；ASR 配置与 LLM provider 目录分开。
 
-### 3.6 收敛"IDE 化"能力（两种专家观点，需要拍板）
+### 3.6 收敛"IDE 化"能力（已锁定）
 
-北极星明确"不是完整 IDE、不做 browser-use"，但代码里已有编辑器、内嵌浏览器 + DOM 拾取器、GitHub PR 桥。两种处理观点：
+北极星明确"不是完整 IDE、不做 browser-use"，已有能力按以下边界收敛：
 
-- **观点 A（冻结为预览面）**：保留 CodeMirror 编辑器和内嵌浏览器，但**冻结**——编辑器定位为"代码/diff 审阅面"（保留 diff gutter、AI 高亮），浏览器定位为"只读预览面"；不再投入 LSP、补全、调试等 IDE 方向的功能。理由：审阅 agent 产出的 diff、预览 agent 起的 dev server，是"管理 agent"闭环的一部分，不是 IDE 功能。
-- **观点 B（移除/隐藏）**：编辑器、内嵌浏览器、GitHub PR 桥都移出主 UI（藏到设置开关或直接删）。理由：DOM 拾取器 + 截图回传（`browser_init.js` + `capture.rs`）事实上已经是半个 browser-use，与北极星直接冲突；留着就会被继续投喂功能。
-- **本文建议**：取 A 的编辑器（冻结为审阅面）+ 介于 A/B 之间的浏览器（冻结为纯预览；**若用户确认严格执行北极星，则移除 DOM 拾取器**）。GitHub PR 桥保留（它服务于"agent 完成任务后交付"，不是 IDE 功能）。**明确不加 LSP**。最终需 owner 在 `docs/desktop-gap-checklist.md` 中逐项拍板。
+- **CodeMirror**：仅保留为 AUDIT/diff 审阅面，可承载 diff gutter 与 AI 高亮；不扩展编辑能力，不加 LSP、补全或调试。入口默认隐藏，只有用户明确交互时才打开。
+- **内嵌浏览器**：保留预览与 DOM 元素拾取器，但 picker 必须由用户主动触发；不提供 agent 自主导航、点击、填表等自动化，因此不属于内置 browser-use。
+- **GitHub PR**：保留"任务完成后交付"能力，但以插件提供，core 不直接拥有 GitHub PR 创建逻辑。
+- **产品禁区**：不加入 memory、computer-use 或内置 browser-use。
 
 ### 3.7 IM：独立 agent + MCP 桥（详见 `docs/im-bridge.md`）
 
 - IM agent 是独立进程/会话，不复用聊天会话。桌面端暴露一个 **仅监听 localhost、token 鉴权的 MCP server**，提供查询 workspace/标签结构、读取会话进度、指派 prompt 等工具。
 - 渠道接入统一走 **OpenClaw 网关**（Telegram / Discord / 飞书官方 Bot API；微信经腾讯 openclaw-weixin / iLink 插件），**不要**上来就在应用内手写 5 套渠道 SDK。
 - 默认 **confirm-before-assign**：IM 侧发来的 prompt 先进桌面确认队列，用户放行后才注入会话。
+- v1 随桌面应用生命周期运行，应用退出即离线；不提供 always-on daemon。独立 daemon 仅作为后续有明确需求时的可选演进。
 
 ### 3.8 技能与 MCP 管理
 
 - 现有 Marketplace（`src/lib/Marketplace.svelte`）与 MCP 设置（`McpSection.svelte`）是 jucode-only。规划为统一插件管理页：
   - **技能源**：官方 JuCode 技能 + [anthropics/skills](https://github.com/anthropics/skills)。展示时标注许可：anthropics/skills 中 docx / pdf / pptx / xlsx 为 source-available（非 OSS），且 **Claude Code 无法使用这些预置文档技能**，UI 需按后端做可用性过滤。
   - **MCP**：配置按后端能力分发（jucode 走现有 `/mcp` 命令通道；claude / codex 写各自配置文件）。
-  - 技能获取路径（桌面直连 GitHub vs 经 jucode-backend 聚合）是待拍板项。
+  - 技能的下载传输路径可按审计与缓存要求实现，但不得改变上述两个已锁定技能源。
+
+### 3.9 本地数据与密钥
+
+- Workspace、布局和标签元数据写 app-data 中的版本化文件，支持迁移与备份；不落 `localStorage`。
+- Provider 密钥继续使用 JSON 配置格式，对敏感字段做简单加密；不依赖 OS keychain。加密失败必须显式报错，不能回退为明文写入。
 
 ## 4. 分期
 
@@ -103,15 +128,15 @@ Workspace ─┬─ Project A ─┬─ Session(GUI, jucode)
 | --- | --- | --- |
 | M1 | 平铺树 + 多可见面板 + 双击最大化 + 分屏预览；Workspace 实体与迁移 | `src/lib/workbench/`（新）、`session.svelte.ts`、`+page.svelte` |
 | M2 | 原生 TUI 标签（PTY 跑 jucode/codex/claude CLI，独立会话） | `src-tauri/src/lib.rs`（pty_open 扩展）、`TerminalPanel.svelte` |
-| M3 | 模型选择器四分组；provider 目录 + BYOK 复用；serve/CLI 功能对齐残留（`/pin`、`command_list`） | `Composer.svelte`、`settings/`、`backends/` |
-| M4 | ACP backend（flag 后）；技能/MCP 统一管理页 | `backends/acp.ts`（新）、`Marketplace.svelte`、`McpSection.svelte` |
+| M3 | 模型选择器四分组；models.dev 快照 + BYOK + OpenRouter featured；扩展 ASR provider；serve/CLI 功能对齐残留（`/pin`、`command_list`） | `Composer.svelte`、`settings/`、`audio.ts`、`protocol.ts`、`backends/` |
+| M4 | ACP backend（flag 后，保留原生 backend）；技能/MCP 统一管理页；GitHub PR 插件化 | `backends/acp.ts`（新）、`Marketplace.svelte`、`McpSection.svelte`、插件接口 |
 | M5 | IM 桥（MCP server + OpenClaw 网关 + 确认队列） | 新 crate/模块，见 `docs/im-bridge.md` |
-| 贯穿 | IDE 能力收敛（按 checklist 拍板结果执行） | `editor/`、`BrowserPanel`、`GitPanel` |
+| 贯穿 | IDE 能力按 owner 决策收敛；Workspace/app-data 与 JSON 密钥迁移 | `editor/`、`BrowserPanel`、`session.svelte.ts`、配置存储 |
 
 ## 5. 不做的事
 
 - 不做完整 IDE：无 LSP、无补全、无调试器。
-- 不做 memory、computer-use、browser-use。
+- 不做 memory、computer-use、内置 browser-use；用户主动操作的浏览器 preview + pick 不属于自动化。
 - 不在桌面端内嵌 LiteLLM 等聚合代理。
 - 不为 IM 手写 5 套渠道 SDK。
 - 不引入 dockview 等重型面板框架。
