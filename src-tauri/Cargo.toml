@@ -21,7 +21,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["protocol-asset", "tray-icon", "macos-private-api"] }
+tauri = { version = "2", features = ["protocol-asset", "tray-icon"] }
 base64 = "0.22"
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
@@ -39,7 +39,10 @@ tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 
-# macOS 侧栏磨砂（NSVisualEffectView）
+# macOS 侧栏磨砂（NSVisualEffectView）。透明窗口 + macOSPrivateApi 只在
+# tauri.macos.conf.json 里开启，所以对应的 cargo feature 也必须只在 macOS 打开：
+# 否则 tauri-build 在 Linux/Windows 上会因 feature 与配置不符而报错。
 [target."cfg(target_os = \"macos\")".dependencies]
+tauri = { version = "2", features = ["macos-private-api"] }
 window-vibrancy = "0.5"
 
