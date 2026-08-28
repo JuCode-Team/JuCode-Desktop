@@ -1,5 +1,31 @@
 import { describe, expect, it } from 'vitest';
-import { ASR_SAMPLE_RATE, downsample, encodeWav, toBase64 } from './audio';
+import { ASR_PROVIDERS, ASR_SAMPLE_RATE, asrProvider, downsample, encodeWav, resolveAsrSettings, toBase64 } from './audio';
+
+describe('ASR providers', () => {
+	it('switches to each provider default', () => {
+		for (const provider of ASR_PROVIDERS) {
+			expect(resolveAsrSettings({ provider: provider.id })).toEqual({
+				provider: provider.id,
+				base_url: provider.baseUrl,
+				model: provider.model
+			});
+		}
+	});
+
+	it('keeps custom endpoint and model for a known provider', () => {
+		expect(resolveAsrSettings({ provider: 'openai', base_url: ' https://whisper.example/v1/ ', model: ' custom-whisper ' })).toEqual({
+			provider: 'openai',
+			base_url: 'https://whisper.example/v1/',
+			model: 'custom-whisper'
+		});
+	});
+
+	it('falls back to MiMo for missing or unknown settings', () => {
+		const mimo = asrProvider('mimo');
+		expect(resolveAsrSettings(null)).toEqual({ provider: 'mimo', base_url: mimo.baseUrl, model: mimo.model });
+		expect(resolveAsrSettings({ provider: 'unknown' }).provider).toBe('mimo');
+	});
+});
 
 describe('downsample', () => {
 	it('returns input untouched when rates match', () => {

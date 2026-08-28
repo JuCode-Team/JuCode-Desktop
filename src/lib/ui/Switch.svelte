@@ -1,11 +1,17 @@
 <script lang="ts">
 	let {
 		checked = $bindable(),
-		label
-	}: { checked: boolean; label?: string } = $props();
+		label,
+		onChange
+	}: { checked: boolean; label?: string; onChange?: (checked: boolean) => void } = $props();
+
+	function toggle() {
+		checked = !checked;
+		onChange?.(checked);
+	}
 </script>
 
-<button class="sw" class:on={checked} role="switch" aria-checked={checked} aria-label={label} onclick={() => (checked = !checked)}>
+<button class="sw" class:on={checked} role="switch" aria-checked={checked} aria-label={label} onclick={toggle}>
 	<span class="knob"></span>
 </button>
 

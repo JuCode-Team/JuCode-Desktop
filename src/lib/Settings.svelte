@@ -22,6 +22,8 @@
 	import Segmented from '$lib/ui/Segmented.svelte';
 	import { focusTrap } from '$lib/focusTrap';
 	import { t, setLocale, getLocale, LOCALES, LOCALE_LABELS } from '$lib/i18n';
+	import { ASR_PROVIDERS, asrProvider, resolveAsrSettings, type AsrSettings } from '$lib/audio';
+	import { PLUGINS, loadPluginSettings, setPluginEnabled } from '$lib/plugins/registry';
 
 	let {
 		sessionId,
@@ -66,6 +68,9 @@
 	let builtin = $state<{ id: string; base_url: string; protocol: string; models: ModelCfg[] }[]>([]);
 	let custom = $state<Provider[]>([]);
 	let saved = $state(false);
+	let asr = $state<AsrSettings>(resolveAsrSettings(null));
+	let asrKey = $state('');
+	let pluginSettings = $state(loadPluginSettings());
 	// Capture the opening section once; the prop doesn't change during the modal's life.
 	let section = $state<'overview' | 'account' | 'behavior' | 'extensions'>(untrack(() => initialSection));
 
@@ -124,6 +129,7 @@
 
 	onMount(async () => {
 		cfg = await readConfig();
+		asr = resolveAsrSettings(cfg.asr);
 		if (cfg.compaction_threshold_percent == null) cfg.compaction_threshold_percent = 75;
 		keyed = await readAuthProviders();
 		loadBalances();
@@ -216,7 +222,8 @@
 			retry_attempts: Number(cfg.retry_attempts) || 0,
 			connect_timeout_seconds: Number(cfg.connect_timeout_seconds) || 0,
 			read_timeout_seconds: Number(cfg.read_timeout_seconds) || 0,
-			include_project_instructions: !!cfg.include_project_instructions
+			include_project_instructions: !!cfg.include_project_instructions,
+			asr
 		});
 		saved = true;
 		setTimeout(() => (saved = false), 1500);
@@ -261,15 +268,24 @@
 	// Card click: not-logged-in jucode kicks off OAuth directly (no expand); other
 	// (key-based) providers expand to reveal the key input. Logged-in cards expand
 	// to show details.
-	// MiMo ASR key for composer voice input (stored as providers.mimo — a plain
-	// keyed provider from auth.json's perspective, but not a chat provider, so
-	// it gets its own group instead of a provider card).
-	let mimoKey = $state('');
-	async function saveMimoKey() {
-		if (!mimoKey.trim()) return;
-		await setAuthKey('mimo', mimoKey.trim());
+	// ASR keys are separate from chat-provider keys, except the historical MiMo
+	// key which stays at providers.mimo for backward compatibility.
+	const selectedAsr = $derived(asrProvider(asr.provider));
+	const asrOptions = ASR_PROVIDERS.map((provider) => ({ value: provider.id, label: provider.name }));
+	function selectAsr(id: string) {
+		const provider = asrProvider(id);
+		asr = { provider: provider.id, base_url: provider.baseUrl, model: provider.model };
+		asrKey = '';
+	}
+	async function saveAsrKey() {
+		if (!asrKey.trim()) return;
+		await setAuthKey(selectedAsr.authKey, asrKey.trim());
 		keyed = await readAuthProviders();
-		mimoKey = '';
+		asrKey = '';
+	}
+	function togglePlugin(id: string, enabled: boolean) {
+		pluginSettings = { ...pluginSettings, [id]: enabled };
+		setPluginEnabled(id, enabled);
 	}
 
 	function cardClick(p: Provider, authed: boolean) {
@@ -361,16 +377,52 @@
 					<div class="group">
 						<div class="glabel"><Mic size={12} /> {t('settings.voice.groupLabel')}</div>
 						<p class="hint">{t('settings.voice.hint')}</p>
+						<div class="voicefields">
+							<label class="voicefield">
+								<span>{t('settings.voice.provider')}</span>
+								<Select value={asr.provider} options={asrOptions} onChange={selectAsr} />
+							</label>
+							<label class="voicefield">
+								<span>{t('settings.voice.baseUrl')}</span>
+								<TextField bind:value={asr.base_url} mono placeholder={selectedAsr.baseUrl} />
+							</label>
+							<label class="voicefield">
+								<span>{t('settings.voice.model')}</span>
+								<TextField bind:value={asr.model} mono placeholder={selectedAsr.model} />
+							</label>
+						</div>
 						<div class="voicekey">
-							<TextField bind:value={mimoKey} type="password" placeholder={t('settings.voice.keyPlaceholder')} />
-							<Button variant="primary" size="sm" disabled={!mimoKey.trim()} onclick={saveMimoKey}>{t('settings.account.saveKey')}</Button>
-							{#if keyed.includes('mimo')}
-								<Button variant="ghost" size="sm" onclick={() => logout('mimo')}>{t('settings.account.clearKey')}</Button>
+							<TextField bind:value={asrKey} type="password" placeholder={t('settings.voice.keyPlaceholder', { provider: selectedAsr.name })} />
+							<Button variant="primary" size="sm" disabled={!asrKey.trim()} onclick={saveAsrKey}>{t('settings.account.saveKey')}</Button>
+							{#if keyed.includes(selectedAsr.authKey)}
+								<Button variant="ghost" size="sm" onclick={() => logout(selectedAsr.authKey)}>{t('settings.account.clearKey')}</Button>
 							{/if}
 						</div>
-						{#if keyed.includes('mimo')}<p class="hint mt keyok"><CircleCheck size={13} /> {t('settings.account.keyed')}</p>{/if}
+						{#if keyed.includes(selectedAsr.authKey)}<p class="hint mt keyok"><CircleCheck size={13} /> {t('settings.account.keyed')}</p>{/if}
 					</div>
 				{:else if section === 'extensions'}
+					<div class="group">
+						<div class="glabel"><Puzzle size={12} /> {t('settings.plugins.groupLabel')}</div>
+						<p class="hint">{t('settings.plugins.hint')}</p>
+						<div class="setlist">
+							{#each PLUGINS as plugin (plugin.id)}
+								<div class="set">
+									<span class="set-txt">
+										<span class="set-title">{plugin.name}</span>
+										<span class="set-sub">
+											{t('settings.plugins.commands', { commands: plugin.commands.join(', ') })}
+											{#if plugin.bin} · {t('settings.plugins.binary', { bin: plugin.bin })}{/if}
+										</span>
+									</span>
+									<Switch
+										checked={pluginSettings[plugin.id] === true}
+										label={plugin.name}
+										onChange={(enabled) => togglePlugin(plugin.id, enabled)}
+									/>
+								</div>
+							{/each}
+						</div>
+					</div>
 					<div class="group">
 						<Dependencies />
 					</div>
@@ -792,6 +844,22 @@
 		display: flex;
 		align-items: center;
 		gap: 8px;
+		margin-top: 10px;
+	}
+	.voicefields {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 10px;
+	}
+	.voicefield {
+		display: flex;
+		flex-direction: column;
+		gap: 5px;
+		font-size: 11.5px;
+		color: var(--dim);
+	}
+	.voicefield:first-child {
+		grid-column: 1 / -1;
 	}
 	.keyok {
 		display: inline-flex;

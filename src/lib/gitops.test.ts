@@ -4,10 +4,6 @@ import {
 	parseBranches,
 	parseNumstat,
 	parseSyncStatus,
-	parseGhVersion,
-	hasGitHubRemote,
-	parsePrView,
-	extractPrUrl,
 	defaultBaseBranch,
 	slugifyTaskName,
 	parseWorktreeList,
@@ -87,55 +83,6 @@ describe('parseSyncStatus', () => {
 		expect(parseSyncStatus('## feature/local-only')).toEqual({ upstream: null, ahead: 0, behind: 0 });
 		expect(parseSyncStatus('## HEAD (no branch)')).toEqual({ upstream: null, ahead: 0, behind: 0 });
 		expect(parseSyncStatus('')).toEqual({ upstream: null, ahead: 0, behind: 0 });
-	});
-});
-
-describe('parseGhVersion', () => {
-	it('extracts the version from gh --version output', () => {
-		expect(parseGhVersion('gh version 2.63.2 (2024-12-05)\nhttps://github.com/cli/cli/releases/tag/v2.63.2')).toBe('2.63.2');
-	});
-
-	it('returns null for non-gh output', () => {
-		expect(parseGhVersion('command not found: gh')).toBeNull();
-		expect(parseGhVersion('')).toBeNull();
-	});
-});
-
-describe('hasGitHubRemote', () => {
-	it('detects https and ssh GitHub remotes', () => {
-		expect(hasGitHubRemote('origin\thttps://github.com/a/b.git (fetch)\norigin\thttps://github.com/a/b.git (push)')).toBe(true);
-		expect(hasGitHubRemote('origin\tgit@github.com:a/b.git (fetch)')).toBe(true);
-	});
-
-	it('ignores non-GitHub remotes', () => {
-		expect(hasGitHubRemote('origin\thttps://gitlab.com/a/b.git (fetch)')).toBe(false);
-		expect(hasGitHubRemote('origin\thttps://mygithub.company/a/b.git (fetch)')).toBe(false);
-		expect(hasGitHubRemote('')).toBe(false);
-	});
-});
-
-describe('parsePrView', () => {
-	it('parses gh pr view --json output', () => {
-		const out = '{"url":"https://github.com/a/b/pull/7","title":"feat: x","state":"OPEN","isDraft":false}';
-		expect(parsePrView(out)).toEqual({ url: 'https://github.com/a/b/pull/7', title: 'feat: x', state: 'OPEN', isDraft: false });
-	});
-
-	it('returns null for error text or missing url', () => {
-		expect(parsePrView('no pull requests found for branch "x"')).toBeNull();
-		expect(parsePrView('{"title":"no url"}')).toBeNull();
-		expect(parsePrView('')).toBeNull();
-	});
-});
-
-describe('extractPrUrl', () => {
-	it('finds the PR URL in gh pr create output', () => {
-		const out = 'Creating pull request for feat in a/b\n\nhttps://github.com/a/b/pull/12\n';
-		expect(extractPrUrl(out)).toBe('https://github.com/a/b/pull/12');
-	});
-
-	it('returns null when there is no PR URL', () => {
-		expect(extractPrUrl('something went wrong')).toBeNull();
-		expect(extractPrUrl('https://github.com/a/b/issues/3')).toBeNull();
 	});
 });
 

@@ -312,10 +312,6 @@ export function git(args: string[], cwd?: string): Promise<string> {
 export function worktreeBase(cwd: string): Promise<string> {
 	return invoke('worktree_base', { cwd });
 }
-// GitHub CLI 桥（仅放行 --version / auth status / pr view / pr create）。
-export function gh(args: string[], cwd?: string): Promise<string> {
-	return invoke('gh', { args, cwd });
-}
 export function ptyOpen(id: string, cols: number, rows: number, cwd?: string): Promise<void> {
 	return invoke('pty_open', { id, cols, rows, cwd });
 }
@@ -350,8 +346,8 @@ export function processVideo(path: string, maxFrames?: number): Promise<VideoInf
 	return invoke('process_video', { path, maxFrames });
 }
 
-// Speech-to-text via Xiaomi MiMo ASR (key stored under providers.mimo in
-// auth.json; the HTTP call happens in the Tauri backend to bypass CSP/CORS).
+// Speech-to-text via the ASR provider selected in config.json. Keys remain in
+// auth.json; the HTTP call happens in the Tauri backend to bypass CSP/CORS.
 export function transcribeAudio(audioBase64: string, mime?: string, language?: string): Promise<string> {
 	return invoke('transcribe_audio', { audioBase64, mime, language });
 }

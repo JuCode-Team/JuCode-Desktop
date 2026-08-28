@@ -46,9 +46,18 @@ const settings = {
 			keyPlaceholder: '{id} API key · sk-…'
 		},
 		voice: {
-			groupLabel: '语音识别（小米 MiMo）',
-			hint: '配置 MiMo API key 后，输入框可通过麦克风语音输入（mimo-v2.5-asr 模型转写）。',
-			keyPlaceholder: 'MiMo API key'
+			groupLabel: '语音识别',
+			hint: '选择语音转写服务。Base URL 和模型可按兼容服务的配置修改。',
+			provider: 'ASR Provider',
+			baseUrl: 'Base URL',
+			model: '模型',
+			keyPlaceholder: '{provider} API key'
+		},
+		plugins: {
+			groupLabel: '插件',
+			hint: '启用或停用内置功能插件。',
+			commands: '命令：{commands}',
+			binary: '需要 {bin}'
 		},
 		custom: {
 			title: '新建自定义 Provider',
@@ -285,9 +294,18 @@ const settings = {
 			keyPlaceholder: '{id} API key · sk-…'
 		},
 		voice: {
-			groupLabel: 'Speech recognition (Xiaomi MiMo)',
-			hint: 'With a MiMo API key configured, the composer supports microphone voice input (transcribed by mimo-v2.5-asr).',
-			keyPlaceholder: 'MiMo API key'
+			groupLabel: 'Speech recognition',
+			hint: 'Choose the transcription service. The base URL and model can be changed for compatible endpoints.',
+			provider: 'ASR provider',
+			baseUrl: 'Base URL',
+			model: 'Model',
+			keyPlaceholder: '{provider} API key'
+		},
+		plugins: {
+			groupLabel: 'Plugins',
+			hint: 'Enable or disable built-in feature plugins.',
+			commands: 'Commands: {commands}',
+			binary: 'Requires {bin}'
 		},
 		custom: {
 			title: 'New custom provider',

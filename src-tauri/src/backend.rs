@@ -127,8 +127,13 @@ const MAX_CUSTOM_ENV_VARS: usize = 50;
 const MAX_CUSTOM_ENV_VALUE_LEN: usize = 4096;
 
 /// Claude Code permission modes the desktop is allowed to request.
-const CLAUDE_PERMISSION_MODES: &[&str] =
-    &["default", "plan", "auto", "acceptEdits", "bypassPermissions"];
+const CLAUDE_PERMISSION_MODES: &[&str] = &[
+    "default",
+    "plan",
+    "auto",
+    "acceptEdits",
+    "bypassPermissions",
+];
 
 fn expect_string(key: &str, v: &serde_json::Value) -> Result<String, String> {
     v.as_str()
@@ -190,7 +195,9 @@ pub fn validate_opts(
                     .as_object()
                     .ok_or_else(|| "env must be an object of string values".to_string())?;
                 if obj.len() > MAX_CUSTOM_ENV_VARS {
-                    return Err(format!("env accepts at most {MAX_CUSTOM_ENV_VARS} variables"));
+                    return Err(format!(
+                        "env accepts at most {MAX_CUSTOM_ENV_VARS} variables"
+                    ));
                 }
                 let mut vars = Vec::with_capacity(obj.len());
                 for (name, val) in obj {
@@ -364,7 +371,11 @@ fn well_known_paths(kind: BackendKind) -> Vec<PathBuf> {
 /// Dev fallback for the native engine only: the freshly-built binary from the
 /// sibling `JuCode-CLI` checkout (mirrors the pre-multi-backend behavior).
 fn jucode_dev_candidates() -> Vec<PathBuf> {
-    let exe = if cfg!(windows) { "jucode.exe" } else { "jucode" };
+    let exe = if cfg!(windows) {
+        "jucode.exe"
+    } else {
+        "jucode"
+    };
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR")); // <repo>/src-tauri
     [
         format!("../../JuCode-CLI/target/debug/{exe}"),
@@ -538,7 +549,10 @@ mod tests {
         let args = build_args(BackendKind::Claude, &opts);
         let ri = args.iter().position(|a| a == "--resume").unwrap();
         assert_eq!(args[ri + 1], "0f3d7a1c-9e2b-4b7e-9d4d-2a1b3c4d5e6f");
-        let ai = args.iter().position(|a| a == "--resume-session-at").unwrap();
+        let ai = args
+            .iter()
+            .position(|a| a == "--resume-session-at")
+            .unwrap();
         assert_eq!(args[ai + 1], "aa11bb22-cc33-dd44-ee55-ff6677889900");
         // resume_session_at without resume is rejected.
         assert!(validate_opts(
@@ -573,7 +587,11 @@ mod tests {
             assert!(err.is_err(), "{kind:?} must reject permission_mode");
         }
         assert!(validate_opts(BackendKind::Claude, Some(&json!({ "argv": ["-x"] }))).is_err());
-        assert!(validate_opts(BackendKind::Claude, Some(&json!({ "extra_flag": "--yolo" }))).is_err());
+        assert!(validate_opts(
+            BackendKind::Claude,
+            Some(&json!({ "extra_flag": "--yolo" }))
+        )
+        .is_err());
     }
 
     #[test]
@@ -583,31 +601,29 @@ mod tests {
             Some(&json!({ "model": "--dangerously-skip-permissions" }))
         )
         .is_err());
-        assert!(validate_opts(
-            BackendKind::Claude,
-            Some(&json!({ "resume": "--help" }))
-        )
-        .is_err());
-        assert!(validate_opts(
-            BackendKind::Jucode,
-            Some(&json!({ "bin_override": "-rf" }))
-        )
-        .is_err());
+        assert!(validate_opts(BackendKind::Claude, Some(&json!({ "resume": "--help" }))).is_err());
+        assert!(
+            validate_opts(BackendKind::Jucode, Some(&json!({ "bin_override": "-rf" }))).is_err()
+        );
     }
 
     #[test]
     fn permission_mode_is_a_fixed_enum() {
         for ok in CLAUDE_PERMISSION_MODES {
-            assert!(validate_opts(BackendKind::Claude, Some(&json!({ "permission_mode": ok }))).is_ok());
+            assert!(
+                validate_opts(BackendKind::Claude, Some(&json!({ "permission_mode": ok }))).is_ok()
+            );
         }
         assert!(validate_opts(
             BackendKind::Claude,
             Some(&json!({ "permission_mode": "bypassPermissions --verbose" }))
         )
         .is_err());
-        assert!(
-            validate_opts(BackendKind::Claude, Some(&json!({ "permission_mode": "yolo" }))).is_err()
-        );
+        assert!(validate_opts(
+            BackendKind::Claude,
+            Some(&json!({ "permission_mode": "yolo" }))
+        )
+        .is_err());
     }
 
     #[test]
@@ -648,7 +664,10 @@ mod tests {
 
     #[test]
     fn null_or_missing_opts_mean_defaults() {
-        assert_eq!(validate_opts(BackendKind::Jucode, None).unwrap(), BackendOpts::default());
+        assert_eq!(
+            validate_opts(BackendKind::Jucode, None).unwrap(),
+            BackendOpts::default()
+        );
         assert_eq!(
             validate_opts(BackendKind::Codex, Some(&serde_json::Value::Null)).unwrap(),
             BackendOpts::default()
@@ -665,11 +684,17 @@ mod tests {
     fn use_shell_env_defaults_true_and_accepts_bool_only() {
         for kind in [BackendKind::Jucode, BackendKind::Codex, BackendKind::Claude] {
             assert!(validate_opts(kind, None).unwrap().use_shell_env);
-            assert!(!validate_opts(kind, Some(&json!({ "use_shell_env": false })))
-                .unwrap()
-                .use_shell_env);
+            assert!(
+                !validate_opts(kind, Some(&json!({ "use_shell_env": false })))
+                    .unwrap()
+                    .use_shell_env
+            );
         }
-        assert!(validate_opts(BackendKind::Jucode, Some(&json!({ "use_shell_env": "yes" }))).is_err());
+        assert!(validate_opts(
+            BackendKind::Jucode,
+            Some(&json!({ "use_shell_env": "yes" }))
+        )
+        .is_err());
     }
 
     #[test]
@@ -688,7 +713,10 @@ mod tests {
             json!({ "env": { "A": 42 } }),
             json!({ "env": "PATH=/x" }),
         ] {
-            assert!(validate_opts(BackendKind::Claude, Some(&bad)).is_err(), "{bad}");
+            assert!(
+                validate_opts(BackendKind::Claude, Some(&bad)).is_err(),
+                "{bad}"
+            );
         }
     }
 
@@ -763,7 +791,9 @@ mod tests {
         assert_eq!(p, PathBuf::from("claude"));
         let probed = hits.lock().unwrap();
         assert!(!probed.is_empty());
-        assert!(probed.iter().any(|c| c.ends_with(".local/bin/claude") || c.ends_with(".local\\bin\\claude.exe")));
+        assert!(probed
+            .iter()
+            .any(|c| c.ends_with(".local/bin/claude") || c.ends_with(".local\\bin\\claude.exe")));
     }
 
     #[test]
@@ -772,7 +802,13 @@ mod tests {
             c.to_string_lossy().contains("JuCode-CLI/target/debug")
         });
         assert!(p.to_string_lossy().contains("JuCode-CLI/target/debug"));
-        let none = resolve_with(BackendKind::Jucode, None, &no_env, &no_which, &nothing_exists);
+        let none = resolve_with(
+            BackendKind::Jucode,
+            None,
+            &no_env,
+            &no_which,
+            &nothing_exists,
+        );
         assert_eq!(none, PathBuf::from("jucode"));
     }
 }
