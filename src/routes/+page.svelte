@@ -1303,7 +1303,6 @@
 					</div>
 				{:else if chat.messages.length === 0 && !chat.busy}
 					<div class="welcome">
-						<span class="welcome-mark">JuCode</span>
 						<p class="welcome-tip">{t('shell.welcomeTip')}</p>
 						<div class="welcome-hints">
 							<span><kbd>/</kbd> {t('shell.hintCommand')}</span>
