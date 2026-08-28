@@ -53,7 +53,9 @@ fn is_denied(name: &str) -> bool {
 /// 从捕获输出里解析 NUL 分隔的 KEY=VALUE（值可含换行）。
 /// 若整段找不到 NUL 分隔（env 不支持 -0 的降级情形），退回按行解析。
 pub(crate) fn parse_env_output(bytes: &[u8]) -> Option<HashMap<String, String>> {
-    let pos = bytes.windows(MARKER.len()).position(|w| w == MARKER)?;
+    let pos = bytes
+        .windows(MARKER.len())
+        .position(|w| w == MARKER)?;
     let rest = &bytes[pos + MARKER.len()..];
     let mut vars = parse_entries(rest.split(|b| *b == 0));
     if vars.len() <= 1 {
@@ -82,16 +84,13 @@ fn parse_entries<'a>(entries: impl Iterator<Item = &'a [u8]>) -> HashMap<String,
 }
 
 fn default_shell() -> String {
-    std::env::var("SHELL")
-        .ok()
-        .filter(|s| !s.trim().is_empty())
-        .unwrap_or_else(|| {
-            if cfg!(target_os = "macos") {
-                "/bin/zsh".to_string()
-            } else {
-                "/bin/bash".to_string()
-            }
-        })
+    std::env::var("SHELL").ok().filter(|s| !s.trim().is_empty()).unwrap_or_else(|| {
+        if cfg!(target_os = "macos") {
+            "/bin/zsh".to_string()
+        } else {
+            "/bin/bash".to_string()
+        }
+    })
 }
 
 /// 用指定 shell 捕获一次环境。测试用假 shell 脚本注入即可覆盖全链路。
@@ -179,11 +178,7 @@ pub fn status() -> ShellEnvStatus {
 
 /// 快照的 PATH（供二进制解析优先使用）。
 pub fn snapshot_path() -> Option<String> {
-    state()
-        .read()
-        .unwrap()
-        .as_ref()
-        .and_then(|e| e.vars.get("PATH").cloned())
+    state().read().unwrap().as_ref().and_then(|e| e.vars.get("PATH").cloned())
 }
 
 /// 在不清空现有环境的前提下合并快照（git/gh 这类命令用：既要终端 PATH/
@@ -309,10 +304,7 @@ mod tests {
         std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
 
         let env = capture_with(fake.to_str().unwrap()).expect("capture should succeed");
-        assert_eq!(
-            env.vars.get("SNAP_TEST_VAR").map(String::as_str),
-            Some("hello")
-        );
+        assert_eq!(env.vars.get("SNAP_TEST_VAR").map(String::as_str), Some("hello"));
         assert!(env.vars.contains_key("PATH"));
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -344,12 +336,7 @@ mod tests {
         );
         let envs: HashMap<_, _> = cmd
             .get_envs()
-            .filter_map(|(k, v)| {
-                Some((
-                    k.to_string_lossy().to_string(),
-                    v?.to_string_lossy().to_string(),
-                ))
-            })
+            .filter_map(|(k, v)| Some((k.to_string_lossy().to_string(), v?.to_string_lossy().to_string())))
             .collect();
         assert_eq!(envs["PATH"], "/snap/bin");
         assert_eq!(envs["SHARED"], "from-custom");

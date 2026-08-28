@@ -94,9 +94,7 @@ fn pick_shot_backend(
         "windows" => Ok(ShotBackend::WinSnip),
         "linux" => {
             if wayland && has("grim") {
-                return Ok(ShotBackend::Grim {
-                    slurp: has("slurp"),
-                });
+                return Ok(ShotBackend::Grim { slurp: has("slurp") });
             }
             if has("gnome-screenshot") {
                 return Ok(ShotBackend::GnomeScreenshot);
@@ -331,10 +329,7 @@ fn win_capture_fullscreen(path: &Path) -> Result<String, String> {
 #[tauri::command]
 pub fn start_screen_recording(rec: tauri::State<Recorder>) -> Result<(), String> {
     let backend = pick_rec_backend(std::env::consts::OS, is_wayland(), &has_tool)?;
-    let mut guard = rec
-        .inner
-        .lock()
-        .map_err(|e| format!("lock poisoned: {e}"))?;
+    let mut guard = rec.inner.lock().map_err(|e| format!("lock poisoned: {e}"))?;
     if guard.is_some() {
         return Err("已有录屏进行中 / A screen recording is already in progress".to_string());
     }
@@ -407,8 +402,8 @@ pub fn stop_screen_recording(rec: tauri::State<'_, Recorder>) -> Result<String, 
         .lock()
         .map_err(|e| format!("lock poisoned: {e}"))?
         .take();
-    let (mut child, path, stop) = taken
-        .ok_or_else(|| "当前没有进行中的录屏 / No screen recording in progress".to_string())?;
+    let (mut child, path, stop) =
+        taken.ok_or_else(|| "当前没有进行中的录屏 / No screen recording in progress".to_string())?;
     match stop {
         StopMethod::SigInt => {
             let _ = Command::new("kill")
@@ -461,12 +456,7 @@ fn find_tool(name: &str) -> Result<PathBuf, String> {
         let mut dirs: Vec<PathBuf> = Vec::new();
         if let Some(la) = std::env::var_os("LOCALAPPDATA") {
             // winget (Gyan.FFmpeg) shim directory.
-            dirs.push(
-                PathBuf::from(la)
-                    .join("Microsoft")
-                    .join("WinGet")
-                    .join("Links"),
-            );
+            dirs.push(PathBuf::from(la).join("Microsoft").join("WinGet").join("Links"));
         }
         dirs.push(PathBuf::from("C:\\ffmpeg\\bin"));
         for dir in dirs {
@@ -476,12 +466,7 @@ fn find_tool(name: &str) -> Result<PathBuf, String> {
             }
         }
     } else {
-        for dir in [
-            "/opt/homebrew/bin",
-            "/usr/local/bin",
-            "/opt/local/bin",
-            "/usr/bin",
-        ] {
+        for dir in ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin", "/usr/bin"] {
             let candidate = Path::new(dir).join(name);
             if candidate.is_file() {
                 return Ok(candidate);
@@ -638,12 +623,9 @@ mod tests {
 
     #[test]
     fn wayland_prefers_grim_with_slurp() {
-        let got = pick_shot_backend(
-            "linux",
-            true,
-            &avail(&["grim", "slurp", "gnome-screenshot"]),
-        )
-        .unwrap();
+        let got =
+            pick_shot_backend("linux", true, &avail(&["grim", "slurp", "gnome-screenshot"]))
+                .unwrap();
         assert_eq!(got, ShotBackend::Grim { slurp: true });
     }
 
@@ -663,8 +645,8 @@ mod tests {
     #[test]
     fn x11_ignores_grim_and_probes_in_order() {
         // grim is wayland-only: never picked on X11 even if installed.
-        let got =
-            pick_shot_backend("linux", false, &avail(&["grim", "spectacle", "scrot"])).unwrap();
+        let got = pick_shot_backend("linux", false, &avail(&["grim", "spectacle", "scrot"]))
+            .unwrap();
         assert_eq!(got, ShotBackend::Spectacle);
         let got = pick_shot_backend("linux", false, &avail(&["grim", "scrot"])).unwrap();
         assert_eq!(got, ShotBackend::Scrot);

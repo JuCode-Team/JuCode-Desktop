@@ -142,29 +142,21 @@ fn system_plan(
             if has("winget") {
                 winget(winget_id)
             } else {
-                Plan::OpenUrl {
-                    url: url.to_string(),
-                }
+                Plan::OpenUrl { url: url.to_string() }
             }
         }
         "macos" => {
             if has("brew") {
                 brew(brew_pkg)
             } else {
-                Plan::OpenUrl {
-                    url: url.to_string(),
-                }
+                Plan::OpenUrl { url: url.to_string() }
             }
         }
         "linux" => match linux_pkg_command(linux_pkgs, has) {
             Some(command) => Plan::Manual { command },
-            None => Plan::OpenUrl {
-                url: url.to_string(),
-            },
+            None => Plan::OpenUrl { url: url.to_string() },
         },
-        _ => Plan::OpenUrl {
-            url: url.to_string(),
-        },
+        _ => Plan::OpenUrl { url: url.to_string() },
     }
 }
 
@@ -177,18 +169,14 @@ pub fn plan(dep: Dep, os: &str, has: &dyn Fn(&str) -> bool) -> Plan {
             if has("npm") {
                 npm_global("@openai/codex")
             } else {
-                Plan::NeedsPrereq {
-                    prereq: "node".to_string(),
-                }
+                Plan::NeedsPrereq { prereq: "node".to_string() }
             }
         }
         Dep::Jucode => {
             if has("npm") {
                 npm_global("@jucode/cli")
             } else {
-                Plan::NeedsPrereq {
-                    prereq: "node".to_string(),
-                }
+                Plan::NeedsPrereq { prereq: "node".to_string() }
             }
         }
         Dep::Claude => {
@@ -260,15 +248,10 @@ mod tests {
         // Linux with apt → copyable sudo command (nodejs + npm).
         assert_eq!(
             plan(Dep::Node, "linux", &avail(&["apt-get"])),
-            Plan::Manual {
-                command: "sudo apt-get install -y nodejs npm".to_string()
-            }
+            Plan::Manual { command: "sudo apt-get install -y nodejs npm".to_string() }
         );
         // Linux without a known manager → download page.
-        assert!(matches!(
-            plan(Dep::Node, "linux", &avail(&[])),
-            Plan::OpenUrl { .. }
-        ));
+        assert!(matches!(plan(Dep::Node, "linux", &avail(&[])), Plan::OpenUrl { .. }));
     }
 
     #[test]
@@ -277,15 +260,10 @@ mod tests {
             plan(Dep::Ffmpeg, "windows", &avail(&["winget"])),
             winget("Gyan.FFmpeg")
         );
-        assert_eq!(
-            plan(Dep::Ffmpeg, "macos", &avail(&["brew"])),
-            brew("ffmpeg")
-        );
+        assert_eq!(plan(Dep::Ffmpeg, "macos", &avail(&["brew"])), brew("ffmpeg"));
         assert_eq!(
             plan(Dep::Ffmpeg, "linux", &avail(&["dnf"])),
-            Plan::Manual {
-                command: "sudo dnf install -y ffmpeg".to_string()
-            }
+            Plan::Manual { command: "sudo dnf install -y ffmpeg".to_string() }
         );
     }
 
@@ -294,29 +272,16 @@ mod tests {
         // No npm → prereq.
         assert_eq!(
             plan(Dep::Codex, "windows", &avail(&[])),
-            Plan::NeedsPrereq {
-                prereq: "node".to_string()
-            }
+            Plan::NeedsPrereq { prereq: "node".to_string() }
         );
         assert_eq!(
             plan(Dep::Jucode, "linux", &avail(&[])),
-            Plan::NeedsPrereq {
-                prereq: "node".to_string()
-            }
+            Plan::NeedsPrereq { prereq: "node".to_string() }
         );
         // With npm → npm i -g <pkg>, identical across platforms.
-        assert_eq!(
-            plan(Dep::Codex, "windows", &avail(&["npm"])),
-            npm_global("@openai/codex")
-        );
-        assert_eq!(
-            plan(Dep::Codex, "macos", &avail(&["npm"])),
-            npm_global("@openai/codex")
-        );
-        assert_eq!(
-            plan(Dep::Jucode, "linux", &avail(&["npm"])),
-            npm_global("@jucode/cli")
-        );
+        assert_eq!(plan(Dep::Codex, "windows", &avail(&["npm"])), npm_global("@openai/codex"));
+        assert_eq!(plan(Dep::Codex, "macos", &avail(&["npm"])), npm_global("@openai/codex"));
+        assert_eq!(plan(Dep::Jucode, "linux", &avail(&["npm"])), npm_global("@jucode/cli"));
     }
 
     #[test]

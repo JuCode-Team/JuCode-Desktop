@@ -148,9 +148,7 @@ pub fn browser_open(
 #[tauri::command]
 pub fn browser_navigate(app: AppHandle, url: String) -> Result<(), String> {
     let target = normalize_url(&url)?;
-    get_browser(&app)?
-        .navigate(target)
-        .map_err(|e| e.to_string())
+    get_browser(&app)?.navigate(target).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

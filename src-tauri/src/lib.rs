@@ -1,10 +1,10 @@
-use serde::Serialize;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
 mod backend;
@@ -266,7 +266,11 @@ fn send_op(
 /// own protocol frame (JSON-RPC for codex, stream-json for claude) and sends it
 /// as one line. Embedded newlines are rejected — one call, one frame.
 #[tauri::command]
-fn send_line(session: String, line: String, engines: tauri::State<Engines>) -> Result<(), String> {
+fn send_line(
+    session: String,
+    line: String,
+    engines: tauri::State<Engines>,
+) -> Result<(), String> {
     if line.contains('\n') || line.contains('\r') {
         return Err("line must be a single frame (no embedded newlines)".to_string());
     }
@@ -338,12 +342,8 @@ fn read_json(path: &std::path::Path) -> serde_json::Value {
 fn read_json_strict(path: &std::path::Path) -> Result<serde_json::Value, String> {
     match std::fs::read_to_string(path) {
         Ok(text) if text.trim().is_empty() => Ok(serde_json::json!({})),
-        Ok(text) => serde_json::from_str(&text).map_err(|e| {
-            format!(
-                "{} 解析失败，已中止写入以免覆盖现有内容：{e}",
-                path.display()
-            )
-        }),
+        Ok(text) => serde_json::from_str(&text)
+            .map_err(|e| format!("{} 解析失败，已中止写入以免覆盖现有内容：{e}", path.display())),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(serde_json::json!({})),
         Err(e) => Err(format!("读取 {} 失败：{e}", path.display())),
     }
@@ -428,7 +428,10 @@ fn remove_auth_key(provider: String) -> Result<(), String> {
             root.remove("jucode");
         }
     }
-    if let Some(map) = current.get_mut("providers").and_then(|v| v.as_object_mut()) {
+    if let Some(map) = current
+        .get_mut("providers")
+        .and_then(|v| v.as_object_mut())
+    {
         map.remove(&provider);
     }
     write_json(&path, &current)
@@ -459,10 +462,7 @@ fn unix_now() -> u64 {
 fn jucode_access_token() -> Result<String, String> {
     let path = jucode_dir().join("auth.json");
     let auth = read_json(&path);
-    let jucode = auth
-        .get("jucode")
-        .cloned()
-        .unwrap_or_else(|| serde_json::json!({}));
+    let jucode = auth.get("jucode").cloned().unwrap_or_else(|| serde_json::json!({}));
     let access = jucode
         .get("access_token")
         .and_then(|v| v.as_str())
@@ -473,10 +473,7 @@ fn jucode_access_token() -> Result<String, String> {
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
-    let access_exp = jucode
-        .get("access_expires_at")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0);
+    let access_exp = jucode.get("access_expires_at").and_then(|v| v.as_u64()).unwrap_or(0);
     if refresh.is_empty() {
         return Err("not logged in to JuCode".to_string());
     }
@@ -493,10 +490,7 @@ fn jucode_access_token() -> Result<String, String> {
         .map_err(|e| format!("lock poisoned: {e}"))?;
     // Re-read after acquiring the lock: another thread may have just refreshed.
     let fresh = read_json(&path);
-    let fresh_jucode = fresh
-        .get("jucode")
-        .cloned()
-        .unwrap_or_else(|| serde_json::json!({}));
+    let fresh_jucode = fresh.get("jucode").cloned().unwrap_or_else(|| serde_json::json!({}));
     let fresh_access = fresh_jucode
         .get("access_token")
         .and_then(|v| v.as_str())
@@ -531,23 +525,12 @@ fn jucode_access_token() -> Result<String, String> {
         .map_err(|e| e.to_string())?
         .into_json()
         .map_err(|e| e.to_string())?;
-    let new_access = resp
-        .get("access_token")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    let new_refresh = resp
-        .get("refresh_token")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
+    let new_access = resp.get("access_token").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let new_refresh = resp.get("refresh_token").and_then(|v| v.as_str()).unwrap_or("").to_string();
     if new_access.is_empty() || new_refresh.is_empty() {
         return Err("JuCode session expired; please sign in again".to_string());
     }
-    let expires_in = resp
-        .get("expires_in")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(3600);
+    let expires_in = resp.get("expires_in").and_then(|v| v.as_u64()).unwrap_or(3600);
     let refresh_expires_in = resp
         .get("refresh_expires_in")
         .and_then(|v| v.as_u64())
@@ -733,11 +716,7 @@ fn resolve_asr_config(config: &serde_json::Value) -> Result<AsrConfig, String> {
         .filter(|value| !value.is_empty())
         .unwrap_or(provider.model)
         .to_string();
-    Ok(AsrConfig {
-        provider,
-        base_url,
-        model,
-    })
+    Ok(AsrConfig { provider, base_url, model })
 }
 
 fn append_multipart_field(body: &mut Vec<u8>, boundary: &str, name: &str, value: &str) {
@@ -820,10 +799,7 @@ fn build_asr_request(
                 url: format!("{}/audio/transcriptions", config.base_url),
                 headers: vec![
                     ("Authorization", format!("Bearer {key}")),
-                    (
-                        "Content-Type",
-                        format!("multipart/form-data; boundary={boundary}"),
-                    ),
+                    ("Content-Type", format!("multipart/form-data; boundary={boundary}")),
                 ],
                 body,
             })
@@ -892,12 +868,10 @@ fn transcribe_audio(
         .and_then(|value| value.as_str())
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            format!(
-                "No API key configured for {} (Settings → Account → Speech recognition)",
-                config.provider.name
-            )
-        })?;
+        .ok_or_else(|| format!(
+            "No API key configured for {} (Settings → Account → Speech recognition)",
+            config.provider.name
+        ))?;
     let audio = base64::engine::general_purpose::STANDARD
         .decode(audio_base64)
         .map_err(|error| format!("Invalid base64 audio: {error}"))?;
@@ -992,8 +966,8 @@ fn generate_text(
         ],
         "temperature": 0.3,
     });
-    let mut req =
-        ureq::post(&format!("{base}/chat/completions")).timeout(std::time::Duration::from_secs(90));
+    let mut req = ureq::post(&format!("{base}/chat/completions"))
+        .timeout(std::time::Duration::from_secs(90));
     if !key.is_empty() {
         req = req.set("Authorization", &format!("Bearer {key}"));
     }
@@ -1234,9 +1208,7 @@ fn check_environment() -> EnvReport {
     };
     let engine = DepStatus {
         present: engine_path.is_some(),
-        detail: engine_path
-            .map(|p| p.display().to_string())
-            .unwrap_or_default(),
+        detail: engine_path.map(|p| p.display().to_string()).unwrap_or_default(),
     };
 
     EnvReport {
@@ -1451,7 +1423,9 @@ fn run_install(name: String, app: AppHandle) -> Result<InstallStart, String> {
     let (program, args) = match plan {
         installer::Plan::Manual { command } => return Ok(InstallStart::ManualCommand { command }),
         installer::Plan::OpenUrl { url } => return Ok(InstallStart::OpenUrl { url }),
-        installer::Plan::NeedsPrereq { prereq } => return Ok(InstallStart::NeedsPrereq { prereq }),
+        installer::Plan::NeedsPrereq { prereq } => {
+            return Ok(InstallStart::NeedsPrereq { prereq })
+        }
         installer::Plan::Run { program, args } => (program, args),
     };
     // Resolve the logical program name through PATH (e.g. `npm` → `npm.cmd`).
@@ -1515,11 +1489,7 @@ fn list_dir(path: Option<String>, root: Option<String>) -> Result<Vec<FsEntry>, 
             is_dir,
         });
     }
-    entries.sort_by(|a, b| {
-        b.is_dir
-            .cmp(&a.is_dir)
-            .then(a.name.to_lowercase().cmp(&b.name.to_lowercase()))
-    });
+    entries.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then(a.name.to_lowercase().cmp(&b.name.to_lowercase())));
     Ok(entries)
 }
 
@@ -1528,7 +1498,10 @@ fn list_dir(path: Option<String>, root: Option<String>) -> Result<Vec<FsEntry>, 
 fn list_providers() -> Result<serde_json::Value, String> {
     let mut cmd = Command::new(resolve_bin());
     no_window(&mut cmd);
-    let out = cmd.arg("providers").output().map_err(|e| e.to_string())?;
+    let out = cmd
+        .arg("providers")
+        .output()
+        .map_err(|e| e.to_string())?;
     if !out.status.success() {
         return Err(String::from_utf8_lossy(&out.stderr).to_string());
     }
@@ -1777,10 +1750,7 @@ fn git_head_text(path: String, cwd: Option<String>) -> Result<String, String> {
         return Err(String::from_utf8_lossy(&out.stderr).into_owned());
     }
     if out.stdout.len() as u64 > MAX_TEXT_READ {
-        return Err(format!(
-            "file too large to diff ({} bytes)",
-            out.stdout.len()
-        ));
+        return Err(format!("file too large to diff ({} bytes)", out.stdout.len()));
     }
     String::from_utf8(out.stdout).map_err(|_| "not a UTF-8 text file".to_string())
 }
@@ -1790,27 +1760,9 @@ fn git_head_text(path: String, cwd: Option<String>) -> Result<String, String> {
 /// argument-validated set of remote operations (fetch / pull / push / remote -v).
 /// Anything that can run arbitrary programs is intentionally excluded.
 const GIT_SUBCOMMANDS: &[&str] = &[
-    "status",
-    "log",
-    "diff",
-    "add",
-    "reset",
-    "restore",
-    "commit",
-    "stash",
-    "show",
-    "rev-parse",
-    "branch",
-    "checkout",
-    "switch",
-    "ls-files",
-    "clean",
-    "fetch",
-    "pull",
-    "push",
-    "remote",
-    "merge",
-    "rev-list",
+    "status", "log", "diff", "add", "reset", "restore", "commit", "stash", "show",
+    "rev-parse", "branch", "checkout", "switch", "ls-files", "clean", "fetch", "pull",
+    "push", "remote", "merge", "rev-list",
 ];
 
 /// 需要访问网络的子命令：禁用凭据交互提示、限时执行（防止卡在等待输入上）。
@@ -1856,52 +1808,16 @@ fn is_valid_ref_name(s: &str) -> bool {
 fn git_flag_allowed(sub: &str, arg: &str) -> bool {
     let base = arg.split_once('=').map(|(k, _)| k).unwrap_or(arg);
     let allowed: &[&str] = match sub {
-        "status" => &[
-            "--porcelain",
-            "-s",
-            "-b",
-            "-sb",
-            "--short",
-            "--branch",
-            "--no-color",
-        ],
-        "log" => &[
-            "--oneline",
-            "-n",
-            "-1",
-            "--no-color",
-            "--pretty",
-            "--format",
-            "--max-count",
-        ],
-        "diff" => &[
-            "--cached",
-            "--staged",
-            "--no-color",
-            "--stat",
-            "--numstat",
-            "--name-only",
-        ],
+        "status" => &["--porcelain", "-s", "-b", "-sb", "--short", "--branch", "--no-color"],
+        "log" => &["--oneline", "-n", "-1", "--no-color", "--pretty", "--format", "--max-count"],
+        "diff" => &["--cached", "--staged", "--no-color", "--stat", "--numstat", "--name-only"],
         "add" => &["-A", "--all"],
         "restore" => &["--staged", "--worktree"],
         "commit" => &["-m"],
         "stash" => &["-m", "-u", "--include-untracked"],
         "show" => &["--no-color", "--stat", "--pretty", "--format", "-s"],
-        "rev-parse" => &[
-            "--abbrev-ref",
-            "--symbolic-full-name",
-            "--short",
-            "--verify",
-        ],
-        "branch" => &[
-            "--show-current",
-            "--format",
-            "--list",
-            "--no-color",
-            "-d",
-            "-D",
-            "--delete",
-        ],
+        "rev-parse" => &["--abbrev-ref", "--symbolic-full-name", "--short", "--verify"],
+        "branch" => &["--show-current", "--format", "--list", "--no-color", "-d", "-D", "--delete"],
         "checkout" => &["-b"],
         // 注意：不放行 `-c`（与全局禁用的 config 短参撞名），创建分支用
         // `switch --create` 或 `checkout -b`。
@@ -2219,11 +2135,7 @@ fn run_with_timeout(
     };
     let stdout = out_thread.join().unwrap_or_default();
     let stderr = err_thread.join().unwrap_or_default();
-    Ok(std::process::Output {
-        status,
-        stdout,
-        stderr,
-    })
+    Ok(std::process::Output { status, stdout, stderr })
 }
 
 /// Runs a git command in the project root and returns stdout (or stderr on failure).
@@ -2254,8 +2166,7 @@ fn git(args: Vec<String>, cwd: Option<String>) -> Result<String, String> {
     let output = if is_remote {
         run_with_timeout(cmd, REMOTE_OP_TIMEOUT)?
     } else {
-        cmd.output()
-            .map_err(|e| format!("failed to run git: {e}"))?
+        cmd.output().map_err(|e| format!("failed to run git: {e}"))?
     };
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).into_owned())
@@ -2325,11 +2236,7 @@ fn git_checkpoint_capture(cwd: String) -> Result<String, String> {
             &["commit-tree", &tree, "-p", &head, "-m", "jucode-checkpoint"],
         )?
     } else {
-        git_plumb(
-            &dir,
-            None,
-            &["commit-tree", &tree, "-m", "jucode-checkpoint"],
-        )?
+        git_plumb(&dir, None, &["commit-tree", &tree, "-m", "jucode-checkpoint"])?
     };
     Ok(commit)
 }
@@ -2485,10 +2392,7 @@ fn pty_write(id: String, data: String, ptys: tauri::State<Ptys>) -> Result<(), S
         .get(&id)
         .cloned();
     let pty = pty.ok_or_else(|| "unknown terminal".to_string())?;
-    let mut writer = pty
-        .writer
-        .lock()
-        .map_err(|e| format!("lock poisoned: {e}"))?;
+    let mut writer = pty.writer.lock().map_err(|e| format!("lock poisoned: {e}"))?;
     writer.write_all(data.as_bytes()).map_err(|e| e.to_string())
 }
 
@@ -2502,10 +2406,7 @@ fn pty_resize(id: String, cols: u16, rows: u16, ptys: tauri::State<Ptys>) -> Res
         .get(&id)
         .cloned();
     let pty = pty.ok_or_else(|| "unknown terminal".to_string())?;
-    let master = pty
-        .master
-        .lock()
-        .map_err(|e| format!("lock poisoned: {e}"))?;
+    let master = pty.master.lock().map_err(|e| format!("lock poisoned: {e}"))?;
     master
         .resize(PtySize {
             rows,
@@ -2613,9 +2514,7 @@ pub fn run() {
             // 不透明、只让侧栏半透明，于是磨砂只在侧栏透出（见 app.css 的 [data-vibrancy]）。
             #[cfg(target_os = "macos")]
             if let Some(win) = app.get_webview_window("main") {
-                use window_vibrancy::{
-                    apply_vibrancy, NSVisualEffectMaterial, NSVisualEffectState,
-                };
+                use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial, NSVisualEffectState};
                 let _ = apply_vibrancy(
                     &win,
                     NSVisualEffectMaterial::Sidebar,
@@ -2633,8 +2532,7 @@ pub fn run() {
                 let _ = app.deep_link().register_all();
                 // 深链到达时先把窗口带到前台，具体路由由前端解析处理。
                 let handle = app.handle().clone();
-                app.deep_link()
-                    .on_open_url(move |_| show_main_window(&handle));
+                app.deep_link().on_open_url(move |_| show_main_window(&handle));
             }
             Ok(())
         })
@@ -2744,8 +2642,9 @@ mod tests {
         assert_eq!(mimo.provider.protocol, AsrProtocol::Mimo);
         assert_eq!(mimo.model, "mimo-v2.5-asr");
 
-        let groq =
-            resolve_asr_config(&serde_json::json!({ "asr": { "provider": "groq" } })).unwrap();
+        let groq = resolve_asr_config(
+            &serde_json::json!({ "asr": { "provider": "groq" } })
+        ).unwrap();
         assert_eq!(groq.provider.protocol, AsrProtocol::OpenAiWhisper);
         assert_eq!(groq.base_url, "https://api.groq.com/openai/v1");
         assert_eq!(groq.model, "whisper-large-v3-turbo");
@@ -2757,8 +2656,7 @@ mod tests {
                 "base_url": "https://speech.example/v1/",
                 "model": "custom-model"
             }
-        }))
-        .unwrap();
+        })).unwrap();
         assert_eq!(deepgram.provider.protocol, AsrProtocol::Deepgram);
         assert_eq!(deepgram.base_url, "https://speech.example/v1");
         assert_eq!(deepgram.model, "custom-model");
@@ -2770,53 +2668,43 @@ mod tests {
 
         let audio = b"wav bytes";
         let mimo = resolve_asr_config(&serde_json::json!({})).unwrap();
-        let request =
-            build_asr_request(&mimo, "mimo-key", audio, "audio/wav", "auto", "boundary").unwrap();
-        assert_eq!(
-            request.url,
-            "https://api.xiaomimimo.com/v1/chat/completions"
-        );
-        assert!(request
-            .headers
-            .contains(&("api-key", "mimo-key".to_string())));
+        let request = build_asr_request(
+            &mimo, "mimo-key", audio, "audio/wav", "auto", "boundary"
+        ).unwrap();
+        assert_eq!(request.url, "https://api.xiaomimimo.com/v1/chat/completions");
+        assert!(request.headers.contains(&("api-key", "mimo-key".to_string())));
         let json: serde_json::Value = serde_json::from_slice(&request.body).unwrap();
         assert_eq!(json["model"], "mimo-v2.5-asr");
         assert!(json["messages"][0]["content"][0]["input_audio"]["data"]
-            .as_str()
-            .unwrap()
-            .starts_with("data:audio/wav;base64,"));
+            .as_str().unwrap().starts_with("data:audio/wav;base64,"));
 
-        let openai =
-            resolve_asr_config(&serde_json::json!({ "asr": { "provider": "openai" } })).unwrap();
-        let request =
-            build_asr_request(&openai, "openai-key", audio, "audio/wav", "en", "boundary").unwrap();
-        assert_eq!(
-            request.url,
-            "https://api.openai.com/v1/audio/transcriptions"
-        );
-        assert!(request
-            .headers
-            .contains(&("Authorization", "Bearer openai-key".to_string())));
+        let openai = resolve_asr_config(
+            &serde_json::json!({ "asr": { "provider": "openai" } })
+        ).unwrap();
+        let request = build_asr_request(
+            &openai, "openai-key", audio, "audio/wav", "en", "boundary"
+        ).unwrap();
+        assert_eq!(request.url, "https://api.openai.com/v1/audio/transcriptions");
+        assert!(request.headers.contains(
+            &("Authorization", "Bearer openai-key".to_string())
+        ));
         let body = String::from_utf8_lossy(&request.body);
         assert!(body.contains("name=\"model\"\r\n\r\nwhisper-1"));
         assert!(body.contains("name=\"language\"\r\n\r\nen"));
         assert!(body.contains("filename=\"recording.wav\""));
-        assert!(request
-            .body
-            .windows(audio.len())
-            .any(|window| window == audio));
+        assert!(request.body.windows(audio.len()).any(|window| window == audio));
 
-        let deepgram =
-            resolve_asr_config(&serde_json::json!({ "asr": { "provider": "deepgram" } })).unwrap();
-        let request =
-            build_asr_request(&deepgram, "dg-key", audio, "audio/wav", "zh", "boundary").unwrap();
+        let deepgram = resolve_asr_config(
+            &serde_json::json!({ "asr": { "provider": "deepgram" } })
+        ).unwrap();
+        let request = build_asr_request(
+            &deepgram, "dg-key", audio, "audio/wav", "zh", "boundary"
+        ).unwrap();
         assert_eq!(
             request.url,
             "https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&language=zh"
         );
-        assert!(request
-            .headers
-            .contains(&("Authorization", "Token dg-key".to_string())));
+        assert!(request.headers.contains(&("Authorization", "Token dg-key".to_string())));
         assert_eq!(request.body, audio);
     }
 
@@ -2951,10 +2839,7 @@ mod tests {
     fn windows_advice_depends_on_winget() {
         let advice = git_install_advice("windows", &avail(&["winget"]));
         assert_eq!(advice.kind, "auto");
-        assert!(advice
-            .command
-            .unwrap()
-            .contains("winget install --id Git.Git"));
+        assert!(advice.command.unwrap().contains("winget install --id Git.Git"));
         let advice = git_install_advice("windows", &avail(&[]));
         assert_eq!(advice.kind, "open-url");
         assert_eq!(advice.url, "https://git-scm.com/download/win");
@@ -2999,10 +2884,7 @@ mod tests {
             vec!["checkout", "main"],
             vec!["remote", "-v"],
         ] {
-            assert!(
-                validate_git_args(&args(&cmd)).is_ok(),
-                "should allow: {cmd:?}"
-            );
+            assert!(validate_git_args(&args(&cmd)).is_ok(), "should allow: {cmd:?}");
         }
     }
 
@@ -3014,10 +2896,7 @@ mod tests {
             vec!["push"],
             vec!["push", "-u", "origin", "feature/new-ui"],
         ] {
-            assert!(
-                validate_git_args(&args(&cmd)).is_ok(),
-                "should allow: {cmd:?}"
-            );
+            assert!(validate_git_args(&args(&cmd)).is_ok(), "should allow: {cmd:?}");
         }
     }
 
@@ -3050,10 +2929,7 @@ mod tests {
             // 远端子命令禁止 `--` 逃逸
             vec!["push", "--", "origin"],
         ] {
-            assert!(
-                validate_git_args(&args(&cmd)).is_err(),
-                "should reject: {cmd:?}"
-            );
+            assert!(validate_git_args(&args(&cmd)).is_err(), "should reject: {cmd:?}");
         }
     }
 
@@ -3125,8 +3001,11 @@ mod tests {
 
     /// Creates <tmp>/<name>/repo and returns (tmp_root, repo_root).
     fn tmp_repo(name: &str) -> (std::path::PathBuf, std::path::PathBuf) {
-        let root =
-            std::env::temp_dir().join(format!("jucode-wt-test-{}-{}", std::process::id(), name));
+        let root = std::env::temp_dir().join(format!(
+            "jucode-wt-test-{}-{}",
+            std::process::id(),
+            name
+        ));
         let repo = root.join("repo");
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&repo).unwrap();
@@ -3139,10 +3018,7 @@ mod tests {
         let base = worktree_base_dir(&repo).unwrap();
         assert_eq!(
             base,
-            root.canonicalize()
-                .unwrap()
-                .join(".jucode-worktrees")
-                .join("repo")
+            root.canonicalize().unwrap().join(".jucode-worktrees").join("repo")
         );
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -3170,14 +3046,8 @@ mod tests {
             &repo
         )
         .is_ok());
-        assert!(validate_worktree_args(
-            &args(&["worktree", "add", &ok, "-b", "task/my-task"]),
-            &repo
-        )
-        .is_ok());
-        assert!(
-            validate_worktree_args(&args(&["worktree", "add", &ok, "task/my-task"]), &repo).is_ok()
-        );
+        assert!(validate_worktree_args(&args(&["worktree", "add", &ok, "-b", "task/my-task"]), &repo).is_ok());
+        assert!(validate_worktree_args(&args(&["worktree", "add", &ok, "task/my-task"]), &repo).is_ok());
 
         // 容器外 / 穿越 / 非法 slug / 非法分支名 / 非法 flag 一律拒绝。
         let escape = base.join("../evil").display().to_string();
@@ -3210,9 +3080,7 @@ mod tests {
         std::fs::create_dir_all(base.join("done-task")).unwrap();
         let ok = base.join("done-task").display().to_string();
         assert!(validate_worktree_args(&args(&["worktree", "remove", &ok]), &repo).is_ok());
-        assert!(
-            validate_worktree_args(&args(&["worktree", "remove", &ok, "--force"]), &repo).is_ok()
-        );
+        assert!(validate_worktree_args(&args(&["worktree", "remove", &ok, "--force"]), &repo).is_ok());
         assert!(validate_worktree_args(&args(&["worktree", "list", "--porcelain"]), &repo).is_ok());
         assert!(validate_worktree_args(&args(&["worktree", "prune"]), &repo).is_ok());
 
@@ -3252,26 +3120,15 @@ mod tests {
         assert!(in_root_or_task_container(&inside_repo, &canon_repo));
         assert!(in_root_or_task_container(&inside_container, &canon_repo));
         assert!(!in_root_or_task_container(&outside, &canon_repo));
-        assert!(!in_root_or_task_container(
-            std::path::Path::new("/etc"),
-            &canon_repo
-        ));
+        assert!(!in_root_or_task_container(std::path::Path::new("/etc"), &canon_repo));
         let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
     fn merge_and_revlist_whitelist() {
-        assert!(
-            validate_git_args(&args(&["merge", "--no-ff", "--no-edit", "task/fix-login"])).is_ok()
-        );
+        assert!(validate_git_args(&args(&["merge", "--no-ff", "--no-edit", "task/fix-login"])).is_ok());
         assert!(validate_git_args(&args(&["merge", "--abort"])).is_ok());
-        assert!(validate_git_args(&args(&[
-            "rev-list",
-            "--left-right",
-            "--count",
-            "main...task/x"
-        ]))
-        .is_ok());
+        assert!(validate_git_args(&args(&["rev-list", "--left-right", "--count", "main...task/x"])).is_ok());
 
         assert!(validate_git_args(&args(&["merge", "--squash", "task/x"])).is_err());
         assert!(validate_git_args(&args(&["merge", "--no-ff", "-evil"])).is_err());
@@ -3279,4 +3136,5 @@ mod tests {
         // worktree 不走通用校验入口。
         assert!(validate_git_args(&args(&["worktree", "list", "--porcelain"])).is_err());
     }
+
 }
