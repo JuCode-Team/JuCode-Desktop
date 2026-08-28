@@ -375,6 +375,55 @@ fn write_config(patch: serde_json::Value) -> Result<(), String> {
     write_json(&path, &current)
 }
 
+/// App-data files owned by the desktop shell (workspaces / layout state).
+/// Confined to a plain file name directly under the per-app config dir —
+/// no separators, no dotfiles, so the frontend can't reach anything else.
+fn valid_app_data_name(file: &str) -> bool {
+    !file.is_empty()
+        && file.len() <= 64
+        && !file.starts_with('.')
+        && file
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
+}
+
+fn app_data_path(app: &AppHandle, file: &str) -> Result<PathBuf, String> {
+    if !valid_app_data_name(file) {
+        return Err(format!("invalid app-data file name: {file}"));
+    }
+    let dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| format!("app config dir unavailable: {e}"))?;
+    Ok(dir.join(file))
+}
+
+/// Reads a desktop app-data file; `None` when it doesn't exist yet.
+#[tauri::command]
+fn app_data_read(app: AppHandle, file: String) -> Result<Option<String>, String> {
+    let path = app_data_path(&app, &file)?;
+    match std::fs::read_to_string(&path) {
+        Ok(text) => Ok(Some(text)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(format!("读取 {} 失败：{e}", path.display())),
+    }
+}
+
+/// Writes a desktop app-data file. Write-then-rename so a crash mid-write
+/// can't leave a truncated file behind (the previous content survives).
+#[tauri::command]
+fn app_data_write(app: AppHandle, file: String, content: String) -> Result<(), String> {
+    let path = app_data_path(&app, &file)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let mut tmp = path.clone();
+    tmp.set_file_name(format!("{file}.tmp"));
+    std::fs::write(&tmp, content.as_bytes())
+        .map_err(|e| format!("写入 {} 失败：{e}", tmp.display()))?;
+    std::fs::rename(&tmp, &path).map_err(|e| format!("写入 {} 失败：{e}", path.display()))
+}
+
 /// Returns the provider names the user is authenticated with. JuCode is now
 /// an OAuth login (tokens live in the top-level `jucode` block, not the
 /// `providers` map), so it's reported as "jucode" whenever a refresh token
@@ -2442,6 +2491,8 @@ pub fn run() {
             close_session,
             read_config,
             write_config,
+            app_data_read,
+            app_data_write,
             read_auth_providers,
             set_auth_key,
             remove_auth_key,
@@ -2502,7 +2553,18 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::read_json_strict;
+    use super::{read_json_strict, valid_app_data_name};
+
+    #[test]
+    fn app_data_names_stay_inside_the_config_dir() {
+        assert!(valid_app_data_name("workspaces.json"));
+        assert!(valid_app_data_name("layout-v1.json"));
+        assert!(!valid_app_data_name(""));
+        assert!(!valid_app_data_name(".hidden"));
+        assert!(!valid_app_data_name("../auth.json"));
+        assert!(!valid_app_data_name("nested/file.json"));
+        assert!(!valid_app_data_name("back\\slash.json"));
+    }
 
     fn tmp(name: &str) -> std::path::PathBuf {
         let p = std::env::temp_dir().join(format!("jucode-test-{}-{}", std::process::id(), name));
