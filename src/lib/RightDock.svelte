@@ -11,6 +11,20 @@
 	import DiagnosticsPanel from './DiagnosticsPanel.svelte';
 	import TerminalPanel from './TerminalPanel.svelte';
 	import BrowserPanel from './BrowserPanel.svelte';
+	import Mosaic from '$lib/workbench/Mosaic.svelte';
+	import {
+		activateTab,
+		deserializeLayout,
+		emptyLayout,
+		leavesOf,
+		openTab,
+		serializeLayout,
+		singleLeafLayout,
+		type TileLayout,
+		type TileTab
+	} from '$lib/workbench/tiles';
+	import { workspaces } from '$lib/workbench/workspaceStore.svelte';
+	import { prefs } from '$lib/prefs.svelte';
 	import { browser } from '$lib/browser.svelte';
 	import type { Goal, PlanStep, TurnDiff, ChatState } from '$lib/chat.svelte';
 	import type { WorktreeMeta } from '$lib/types';
@@ -151,8 +165,45 @@
 	// A browser open (agent tool call, typed URL, element pick) reveals the tab.
 	$effect(() => {
 		if (browser.openSignal === 0) return;
-		untrack(() => openPanel('browser'));
+		untrack(() => (prefs.mosaic ? mosaicAdd(null, 'browser') : openPanel('browser')));
 	});
+
+	// ---------- mosaic (tiled) mode — behind the `mosaic` feature flag ----------
+	// The tile layout is workspace state: it loads from and persists to the
+	// active workspace's app-data entry (never localStorage). When a workspace
+	// has no tile layout yet, the legacy single-stack dock tabs seed one leaf.
+	let tiles = $state<TileLayout>(emptyLayout());
+	$effect(() => {
+		void workspaces.activeId; // rebuild when the active workspace changes
+		tiles = untrack(() => initialTiles());
+	});
+	function initialTiles(): TileLayout {
+		const parsed = deserializeLayout(workspaces.active?.layout ?? null);
+		if (parsed?.root) return parsed;
+		return singleLeafLayout(
+			openTabs.map((t) => ({ id: t.id, panel: t.panel })),
+			active
+		);
+	}
+	function setTiles(next: TileLayout) {
+		tiles = next;
+		workspaces.updateLayout(serializeLayout(next));
+	}
+	function mosaicAdd(leafId: string | null, panel: string) {
+		// Same singleton rule as openPanel: the embedded browser is one native
+		// webview, so a second tab would fight over it — refocus instead.
+		if (panel === 'browser') {
+			const existing = leavesOf(tiles.root)
+				.flatMap((l) => l.tabs)
+				.find((tab) => tab.panel === 'browser');
+			if (existing) {
+				setTiles(activateTab(tiles, existing.id));
+				return;
+			}
+		}
+		setTiles(openTab(tiles, leafId, { id: newId(), panel }));
+	}
+	const mosaicLabel = (tab: TileTab) => labelOf(tab.panel);
 	function closeTab(id: string) {
 		const idx = openTabs.findIndex((t) => t.id === id);
 		openTabs = openTabs.filter((t) => t.id !== id);
@@ -187,6 +238,34 @@
 	}
 </script>
 
+{#snippet panelBody(kind: string)}
+	{#if kind === 'plan'}<PlanPanel {plan} />
+	{:else if kind === 'goal'}<GoalPanel {goal} />
+	{:else if kind === 'changes'}<ChangesPanel {cwd} files={changed} onRevert={onRevertFile} />
+	{:else if kind === 'turns'}<TurnsPanel {turns} onOpenFile={onOpenFile} />
+	{:else if kind === 'files'}<FilesPanel rootDir={cwd} />
+	{:else if kind === 'git'}<GitPanel {cwd} {worktree} {llm} {onOpenTask} {onTaskRemoved} />
+	{:else if kind === 'term'}<TerminalPanel {cwd} />
+	{:else if kind === 'browser'}<BrowserPanel />
+	{:else if kind === 'diag'}<DiagnosticsPanel {chat} />{/if}
+{/snippet}
+
+{#if prefs.mosaic}
+	<div class="dock">
+		<Mosaic
+			layout={tiles}
+			onchange={setTiles}
+			label={mosaicLabel}
+			addOptions={PANELS.map((p) => ({ key: p.key, label: labelOf(p.key) }))}
+			onAdd={mosaicAdd}
+			emptyText={t('dock.dock.empty')}
+		>
+			{#snippet panel(tab)}
+				{@render panelBody(tab.panel)}
+			{/snippet}
+		</Mosaic>
+	</div>
+{:else}
 <div class="dock">
 	<div class="tabbar">
 		<div class="tabs" bind:this={bar}>
@@ -232,15 +311,7 @@
 	<div class="content">
 		{#each visibleTabs as tab (tab.id)}
 			<div class="pane" class:hidden={tab.id !== active}>
-				{#if tab.panel === 'plan'}<PlanPanel {plan} />
-				{:else if tab.panel === 'goal'}<GoalPanel {goal} />
-				{:else if tab.panel === 'changes'}<ChangesPanel {cwd} files={changed} onRevert={onRevertFile} />
-				{:else if tab.panel === 'turns'}<TurnsPanel {turns} onOpenFile={onOpenFile} />
-				{:else if tab.panel === 'files'}<FilesPanel rootDir={cwd} />
-				{:else if tab.panel === 'git'}<GitPanel {cwd} {worktree} {llm} {onOpenTask} {onTaskRemoved} />
-				{:else if tab.panel === 'term'}<TerminalPanel {cwd} />
-				{:else if tab.panel === 'browser'}<BrowserPanel />
-				{:else if tab.panel === 'diag'}<DiagnosticsPanel {chat} />{/if}
+				{@render panelBody(tab.panel)}
 			</div>
 		{/each}
 		{#if visibleTabs.length === 0}
@@ -259,6 +330,7 @@
 		{/if}
 	</div>
 </div>
+{/if}
 
 <style>
 	.dock {

@@ -450,6 +450,19 @@
 						</div>
 					{/if}
 
+					<div class="group">
+						<div class="glabel">{t('settings.behavior.mosaic')}</div>
+						<Segmented
+							value={prefs.mosaic ? 'on' : 'off'}
+							options={[
+								{ value: 'on', label: t('settings.behavior.mosaicOn') },
+								{ value: 'off', label: t('settings.behavior.mosaicOff') }
+							]}
+							onChange={(v) => prefs.setMosaic(v === 'on')}
+						/>
+						<p class="hint mt">{t('settings.behavior.mosaicHint')}</p>
+					</div>
+
 					<BackendSection />
 
 					<div class="group">
