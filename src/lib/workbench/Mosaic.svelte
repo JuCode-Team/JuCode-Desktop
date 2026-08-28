@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { X, Plus, Maximize2, Minimize2 } from 'lucide-svelte';
+	import { t } from '$lib/i18n';
 	import {
 		activateTab,
 		closeTab,
@@ -45,6 +46,25 @@
 	let drag = $state<{ tabId: string; label: string; x: number; y: number; live: boolean } | null>(null);
 	let hover = $state<{ leafId: string; zone: DropZone } | null>(null);
 	let addMenuFor = $state<string | null>(null);
+	// Measured so the floating drag ghost can be clamped inside the viewport.
+	let ghostW = $state(0);
+	let ghostH = $state(0);
+
+	const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), Math.max(min, max));
+
+	// Esc: cancel an in-flight drag, close the add menu, or restore a
+	// maximized leaf — in that priority order.
+	function windowKeydown(e: KeyboardEvent) {
+		if (e.key !== 'Escape') return;
+		if (drag?.live) {
+			drag = null;
+			hover = null;
+		} else if (addMenuFor) {
+			addMenuFor = null;
+		} else if (layout.maximized) {
+			onchange(toggleMaximize(layout, layout.maximized));
+		}
+	}
 
 	/** Which leaf (and which drop zone inside it) the pointer is over. */
 	function zoneAt(x: number, y: number): { leafId: string; zone: DropZone } | null {
@@ -123,6 +143,8 @@
 	}
 </script>
 
+<svelte:window onkeydown={windowKeydown} />
+
 <div class="mosaic" class:dragging={drag?.live} bind:this={rootEl}>
 	{#if layout.root}
 		{@render node(layout.root)}
@@ -137,7 +159,15 @@
 		</div>
 	{/if}
 	{#if drag?.live}
-		<div class="ghost" style:left="{drag.x + 12}px" style:top="{drag.y + 10}px">{drag.label}</div>
+		<div
+			class="ghost"
+			bind:clientWidth={ghostW}
+			bind:clientHeight={ghostH}
+			style:left="{clamp(drag.x + 12, 4, window.innerWidth - ghostW - 4)}px"
+			style:top="{clamp(drag.y + 10, 4, window.innerHeight - ghostH - 4)}px"
+		>
+			{drag.label}
+		</div>
 	{/if}
 </div>
 
@@ -160,7 +190,12 @@
 {/snippet}
 
 {#snippet leafView(leaf: LeafNode)}
-	<section class="leaf" class:maxed={layout.maximized === leaf.id} data-leaf={leaf.id}>
+	<section
+		class="leaf"
+		class:maxed={layout.maximized === leaf.id}
+		class:droptarget={drag?.live && hover?.leafId === leaf.id}
+		data-leaf={leaf.id}
+	>
 		<div class="lbar" ondblclick={(e) => barDblClick(e, leaf)} role="tablist" tabindex="-1">
 			<div class="ltabs">
 				{#each leaf.tabs as tab (tab.id)}
@@ -189,19 +224,23 @@
 					</div>
 				{/each}
 			</div>
-			<div class="lactions">
-				{#if addOptions.length}
+		<div class="lactions">
+			{#if layout.maximized === leaf.id}
+				<span class="lmax-hint">{t('dock.mosaic.maximizedHint')}</span>
+			{/if}
+			{#if addOptions.length}
 					<button
 						class="lbtn"
 						aria-label="add panel"
 						onclick={() => (addMenuFor = addMenuFor === leaf.id ? null : leaf.id)}><Plus size={13} /></button
 					>
 				{/if}
-				<button
-					class="lbtn"
-					aria-label={layout.maximized === leaf.id ? 'restore' : 'maximize'}
-					onclick={() => onchange(toggleMaximize(layout, leaf.id))}
-				>
+			<button
+				class="lbtn"
+				title={layout.maximized === leaf.id ? t('dock.mosaic.restore') : t('dock.mosaic.maximize')}
+				aria-label={layout.maximized === leaf.id ? t('dock.mosaic.restore') : t('dock.mosaic.maximize')}
+				onclick={() => onchange(toggleMaximize(layout, leaf.id))}
+			>
 					{#if layout.maximized === leaf.id}<Minimize2 size={12} />{:else}<Maximize2 size={12} />{/if}
 				</button>
 			</div>
@@ -226,7 +265,11 @@
 			{/each}
 		</div>
 		{#if drag?.live && hover?.leafId === leaf.id}
-			<div class="dropzone {hover.zone}"></div>
+			<div class="dropzone {hover.zone}">
+				<span class="dropzone-label">
+					{hover.zone === 'center' ? t('dock.mosaic.stackHere') : t('dock.mosaic.splitHere')}
+				</span>
+			</div>
 		{/if}
 	</section>
 {/snippet}
@@ -263,21 +306,36 @@
 		min-width: 0;
 		min-height: 0;
 	}
+	/* Splitter: a 2px visible line, but the ::before pseudo-element widens the
+	   pointer target to ~10px on the drag axis without shifting layout. */
 	.gutter {
+		position: relative;
+		z-index: 3;
 		flex-shrink: 0;
 		background: var(--hairline);
 		transition: background var(--t-fast) var(--ease-out);
 	}
+	.gutter::before {
+		content: '';
+		position: absolute;
+	}
 	.gutter.row {
-		width: 4px;
+		width: 2px;
 		cursor: col-resize;
 	}
+	.gutter.row::before {
+		inset: 0 -4px;
+	}
 	.gutter.col {
-		height: 4px;
+		height: 2px;
 		cursor: row-resize;
 	}
-	.gutter:hover {
-		background: var(--accent-soft);
+	.gutter.col::before {
+		inset: -4px 0;
+	}
+	.gutter:hover,
+	.gutter:active {
+		background: color-mix(in oklab, var(--accent) 55%, var(--hairline));
 	}
 	.leaf {
 		position: relative;
@@ -289,11 +347,17 @@
 		overflow: hidden;
 		background: var(--panel);
 	}
-	/* Maximize = reposition over the whole mosaic; nothing re-mounts. */
+	/* Maximize = reposition over the whole mosaic; nothing re-mounts. The
+	   accent ring says "this pane is covering the others". */
 	.leaf.maxed {
 		position: absolute;
 		inset: 0;
 		z-index: 6;
+		box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 45%, var(--border));
+	}
+	/* The pane a dragged tab would land in: a border on the pane itself. */
+	.leaf.droptarget {
+		box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--accent) 65%, transparent);
 	}
 	.lbar {
 		position: relative;
@@ -329,15 +393,18 @@
 		user-select: none;
 		white-space: nowrap;
 		flex-shrink: 0;
+		/* Inactive tabs keep a visible surface so they read as tabs, not text. */
+		background: var(--surface);
+		box-shadow: inset 0 0 0 1px var(--hairline);
 	}
 	.ltab:hover {
-		background: var(--surface);
+		background: var(--surface2);
 		color: var(--text);
 	}
 	.ltab.on {
 		background: var(--surface2);
 		color: var(--text);
-		box-shadow: inset 0 0 0 1px var(--hairline);
+		box-shadow: inset 0 0 0 1px var(--border);
 	}
 	.ltab.lifted {
 		opacity: 0.45;
@@ -379,6 +446,16 @@
 		align-items: center;
 		gap: 2px;
 		flex-shrink: 0;
+	}
+	.lmax-hint {
+		padding: 2px 8px;
+		margin-right: 4px;
+		font-size: 11px;
+		font-weight: 600;
+		white-space: nowrap;
+		color: var(--accent-bright);
+		background: var(--accent-soft);
+		border-radius: var(--r-full);
 	}
 	.lbtn {
 		display: inline-flex;
@@ -444,14 +521,30 @@
 	.lpane.hidden {
 		display: none;
 	}
-	/* Landing preview while dragging a tab over this leaf. */
+	/* Landing preview while dragging a tab over this leaf: a thin border and
+	   a faint fill outlining the exact area, plus a label saying what a drop
+	   does (stack into the tab group vs split the pane). */
 	.dropzone {
 		position: absolute;
 		z-index: 5;
 		pointer-events: none;
-		background: color-mix(in oklab, var(--accent) 13%, transparent);
-		border: 1px solid color-mix(in oklab, var(--accent) 45%, transparent);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: color-mix(in oklab, var(--accent) 6%, transparent);
+		border: 1px solid color-mix(in oklab, var(--accent) 60%, transparent);
 		border-radius: var(--r-sm);
+	}
+	.dropzone-label {
+		padding: 3px 9px;
+		font-size: 11.5px;
+		font-weight: 600;
+		white-space: nowrap;
+		color: var(--text);
+		background: var(--panel);
+		border: 1px solid var(--border);
+		border-radius: var(--r-full);
+		box-shadow: var(--shadow-pop);
 	}
 	.dropzone.center {
 		inset: 0;

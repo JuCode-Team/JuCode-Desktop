@@ -17,6 +17,13 @@ const dock = {
 			empty: '没有打开的面板',
 			hint: '选一个面板打开，或点右上角'
 		},
+		mosaic: {
+			stackHere: '叠放到这里',
+			splitHere: '拆分到这里',
+			maximizedHint: '已最大化 · Esc 还原',
+			maximize: '最大化',
+			restore: '还原'
+		},
 		turns: {
 			empty: '本会话还没有文件改动',
 			turnN: '第 {n} 回合',
@@ -186,6 +193,13 @@ const dock = {
 		dock: {
 			empty: 'No open panels',
 			hint: 'Pick a panel to open, or click the top-right'
+		},
+		mosaic: {
+			stackHere: 'Stack here',
+			splitHere: 'Split here',
+			maximizedHint: 'Maximized · Esc to restore',
+			maximize: 'Maximize',
+			restore: 'Restore'
 		},
 		turns: {
 			empty: 'No file changes in this session yet',
