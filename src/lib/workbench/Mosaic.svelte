@@ -303,6 +303,8 @@
 		padding: 6px 6px 5px;
 		border-bottom: 1px solid var(--hairline);
 		flex-shrink: 0;
+		/* dblclick maximizes — don't let it select panel text instead */
+		user-select: none;
 	}
 	.ltabs {
 		display: flex;

@@ -1102,6 +1102,10 @@
 		const cleanups: Array<() => void> = [];
 		let disposed = false;
 		(async () => {
+			// Load the workspaces file first (migrating a pre-workspace
+			// localStorage layout on first run): it has no dependency on the
+			// event listeners below, and the sidebar switcher can show early.
+			const wsEntry = await workspaces.load(t('shell.workspace.default'));
 			const unlisten = await listen<EventPayload>('agent-event', (e) => {
 				const s = sessionMap.get(e.payload.session);
 				if (!s) return;
@@ -1188,12 +1192,9 @@
 				cleanups.forEach((f) => f());
 				return;
 			}
-			// Load the workspaces file (migrating a pre-workspace localStorage
-			// layout on first run), then restore the active workspace's projects
-			// + their open conversations (resume by id), or seed a default
-			// project on first run.
-			const entry = await workspaces.load(t('shell.workspace.default'));
-			await store.restore(entry.projects);
+			// Restore the active workspace's projects + their open conversations
+			// (resume by id), or seed a default project on first run.
+			await store.restore(wsEntry.projects);
 			// 深链在项目恢复完成后再注册，冷启动携带的链接（onOpenUrl 会补发当前
 			// 深链）才能作用于已恢复的项目列表。
 			const undeep = await onOpenUrl((urls) => {
