@@ -357,10 +357,6 @@ fn write_json(path: &std::path::Path, value: &serde_json::Value) -> Result<(), S
     std::fs::write(path, format!("{text}\n")).map_err(|error| error.to_string())
 }
 
-fn auth_path() -> PathBuf {
-    jucode_dir().join("auth.json")
-}
-
 /// Whether new writes to auth.json encrypt credentials at rest.
 ///
 /// Off by default: auth.json is shared with the `jucode` CLI engine, which
@@ -374,37 +370,71 @@ fn encrypt_secrets_enabled(config: &serde_json::Value) -> bool {
         .unwrap_or(false)
 }
 
-/// Reads auth.json with credentials decrypted. Plaintext files (written before
-/// this feature, or by the CLI) load unchanged.
+/// The credential file plus the two things needed to interpret it: the config
+/// holding the `encrypt_secrets` switch, and the key store. Bundled so the
+/// migration behavior can be tested against temp paths instead of `$HOME`.
+struct AuthStore {
+    auth: PathBuf,
+    config: PathBuf,
+    keys: Option<secrets::SecretStore>,
+}
+
+impl AuthStore {
+    fn app_local() -> Self {
+        let dir = jucode_dir();
+        Self {
+            auth: dir.join("auth.json"),
+            config: dir.join("config.json"),
+            keys: secrets::SecretStore::app_local().ok(),
+        }
+    }
+
+    /// Reads auth.json with credentials decrypted. Plaintext files (written
+    /// before this feature, or by the CLI) load unchanged.
+    fn read(&self) -> serde_json::Value {
+        let mut auth = read_json(&self.auth);
+        self.reveal(&mut auth);
+        auth
+    }
+
+    /// `read` for read-modify-write callers — see `read_json_strict`.
+    fn read_strict(&self) -> Result<serde_json::Value, String> {
+        let mut auth = read_json_strict(&self.auth)?;
+        self.reveal(&mut auth);
+        Ok(auth)
+    }
+
+    fn reveal(&self, auth: &mut serde_json::Value) {
+        if let Some(keys) = &self.keys {
+            keys.reveal(auth);
+        }
+    }
+
+    /// Writes auth.json, encrypting credentials first when the setting is on.
+    /// The file is restricted to the owner either way.
+    fn write(&self, auth: &mut serde_json::Value) -> Result<(), String> {
+        if encrypt_secrets_enabled(&read_json(&self.config)) {
+            self.keys
+                .as_ref()
+                .ok_or_else(|| "could not locate the app config directory".to_string())?
+                .protect(auth)?;
+        }
+        write_json(&self.auth, auth)?;
+        secrets::restrict_to_owner(&self.auth);
+        Ok(())
+    }
+}
+
 fn read_auth() -> serde_json::Value {
-    let mut auth = read_json(&auth_path());
-    reveal_secrets(&mut auth);
-    auth
+    AuthStore::app_local().read()
 }
 
-/// `read_auth` for read-modify-write callers — see `read_json_strict`.
 fn read_auth_strict() -> Result<serde_json::Value, String> {
-    let mut auth = read_json_strict(&auth_path())?;
-    reveal_secrets(&mut auth);
-    Ok(auth)
+    AuthStore::app_local().read_strict()
 }
 
-fn reveal_secrets(auth: &mut serde_json::Value) {
-    if let Ok(store) = secrets::SecretStore::app_local() {
-        store.reveal(auth);
-    }
-}
-
-/// Writes auth.json, encrypting credentials first when the setting is on. The
-/// file is restricted to the owner either way.
 fn write_auth(auth: &mut serde_json::Value) -> Result<(), String> {
-    let path = auth_path();
-    if encrypt_secrets_enabled(&read_json(&jucode_dir().join("config.json"))) {
-        secrets::SecretStore::app_local()?.protect(auth)?;
-    }
-    write_json(&path, auth)?;
-    secrets::restrict_to_owner(&path);
-    Ok(())
+    AuthStore::app_local().write(auth)
 }
 
 #[tauri::command]
@@ -2645,6 +2675,115 @@ mod tests {
             serde_json::json!({ "providers": { "openai": "k" } })
         );
         let _ = std::fs::remove_file(&p);
+    }
+
+    // --- auth.json credential encryption ---
+
+    /// An `AuthStore` over throwaway paths, with the switch preset.
+    fn auth_store(name: &str, encrypt: bool) -> (super::AuthStore, std::path::PathBuf) {
+        let dir = std::env::temp_dir()
+            .join(format!("jucode-authstore-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("config.json"),
+            serde_json::json!({ "encrypt_secrets": encrypt }).to_string(),
+        )
+        .unwrap();
+        let store = super::AuthStore {
+            auth: dir.join("auth.json"),
+            config: dir.join("config.json"),
+            keys: Some(super::secrets::SecretStore::in_dir(&dir)),
+        };
+        (store, dir)
+    }
+
+    /// An auth.json as the CLI leaves it after `/login` plus a manually entered
+    /// provider key: everything in the clear.
+    fn plaintext_auth() -> serde_json::Value {
+        serde_json::json!({
+            "providers": { "deepseek": "sk-legacy" },
+            "jucode": {
+                "access_token": "at-1",
+                "refresh_token": "rt-1",
+                "access_expires_at": 9,
+            }
+        })
+    }
+
+    #[test]
+    fn plaintext_auth_loads_then_next_save_encrypts_it() {
+        let (store, dir) = auth_store("migrate", true);
+        std::fs::write(&store.auth, plaintext_auth().to_string()).unwrap();
+        // Nothing is re-written on read, so the pre-existing file still loads.
+        assert_eq!(store.read(), plaintext_auth());
+
+        let mut current = store.read_strict().unwrap();
+        current["providers"]["mimo"] = serde_json::json!("sk-mimo");
+        store.write(&mut current).unwrap();
+
+        let on_disk = std::fs::read_to_string(&store.auth).unwrap();
+        assert!(!on_disk.contains("sk-legacy"), "{on_disk}");
+        assert!(!on_disk.contains("sk-mimo"), "{on_disk}");
+        assert!(!on_disk.contains("rt-1"), "{on_disk}");
+        // Expiry stays readable: the refresh check must work without a key.
+        assert!(on_disk.contains("\"access_expires_at\": 9"), "{on_disk}");
+
+        let back = store.read();
+        assert_eq!(back["providers"]["deepseek"], serde_json::json!("sk-legacy"));
+        assert_eq!(back["providers"]["mimo"], serde_json::json!("sk-mimo"));
+        assert_eq!(back["jucode"]["refresh_token"], serde_json::json!("rt-1"));
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn disabling_encryption_writes_plaintext_again() {
+        let (store, dir) = auth_store("disable", true);
+        let mut current = plaintext_auth();
+        store.write(&mut current).unwrap();
+        assert!(!std::fs::read_to_string(&store.auth).unwrap().contains("sk-legacy"));
+
+        let mut current = store.read_strict().unwrap();
+        std::fs::write(&store.config, r#"{"encrypt_secrets":false}"#).unwrap();
+        store.write(&mut current).unwrap();
+
+        let on_disk = std::fs::read_to_string(&store.auth).unwrap();
+        assert!(on_disk.contains("sk-legacy"), "{on_disk}");
+        assert!(on_disk.contains("rt-1"), "{on_disk}");
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// The CLI engine reads this same file, so leaving the switch off has to
+    /// keep it byte-for-byte readable to anything that only knows plaintext.
+    #[test]
+    fn default_settings_leave_auth_in_the_clear() {
+        let (store, dir) = auth_store("default-off", false);
+        let mut current = plaintext_auth();
+        store.write(&mut current).unwrap();
+
+        let on_disk = std::fs::read_to_string(&store.auth).unwrap();
+        assert!(on_disk.contains("sk-legacy"), "{on_disk}");
+        assert!(on_disk.contains("rt-1"), "{on_disk}");
+        assert_eq!(store.read(), plaintext_auth());
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn auth_file_is_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let (store, dir) = auth_store("perms", false);
+        std::fs::write(&store.auth, "{}").unwrap();
+        std::fs::set_permissions(&store.auth, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        store.write(&mut plaintext_auth()).unwrap();
+
+        let mode = std::fs::metadata(&store.auth).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o600);
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

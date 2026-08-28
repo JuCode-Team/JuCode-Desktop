@@ -50,7 +50,7 @@ impl SecretStore {
     }
 
     #[cfg(test)]
-    fn in_dir(dir: impl Into<PathBuf>) -> Self {
+    pub fn in_dir(dir: impl Into<PathBuf>) -> Self {
         Self { dir: dir.into() }
     }
 
