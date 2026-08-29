@@ -528,7 +528,10 @@ fn read_bounded(reader: impl Read, limit: usize) -> io::Result<Vec<u8>> {
 }
 
 fn verify_sha256(bytes: &[u8], expected: &str) -> io::Result<()> {
-    let actual = format!("{:x}", Sha256::digest(bytes));
+    let actual = Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
     if actual.eq_ignore_ascii_case(expected.trim()) {
         Ok(())
     } else {
