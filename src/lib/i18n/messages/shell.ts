@@ -22,6 +22,12 @@ const shell = {
 			resume: '恢复历史会话',
 			checkpoint: '回退到历史回合'
 		},
+		modelGroup: {
+			codex: 'Codex 官方',
+			claude: 'Claude 官方',
+			jucode: 'JuCode 内置',
+			byok: '自定义 / BYOK'
+		},
 		notConfigured: '未配置',
 		pickerSearchPlaceholder: '筛选…',
 		empty: '(empty)',
@@ -243,6 +249,12 @@ const shell = {
 			model: 'Select model',
 			resume: 'Resume a session',
 			checkpoint: 'Rewind to a turn'
+		},
+		modelGroup: {
+			codex: 'Codex official',
+			claude: 'Claude official',
+			jucode: 'JuCode built-in',
+			byok: 'Custom / BYOK'
 		},
 		notConfigured: 'not configured',
 		pickerSearchPlaceholder: 'Filter…',

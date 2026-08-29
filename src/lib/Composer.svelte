@@ -28,6 +28,7 @@
 		active: boolean;
 		command: string;
 		depth: number | undefined;
+		group?: string;
 	};
 
 	let {

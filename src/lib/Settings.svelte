@@ -13,6 +13,7 @@
 	import Vendor from '$lib/Vendor.svelte';
 	import OverviewPanel from '$lib/OverviewPanel.svelte';
 	import ProviderAccountCard from '$lib/settings/ProviderAccountCard.svelte';
+	import ProviderCatalogPicker from '$lib/settings/ProviderCatalogPicker.svelte';
 	import CustomProviderForm from '$lib/settings/CustomProviderForm.svelte';
 	import McpSection from '$lib/settings/McpSection.svelte';
 	import UpdateCard from '$lib/settings/UpdateCard.svelte';
@@ -25,6 +26,11 @@
 	import { t, setLocale, getLocale, LOCALES, LOCALE_LABELS } from '$lib/i18n';
 	import { ASR_PROVIDERS, asrProvider, resolveAsrSettings, type AsrSettings } from '$lib/audio';
 	import { PLUGINS, loadPluginSettings, setPluginEnabled } from '$lib/plugins/registry';
+	import {
+		PROVIDER_CATALOG,
+		providerFormPrefill,
+		type CatalogProvider
+	} from '$lib/providers/catalog';
 
 	let {
 		sessionId,
@@ -53,15 +59,18 @@
 	}
 	interface Provider {
 		id: string;
+		name?: string;
 		base_url: string;
 		format: string;
 		models: ModelCfg[];
 		builtin: boolean;
+		source?: 'catalog' | 'custom';
 	}
 	const CUSTOM_KEY = 'jucode-custom-providers';
 	const FORMATS = [
 		{ value: 'responses', label: 'Responses' },
-		{ value: 'anthropic', label: 'Anthropic' }
+		{ value: 'anthropic', label: 'Anthropic' },
+		{ value: 'chat', label: 'Chat Completions' }
 	];
 
 	let cfg = $state<Record<string, any>>({});
@@ -76,9 +85,10 @@
 	let section = $state<'overview' | 'account' | 'behavior' | 'extensions'>(untrack(() => initialSection));
 
 	// inline editor state
-	let editing = $state<string | null>(null); // provider id, or '__new__'
+	let editing = $state<string | null>(null); // provider id, '__catalog__', or '__new__'
 	let keyInput = $state('');
 	let form = $state<{ id: string; base_url: string; format: string; key: string; models: ModelCfg[] }>({ id: '', base_url: '', format: 'responses', key: '', models: [] });
+	let selectedCatalog = $state<CatalogProvider | null>(null);
 	let mName = $state('');
 	let mCtx = $state<number | undefined>();
 
@@ -99,6 +109,9 @@
 		...builtin.map((b) => ({ id: b.id, base_url: b.base_url, models: b.models, format: b.protocol, builtin: true })),
 		...custom
 	]);
+	const catalogProviders = $derived(
+		PROVIDER_CATALOG.providers.filter((entry) => !allProviders.some((provider) => provider.id === entry.id))
+	);
 	const modelOpts = $derived(models.map((m) => ({ value: m.name, label: m.name, ...m })));
 	const effortOpts = $derived(efforts.map((e) => ({ value: e, label: cap(e) })));
 	// All providers' models in one list (provider-qualified), so the default-model
@@ -109,6 +122,7 @@
 				value: `${p.id}::${m.name}`,
 				label: m.name,
 				provider: p.id,
+				group: p.id === 'jucode' ? t('settings.behavior.groupJucode') : t('settings.behavior.groupByok'),
 				context_window: m.context_window,
 				authed: keyed.includes(p.id)
 			}))
@@ -162,8 +176,20 @@
 		keyInput = '';
 	}
 	function openCreate() {
+		editing = '__catalog__';
+		selectedCatalog = null;
+	}
+	function openCustom() {
 		editing = '__new__';
+		selectedCatalog = null;
 		form = { id: '', base_url: '', format: 'responses', key: '', models: [] };
+		mName = '';
+		mCtx = undefined;
+	}
+	function selectCatalogProvider(provider: CatalogProvider) {
+		selectedCatalog = provider;
+		form = providerFormPrefill(provider);
+		editing = '__new__';
 		mName = '';
 		mCtx = undefined;
 	}
@@ -194,8 +220,19 @@
 	}
 	async function createProvider() {
 		const id = form.id.trim();
-		if (!id || !form.base_url.trim() || form.models.length === 0) return;
-		custom = [...custom.filter((c) => c.id !== id), { id, base_url: form.base_url.trim(), format: form.format, models: form.models, builtin: false }];
+		if (!id || !form.base_url.trim() || form.models.length === 0 || (selectedCatalog && !form.key.trim())) return;
+		custom = [
+			...custom.filter((c) => c.id !== id),
+			{
+				id,
+				name: selectedCatalog?.name,
+				base_url: form.base_url.trim(),
+				format: form.format,
+				models: form.models,
+				builtin: false,
+				source: selectedCatalog ? 'catalog' : 'custom'
+			}
+		];
 		persistCustom();
 		if (form.key.trim()) {
 			await setAuthKey(id, form.key.trim());
@@ -203,6 +240,7 @@
 			onAuthChange?.();
 		}
 		editing = null;
+		selectedCatalog = null;
 	}
 	function deleteProvider(id: string) {
 		custom = custom.filter((c) => c.id !== id);
@@ -359,16 +397,26 @@
 							{/each}
 						</div>
 
-						{#if editing === '__new__'}
+						{#if editing === '__catalog__'}
+							<ProviderCatalogPicker
+								providers={catalogProviders}
+								onSelect={selectCatalogProvider}
+								onCustom={openCustom}
+								onCancel={() => (editing = null)}
+							/>
+						{:else if editing === '__new__'}
 							<CustomProviderForm
 								bind:form
 								bind:mName
 								bind:mCtx
 								formats={FORMATS}
 								{fmt}
+								title={selectedCatalog ? t('settings.catalog.connect', { provider: selectedCatalog.name }) : undefined}
+								submitLabel={selectedCatalog ? t('settings.catalog.addProvider') : undefined}
+								createDisabled={!!selectedCatalog && !form.key.trim()}
 								onAddModel={addFormModel}
 								onCreate={createProvider}
-								onCancel={() => (editing = null)}
+								onCancel={() => (editing = selectedCatalog ? '__catalog__' : null)}
 							/>
 						{:else}
 							<button class="addprov" onclick={openCreate}><Plus size={15} /> {t('settings.custom.add')}</button>

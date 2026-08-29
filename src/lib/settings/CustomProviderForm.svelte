@@ -26,6 +26,9 @@
 		mCtx = $bindable(),
 		formats,
 		fmt,
+		title,
+		submitLabel,
+		createDisabled = false,
 		onAddModel,
 		onCreate,
 		onCancel
@@ -35,6 +38,9 @@
 		mCtx: number | undefined;
 		formats: { value: string; label: string }[];
 		fmt: (n?: number) => string;
+		title?: string;
+		submitLabel?: string;
+		createDisabled?: boolean;
 		onAddModel: () => void;
 		onCreate: () => void;
 		onCancel: () => void;
@@ -42,7 +48,7 @@
 </script>
 
 <div class="newprov">
-	<div class="np-title">{t('settings.custom.title')}</div>
+	<div class="np-title">{title ?? t('settings.custom.title')}</div>
 	<div class="np-grid">
 		<label class="np-f"><span>{t('settings.custom.providerId')}</span><TextField bind:value={form.id} placeholder={t('settings.custom.providerIdPlaceholder')} /></label>
 		<label class="np-f"><span>{t('settings.custom.format')}</span><Segmented bind:value={form.format} options={formats} /></label>
@@ -62,7 +68,7 @@
 	</div>
 	<div class="np-foot">
 		<Button variant="ghost" size="sm" onclick={onCancel}>{t('common.cancel')}</Button>
-		<Button variant="primary" size="sm" onclick={onCreate}>{t('settings.custom.create')}</Button>
+		<Button variant="primary" size="sm" disabled={createDisabled} onclick={onCreate}>{submitLabel ?? t('settings.custom.create')}</Button>
 	</div>
 </div>
 

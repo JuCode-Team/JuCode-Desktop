@@ -16,10 +16,12 @@
 	}
 	interface Provider {
 		id: string;
+		name?: string;
 		base_url: string;
 		format: string;
 		models: ModelCfg[];
 		builtin: boolean;
+		source?: 'catalog' | 'custom';
 	}
 
 	let {
@@ -63,11 +65,11 @@
 	<button class="pcard-main" onclick={() => onCardClick(provider, authed)}>
 		<span class="tile"><Vendor model={provider.models[0]?.name ?? provider.id} size={18} /></span>
 		<span class="pcard-txt">
-			<span class="pcard-id">{cap(provider.id)}
+			<span class="pcard-id">{provider.name ?? cap(provider.id)}
 				{#if isDefault}<span class="defbadge"><CircleCheck size={11} /> {t('settings.account.default')}</span>{/if}
-				{#if !provider.builtin}<span class="tagx">{t('settings.account.custom')}</span>{/if}
+				{#if !provider.builtin}<span class="tagx">{provider.source === 'catalog' ? t('settings.account.byok') : t('settings.account.custom')}</span>{/if}
 			</span>
-			<span class="pcard-url">{provider.base_url}</span>
+			<span class="pcard-url">{#if provider.name}{provider.id} · {/if}{provider.base_url}</span>
 		</span>
 		<span class="pcard-right">
 			{#if provider.id === 'jucode' && loggingIn && !authed}
