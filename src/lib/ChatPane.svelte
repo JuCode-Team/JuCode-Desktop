@@ -38,6 +38,7 @@
 		type Op
 	} from '$lib/protocol';
 	import { buildModelRows } from '$lib/composer/modelRows';
+	import { canHandOffToTui, isValidResumeSessionId } from '$lib/tuiHandoff';
 	import { dispatch } from '$lib/backends/router';
 	import { browser } from '$lib/browser.svelte';
 	import { prefs } from '$lib/prefs.svelte';
@@ -175,6 +176,14 @@
 	// The backend is only switchable while the session is virgin: no user turn
 	// yet (an optimistic push counts) and not a resumed conversation.
 	const backendLocked = $derived(!!session.restored || chat.userTurns > 0);
+
+	// GUI → TUI handoff: offered for the native CLIs only (never ACP), enabled
+	// once the engine holds a resumable conversation under a valid session id
+	// (same gate as SessionStore.openInTui).
+	const tuiCapable = $derived(canHandOffToTui(session.backendId));
+	const tuiReady = $derived(
+		isValidResumeSessionId(chat.sessionId) && (chat.resumable || !!session.restored)
+	);
 
 	// Current git branch for the composer's footer strip. A detached HEAD reads
 	// "detached"; a failed probe (not a git repo) hides the chip.
@@ -776,6 +785,8 @@
 			modelSearch={showPickerSearch}
 			{backendLocked}
 			{gitBranch}
+			{tuiReady}
+			onOpenTui={tuiCapable ? () => store.openInTui(session.id) : undefined}
 			onBackend={(b, acpAgent) => store.switchBackend(session.id, b, acpAgent)}
 			bind:pickerQuery
 			bind:pickerSelIdx={selIdx}

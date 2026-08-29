@@ -48,6 +48,7 @@
 		reconcileLayout
 	} from '$lib/workbench/canvas';
 	import { tuiBackendOf, tuiTabTitle } from '$lib/workbench/tuiTab';
+	import { tuiResumeArgs, tuiResumeCommand } from '$lib/tuiHandoff';
 	import type { WorkspaceEntry } from '$lib/workbench/workspaces';
 	import type { TabIcon } from '$lib/workbench/tabChrome';
 	import Mosaic from '$lib/workbench/Mosaic.svelte';
@@ -900,15 +901,28 @@
 						{#if sid}
 							{@const sess = sessionMap.get(sid)}
 							{#if sess}
-								<ChatPane
-									session={sess}
-									{store}
-									{providers}
-									{providersList}
-									isActive={sid === activeId}
-									onRegister={registerPane}
-									onUnregister={unregisterPane}
-								/>
+								{#if sess.surface === 'tui'}
+									<!-- Session handoff: the same chat tile renders the native TUI
+									     resuming this conversation by id (never a standalone tui:* tab). -->
+									<TuiPanel
+										backend={sess.backendId}
+										cwd={store.projectPathOf(sid) ?? ''}
+										args={tuiResumeArgs(sess.backendId, sess.chat.sessionId)}
+										resumeCommand={tuiResumeCommand(sess.backendId, sess.chat.sessionId)}
+										onBackToGui={() => store.returnToGui(sid)}
+										onOpenSettings={() => { settingsInitial = 'behavior'; showSettings = true; }}
+									/>
+								{:else}
+									<ChatPane
+										session={sess}
+										{store}
+										{providers}
+										{providersList}
+										isActive={sid === activeId}
+										onRegister={registerPane}
+										onUnregister={unregisterPane}
+									/>
+								{/if}
 							{:else}
 								<div class="gone">{t('shell.chatGone')}</div>
 							{/if}

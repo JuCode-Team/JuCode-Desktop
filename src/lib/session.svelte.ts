@@ -1,5 +1,6 @@
 import { ChatState } from './chat.svelte';
 import { createSession, closeSession, projectRoot, writeConfig, git, claudeSessionTranscript } from './protocol';
+import { canHandOffToTui, isValidResumeSessionId } from './tuiHandoff';
 import { createAdapter, normalizeBackendId, type BackendId } from './backends';
 import { dispatch, ioFor, registerAdapter, unregisterAdapter } from './backends/router';
 import { buildBackendOpts, defaultBackendFor } from './backends/settings';
@@ -33,6 +34,9 @@ export interface SavedProject {
 		/** backend 为 'acp' 时：驱动该会话的 registry agent（重启动/恢复时必需）。 */
 		acpAgent?: { id: string; name: string };
 		archived?: boolean;
+		/** The conversation was handed to the native TUI (resume by `sid`).
+		 *  Omitted for the default GUI surface so old layouts stay clean. */
+		surface?: 'tui';
 	} & SavedTabChrome)[];
 	/** 并行任务 worktree 项目的元数据（isWorktree/mainRepoPath/branch/baseBranch/slug）。 */
 	worktree?: WorktreeMeta;
@@ -67,6 +71,7 @@ export class SessionStore {
 	loaded = $state(false);
 
 	#counter = 0;
+	#surfaceTransitions = new Set<string>();
 	uid() {
 		return `s${Date.now().toString(36)}-${(this.#counter++).toString(36)}`;
 	}
@@ -296,7 +301,8 @@ export class SessionStore {
 		archived = false,
 		chrome?: SavedTabChrome,
 		reuseId?: string,
-		acpAgent?: { id: string; name: string }
+		acpAgent?: { id: string; name: string },
+		surface?: 'tui'
 	) {
 		const s = this.#newSession(backend, backend === 'acp' ? acpAgent : undefined, reuseId);
 		if (title) s.chat.title = title;
@@ -309,6 +315,15 @@ export class SessionStore {
 		s.restored = true;
 		project.sessions.push(s);
 		if (backend === 'claude' || backend === 'codex') s.chat.sessionId = sid;
+		// The conversation was handed to the native TUI when it was persisted:
+		// render the TuiPanel (which resumes by id) and never spawn the GUI
+		// engine beside it — one process per conversation. `returnToGui`
+		// respawns the engine with resume later.
+		if (surface === 'tui' && canHandOffToTui(backend)) {
+			s.surface = 'tui';
+			s.chat.sessionId = sid;
+			return s.id;
+		}
 		const spawned =
 			backend === 'claude'
 				? this.#spawn(s, project.path, () => this.#replayClaudeTranscript(s, project.path, sid), {
@@ -381,7 +396,9 @@ export class SessionStore {
 	 */
 	restartSession(id: string, force = false) {
 		const s = this.allSessions.find((x) => x.id === id);
-		if (!s) return;
+		// The native TUI owns handed-off conversations. No crash/manual path may
+		// bring up a GUI engine beside it; returnToGui flips ownership first.
+		if (!s || s.surface === 'tui') return;
 		const now = Date.now();
 		if (force) {
 			s.chat.restarts = 0;
@@ -389,7 +406,10 @@ export class SessionStore {
 		s.chat.restartWindowStart = now;
 		s.chat.restarts++;
 		const sid = s.chat.sessionId;
-		const canResume = s.chat.resumable;
+		// A restored session's conversation exists engine-side even while its
+		// replayed transcript is still empty (replay is async / best-effort) —
+		// the same rule serialize uses to decide a tab is resumable.
+		const canResume = s.chat.resumable || (!!sid && !!s.restored);
 		s.chat.engineState = 'connecting';
 		s.chat.messages.push({ kind: 'system', text: force ? t('shell.restarting') : t('shell.autoRestarting') });
 		// claude resumes via the --resume spawn option (no /resume command in
@@ -429,6 +449,12 @@ export class SessionStore {
 	handleExit(id: string) {
 		const s = this.allSessions.find((x) => x.id === id);
 		if (!s) return;
+		// An intentional GUI close can be observed after openInTui has already
+		// flipped the surface. Never auto-restart underneath the native TUI.
+		if (s.surface === 'tui') {
+			s.chat.switching = false;
+			return;
+		}
 		// Intentional close for a provider switch — switchProvider re-creates the
 		// engine itself, so don't treat this exit as a crash.
 		if (s.chat.switching) {
@@ -571,6 +597,65 @@ export class SessionStore {
 		dispatch(id, { op: 'command', input: '/resume' });
 	}
 
+	/** Hand a conversation to the native TUI (same chat tile, `surface` flips
+	 *  to 'tui'): the tile re-renders as a TuiPanel resuming the same engine
+	 *  session by id (claude `--resume <id>`, codex `resume <id>`, jucode
+	 *  `/resume <id>` written into the pty). The GUI engine is closed FIRST so
+	 *  two processes never hold the same conversation. Requires a usable
+	 *  engine session id — resume-by-id is the product, never a TUI picker —
+	 *  so a fresh empty chat and ACP sessions are a no-op. */
+	async openInTui(id: string) {
+		const s = this.allSessions.find((x) => x.id === id);
+		if (
+			!s ||
+			s.surface === 'tui' ||
+			s.chat.switching ||
+			this.#surfaceTransitions.has(id) ||
+			!canHandOffToTui(s.backendId)
+		)
+			return;
+		// Same rule serialize uses for `sid`: the engine persisted the
+		// conversation only once a user turn exists (or it was restored).
+		if (!isValidResumeSessionId(s.chat.sessionId) || !(s.chat.resumable || s.restored)) return;
+		// Keep a second click from issuing another close that could resolve first
+		// and expose the TUI while the original GUI child is still shutting down.
+		this.#surfaceTransitions.add(id);
+		// Intentional close — handleExit must not auto-restart the GUI engine
+		// underneath the TUI.
+		s.chat.switching = true;
+		try {
+			await closeSession(id);
+		} catch {
+			// A failed close cannot establish exclusive ownership. Leave the GUI
+			// surface in place rather than starting a second process.
+			s.chat.switching = false;
+			return;
+		} finally {
+			this.#surfaceTransitions.delete(id);
+		}
+		// The tab/project may have been removed while the close was in flight.
+		if (!this.allSessions.includes(s)) return;
+		s.surface = 'tui';
+		// TUI ownership is established: a late exit event from the closed GUI
+		// child lands on handleExit's `surface === 'tui'` branch, and if the
+		// engine was already dead no exit event arrives at all — so the flag
+		// must be cleared here or it latches forever.
+		s.chat.switching = false;
+	}
+
+	/** Bring a handed-off conversation back to the GUI. TuiPanel invokes this
+	 *  only after `ptyClose` has completed, so flipping ownership and resuming
+	 *  the GUI engine cannot overlap the native TUI process. */
+	async returnToGui(id: string) {
+		const s = this.allSessions.find((x) => x.id === id);
+		if (!s || s.surface !== 'tui') return;
+		s.surface = 'gui';
+		// Never carry a latched handoff flag back to the GUI — it would block
+		// later openInTui calls and make handleExit swallow the next real crash.
+		s.chat.switching = false;
+		this.restartSession(id, true);
+	}
+
 	/** Snapshot of the layout + open tabs for persistence. Every session is
 	 *  written (empty windows survive a workspace switch under their desktop
 	 *  id); `sid` only when the engine actually persisted the conversation —
@@ -595,6 +680,7 @@ export class SessionStore {
 					...(s.backendId !== 'jucode' ? { backend: s.backendId } : {}),
 					...(s.backendId === 'acp' && s.acpAgent ? { acpAgent: s.acpAgent } : {}),
 					...(s.archived ? { archived: true } : {}),
+					...(s.surface === 'tui' ? { surface: 'tui' as const } : {}),
 					...(s.color ? { color: s.color } : {}),
 					...(s.icon ? { icon: s.icon } : {}),
 					...(s.chat.titleLocked ? { titleLocked: true } : {})
@@ -632,7 +718,11 @@ export class SessionStore {
 				this.projects.push(proj);
 				if (proj.stale) continue;
 				for (const t of p.tabs ?? []) {
-					if (!t.sid && !t.id) continue;
+					// Workspace data is user-editable. Invalid ids must never
+					// reach either a GUI resume or the TUI pty argv.
+					const sid =
+						typeof t.sid === 'string' && isValidResumeSessionId(t.sid) ? t.sid : undefined;
+					if (!sid && !t.id) continue;
 					// Tabs saved before multi-backend support carry no backend field →
 					// jucode (normalizeBackendId maps unknown/missing to the default).
 					// Chrome fields are re-validated here (the file is user-editable).
@@ -656,8 +746,10 @@ export class SessionStore {
 					};
 					// With a conversation to resume, resume it; an empty window spawns
 					// fresh. Both keep the saved desktop id (pre-id files mint anew).
-					const id = t.sid
-						? this.restoreSession(proj, t.sid, t.title, backend, !!t.archived, chrome, t.id, acpAgent)
+					// A tab handed to the TUI restores as a TUI surface (no engine).
+					const surface = t.surface === 'tui' && sid ? ('tui' as const) : undefined;
+					const id = sid
+						? this.restoreSession(proj, sid, t.title, backend, !!t.archived, chrome, t.id, acpAgent, surface)
 						: this.#spawnSaved(proj, t.id!, t.title, backend, !!t.archived, chrome, acpAgent);
 					if (!first && !t.archived) first = id;
 				}

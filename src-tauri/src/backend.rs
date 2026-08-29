@@ -384,23 +384,39 @@ pub fn tui_allowed_args(kind: BackendKind) -> &'static [&'static str] {
     }
 }
 
-/// Validates the extra argv for a TUI spawn against the backend's fixed
-/// token allowlist. Anything else — flags, values, whitespace tricks — is
+/// The one TUI token that may be followed by a session id (GUI → TUI session
+/// handoff resumes by id). jucode has no resume argv — its TUI resumes via
+/// the `/resume` slash command after spawn.
+fn tui_resume_flag(kind: BackendKind) -> Option<&'static str> {
+    match kind {
+        BackendKind::Claude => Some("--resume"),
+        BackendKind::Codex => Some("resume"),
+        BackendKind::Jucode | BackendKind::Acp => None,
+    }
+}
+
+/// Validates the extra argv for a TUI spawn. Accepted shapes only:
+/// nothing, exactly one allowlisted token, or the backend's resume flag
+/// followed by one id that passes `is_valid_session_id`. Anything else —
+/// free-form flags, `--resume=<id>`, flag-like "ids", extra tokens — is
 /// rejected outright. ACP backends are rejected entirely: their command
 /// comes from the registry, not a resolvable well-known binary.
 pub fn validate_tui_args(kind: BackendKind, args: &[String]) -> Result<(), String> {
     if kind == BackendKind::Acp {
         return Err("ACP agents cannot be opened as a TUI tab".to_string());
     }
-    for arg in args {
-        if !tui_allowed_args(kind).contains(&arg.as_str()) {
-            return Err(format!(
-                "argument not allowed for {} TUI: {arg}",
-                kind.bin_name()
-            ));
+    match args {
+        [] => Ok(()),
+        [tok] if tui_allowed_args(kind).contains(&tok.as_str()) => Ok(()),
+        [flag, id] if tui_resume_flag(kind) == Some(flag.as_str()) && is_valid_session_id(id) => {
+            Ok(())
         }
+        _ => Err(format!(
+            "arguments not allowed for {} TUI: {}",
+            kind.bin_name(),
+            args.join(" ")
+        )),
     }
-    Ok(())
 }
 
 /// Validates a settings-provided binary path for a TUI spawn (same rule as
@@ -983,6 +999,48 @@ mod tests {
         assert!(validate_tui_args(BackendKind::Jucode, &["resume".into()]).is_err());
         assert!(validate_tui_args(BackendKind::Codex, &["--continue".into()]).is_err());
         assert!(validate_tui_args(BackendKind::Claude, &["resume".into()]).is_err());
+    }
+
+    #[test]
+    fn tui_resume_accepts_a_validated_session_id() {
+        let sid = "0f3d7a1c-9e2b-4b7e-9d4d-2a1b3c4d5e6f";
+        assert!(validate_tui_args(BackendKind::Claude, &["--resume".into(), sid.into()]).is_ok());
+        assert!(validate_tui_args(BackendKind::Codex, &["resume".into(), sid.into()]).is_ok());
+        // The resume-with-id shape doesn't leak across backends, and jucode
+        // has no resume argv at all (it resumes via /resume after spawn).
+        assert!(validate_tui_args(BackendKind::Claude, &["resume".into(), sid.into()]).is_err());
+        assert!(validate_tui_args(BackendKind::Codex, &["--resume".into(), sid.into()]).is_err());
+        assert!(validate_tui_args(BackendKind::Jucode, &["resume".into(), sid.into()]).is_err());
+        assert!(validate_tui_args(BackendKind::Jucode, &["--resume".into(), sid.into()]).is_err());
+        // Only the resume flag takes a value.
+        assert!(validate_tui_args(BackendKind::Claude, &["--continue".into(), sid.into()]).is_err());
+    }
+
+    #[test]
+    fn tui_resume_rejects_invalid_ids_and_extra_tokens() {
+        let sid = "0f3d7a1c-9e2b-4b7e-9d4d-2a1b3c4d5e6f";
+        for bad_id in ["--help", "-x", "a b", "../etc/passwd", "", "a".repeat(65).as_str()] {
+            assert!(
+                validate_tui_args(BackendKind::Claude, &["--resume".into(), bad_id.into()])
+                    .is_err(),
+                "{bad_id:?} must be rejected as a resume id"
+            );
+            assert!(
+                validate_tui_args(BackendKind::Codex, &["resume".into(), bad_id.into()]).is_err(),
+                "{bad_id:?} must be rejected as a resume id"
+            );
+        }
+        // No third token, ever.
+        assert!(validate_tui_args(
+            BackendKind::Claude,
+            &["--resume".into(), sid.into(), "-x".into()]
+        )
+        .is_err());
+        assert!(validate_tui_args(
+            BackendKind::Claude,
+            &["--continue".into(), "--resume".into(), sid.into()]
+        )
+        .is_err());
     }
 
     #[test]
