@@ -221,6 +221,7 @@
 					<button
 						class="eff"
 						class:on={row.active && ef === activeEffort}
+						aria-label={`${row.label} ${ef}`}
 						onclick={() => onSelect(`${row.command} ${ef}`)}
 					>{ef}</button>
 				{/each}
@@ -248,7 +249,11 @@
 		left: 0;
 		z-index: 21;
 		width: min(544px, 92vw);
-		max-height: min(60vh, 440px);
+		/* Fixed (not max) height: the body is the max of rail/models/efforts,
+		   so swapping effort-chip content on hover must never change the
+		   popover's size — the bottom-anchored top edge would jump. Inner
+		   lists scroll instead. */
+		height: min(60vh, 440px);
 		display: flex;
 		flex-direction: column;
 		background: var(--panel);
