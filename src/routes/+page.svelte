@@ -48,6 +48,7 @@
 		reconcileLayout
 	} from '$lib/workbench/canvas';
 	import { tuiBackendOf, tuiPanelKind, tuiTabTitle } from '$lib/workbench/tuiTab';
+	import type { WorkspaceEntry } from '$lib/workbench/workspaces';
 	import type { TabIcon } from '$lib/workbench/tabChrome';
 	import Mosaic from '$lib/workbench/Mosaic.svelte';
 	import WorkspaceTabs from '$lib/workbench/WorkspaceTabs.svelte';
@@ -460,25 +461,43 @@
 	// A workspace is a saved set of projects + its canvas layout. Switching
 	// swaps the whole session tree: snapshot the current one into its
 	// workspace, close all live engine sessions, then restore the target's
-	// projects (resume by id) and rebuild the canvas.
+	// projects (resume by id) and rebuild the canvas. Swaps must never
+	// overlap: `wsBusy` rejects (and disables in the tab bar) new transitions
+	// while one is in flight; the generation token is belt-and-braces so a
+	// stale restore can never persist its tree over a newer one.
+	let wsGen = 0;
+	let wsBusy = $state(false);
+	/** Swap the live session tree to `entry`'s projects and rebuild the canvas. */
+	async function swapToWorkspace(entry: WorkspaceEntry) {
+		const gen = ++wsGen;
+		wsBusy = true;
+		try {
+			tilesReady = false; // gate the tile effects during the swap
+			for (const p of [...store.projects]) store.removeProject(p);
+			store.loaded = false; // re-gate the persist effect during the swap
+			await store.restore(entry.projects);
+			if (gen !== wsGen) return;
+			initTiles();
+		} finally {
+			if (gen === wsGen) wsBusy = false;
+		}
+	}
 	async function switchWorkspace(id: string) {
-		if (id === workspaces.activeId) return;
+		if (id === workspaces.activeId || wsBusy) return;
 		workspaces.updateProjects(store.serialize());
 		const entry = workspaces.setActive(id);
 		if (!entry) return;
-		tilesReady = false; // gate the tile effects during the swap
-		for (const p of [...store.projects]) store.removeProject(p);
-		store.loaded = false; // re-gate the persist effect during the swap
-		await store.restore(entry.projects);
-		initTiles();
+		await swapToWorkspace(entry);
 	}
 	async function newWorkspace() {
+		if (wsBusy) return;
 		const entry = workspaces.create(t('shell.workspace.nth', { n: workspaces.workspaces.length + 1 }));
 		if (entry) await switchWorkspace(entry.id);
 	}
 	/** Delete a workspace (confirmed). Deleting the active one swaps the live
 	 *  session tree to the default workspace returned by the store. */
 	async function deleteWorkspace(id: string) {
+		if (wsBusy) return;
 		const ws = workspaces.workspaces.find((w) => w.id === id);
 		if (!ws) return;
 		if (ws.isDefault) {
@@ -489,14 +508,10 @@
 			title: t('shell.workspace.delete'),
 			kind: 'warning'
 		});
-		if (!ok) return;
+		if (!ok || wsBusy) return; // a swap may have started under the dialog
 		const next = workspaces.remove(id);
 		if (!next) return; // removed an inactive workspace — nothing to swap
-		tilesReady = false;
-		for (const p of [...store.projects]) store.removeProject(p);
-		store.loaded = false;
-		await store.restore(next.projects);
-		initTiles();
+		await swapToWorkspace(next);
 	}
 
 	// ---------- session tab chrome (color / icon / rename) ----------
@@ -849,6 +864,7 @@
 			workspaces={workspaces.workspaces}
 			activeId={workspaces.activeId}
 			shifted={!showSidebar}
+			busy={wsBusy}
 			onSwitch={switchWorkspace}
 			onNew={newWorkspace}
 			onRename={(id, name) => workspaces.rename(id, name)}

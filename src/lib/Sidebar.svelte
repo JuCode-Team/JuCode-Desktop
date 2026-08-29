@@ -120,7 +120,7 @@
 	<div class="sess-head">
 		<span>{t('shell.sessionsByProject')}</span>
 		<div class="sess-actions">
-			<button class:on={searchOpen} onclick={toggleSearch} aria-label="search sessions" title={t('shell.searchSessions')}><Search size={14} /></button>
+			<button class:on={searchOpen} onclick={toggleSearch} aria-label={t('shell.searchSessions')} title={t('shell.searchSessions')}><Search size={14} /></button>
 			<button onclick={onNewProject} aria-label="new project" title={t('shell.newProjectTitle')}><Plus size={15} /></button>
 		</div>
 	</div>

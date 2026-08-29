@@ -33,6 +33,11 @@ describe('sanitizeSvg', () => {
 		expect(sanitizeSvg('<svg><path href="#x" d="M0 0"/></svg>')).toBeNull();
 	});
 
+	it('rejects url(...) paint servers (external resource references)', () => {
+		expect(sanitizeSvg('<svg><path fill="url(#grad)" d="M0 0"/></svg>')).toBeNull();
+		expect(sanitizeSvg('<svg><rect x="0" y="0" stroke="URL(http://evil)"/></svg>')).toBeNull();
+	});
+
 	it('rejects non-svg roots, comments and oversized markup', () => {
 		expect(sanitizeSvg('<div>hi</div>')).toBeNull();
 		expect(sanitizeSvg('<svg><!-- sneaky --><path d="M0 0"/></svg>')).toBeNull();

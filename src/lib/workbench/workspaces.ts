@@ -72,15 +72,34 @@ export function serializeWorkspaces(file: WorkspacesFile): string {
 
 const isStr = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
 
+type SavedTab = NonNullable<SavedProject['tabs']>[number];
+
+/** Re-validate a saved tab's chrome (the file is user-editable; an inactive
+ *  workspace must not carry a dirty SVG back into it). Invalid color/icon are
+ *  dropped; every other field rides along untouched. */
+function sanitizeTab(t: SavedTab): SavedTab {
+	const { color, icon, ...rest } = t;
+	const c = normalizeColor(color);
+	const i = parseTabIcon(icon);
+	return { ...rest, ...(c ? { color: c } : {}), ...(i ? { icon: i } : {}) };
+}
+
 /** Keep only structurally valid saved projects (id/name/path present); the
  *  optional fields (tabs / worktree / lastBackend) ride along untouched —
- *  SessionStore.restore() already tolerates their absence. */
+ *  SessionStore.restore() already tolerates their absence — except tab
+ *  chrome, which is re-validated. */
 export function sanitizeProjects(raw: unknown): SavedProject[] {
 	if (!Array.isArray(raw)) return [];
-	return raw.filter((p): p is SavedProject => {
-		const o = p as Record<string, unknown>;
-		return !!o && isStr(o.id) && isStr(o.name) && isStr(o.path);
-	});
+	return raw
+		.filter((p): p is SavedProject => {
+			const o = p as Record<string, unknown>;
+			return !!o && isStr(o.id) && isStr(o.name) && isStr(o.path);
+		})
+		.map((p) =>
+			Array.isArray(p.tabs)
+				? { ...p, tabs: p.tabs.filter((t) => !!t && typeof t === 'object').map(sanitizeTab) }
+				: p
+		);
 }
 
 /**

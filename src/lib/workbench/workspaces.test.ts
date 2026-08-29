@@ -48,6 +48,39 @@ describe('workspaces file', () => {
 		expect(projects).toEqual([good]);
 	});
 
+	it('drops dirty chrome on nested session tabs (an inactive workspace must not carry it back)', () => {
+		const dirty = JSON.stringify({
+			version: 1,
+			active: 'a',
+			workspaces: [
+				{
+					id: 'a',
+					name: 'A',
+					layout: null,
+					projects: [
+						{
+							...proj('p1'),
+							tabs: [
+								{
+									id: 't1',
+									sid: 's',
+									title: 'T',
+									color: 'red',
+									icon: { kind: 'svg', markup: '<svg><script>alert(1)</script></svg>' },
+									extra: 'kept'
+								}
+							]
+						}
+					]
+				}
+			]
+		});
+		const tab = parseWorkspacesFile(dirty)?.workspaces[0].projects[0].tabs?.[0] as unknown as Record<string, unknown>;
+		expect(tab.icon).toBeUndefined();
+		expect(tab.color).toBeUndefined();
+		expect(tab).toMatchObject({ id: 't1', sid: 's', title: 'T', extra: 'kept' });
+	});
+
 	it('keeps version 1 and parses an old file without chrome, promoting the first workspace to default', () => {
 		expect(WORKSPACES_VERSION).toBe(1);
 		const old = JSON.stringify({

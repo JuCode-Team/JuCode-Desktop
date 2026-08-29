@@ -89,8 +89,8 @@ describe('SessionStore × backends', () => {
 		const snap = store.serialize();
 		expect(snap[0].lastBackend).toBe('codex');
 		expect(snap[0].tabs).toEqual([
-			{ sid: 'sid-0', title: 't0' },
-			{ sid: 'sid-1', title: 't1', backend: 'codex' }
+			{ id: p.sessions[0].id, sid: 'sid-0', title: 't0' },
+			{ id: p.sessions[1].id, sid: 'sid-1', title: 't1', backend: 'codex' }
 		]);
 	});
 

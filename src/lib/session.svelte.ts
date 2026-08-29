@@ -17,12 +17,15 @@ export interface SavedTabChrome {
 	titleLocked?: boolean;
 }
 
-// The persisted shape of a project + its open tabs (engine session id + title).
+// The persisted shape of a project + its open tabs. `id` is the desktop
+// session id (stable across restore so layout chat tiles keep matching);
+// `sid` is the engine conversation to resume, present only when the engine
+// actually persisted one.
 export interface SavedProject {
 	id: string;
 	name: string;
 	path: string;
-	tabs?: ({ sid: string; title: string; backend?: string; archived?: boolean } & SavedTabChrome)[];
+	tabs?: ({ id?: string; sid?: string; title: string; backend?: string; archived?: boolean } & SavedTabChrome)[];
 	/** 并行任务 worktree 项目的元数据（isWorktree/mainRepoPath/branch/baseBranch/slug）。 */
 	worktree?: WorktreeMeta;
 	/** 本项目最近一次新建会话所用的引擎后端（缺省 = jucode）。 */
@@ -84,9 +87,11 @@ export class SessionStore {
 
 	/** Builds a session record (chat + per-session adapter) and registers the
 	 *  adapter with the op router. `acpAgent` (acp backend only) records which
-	 *  registry agent backs the session, for spawn opts and display. */
-	#newSession(backendId: BackendId, acpAgent?: { id: string; name: string }): Session {
-		const id = this.uid();
+	 *  registry agent backs the session, for spawn opts and display. `reuseId`
+	 *  re-applies a persisted desktop id (layout chat tiles key on it) unless
+	 *  this run already spawned it. */
+	#newSession(backendId: BackendId, acpAgent?: { id: string; name: string }, reuseId?: string): Session {
+		const id = reuseId && !this.allSessions.some((s) => s.id === reuseId) ? reuseId : this.uid();
 		const chat = new ChatState();
 		chat.backendId = backendId;
 		if (acpAgent) {
@@ -281,9 +286,10 @@ export class SessionStore {
 		title: string,
 		backend: BackendId = 'jucode',
 		archived = false,
-		chrome?: SavedTabChrome
+		chrome?: SavedTabChrome,
+		reuseId?: string
 	) {
-		const s = this.#newSession(backend);
+		const s = this.#newSession(backend, undefined, reuseId);
 		if (title) s.chat.title = title;
 		s.archived = archived;
 		if (chrome?.color) s.color = chrome.color;
@@ -303,6 +309,31 @@ export class SessionStore {
 					? this.#spawn(s, project.path, undefined, undefined, sid)
 					: this.#spawn(s, project.path, () => dispatch(s.id, { op: 'command', input: `/resume ${sid}` }));
 		spawned.catch((e) => this.#engineFailed(s.chat, e));
+		return s.id;
+	}
+
+	/** Spawn a fresh session for a persisted tab that has no engine
+	 *  conversation to resume (never sent a turn), reusing the saved desktop
+	 *  id so layout chat tiles keep matching across workspace switches. */
+	#spawnSaved(
+		project: Project,
+		reuseId: string,
+		title: string,
+		backend: BackendId = 'jucode',
+		archived = false,
+		chrome?: SavedTabChrome
+	) {
+		const s = this.#newSession(backend, undefined, reuseId);
+		if (title) s.chat.title = title;
+		s.archived = archived;
+		if (chrome?.color) s.color = chrome.color;
+		if (chrome?.icon) s.icon = chrome.icon;
+		if (chrome?.titleLocked) s.chat.titleLocked = true;
+		project.sessions.push(s);
+		// Same rationale as addSession: pin a resumable uuid for claude.
+		const extra = backend === 'claude' ? { session_id: newUuid() } : undefined;
+		if (extra) s.chat.sessionId = extra.session_id;
+		this.#spawn(s, project.path, undefined, extra).catch((e) => this.#engineFailed(s.chat, e));
 		return s.id;
 	}
 
@@ -527,9 +558,11 @@ export class SessionStore {
 		dispatch(id, { op: 'command', input: '/resume' });
 	}
 
-	/** Snapshot of the layout + open tabs for persistence. The backend id is
-	 *  only written when it isn't the default, so pre-existing layouts stay
-	 *  byte-identical. */
+	/** Snapshot of the layout + open tabs for persistence. Every session is
+	 *  written (empty windows survive a workspace switch under their desktop
+	 *  id); `sid` only when the engine actually persisted the conversation —
+	 *  never `/resume` one it didn't. The backend id is only written when it
+	 *  isn't the default, so pre-existing layouts stay byte-identical. */
 	serialize(): SavedProject[] {
 		return this.projects.map((p) => ({
 			id: p.id,
@@ -539,9 +572,9 @@ export class SessionStore {
 			...(p.lastBackend && p.lastBackend !== 'jucode' ? { lastBackend: p.lastBackend } : {}),
 			...(p.lastBackend === 'acp' && p.lastAcpAgent ? { lastAcpAgent: p.lastAcpAgent } : {}),
 			tabs: p.sessions
-				.filter((s) => s.chat.resumable)
 				.map((s) => ({
-					sid: s.chat.sessionId,
+					id: s.id,
+					...(s.chat.resumable ? { sid: s.chat.sessionId } : {}),
 					title: s.chat.title,
 					...(s.backendId !== 'jucode' ? { backend: s.backendId } : {}),
 					...(s.archived ? { archived: true } : {}),
@@ -582,15 +615,21 @@ export class SessionStore {
 				this.projects.push(proj);
 				if (proj.stale) continue;
 				for (const t of p.tabs ?? []) {
-					if (!t.sid) continue;
+					if (!t.sid && !t.id) continue;
 					// Tabs saved before multi-backend support carry no backend field →
 					// jucode (normalizeBackendId maps unknown/missing to the default).
 					// Chrome fields are re-validated here (the file is user-editable).
-					const id = this.restoreSession(proj, t.sid, t.title, normalizeBackendId(t.backend), !!t.archived, {
+					const backend = normalizeBackendId(t.backend);
+					const chrome = {
 						color: normalizeColor(t.color),
 						icon: parseTabIcon(t.icon),
 						titleLocked: !!t.titleLocked
-					});
+					};
+					// With a conversation to resume, resume it; an empty window spawns
+					// fresh. Both keep the saved desktop id (pre-id files mint anew).
+					const id = t.sid
+						? this.restoreSession(proj, t.sid, t.title, backend, !!t.archived, chrome, t.id)
+						: this.#spawnSaved(proj, t.id!, t.title, backend, !!t.archived, chrome);
 					if (!first && !t.archived) first = id;
 				}
 			}

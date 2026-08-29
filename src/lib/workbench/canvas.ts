@@ -57,8 +57,10 @@ export function openChatTab(
 
 /**
  * Build the canvas from a persisted layout blob when a workspace loads:
- * - chat tiles whose session no longer exists this run are dropped (session
- *   ids are minted per run, so most restarts land here);
+ * - chat tiles whose session is not live are dropped — desktop session ids
+ *   are stable across restore when the saved tabs carry `id` (see
+ *   SavedProject.tabs), so only truly missing sessions (and legacy files
+ *   saved without ids) lose their tile;
  * - a layout left without any chat tile gets one seeded for `seedSessionId` —
  *   an old dock-only layout keeps its panel arrangement and gains a chat leaf
  *   on the left (the pre-canvas shape, chat | panels);

@@ -83,6 +83,16 @@ describe('reconcileLayout', () => {
 		expect(chatSessionsIn(next)).toEqual(['live']);
 	});
 
+	it('keeps a persisted 2-chat split intact when both session ids are live', () => {
+		// Restore with persisted tab ids re-spawns sessions under the same ids,
+		// so a workspace switch (or restart) must not collapse the split.
+		const base = singleLeafLayout([chatTab('live-a')]);
+		const split = splitLeaf(base, leavesOf(base.root)[0].id, 'right', chatTab('live-b')).layout;
+		const next = reconcileLayout(serializeLayout(split), ['live-a', 'live-b'], 'live-a');
+		expect(next).toEqual(split);
+		expect(chatSessionsIn(next)).toEqual(['live-a', 'live-b']);
+	});
+
 	it('re-seeds one chat leaf when every persisted chat session is dead', () => {
 		const layout = openChatTab(dockOnlyLayout(), null, 'old-run');
 		const next = reconcileLayout(serializeLayout(layout), ['fresh'], 'fresh');

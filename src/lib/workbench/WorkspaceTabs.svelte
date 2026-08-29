@@ -14,6 +14,7 @@
 		workspaces,
 		activeId,
 		shifted = false,
+		busy = false,
 		onSwitch,
 		onNew,
 		onRename,
@@ -24,6 +25,8 @@
 		activeId: string;
 		/** Sidebar hidden: pad past the traffic lights / toggle overlay. */
 		shifted?: boolean;
+		/** A workspace swap is in flight: ignore switch / new / delete clicks. */
+		busy?: boolean;
 		onSwitch: (id: string) => void;
 		onNew: () => void;
 		onRename: (id: string, name: string) => void;
@@ -77,8 +80,8 @@
 				tabindex="0"
 				aria-selected={w.id === activeId}
 				title={w.isDefault ? t('shell.workspace.defaultBadge') : w.name}
-				onclick={() => renaming !== w.id && onSwitch(w.id)}
-				onkeydown={(e) => e.key === 'Enter' && onSwitch(w.id)}
+				onclick={() => !busy && renaming !== w.id && onSwitch(w.id)}
+				onkeydown={(e) => e.key === 'Enter' && !busy && onSwitch(w.id)}
 				oncontextmenu={(e) => openMenu(w, e)}
 			>
 				<TabGlyph
@@ -103,7 +106,7 @@
 				{/if}
 				<button
 					class="wsbtn chev"
-					aria-label="workspace menu"
+					aria-label={t('shell.workspace.menu')}
 					title={t('shell.workspace.menu')}
 					onclick={(e) => {
 						e.stopPropagation();
@@ -116,8 +119,9 @@
 				{#if !w.isDefault}
 					<button
 						class="wsbtn close"
-						aria-label="delete workspace"
+						aria-label={t('shell.workspace.delete')}
 						title={t('shell.workspace.delete')}
+						disabled={busy}
 						onclick={(e) => {
 							e.stopPropagation();
 							onDelete(w.id);
@@ -129,7 +133,7 @@
 				{/if}
 			</div>
 		{/each}
-		<button class="wsadd" aria-label="new workspace" title={t('shell.workspace.new')} onclick={onNew}>
+		<button class="wsadd" aria-label={t('shell.workspace.new')} title={t('shell.workspace.new')} disabled={busy} onclick={onNew}>
 			<Plus size={13} />
 		</button>
 	</div>

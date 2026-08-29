@@ -63,7 +63,8 @@ export function sanitizeSvg(markup: string): string | null {
 			const name = a[1].toLowerCase();
 			if (name.startsWith('on') || !SVG_ATTRS.has(name)) return null;
 			const value = (a[2] ?? a[3] ?? a[4] ?? '').toLowerCase();
-			if (value.includes('javascript:') || value.includes('data:')) return null;
+			// url(...) paint servers can reference external resources.
+			if (value.includes('javascript:') || value.includes('data:') || value.includes('url(')) return null;
 		}
 	}
 	if (/[<>]/.test(s.slice(last))) return null;

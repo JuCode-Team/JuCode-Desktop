@@ -67,13 +67,13 @@ describe('SessionStore lifecycle', () => {
 		const store = new SessionStore();
 		const p = proj();
 		store.projects.push(p);
-		store.addSession(p);
+		const id = store.addSession(p);
 		p.sessions[0].chat.sessionId = 'sid-0';
 		p.sessions[0].chat.title = 'kept';
 		p.sessions[0].chat.messages.push({ kind: 'user', text: 'hi' });
-		store.archiveSession(p.sessions[0].id);
+		store.archiveSession(id);
 		const snap = store.serialize();
-		expect(snap[0].tabs).toEqual([{ sid: 'sid-0', title: 'kept', archived: true }]);
+		expect(snap[0].tabs).toEqual([{ id, sid: 'sid-0', title: 'kept', archived: true }]);
 	});
 
 	it('a flagged resume failure makes the next claude restart come up fresh', () => {
@@ -149,21 +149,31 @@ describe('SessionStore lifecycle', () => {
 		expect(msgs[msgs.length - 1]).toMatchObject({ kind: 'error', text: expect.stringContaining('已暂停自动重启') });
 	});
 
-	it('serialize keeps only resumable tabs (session id + a real turn)', () => {
+	it('serialize writes every tab with its desktop id; sid only when resumable', () => {
 		const store = new SessionStore();
 		const p = proj();
 		store.projects.push(p);
 		store.addSession(p);
 		store.addSession(p);
-		p.sessions[0].chat.sessionId = 'sid-0';
-		p.sessions[0].chat.title = 'first';
-		p.sessions[0].chat.messages.push({ kind: 'user', text: 'hi' });
-		// second session has an id but no user turn → never persisted by the engine,
-		// so it's dropped (resuming it would fail with "No such file").
-		p.sessions[1].chat.sessionId = 'sid-1';
+		const [a, b] = p.sessions;
+		a.chat.sessionId = 'sid-0';
+		a.chat.title = 'first';
+		a.chat.messages.push({ kind: 'user', text: 'hi' });
+		// second session has an engine id but no user turn → never persisted by
+		// the engine, so no sid is written (resuming it would fail); the tab
+		// still survives as an empty window under its desktop id.
+		b.chat.sessionId = 'sid-1';
 		const snap = store.serialize();
 		expect(snap).toEqual([
-			{ id: 'p1', name: 'p1', path: '/tmp/p1', tabs: [{ sid: 'sid-0', title: 'first' }] }
+			{
+				id: 'p1',
+				name: 'p1',
+				path: '/tmp/p1',
+				tabs: [
+					{ id: a.id, sid: 'sid-0', title: 'first' },
+					{ id: b.id, title: 'New session' }
+				]
+			}
 		]);
 	});
 
@@ -186,6 +196,46 @@ describe('SessionStore lifecycle', () => {
 		expect(store.loaded).toBe(true);
 	});
 
+	it('restore reuses persisted desktop ids so a saved chat split still matches', async () => {
+		const store = new SessionStore();
+		await store.restore([
+			{
+				id: 'p1',
+				name: 'p1',
+				path: '/tmp/p1',
+				tabs: [
+					{ id: 'live-a', sid: 's-a', title: 'A' },
+					{ id: 'live-b', title: 'B' } // empty window — nothing to resume
+				]
+			}
+		]);
+		expect(store.projects[0].sessions.map((s) => s.id)).toEqual(['live-a', 'live-b']);
+		expect(store.activeId).toBe('live-a');
+		await Promise.resolve(); // let the spawn continuations run
+		// The resumable tab resumes; the empty one spawns fresh with no /resume.
+		expect(sendOp).toHaveBeenCalledWith('live-a', { op: 'command', input: '/resume s-a' });
+		expect(sendOp).not.toHaveBeenCalledWith('live-b', expect.anything());
+		expect(store.projects[0].sessions[1].chat.title).toBe('B');
+	});
+
+	it('restore mints a fresh id when the persisted one is already live', async () => {
+		const store = new SessionStore();
+		await store.restore([
+			{
+				id: 'p1',
+				name: 'p1',
+				path: '/tmp/p1',
+				tabs: [
+					{ id: 'dup', sid: 's-a', title: 'A' },
+					{ id: 'dup', sid: 's-b', title: 'B' }
+				]
+			}
+		]);
+		const ids = store.projects[0].sessions.map((s) => s.id);
+		expect(ids[0]).toBe('dup');
+		expect(ids[1]).not.toBe('dup');
+	});
+
 	it('serialize includes tab chrome only when set, and restore re-applies it', async () => {
 		const store = new SessionStore();
 		const p = proj();
@@ -198,6 +248,7 @@ describe('SessionStore lifecycle', () => {
 		const snap = store.serialize();
 		expect(snap[0].tabs).toEqual([
 			{
+				id,
 				sid: 'sid-0',
 				title: 'Release train',
 				color: '#db2777',
