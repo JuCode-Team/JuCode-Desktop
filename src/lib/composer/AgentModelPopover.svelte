@@ -112,12 +112,18 @@
 	// actually arrow-keyed — never on the default/active selection. With no
 	// focus the column falls back to the currently active model.
 	let hoverIdx = $state<number | null>(null);
+	let rowsEl: HTMLDivElement;
+	let effortColumnEl: HTMLDivElement;
 	const chipIdx = $derived(effortColumnIdx(rows, hoverIdx, keyNav, selIdx));
 	const chipRow = $derived(chipIdx !== null ? rows[chipIdx] : null);
 	function hoverRow(i: number) {
 		hoverIdx = i;
 		selIdx = i;
 		keyNav = false;
+	}
+	function clearHoverUnlessEntering(event: MouseEvent, destination: HTMLElement) {
+		const next = event.relatedTarget;
+		if (!(next instanceof Node) || !destination.contains(next)) hoverIdx = null;
 	}
 </script>
 
@@ -169,7 +175,12 @@
 					<input bind:value={query} placeholder={t('shell.pickerSearchPlaceholder')} autofocus />
 				</div>
 			{/if}
-			<div class="rows" role="presentation" onmouseleave={() => (hoverIdx = null)}>
+			<div
+				class="rows"
+				role="presentation"
+				bind:this={rowsEl}
+				onmouseleave={(event) => clearHoverUnlessEntering(event, effortColumnEl)}
+			>
 				{#each rows as row, i (row.id)}
 					{#if row.group && (i === 0 || rows[i - 1]?.group !== row.group)}
 						<div class="row-group">{row.group}</div>
@@ -195,7 +206,13 @@
 		<!-- Reserved-width effort column: content swaps with the focused row but
 		     the column itself never appears/disappears, so the popover width and
 		     the model rows' heights stay put. -->
-		<div class="effcol" role="group" aria-label={t('chat.effortTitle')}>
+		<div
+			class="effcol"
+			role="group"
+			aria-label={t('chat.effortTitle')}
+			bind:this={effortColumnEl}
+			onmouseleave={(event) => clearHoverUnlessEntering(event, rowsEl)}
+		>
 			<span class="effcap">{t('chat.effortTitle')}</span>
 			{#if chipRow && chipEfforts(chipRow).length}
 				{@const row = chipRow}
