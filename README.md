@@ -43,7 +43,7 @@ WebView (Svelte)  ──invoke('send_op', …)──▶  src-tauri (Rust)  ─�
 - **Setup wizard** — first-run environment check (git + engine), guided/auto install,
   JuCode OAuth login or API-key path; **logout** per provider in settings.
 - **Branch tree** (`/tree`), **resume** (`/resume`), **model picker** (`/model`),
-  context/cost ring, skills marketplace.
+  context/cost ring, combined [JuCode + Anthropic skills marketplace](docs/skills.md).
 - **Theming** — system / light / dark; image paste & drag-drop; desktop notifications.
 
 Keyboard: `⌘K` palette · `⌘F` find · `⌘N` new session · `⌘B` toggle panel · `⌘,` settings.

@@ -1,21 +1,24 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { X, Search, Download, LoaderCircle, RefreshCw } from 'lucide-svelte';
-	import { fetchMarketplace, type MarketSkill } from '$lib/protocol';
-	import { dispatch } from '$lib/backends/router';
+	import { X, Search, Download, LoaderCircle, RefreshCw, Check } from 'lucide-svelte';
+	import { fetchMarketplace, installMarketplaceSkill, type MarketSkill } from '$lib/protocol';
+	import type { BackendId } from '$lib/backends';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import Chip from '$lib/ui/Chip.svelte';
 	import { focusTrap } from '$lib/focusTrap';
 	import { t } from '$lib/i18n';
 
-	let { sessionId, onClose }: { sessionId: string; onClose: () => void } = $props();
+	let { backend, onClose }: { backend: BackendId; onClose: () => void } = $props();
 
 	let skills = $state<MarketSkill[]>([]);
 	let loading = $state(true);
 	let error = $state('');
+	let warnings = $state<string[]>([]);
+	let installDir = $state('');
 	let query = $state('');
 	let tag = $state('');
+	let source = $state<'all' | 'jucode' | 'anthropic' | 'installed'>('all');
 	let installing = $state<Record<string, boolean>>({});
 
 	const tags = $derived([...new Set(skills.flatMap((s) => s.tags))].sort());
@@ -24,15 +27,22 @@
 			const q = query.trim().toLowerCase();
 			const matchQ = !q || s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q) || s.id.toLowerCase().includes(q);
 			const matchT = !tag || s.tags.includes(tag);
-			return matchQ && matchT;
+			const matchSource =
+				source === 'all' ||
+				(source === 'installed' ? s.installed : s.source === source);
+			return matchQ && matchT && matchSource;
 		})
 	);
 
 	async function load() {
 		loading = true;
 		error = '';
+		warnings = [];
 		try {
-			skills = await fetchMarketplace();
+			const catalog = await fetchMarketplace(backend);
+			skills = catalog.skills;
+			warnings = catalog.warnings;
+			installDir = catalog.installDir;
 		} catch (e) {
 			error = String(e);
 		} finally {
@@ -41,10 +51,18 @@
 	}
 	onMount(load);
 
-	function install(s: MarketSkill) {
-		installing[s.id] = true;
-		dispatch(sessionId, { op: 'command', input: `/skills install ${s.id}` });
-		setTimeout(() => (installing[s.id] = false), 2500);
+	async function install(s: MarketSkill) {
+		const key = `${s.source}:${s.id}`;
+		installing[key] = true;
+		error = '';
+		try {
+			await installMarketplaceSkill(s.source, s.id, backend);
+			s.installed = true;
+		} catch (e) {
+			error = String(e);
+		} finally {
+			installing[key] = false;
+		}
 	}
 </script>
 
@@ -67,9 +85,16 @@
 			<Button variant="secondary" size="icon" onclick={load} title={t('settings.usage.refresh')}><RefreshCw size={14} /></Button>
 		</div>
 
+		<div class="chips sources" aria-label={t('settings.marketplace.sourceFilter')}>
+			<Chip selected={source === 'all'} onclick={() => (source = 'all')}>{t('settings.marketplace.all')}</Chip>
+			<Chip selected={source === 'jucode'} onclick={() => (source = 'jucode')}>JuCode</Chip>
+			<Chip selected={source === 'anthropic'} onclick={() => (source = 'anthropic')}>Anthropic</Chip>
+			<Chip selected={source === 'installed'} onclick={() => (source = 'installed')}>{t('settings.marketplace.installed')}</Chip>
+		</div>
+
 		{#if tags.length}
-			<div class="chips">
-				<Chip selected={tag === ''} onclick={() => (tag = '')}>{t('settings.marketplace.all')}</Chip>
+			<div class="chips tags">
+				<Chip selected={tag === ''} onclick={() => (tag = '')}>{t('settings.marketplace.allTags')}</Chip>
 				{#each tags as tg (tg)}
 					<Chip selected={tag === tg} onclick={() => (tag = tg)}>{tg}</Chip>
 				{/each}
@@ -79,32 +104,45 @@
 		<div class="body">
 			{#if loading}
 				<div class="state"><LoaderCircle size={20} class="spin" /> {t('common.loading')}</div>
-			{:else if error}
-				<div class="state err">{error.includes('401') || error.toLowerCase().includes('unauth') ? t('settings.marketplace.needLogin') : t('settings.marketplace.loadFailed', { error })}</div>
-			{:else if filtered.length === 0}
-				<div class="state">{t('settings.marketplace.noMatch')}</div>
 			{:else}
-				<div class="grid">
-					{#each filtered as s (s.id)}
-						<div class="card">
-							<div class="card-top">
-								<span class="name">{s.name}</span>
-								{#if s.isDefault}<span class="badge">{t('settings.account.default')}</span>{/if}
-							</div>
-							<p class="desc">{s.description}</p>
-							<div class="card-foot">
-								<div class="tagrow">
-									{#each s.tags.slice(0, 3) as tg (tg)}<span class="t">{tg}</span>{/each}
+				{#if error}<div class="notice err">{t('settings.marketplace.loadFailed', { error })}</div>{/if}
+				{#each warnings as warning (warning)}
+					<div class="notice warn">{warning.includes('401') || warning.toLowerCase().includes('unauth') ? t('settings.marketplace.needLogin') : warning}</div>
+				{/each}
+				<div class="license-note">{t('settings.marketplace.licenseNotice')}</div>
+				{#if filtered.length === 0}
+					<div class="state">{t('settings.marketplace.noMatch')}</div>
+				{:else}
+					<div class="grid">
+						{#each filtered as s (`${s.source}:${s.id}`)}
+							<div class="card">
+								<div class="card-top">
+									<span class="name">{s.name}</span>
+									<span class="source">{s.source === 'anthropic' ? 'Anthropic' : 'JuCode'}</span>
+									{#if s.isDefault}<span class="badge">{t('settings.account.default')}</span>{/if}
 								</div>
-								<Button variant="primary" size="sm" disabled={installing[s.id]} onclick={() => install(s)}>
-									{#if installing[s.id]}<LoaderCircle size={14} class="spin" /> {t('settings.marketplace.installing')}{:else}<Download size={14} /> {t('settings.marketplace.install')}{/if}
-								</Button>
+								<p class="desc">{s.description}</p>
+								{#if !s.redistributable}<p class="restricted">{t('settings.marketplace.sourceAvailable')}</p>{/if}
+								<div class="card-foot">
+									<div class="tagrow">
+										{#each s.tags.slice(0, 3) as tg (tg)}<span class="t">{tg}</span>{/each}
+									</div>
+									<Button
+										variant={s.installed ? 'secondary' : 'primary'}
+										size="sm"
+										disabled={s.installed || installing[`${s.source}:${s.id}`]}
+										onclick={() => install(s)}
+									>
+										{#if installing[`${s.source}:${s.id}`]}<LoaderCircle size={14} class="spin" /> {t('settings.marketplace.installing')}{:else if s.installed}<Check size={14} /> {t('settings.marketplace.installed')}{:else}<Download size={14} /> {t('settings.marketplace.install')}{/if}
+									</Button>
+								</div>
 							</div>
-						</div>
-					{/each}
-				</div>
+						{/each}
+					</div>
+				{/if}
 			{/if}
 		</div>
+		{#if installDir}<div class="install-dir">{t('settings.marketplace.installDir', { path: installDir })}</div>{/if}
 	</div>
 </div>
 
@@ -180,7 +218,37 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 6px;
-		padding: 4px 20px 10px;
+		padding: 4px 20px;
+	}
+	.chips.sources {
+		padding-top: 2px;
+	}
+	.chips.tags {
+		padding-bottom: 10px;
+	}
+	.license-note {
+		margin: 0 0 12px;
+		padding: 9px 11px;
+		border: 1px solid var(--hairline);
+		border-radius: var(--r-md);
+		background: var(--surface2);
+		color: var(--dim);
+		font-size: 11.5px;
+		line-height: 1.45;
+	}
+	.notice {
+		margin: 0 0 8px;
+		padding: 8px 10px;
+		border-radius: var(--r-md);
+		font-size: 12px;
+	}
+	.notice.warn {
+		color: var(--warn);
+		background: color-mix(in oklab, var(--warn) 10%, transparent);
+	}
+	.notice.err {
+		color: var(--err);
+		background: color-mix(in oklab, var(--err) 10%, transparent);
 	}
 	.body {
 		flex: 1;
@@ -221,8 +289,12 @@
 		border-radius: 999px;
 		padding: 1px 8px;
 	}
+	.source {
+		font-size: 10px;
+		color: var(--dim2);
+	}
 	.desc {
-		margin: 8px 0 12px;
+		margin: 8px 0 10px;
 		font-size: 12.5px;
 		line-height: 1.5;
 		color: var(--dim);
@@ -232,6 +304,12 @@
 		line-clamp: 3;
 		-webkit-box-orient: vertical;
 		overflow: hidden;
+	}
+	.restricted {
+		margin: -2px 0 10px;
+		color: var(--warn);
+		font-size: 10.5px;
+		line-height: 1.35;
 	}
 	.card-foot {
 		display: flex;
@@ -263,7 +341,15 @@
 		font-size: 14px;
 		text-align: center;
 	}
-	.state.err {
-		color: var(--err);
+	.install-dir {
+		flex-shrink: 0;
+		padding: 8px 20px;
+		border-top: 1px solid var(--hairline);
+		color: var(--dim2);
+		font-family: var(--font-mono);
+		font-size: 10.5px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 </style>

@@ -1,0 +1,198 @@
+{
+  "schema_version": 1,
+  "repository": "https://github.com/anthropics/skills",
+  "ref": "main",
+  "tree_url": "https://api.github.com/repos/anthropics/skills/git/trees/main?recursive=1",
+  "skills": [
+    {
+      "id": "academy-guide",
+      "name": "Academy Guide",
+      "description": "Recommends relevant Claude Academy courses, tutorials, and use cases.",
+      "tags": ["education", "guidance"],
+      "skill_url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/academy-guide/SKILL.md",
+      "homepage": "https://github.com/anthropics/skills/tree/main/skills/academy-guide",
+      "license": "Apache-2.0",
+      "redistributable": true
+    },
+    {
+      "id": "algorithmic-art",
+      "name": "Algorithmic Art",
+      "description": "Creates generative art with deterministic randomness and interactive parameters.",
+      "tags": ["creative", "design"],
+      "skill_url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/algorithmic-art/SKILL.md",
+      "homepage": "https://github.com/anthropics/skills/tree/main/skills/algorithmic-art",
+      "license": "Apache-2.0",
+      "redistributable": true
+    },
+    {
+      "id": "brand-guidelines",
+      "name": "Brand Guidelines",
+      "description": "Applies Anthropic brand colors, typography, and visual identity to artifacts.",
+      "tags": ["creative", "brand"],
+      "skill_url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/brand-guidelines/SKILL.md",
+      "homepage": "https://github.com/anthropics/skills/tree/main/skills/brand-guidelines",
+      "license": "Apache-2.0",
+      "redistributable": true
+    },
+    {
+      "id": "canvas-design",
+      "name": "Canvas Design",
+      "description": "Creates polished static visual designs in PNG and PDF formats.",
+      "tags": ["creative", "design"],
+      "skill_url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/canvas-design/SKILL.md",
+      "homepage": "https://github.com/anthropics/skills/tree/main/skills/canvas-design",
+      "license": "Apache-2.0",
+      "redistributable": true
+    },
+    {
+      "id": "claude-api",
+      "name": "Claude API",
+      "description": "Provides current Claude API and SDK guidance for building applications.",
+      "tags": ["development", "api"],
+      "skill_url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/claude-api/SKILL.md",
+      "homepage": "https://github.com/anthropics/skills/tree/main/skills/claude-api",
+      "license": "Apache-2.0",
+      "redistributable": true
+    },
+    {
+      "id": "discernment-nudge",
+      "name": "Discernment Nudge",
+      "description": "Adds concise follow-up questions that help check facts and probe reasoning.",
+      "tags": ["communication", "reasoning"],
+      "skill_url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/discernment-nudge/SKILL.md",
+      "homepage": "https://github.com/anthropics/skills/tree/main/skills/discernment-nudge",
+      "license": "Apache-2.0",
+      "redistributable": true
+    },
+    {
+      "id": "doc-coauthoring",
+      "name": "Document Coauthoring",
+      "description": "Guides a structured workflow for collaboratively drafting documentation.",
+      "tags": ["documents", "communication"],
+      "skill_url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/doc-coauthoring/SKILL.md",
+      "homepage": "https://github.com/anthropics/skills/tree/main/skills/doc-coauthoring",
+      "license": "Apache-2.0",
+      "redistributable": true
+    },
+    {
+      "id": "docx",
+      "name": "Word Documents",
+      "description": "Creates, reads, edits, and validates Word documents and templates.",
+      "tags": ["documents", "source-available"],
+      "skill_url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/docx/SKILL.md",
+      "homepage": "https://github.com/anthropics/skills/tree/main/skills/docx",
+      "license": "Anthropic source-available",
+      "redistributable": false
+    },
+    {
+      "id": "frontend-design",
+      "name": "Frontend Design",
+      "description": "Guides distinctive, intentional visual design for web interfaces.",
+      "tags": ["development", "design"],
+      "skill_url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/frontend-design/SKILL.md",
+      "homepage": "https://github.com/anthropics/skills/tree/main/skills/frontend-design",
+      "license": "Apache-2.0",
+      "redistributable": true
+    },
+    {
+      "id": "internal-comms",
+      "name": "Internal Communications",
+      "description": "Provides patterns for status updates, newsletters, FAQs, and internal writing.",
+      "tags": ["enterprise", "communication"],
+      "skill_url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/internal-comms/SKILL.md",
+      "homepage": "https://github.com/anthropics/skills/tree/main/skills/internal-comms",
+      "license": "Apache-2.0",
+      "redistributable": true
+    },
+    {
+      "id": "mcp-builder",
+      "name": "MCP Builder",
+      "description": "Guides creation of reliable Model Context Protocol servers.",
+      "tags": ["development", "mcp"],
+      "skill_url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/mcp-builder/SKILL.md",
+      "homepage": "https://github.com/anthropics/skills/tree/main/skills/mcp-builder",
+      "license": "Apache-2.0",
+      "redistributable": true
+    },
+    {
+      "id": "pdf",
+      "name": "PDF Documents",
+      "description": "Creates, reads, edits, combines, and validates PDF documents.",
+      "tags": ["documents", "source-available"],
+      "skill_url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/pdf/SKILL.md",
+      "homepage": "https://github.com/anthropics/skills/tree/main/skills/pdf",
+      "license": "Anthropic source-available",
+      "redistributable": false
+    },
+    {
+      "id": "pptx",
+      "name": "PowerPoint Presentations",
+      "description": "Creates, edits, renders, and validates PowerPoint presentations.",
+      "tags": ["documents", "source-available"],
+      "skill_url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/pptx/SKILL.md",
+      "homepage": "https://github.com/anthropics/skills/tree/main/skills/pptx",
+      "license": "Anthropic source-available",
+      "redistributable": false
+    },
+    {
+      "id": "skill-creator",
+      "name": "Skill Creator",
+      "description": "Guides creation and improvement of reusable Agent Skills.",
+      "tags": ["development", "skills"],
+      "skill_url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/skill-creator/SKILL.md",
+      "homepage": "https://github.com/anthropics/skills/tree/main/skills/skill-creator",
+      "license": "Apache-2.0",
+      "redistributable": true
+    },
+    {
+      "id": "slack-gif-creator",
+      "name": "Slack GIF Creator",
+      "description": "Creates compact animated GIFs optimized for Slack.",
+      "tags": ["creative", "communication"],
+      "skill_url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/slack-gif-creator/SKILL.md",
+      "homepage": "https://github.com/anthropics/skills/tree/main/skills/slack-gif-creator",
+      "license": "Apache-2.0",
+      "redistributable": true
+    },
+    {
+      "id": "theme-factory",
+      "name": "Theme Factory",
+      "description": "Applies cohesive color and typography themes to generated artifacts.",
+      "tags": ["creative", "design"],
+      "skill_url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/theme-factory/SKILL.md",
+      "homepage": "https://github.com/anthropics/skills/tree/main/skills/theme-factory",
+      "license": "Apache-2.0",
+      "redistributable": true
+    },
+    {
+      "id": "web-artifacts-builder",
+      "name": "Web Artifacts Builder",
+      "description": "Builds complex interactive web artifacts with modern frontend tooling.",
+      "tags": ["development", "web"],
+      "skill_url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/web-artifacts-builder/SKILL.md",
+      "homepage": "https://github.com/anthropics/skills/tree/main/skills/web-artifacts-builder",
+      "license": "Apache-2.0",
+      "redistributable": true
+    },
+    {
+      "id": "webapp-testing",
+      "name": "Web App Testing",
+      "description": "Tests local web applications with browser automation and screenshots.",
+      "tags": ["development", "testing"],
+      "skill_url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/webapp-testing/SKILL.md",
+      "homepage": "https://github.com/anthropics/skills/tree/main/skills/webapp-testing",
+      "license": "Apache-2.0",
+      "redistributable": true
+    },
+    {
+      "id": "xlsx",
+      "name": "Excel Spreadsheets",
+      "description": "Creates, edits, recalculates, and analyzes spreadsheet workbooks.",
+      "tags": ["documents", "source-available"],
+      "skill_url": "https://raw.githubusercontent.com/anthropics/skills/main/skills/xlsx/SKILL.md",
+      "homepage": "https://github.com/anthropics/skills/tree/main/skills/xlsx",
+      "license": "Anthropic source-available",
+      "redistributable": false
+    }
+  ]
+}
