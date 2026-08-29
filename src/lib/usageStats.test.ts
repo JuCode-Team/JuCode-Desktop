@@ -62,6 +62,33 @@ describe('recordUsage', () => {
 		expect(m.getDailyUsage()).toEqual({});
 	});
 
+	it('ignores invalid token counts without poisoning valid totals', async () => {
+		const m = await fresh();
+		m.recordUsage(Number.NaN, 4, { provider: 'openai', model: 'gpt-6', agent: 'codex' });
+		m.recordUsage(Number.POSITIVE_INFINITY, -2, {
+			provider: 'invalid',
+			model: 'invalid',
+			agent: 'invalid'
+		});
+		const day = m.getDailyUsage()[m.dayKey(new Date())];
+		expect(day).toEqual({
+			in: 0,
+			out: 4,
+			prov: { openai: { in: 0, out: 4 } },
+			models: { 'gpt-6': { in: 0, out: 4 } },
+			agents: { codex: { in: 0, out: 4 } }
+		});
+	});
+
+	it('records keys that match object prototype properties', async () => {
+		const m = await fresh();
+		m.recordUsage(10, 1, { provider: 'constructor', model: '__proto__', agent: 'toString' });
+		const day = m.getDailyUsage()[m.dayKey(new Date())];
+		expect(Object.entries(day.prov!)).toEqual([['constructor', { in: 10, out: 1 }]]);
+		expect(Object.entries(day.models!)).toEqual([['__proto__', { in: 10, out: 1 }]]);
+		expect(Object.entries(day.agents!)).toEqual([['toString', { in: 10, out: 1 }]]);
+	});
+
 	it('stores agent display labels for stable keys', async () => {
 		const m = await fresh();
 		m.recordUsage(10, 1, { agent: 'acp:gemini-cli', agentLabel: 'Gemini CLI' });
@@ -110,12 +137,26 @@ describe('load compatibility', () => {
 			'jucode-usage-daily': JSON.stringify({
 				'not-a-day': { in: 99, out: 99 },
 				'2026-1-2': { in: 99, out: 99 },
-				'2026-01-02': { in: 'x', out: 5, models: { m1: { in: 'y', out: 1 } } }
+				'2026-01-02': {
+					in: '1e400',
+					out: 5,
+					models: {
+						m1: { in: 'y', out: 1 },
+						'  ': { in: 20, out: 2 },
+						invalid: { in: 'Infinity', out: -1 }
+					},
+					agentLabels: { ' acp:x ': ' New name ', '': 'junk', 'acp:y': '   ' }
+				}
 			})
 		});
 		const usage = m.getDailyUsage();
 		expect(Object.keys(usage)).toEqual(['2026-01-02']);
-		expect(usage['2026-01-02']).toEqual({ in: 0, out: 5, models: { m1: { in: 0, out: 1 } } });
+		expect(usage['2026-01-02']).toEqual({
+			in: 0,
+			out: 5,
+			models: { m1: { in: 0, out: 1 } },
+			agentLabels: { 'acp:x': 'New name' }
+		});
 	});
 
 	it('starts empty when the stored JSON is corrupt', async () => {

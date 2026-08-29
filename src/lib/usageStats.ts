@@ -35,6 +35,22 @@ export interface UsageMeta {
 let cache: Record<string, DayUsage> | null = null;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
+function tokenCount(v: unknown): number {
+	const n = typeof v === 'number' || typeof v === 'string' ? Number(v) : 0;
+	return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
+function ownUsage(map: Record<string, DimUsage>, key: string): DimUsage {
+	if (Object.prototype.hasOwnProperty.call(map, key)) return map[key];
+	const usage = { in: 0, out: 0 };
+	Object.defineProperty(map, key, { value: usage, enumerable: true, configurable: true, writable: true });
+	return usage;
+}
+
+function setOwnLabel(map: Record<string, string>, key: string, label: string) {
+	Object.defineProperty(map, key, { value: label, enumerable: true, configurable: true, writable: true });
+}
+
 export function dayKey(d: Date): string {
 	const m = `${d.getMonth() + 1}`.padStart(2, '0');
 	const day = `${d.getDate()}`.padStart(2, '0');
@@ -44,9 +60,17 @@ export function dayKey(d: Date): string {
 function readDim(v: unknown): Record<string, DimUsage> | undefined {
 	if (!v || typeof v !== 'object') return undefined;
 	const out: Record<string, DimUsage> = {};
-	for (const [k, e] of Object.entries(v as Record<string, Partial<DimUsage> | null>))
-		out[k] = { in: Number(e?.in) || 0, out: Number(e?.out) || 0 };
-	return out;
+	for (const [rawKey, e] of Object.entries(v as Record<string, Partial<DimUsage> | null>)) {
+		const key = rawKey.trim();
+		if (!key) continue;
+		const inTokens = tokenCount(e?.in);
+		const outTokens = tokenCount(e?.out);
+		if (!inTokens && !outTokens) continue;
+		const usage = ownUsage(out, key);
+		usage.in += inTokens;
+		usage.out += outTokens;
+	}
+	return Object.keys(out).length ? out : undefined;
 }
 
 function load(): Record<string, DayUsage> {
@@ -59,7 +83,7 @@ function load(): Record<string, DayUsage> {
 			for (const [k, v] of Object.entries(parsed)) {
 				const d = v as Partial<DayUsage> | null;
 				if (!/^\d{4}-\d{2}-\d{2}$/.test(k)) continue;
-				const day: DayUsage = { in: Number(d?.in) || 0, out: Number(d?.out) || 0 };
+				const day: DayUsage = { in: tokenCount(d?.in), out: tokenCount(d?.out) };
 				const prov = readDim(d?.prov);
 				if (prov) day.prov = prov;
 				const models = readDim(d?.models);
@@ -67,9 +91,13 @@ function load(): Record<string, DayUsage> {
 				const agents = readDim(d?.agents);
 				if (agents) day.agents = agents;
 				if (d?.agentLabels && typeof d.agentLabels === 'object') {
-					day.agentLabels = {};
-					for (const [ak, al] of Object.entries(d.agentLabels))
-						if (typeof al === 'string' && al) day.agentLabels[ak] = al;
+					const labels: Record<string, string> = {};
+					for (const [rawKey, rawLabel] of Object.entries(d.agentLabels)) {
+						const key = rawKey.trim();
+						const label = typeof rawLabel === 'string' ? rawLabel.trim() : '';
+						if (key && label) setOwnLabel(labels, key, label);
+					}
+					if (Object.keys(labels).length) day.agentLabels = labels;
 				}
 				cache[k] = day;
 			}
@@ -98,24 +126,26 @@ function persist() {
 /** 空白/缺失的 key 归入 'other' 桶。 */
 function bump(map: Record<string, DimUsage>, key: string | undefined, inT: number, outT: number): string {
 	const k = key?.trim() || 'other';
-	const e = (map[k] ??= { in: 0, out: 0 });
+	const e = ownUsage(map, k);
 	e.in += inT;
 	e.out += outT;
 	return k;
 }
 
 export function recordUsage(inTokens: number, outTokens: number, meta?: UsageMeta) {
-	if (!inTokens && !outTokens) return;
+	const inT = tokenCount(inTokens);
+	const outT = tokenCount(outTokens);
+	if (!inT && !outT) return;
 	const map = load();
 	const k = dayKey(new Date());
 	const d = (map[k] ??= { in: 0, out: 0 });
-	d.in += inTokens;
-	d.out += outTokens;
-	bump((d.prov ??= {}), meta?.provider, inTokens, outTokens);
-	bump((d.models ??= {}), meta?.model, inTokens, outTokens);
-	const agentKey = bump((d.agents ??= {}), meta?.agent, inTokens, outTokens);
+	d.in += inT;
+	d.out += outT;
+	bump((d.prov ??= {}), meta?.provider, inT, outT);
+	bump((d.models ??= {}), meta?.model, inT, outT);
+	const agentKey = bump((d.agents ??= {}), meta?.agent, inT, outT);
 	const label = meta?.agentLabel?.trim();
-	if (label && agentKey !== 'other') (d.agentLabels ??= {})[agentKey] = label;
+	if (label && agentKey !== 'other') setOwnLabel((d.agentLabels ??= {}), agentKey, label);
 	persist();
 }
 
@@ -130,7 +160,7 @@ export function sumDimension(days: DayUsage[], dim: UsageDimension): [string, Di
 		const m = d[dim];
 		if (!m) continue;
 		for (const [k, v] of Object.entries(m)) {
-			const e = (acc[k] ??= { in: 0, out: 0 });
+			const e = ownUsage(acc, k);
 			e.in += v.in;
 			e.out += v.out;
 		}
@@ -141,7 +171,10 @@ export function sumDimension(days: DayUsage[], dim: UsageDimension): [string, Di
 /** 汇总各天记录到的 agent 展示名（后出现的覆盖先出现的）。 */
 export function collectAgentLabels(days: DayUsage[]): Record<string, string> {
 	const out: Record<string, string> = {};
-	for (const d of days) if (d.agentLabels) Object.assign(out, d.agentLabels);
+	for (const d of days) {
+		if (!d.agentLabels) continue;
+		for (const [key, label] of Object.entries(d.agentLabels)) setOwnLabel(out, key, label);
+	}
 	return out;
 }
 

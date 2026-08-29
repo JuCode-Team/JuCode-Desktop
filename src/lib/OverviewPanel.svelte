@@ -19,7 +19,8 @@
 		.sort((a, b) => (a[0] < b[0] ? 1 : -1))
 		.slice(0, DETAIL_DAYS);
 	const dayValues = days.map(([, d]) => d);
-	const agentLabels = collectAgentLabels(dayValues);
+	// days is newest-first; merge oldest-first so the latest ACP name wins.
+	const agentLabels = collectAgentLabels([...dayValues].reverse());
 
 	let dim = $state<UsageDimension>('prov');
 
