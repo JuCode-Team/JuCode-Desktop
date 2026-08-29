@@ -28,6 +28,7 @@ const settings = {
 			hint: '各 Provider 独立登录、可同时使用。点卡片登录或查看详情;展开后可设为新会话默认。',
 			default: '默认',
 			custom: '自定义',
+			byok: 'BYOK',
 			authorizing: '授权中…',
 			loggedIn: '已登录',
 			keyed: '已配密钥',
@@ -70,7 +71,23 @@ const settings = {
 			modelName: '模型名',
 			contextWindow: '窗口',
 			create: '创建',
-			add: '添加自定义 Provider'
+			add: '添加 Provider'
+		},
+		catalog: {
+			title: '选择 Provider',
+			hint: '选择后会填好端点、协议和模型列表。你只需粘贴 API key。',
+			search: '搜索 Provider 或模型…',
+			featured: '推荐',
+			modelCount: '{count} 个模型',
+			noMatch: '没有匹配的 Provider',
+			custom: '手动配置',
+			connect: '连接 {provider}',
+			addProvider: '添加 Provider',
+			protocol: {
+				responses: 'Responses',
+				anthropic: 'Anthropic Messages',
+				chat: 'Chat Completions'
+			}
 		},
 		backend: {
 			groupLabel: '引擎后端',
@@ -99,6 +116,8 @@ const settings = {
 			selectModel: '选择模型',
 			noModels: '暂无模型 · 先在「账户」登录或配置 Provider。',
 			notConfigured: '未配置',
+			groupJucode: 'JuCode 内置',
+			groupByok: '自定义 / BYOK',
 			htmlOpen: '对话中点击 HTML 链接时',
 			htmlOpenBrowser: '内置浏览器',
 			htmlOpenEditor: '编辑器',
@@ -280,6 +299,7 @@ const settings = {
 			hint: 'Each provider logs in independently and can be used at the same time. Click a card to log in or view details; expand it to set as the default for new sessions.',
 			default: 'Default',
 			custom: 'Custom',
+			byok: 'BYOK',
 			authorizing: 'Authorizing…',
 			loggedIn: 'Logged in',
 			keyed: 'Key set',
@@ -322,7 +342,23 @@ const settings = {
 			modelName: 'Model name',
 			contextWindow: 'Window',
 			create: 'Create',
-			add: 'Add custom provider'
+			add: 'Add provider'
+		},
+		catalog: {
+			title: 'Choose a provider',
+			hint: 'The endpoint, protocol and model list are filled in for you. Just paste your API key.',
+			search: 'Search providers or models…',
+			featured: 'Featured',
+			modelCount: '{count} models',
+			noMatch: 'No matching providers',
+			custom: 'Set up manually',
+			connect: 'Connect {provider}',
+			addProvider: 'Add provider',
+			protocol: {
+				responses: 'Responses',
+				anthropic: 'Anthropic Messages',
+				chat: 'Chat Completions'
+			}
 		},
 		backend: {
 			groupLabel: 'Engine backends',
@@ -350,6 +386,8 @@ const settings = {
 			defaultModel: 'Default model',
 			selectModel: 'Select a model',
 			noModels: 'No models yet · log in or configure a provider under Account first.',
+			groupJucode: 'JuCode built-in',
+			groupByok: 'Custom / BYOK',
 			htmlOpen: 'Clicking an HTML link in chat',
 			htmlOpenBrowser: 'Built-in browser',
 			htmlOpenEditor: 'Editor',

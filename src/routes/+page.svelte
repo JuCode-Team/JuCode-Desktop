@@ -523,6 +523,20 @@
 		// Mirror the engine's jucode allow-list so we don't offer a model it rejects.
 		const jucodeOk = (n: string) =>
 			['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex', 'gpt-5.2'].includes(n) || n.startsWith('claude-');
+		const groups = {
+			codex: t('shell.modelGroup.codex'),
+			claude: t('shell.modelGroup.claude'),
+			jucode: t('shell.modelGroup.jucode'),
+			byok: t('shell.modelGroup.byok')
+		};
+		const activeGroup =
+			chat?.backendId === 'codex'
+				? groups.codex
+				: chat?.backendId === 'claude'
+					? groups.claude
+					: cur === 'jucode'
+						? groups.jucode
+						: groups.byok;
 		const activeRows = p.models.map((m) => ({
 			id: `${cur}::${m.model}`,
 			label: m.label || m.model,
@@ -530,7 +544,8 @@
 			detail: m.context_window ? `${cur} · ${fmtTokens(m.context_window)}` : cur,
 			active: m.active,
 			command: `/model ${m.model}`,
-			depth: nil
+			depth: nil,
+			group: activeGroup
 		}));
 		// Provider switching rewrites the native engine's global config and
 		// restarts it — meaningful for jucode sessions only. Other backends'
@@ -547,10 +562,14 @@
 						detail: `${pv.id}${providers.includes(pv.id) ? '' : ` · ${t('shell.notConfigured')}`} · ${fmtTokens(m.context_window ?? 0)}`,
 						active: false,
 						command: `@switch ${pv.id} ${m.name}`,
-						depth: nil
+						depth: nil,
+						group: pv.id === 'jucode' ? groups.jucode : groups.byok
 					}))
 			);
-		return [...activeRows, ...otherRows];
+		const groupOrder = [groups.codex, groups.claude, groups.jucode, groups.byok];
+		return [...activeRows, ...otherRows].sort(
+			(a, b) => groupOrder.indexOf(a.group) - groupOrder.indexOf(b.group)
+		);
 	});
 
 	// Whether to offer a filter box (history and other long lists).

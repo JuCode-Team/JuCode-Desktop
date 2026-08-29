@@ -2,7 +2,7 @@
 	import { ChevronDown, Check } from 'lucide-svelte';
 	import type { Snippet } from 'svelte';
 
-	type Opt = { value: string; label?: string } & Record<string, unknown>;
+	type Opt = { value: string; label?: string; group?: string } & Record<string, unknown>;
 	let {
 		value = $bindable(),
 		options,
@@ -40,7 +40,10 @@
 	{#if open}
 		<button class="backdrop" aria-label="close" onclick={() => (open = false)}></button>
 		<div class="menu">
-			{#each options as o (o.value)}
+			{#each options as o, i (o.value)}
+				{#if o.group && (i === 0 || options[i - 1]?.group !== o.group)}
+					<div class="opt-group">{o.group}</div>
+				{/if}
 				<button class="opt" class:on={o.value === value} onclick={() => pick(o.value)}>
 					<span class="opt-c">{#if item}{@render item(o)}{:else}{o.label ?? o.value}{/if}</span>
 					{#if o.value === value}<Check size={14} class="opt-chk" />{/if}
@@ -132,6 +135,18 @@
 		border-radius: var(--r-sm);
 		cursor: pointer;
 		text-align: left;
+	}
+	.opt-group {
+		padding: 8px 9px 4px;
+		color: var(--dim2);
+		font-size: 10px;
+		font-weight: 600;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+	}
+	.opt-group:not(:first-child) {
+		margin-top: 3px;
+		border-top: 1px solid var(--hairline);
 	}
 	.opt:hover {
 		background: var(--surface2);

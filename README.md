@@ -73,6 +73,29 @@ pnpm build        # production frontend build
 pnpm tauri build  # packaged app (bundles the engine sidecar)
 ```
 
+## Provider catalog
+
+Settings uses the vendored snapshot at `src/lib/providers/catalog.json`. It is a
+small, agent-capable subset of [models.dev](https://models.dev), with OpenRouter
+featured for users who want one key across several model vendors. Catalog
+providers use the same local BYOK path as manually configured providers; no
+proxy service is bundled.
+
+Refresh the snapshot when provider endpoints or model lists change:
+
+```sh
+pnpm catalog:refresh
+```
+
+The refresh command reads `https://models.dev/api.json` and therefore needs
+network access. It can also read an already downloaded API response:
+`node scripts/refresh-provider-catalog.mjs ./api.json`. Tests parse only the
+vendored file and never call models.dev.
+
+models.dev is MIT licensed. The generated JSON starts with source and copyright
+attribution; the upstream license is kept in
+`src/lib/providers/models.dev.LICENSE`.
+
 ## Configuration (env vars)
 
 - `JUCODE_BIN` — path to the `jucode` binary (overrides auto-resolution).

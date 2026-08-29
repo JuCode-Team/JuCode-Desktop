@@ -14,6 +14,7 @@
 		active: boolean;
 		command: string;
 		depth: number | undefined;
+		group?: string;
 	};
 
 	let {
@@ -67,6 +68,9 @@
 	{/if}
 	<div class="rows">
 		{#each rows as row, i (row.id)}
+			{#if row.group && (i === 0 || rows[i - 1]?.group !== row.group)}
+				<div class="row-group">{row.group}</div>
+			{/if}
 			<button class="prow" class:sel={i === selIdx} onclick={() => onSelect(row.command)} onmouseenter={() => (selIdx = i)} style:padding-left={row.depth != null ? `${11 + row.depth * 16}px` : null}>
 				{#if chat.picker?.kind === 'model'}<Vendor model={row.vendor ?? row.label} size={15} />{/if}
 				{#if row.depth != null && row.depth > 0}<span class="twig">↳</span>{/if}
@@ -201,6 +205,18 @@
 	.rows {
 		overflow-y: auto;
 		padding: 6px;
+	}
+	.row-group {
+		padding: 8px 11px 4px;
+		color: var(--dim2);
+		font-size: 10px;
+		font-weight: 600;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+	}
+	.row-group:not(:first-child) {
+		margin-top: 3px;
+		border-top: 1px solid var(--hairline);
 	}
 	.prow {
 		display: flex;

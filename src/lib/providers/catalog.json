@@ -1,0 +1,425 @@
+{
+  "_attribution": {
+    "notice": "Curated and transformed from models.dev. See models.dev.LICENSE.",
+    "source": "https://models.dev/api.json",
+    "repository": "https://github.com/anomalyco/models.dev",
+    "license": "MIT",
+    "copyright": "Copyright (c) 2025 models.dev",
+    "license_file": "models.dev.LICENSE",
+    "snapshot_date": "2026-08-29"
+  },
+  "providers": [
+    {
+      "id": "openrouter",
+      "name": "OpenRouter",
+      "description": "Use one key for models from OpenAI, Anthropic, Google, DeepSeek, Qwen, xAI and more.",
+      "base_url": "https://openrouter.ai/api/v1",
+      "protocol": "chat",
+      "docs_url": "https://openrouter.ai/models",
+      "featured": true,
+      "models": [
+        {
+          "name": "openai/gpt-5.6-sol",
+          "context_window": 1050000,
+          "max_output_tokens": 128000,
+          "reasoning_efforts": [
+            "none",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
+        },
+        {
+          "name": "anthropic/claude-opus-5",
+          "context_window": 1000000,
+          "max_output_tokens": 128000,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
+        },
+        {
+          "name": "google/gemini-3.7-flash",
+          "context_window": 1048576,
+          "max_output_tokens": 65536,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "name": "deepseek/deepseek-v4-pro",
+          "context_window": 1048576,
+          "max_output_tokens": 384000,
+          "reasoning_efforts": [
+            "high",
+            "xhigh"
+          ]
+        },
+        {
+          "name": "qwen/qwen3.8-max",
+          "context_window": 1000000,
+          "max_output_tokens": 131072,
+          "reasoning_efforts": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ]
+        },
+        {
+          "name": "z-ai/glm-5.3",
+          "context_window": 1310720,
+          "max_output_tokens": 131072,
+          "reasoning_efforts": [
+            "low",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "name": "x-ai/grok-4.6",
+          "context_window": 500000,
+          "max_output_tokens": 450000,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "description": "Connect directly to OpenAI with the Responses API.",
+      "base_url": "https://api.openai.com/v1",
+      "protocol": "responses",
+      "docs_url": "https://platform.openai.com/docs/models",
+      "featured": false,
+      "models": [
+        {
+          "name": "gpt-5.6-sol",
+          "context_window": 1050000,
+          "max_output_tokens": 128000,
+          "reasoning_efforts": [
+            "none",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
+        },
+        {
+          "name": "gpt-5.6",
+          "context_window": 1050000,
+          "max_output_tokens": 128000,
+          "reasoning_efforts": [
+            "none",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
+        },
+        {
+          "name": "gpt-5.5",
+          "context_window": 1050000,
+          "max_output_tokens": 128000,
+          "reasoning_efforts": [
+            "none",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ]
+        },
+        {
+          "name": "gpt-5.4-mini",
+          "context_window": 400000,
+          "max_output_tokens": 128000,
+          "reasoning_efforts": [
+            "none",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ]
+        },
+        {
+          "name": "gpt-5.4",
+          "context_window": 1050000,
+          "max_output_tokens": 128000,
+          "reasoning_efforts": [
+            "none",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "anthropic",
+      "name": "Anthropic",
+      "description": "Connect directly to the Anthropic Messages API.",
+      "base_url": "https://api.anthropic.com/v1",
+      "protocol": "anthropic",
+      "docs_url": "https://docs.anthropic.com/en/docs/about-claude/models",
+      "featured": false,
+      "models": [
+        {
+          "name": "claude-opus-5",
+          "context_window": 1000000,
+          "max_output_tokens": 128000,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
+        },
+        {
+          "name": "claude-sonnet-5",
+          "context_window": 1000000,
+          "max_output_tokens": 128000,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
+        },
+        {
+          "name": "claude-fable-5",
+          "context_window": 1000000,
+          "max_output_tokens": 128000,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
+        },
+        {
+          "name": "claude-opus-4-8",
+          "context_window": 1000000,
+          "max_output_tokens": 128000,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
+        },
+        {
+          "name": "claude-sonnet-4-6",
+          "context_window": 1000000,
+          "max_output_tokens": 128000,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high",
+            "max"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "deepseek",
+      "name": "DeepSeek",
+      "description": "Use DeepSeek models through its Anthropic-compatible endpoint.",
+      "base_url": "https://api.deepseek.com/anthropic",
+      "protocol": "anthropic",
+      "docs_url": "https://api-docs.deepseek.com/quick_start/pricing",
+      "featured": false,
+      "models": [
+        {
+          "name": "deepseek-v4-pro",
+          "context_window": 1000000,
+          "max_output_tokens": 384000,
+          "reasoning_efforts": [
+            "high",
+            "max"
+          ]
+        },
+        {
+          "name": "deepseek-v4-flash",
+          "context_window": 1000000,
+          "max_output_tokens": 384000,
+          "reasoning_efforts": [
+            "low",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "name": "deepseek-v4-flash-vision-exp",
+          "context_window": 1000000,
+          "max_output_tokens": 384000,
+          "reasoning_efforts": [
+            "low",
+            "high",
+            "max"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "groq",
+      "name": "Groq",
+      "description": "Run supported open-weight models on Groq infrastructure.",
+      "base_url": "https://api.groq.com/openai/v1",
+      "protocol": "chat",
+      "docs_url": "https://console.groq.com/docs/models",
+      "featured": false,
+      "models": [
+        {
+          "name": "qwen/qwen3.6-27b",
+          "context_window": 131072,
+          "max_output_tokens": 16384,
+          "reasoning_efforts": [
+            "none",
+            "default"
+          ]
+        },
+        {
+          "name": "openai/gpt-oss-120b",
+          "context_window": 131072,
+          "max_output_tokens": 65536,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "name": "openai/gpt-oss-20b",
+          "context_window": 131072,
+          "max_output_tokens": 65536,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "name": "llama-3.3-70b-versatile",
+          "context_window": 131072,
+          "max_output_tokens": 32768
+        }
+      ]
+    },
+    {
+      "id": "xai",
+      "name": "xAI",
+      "description": "Connect directly to the xAI API for Grok models.",
+      "base_url": "https://api.x.ai/v1",
+      "protocol": "chat",
+      "docs_url": "https://docs.x.ai/docs/models",
+      "featured": false,
+      "models": [
+        {
+          "name": "grok-4.6",
+          "context_window": 500000,
+          "max_output_tokens": 500000,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ]
+        },
+        {
+          "name": "grok-4.5",
+          "context_window": 500000,
+          "max_output_tokens": 500000,
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "name": "grok-4.3",
+          "context_window": 1000000,
+          "max_output_tokens": 30000,
+          "reasoning_efforts": [
+            "none",
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "name": "grok-4.20-0309-reasoning",
+          "context_window": 1000000,
+          "max_output_tokens": 30000
+        }
+      ]
+    },
+    {
+      "id": "mistral",
+      "name": "Mistral",
+      "description": "Connect directly to Mistral for its general and coding models.",
+      "base_url": "https://api.mistral.ai/v1",
+      "protocol": "chat",
+      "docs_url": "https://docs.mistral.ai/getting-started/models/",
+      "featured": false,
+      "models": [
+        {
+          "name": "zai-glm-5-2",
+          "context_window": 1000000,
+          "max_output_tokens": 131072,
+          "reasoning_efforts": [
+            "high",
+            "max"
+          ]
+        },
+        {
+          "name": "mistral-medium-latest",
+          "context_window": 262144,
+          "max_output_tokens": 262144,
+          "reasoning_efforts": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "name": "mistral-small-latest",
+          "context_window": 256000,
+          "max_output_tokens": 256000,
+          "reasoning_efforts": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "name": "magistral-medium-latest",
+          "context_window": 128000,
+          "max_output_tokens": 16384
+        },
+        {
+          "name": "mistral-large-2411",
+          "context_window": 131072,
+          "max_output_tokens": 16384
+        }
+      ]
+    }
+  ]
+}
