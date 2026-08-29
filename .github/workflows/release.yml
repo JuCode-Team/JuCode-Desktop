@@ -62,7 +62,7 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: ${{ github.ref_name }}
           releaseDraft: false
-          prerelease: true
+          prerelease: false
           releaseBody: |
             Automated build. macOS builds are unsigned — on first launch use
             right-click → Open, or run `xattr -cr /Applications/JuCode.app`.
