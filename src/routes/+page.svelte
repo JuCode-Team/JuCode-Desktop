@@ -849,7 +849,7 @@
 						{:else if tab.panel === 'git'}<GitPanel cwd={activeProject?.path ?? ''} worktree={activeProject?.worktree ?? null} llm={llmTarget} onOpenTask={(path, meta) => openTaskProject(path, meta)} onTaskRemoved={closeTaskProject} />
 						{:else if tab.panel === 'term'}<TerminalPanel cwd={activeProject?.path ?? ''} />
 						{:else if tab.panel === 'browser'}<BrowserPanel />
-						{:else if tab.panel === 'diag'}<DiagnosticsPanel {chat} />
+						{:else if tab.panel === 'diag'}<DiagnosticsPanel chat={chat ?? null} />
 						{:else if tab.panel === 'audit'}<EditorPane onAiSend={sendAiEdit} />
 						{:else if tui}<TuiPanel backend={tui} cwd={activeProject?.path ?? ''} onOpenSettings={() => { settingsInitial = 'behavior'; showSettings = true; }} />
 						{/if}
