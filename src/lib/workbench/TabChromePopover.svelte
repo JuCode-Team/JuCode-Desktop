@@ -36,8 +36,11 @@
 
 	// Drafts seed once from the props (the popover is transient); live edits
 	// flow back through the callbacks, never the other way.
+	// svelte-ignore state_referenced_locally
 	let nameVal = $state(name);
+	// svelte-ignore state_referenced_locally
 	let slugVal = $state(icon?.kind === 'slug' ? icon.value : '');
+	// svelte-ignore state_referenced_locally
 	let svgVal = $state(icon?.kind === 'svg' ? icon.markup : '');
 	let svgError = $state(false);
 	let nameEl = $state<HTMLInputElement | null>(null);
