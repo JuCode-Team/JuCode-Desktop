@@ -1,9 +1,71 @@
 // Microphone capture for voice input. Records mono PCM via Web Audio, then
-// downsamples to 16 kHz and encodes a 16-bit WAV — MiMo ASR only accepts
-// WAV/MP3, and MediaRecorder's native container differs per webview (webm on
-// Chromium, mp4/AAC on WKWebView), so we build the WAV ourselves.
+// downsamples to 16 kHz and encodes a 16-bit WAV. A stable WAV payload works
+// across the supported ASR APIs, unlike each webview's native recorder format.
 
 export const ASR_SAMPLE_RATE = 16000;
+
+export type AsrProviderId = 'mimo' | 'openai' | 'groq' | 'deepgram';
+
+export interface AsrProvider {
+	id: AsrProviderId;
+	name: string;
+	baseUrl: string;
+	model: string;
+	authKey: string;
+}
+
+/** First-party ASR provider defaults. Base URL and model remain user-editable. */
+export const ASR_PROVIDERS: readonly AsrProvider[] = [
+	{
+		id: 'mimo',
+		name: 'Xiaomi MiMo',
+		baseUrl: 'https://api.xiaomimimo.com/v1',
+		model: 'mimo-v2.5-asr',
+		authKey: 'mimo'
+	},
+	{
+		id: 'openai',
+		name: 'OpenAI-compatible Whisper',
+		baseUrl: 'https://api.openai.com/v1',
+		model: 'whisper-1',
+		authKey: 'asr-openai'
+	},
+	{
+		id: 'groq',
+		name: 'Groq Whisper',
+		baseUrl: 'https://api.groq.com/openai/v1',
+		model: 'whisper-large-v3-turbo',
+		authKey: 'asr-groq'
+	},
+	{
+		id: 'deepgram',
+		name: 'Deepgram',
+		baseUrl: 'https://api.deepgram.com/v1',
+		model: 'nova-3',
+		authKey: 'asr-deepgram'
+	}
+];
+
+export interface AsrSettings {
+	provider: AsrProviderId;
+	base_url: string;
+	model: string;
+}
+
+export function asrProvider(id: unknown): AsrProvider {
+	return ASR_PROVIDERS.find((provider) => provider.id === id) ?? ASR_PROVIDERS[0];
+}
+
+/** Parse persisted ASR settings, retaining MiMo as the backward-compatible default. */
+export function resolveAsrSettings(raw: unknown): AsrSettings {
+	const value = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+	const provider = asrProvider(value.provider);
+	return {
+		provider: provider.id,
+		base_url: typeof value.base_url === 'string' && value.base_url.trim() ? value.base_url.trim() : provider.baseUrl,
+		model: typeof value.model === 'string' && value.model.trim() ? value.model.trim() : provider.model
+	};
+}
 
 /** Linear-interpolation resample to the ASR rate. No-op when rates match. */
 export function downsample(samples: Float32Array, fromRate: number, toRate = ASR_SAMPLE_RATE): Float32Array {

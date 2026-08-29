@@ -1,5 +1,4 @@
-// Git / GitHub 面板用到的纯逻辑（无框架依赖，便于单测）：
-// 分支名校验、git 输出解析、gh CLI 输出解析。
+// Git panel pure logic (framework-independent and unit-testable).
 
 /** 本地分支名校验，与 Rust 侧 is_valid_ref_name 保持一致（比 git 本身略严）。 */
 export function isValidBranchName(name: string): boolean {
@@ -56,46 +55,6 @@ export function parseSyncStatus(out: string): SyncInfo {
 	const ahead = Number(ab.match(/ahead (\d+)/)?.[1] ?? 0);
 	const behind = Number(ab.match(/behind (\d+)/)?.[1] ?? 0);
 	return { upstream: m[1], ahead, behind };
-}
-
-/** 从 `gh --version` 输出提取版本号；非 gh 输出返回 null。 */
-export function parseGhVersion(out: string): string | null {
-	return out.match(/gh version (\d+\.\d+\.\d+)/)?.[1] ?? null;
-}
-
-/** `git remote -v` 输出中是否存在 GitHub 远端（https 或 ssh 均可）。 */
-export function hasGitHubRemote(out: string): boolean {
-	return out.split('\n').some((l) => /\bgithub\.com[/:]/.test(l));
-}
-
-export interface PrInfo {
-	url: string;
-	title: string;
-	state: string;
-	isDraft: boolean;
-}
-
-/** 解析 `gh pr view --json url,title,state,isDraft` 的 JSON 输出。 */
-export function parsePrView(out: string): PrInfo | null {
-	try {
-		const v = JSON.parse(out) as Record<string, unknown>;
-		if (v && typeof v.url === 'string' && v.url) {
-			return {
-				url: v.url,
-				title: String(v.title ?? ''),
-				state: String(v.state ?? ''),
-				isDraft: v.isDraft === true
-			};
-		}
-	} catch {
-		// 非 JSON（gh 出错文本等）→ 视为没有 PR
-	}
-	return null;
-}
-
-/** 从 `gh pr create` 的输出中提取新建 PR 的 URL。 */
-export function extractPrUrl(out: string): string | null {
-	return out.match(/https:\/\/github\.com\/[^\s/]+\/[^\s/]+\/pull\/\d+/)?.[0] ?? null;
 }
 
 /** 选默认 base 分支：优先 main / master / develop，否则第一个非当前分支。 */
