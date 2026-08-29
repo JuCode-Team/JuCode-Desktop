@@ -377,13 +377,21 @@ pub fn tui_allowed_args(kind: BackendKind) -> &'static [&'static str] {
         // `claude --continue` resumes the last session; a bare `claude
         // --resume` opens the interactive session picker.
         BackendKind::Claude => &["--continue", "--resume"],
+        // ACP agents have no fixed binary — their command line lives in the
+        // user-managed registry — so they are never spawned as TUI tabs
+        // (`validate_tui_args` rejects them outright).
+        BackendKind::Acp => &[],
     }
 }
 
 /// Validates the extra argv for a TUI spawn against the backend's fixed
 /// token allowlist. Anything else — flags, values, whitespace tricks — is
-/// rejected outright.
+/// rejected outright. ACP backends are rejected entirely: their command
+/// comes from the registry, not a resolvable well-known binary.
 pub fn validate_tui_args(kind: BackendKind, args: &[String]) -> Result<(), String> {
+    if kind == BackendKind::Acp {
+        return Err("ACP agents cannot be opened as a TUI tab".to_string());
+    }
     for arg in args {
         if !tui_allowed_args(kind).contains(&arg.as_str()) {
             return Err(format!(
@@ -998,6 +1006,14 @@ mod tests {
         assert!(
             validate_tui_args(BackendKind::Claude, &["--continue".into(), "-x".into()]).is_err()
         );
+    }
+
+    #[test]
+    fn tui_rejects_acp_backend() {
+        // ACP command lines come from the registry, not a fixed binary, so
+        // an ACP entry can never be spawned through the TUI pty path.
+        assert!(validate_tui_args(BackendKind::Acp, &[]).is_err());
+        assert!(validate_tui_args(BackendKind::Acp, &["resume".into()]).is_err());
     }
 
     #[test]
