@@ -10,12 +10,14 @@
 	import { t } from '$lib/i18n';
 	import type { ChatState } from '$lib/chat.svelte';
 	import type { ModelRow } from './modelRows';
+	import { effortColumnIdx } from './effortColumn';
 
 	// The composer's model popover: the coding agent lives INSIDE the session,
 	// so an unlocked session shows an agent rail (native engines + registered
 	// ACP agents) on the left and the current agent's models in the center.
-	// Hovering a model reveals its reasoning-effort chips; a chip picks that
-	// model AND that effort in one step.
+	// A fixed-width column on the right lists the hovered/focused model's
+	// reasoning-effort chips (never inserted between rows, so the list never
+	// reflows); a chip picks that model AND that effort in one step.
 	let {
 		chat,
 		title,
@@ -107,18 +109,26 @@
 
 	// Chips are hover-driven for the mouse (mouseenter on a row, cleared when
 	// the pointer leaves the list) and follow selIdx only after the user
-	// actually arrow-keyed — never on the default/active selection.
+	// actually arrow-keyed — never on the default/active selection. With no
+	// focus the column falls back to the currently active model.
 	let hoverIdx = $state<number | null>(null);
-	const chipIdx = $derived(hoverIdx ?? (keyNav ? selIdx : null));
+	let rowsEl: HTMLDivElement;
+	let effortColumnEl: HTMLDivElement;
+	const chipIdx = $derived(effortColumnIdx(rows, hoverIdx, keyNav, selIdx));
+	const chipRow = $derived(chipIdx !== null ? rows[chipIdx] : null);
 	function hoverRow(i: number) {
 		hoverIdx = i;
 		selIdx = i;
 		keyNav = false;
 	}
+	function clearHoverUnlessEntering(event: MouseEvent, destination: HTMLElement) {
+		const next = event.relatedTarget;
+		if (!(next instanceof Node) || !destination.contains(next)) hoverIdx = null;
+	}
 </script>
 
 <button class="pop-backdrop" aria-label="close" onclick={onClose}></button>
-<div class="pop" role="dialog" aria-label={title}>
+<div class="pop" class:norail={backendLocked} role="dialog" aria-label={title}>
 	<div class="pop-head">
 		<span>{title}</span>
 		<IconButton onclick={onClose} label="close"><X size={15} /></IconButton>
@@ -165,7 +175,12 @@
 					<input bind:value={query} placeholder={t('shell.pickerSearchPlaceholder')} autofocus />
 				</div>
 			{/if}
-			<div class="rows" role="presentation" onmouseleave={() => (hoverIdx = null)}>
+			<div
+				class="rows"
+				role="presentation"
+				bind:this={rowsEl}
+				onmouseleave={(event) => clearHoverUnlessEntering(event, effortColumnEl)}
+			>
 				{#each rows as row, i (row.id)}
 					{#if row.group && (i === 0 || rows[i - 1]?.group !== row.group)}
 						<div class="row-group">{row.group}</div>
@@ -181,24 +196,38 @@
 						<span class="prow-detail">{row.detail}</span>
 						{#if row.active}<Check size={14} class="prow-check" />{/if}
 					</button>
-					{#if i === chipIdx && chipEfforts(row).length}
-						<div class="effrow">
-							<span class="effcap">{t('chat.effortTitle')}</span>
-							{#each chipEfforts(row) as ef (ef)}
-								<button
-									class="eff"
-									class:on={row.active && ef === activeEffort}
-									onclick={() => onSelect(`${row.command} ${ef}`)}
-								>{ef}</button>
-							{/each}
-						</div>
-					{/if}
 				{/each}
 				{#if rows.length === 0}
 					<div class="pempty">{query.trim() ? t('shell.noMatch') : t('shell.noOptions')}</div>
 				{/if}
 			</div>
 			<div class="pop-foot">{t('shell.pickerFoot')}</div>
+		</div>
+		<!-- Reserved-width effort column: content swaps with the focused row but
+		     the column itself never appears/disappears, so the popover width and
+		     the model rows' heights stay put. -->
+		<div
+			class="effcol"
+			role="group"
+			aria-label={t('chat.effortTitle')}
+			bind:this={effortColumnEl}
+			onmouseleave={(event) => clearHoverUnlessEntering(event, rowsEl)}
+		>
+			<span class="effcap">{t('chat.effortTitle')}</span>
+			{#if chipRow && chipEfforts(chipRow).length}
+				{@const row = chipRow}
+				<span class="effmodel" title={row.label}>{row.label}</span>
+				{#each chipEfforts(row) as ef (ef)}
+					<button
+						class="eff"
+						class:on={row.active && ef === activeEffort}
+						aria-label={`${row.label} ${ef}`}
+						onclick={() => onSelect(`${row.command} ${ef}`)}
+					>{ef}</button>
+				{/each}
+			{:else}
+				<span class="effempty">{t('chat.effortNone')}</span>
+			{/if}
 		</div>
 	</div>
 </div>
@@ -219,8 +248,12 @@
 		bottom: calc(100% + 8px);
 		left: 0;
 		z-index: 21;
-		width: min(440px, 86vw);
-		max-height: min(60vh, 440px);
+		width: min(544px, 92vw);
+		/* Fixed (not max) height: the body is the max of rail/models/efforts,
+		   so swapping effort-chip content on hover must never change the
+		   popover's size — the bottom-anchored top edge would jump. Inner
+		   lists scroll instead. */
+		height: min(60vh, 440px);
 		display: flex;
 		flex-direction: column;
 		background: var(--panel);
@@ -230,6 +263,10 @@
 		overflow: hidden;
 		transform-origin: bottom left;
 		animation: pop-in var(--t-med) var(--ease-spring);
+	}
+	/* Locked sessions drop the agent rail — two columns need less room. */
+	.pop.norail {
+		width: min(500px, 90vw);
 	}
 	.pop-head {
 		display: flex;
@@ -369,24 +406,45 @@
 		color: var(--accent-bright);
 		flex-shrink: 0;
 	}
-	/* Hovered model's thinking levels: one chip per effort, chip = model+effort. */
-	.effrow {
+	/* Fixed-width column of the focused model's thinking levels: one chip per
+	   effort, chip = model+effort. Width is reserved even when empty so
+	   hovering never resizes the popover or reflows the model list. */
+	.effcol {
 		display: flex;
-		align-items: center;
-		flex-wrap: wrap;
+		flex-direction: column;
+		align-items: stretch;
 		gap: 5px;
-		padding: 2px 11px 8px 36px;
-		animation: rise var(--t-fast) var(--ease-out);
+		width: 118px;
+		flex-shrink: 0;
+		padding: 10px;
+		border-left: 1px solid var(--hairline);
+		overflow-y: auto;
 	}
 	.effcap {
 		font-size: 10.5px;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
 		color: var(--dim2);
-		margin-right: 2px;
+	}
+	.effmodel {
+		font-family: var(--font-mono);
+		font-size: 10.5px;
+		color: var(--dim);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		margin-bottom: 2px;
+	}
+	.effempty {
+		font-size: 11px;
+		color: var(--dim2);
 	}
 	.eff {
 		font-family: var(--font-mono);
 		font-size: 11px;
-		padding: 2px 9px;
+		text-align: center;
+		padding: 3px 9px;
 		border-radius: 999px;
 		border: 1px solid var(--border);
 		background: var(--surface2);
