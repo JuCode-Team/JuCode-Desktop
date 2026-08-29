@@ -7,6 +7,7 @@
 	import { prefs, vibrancySupported } from '$lib/prefs.svelte';
 	import { themeState, setTheme, type ThemePref } from '$lib/theme.svelte';
 	import BackendSection from '$lib/settings/BackendSection.svelte';
+	import AcpSection from '$lib/settings/AcpSection.svelte';
 	import Dependencies from '$lib/Dependencies.svelte';
 	import type { ChatState } from '$lib/chat.svelte';
 	import Vendor from '$lib/Vendor.svelte';
@@ -516,6 +517,8 @@
 					</div>
 
 					<BackendSection />
+
+					<AcpSection />
 
 					<div class="group">
 						<div class="glabel">{t('settings.behavior.defaultModel')}</div>

@@ -1372,7 +1372,7 @@
 				modelTitle={pickerTitle}
 				modelSearch={showPickerSearch}
 				{backendLocked}
-				onBackend={(b) => store.switchBackend(activeId, b)}
+				onBackend={(b, acpAgent) => store.switchBackend(activeId, b, acpAgent)}
 				bind:pickerQuery
 				bind:pickerSelIdx={selIdx}
 				onEffort={chooseEffort}

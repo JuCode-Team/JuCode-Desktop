@@ -207,6 +207,9 @@ const shell = {
 			opUnsupported: '当前引擎后端不支持该操作：{op}',
 			codexAuthHint: 'Codex 认证已失效：请在终端运行 `codex login` 重新登录后重试。',
 			codexUnsupportedRequest: '已拒绝引擎的一个不支持的请求：{method}',
+			acpRefusal: '智能体拒绝了这个请求，本轮已结束。',
+			acpTurnLimit: '本轮达到上限（{reason}），已提前结束。',
+			acpUnsupportedRequest: '已拒绝智能体的一个不支持的请求：{method}',
 			codexCmdGoal: '设置或查看会话目标（/goal <目标>，/goal clear 清除）',
 			claudeAuthHint:
 				'Claude Code 认证已失效：请在终端运行 `claude` 并执行 /login 重新登录（或运行 `claude setup-token`）后重试。',
@@ -426,6 +429,9 @@ const shell = {
 			opUnsupported: 'The current engine backend does not support this action: {op}',
 			codexAuthHint: 'Codex authentication is invalid: run `codex login` in a terminal, then retry.',
 			codexUnsupportedRequest: 'Declined an unsupported engine request: {method}',
+			acpRefusal: 'The agent declined this request and ended the turn.',
+			acpTurnLimit: 'The turn hit a limit ({reason}) and stopped early.',
+			acpUnsupportedRequest: 'Declined an unsupported agent request: {method}',
 			codexCmdGoal: 'Set or view the session goal (/goal <objective>, /goal clear)',
 			claudeAuthHint:
 				'Claude Code authentication is invalid: run `claude` in a terminal and sign in with /login (or run `claude setup-token`), then retry.',

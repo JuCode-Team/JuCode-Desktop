@@ -18,6 +18,10 @@ pub enum BackendKind {
     Codex,
     /// Claude Code CLI in stream-json print mode.
     Claude,
+    /// Any Agent Client Protocol agent (JSON-RPC over stdio). The command
+    /// line comes from the user-managed ACP registry (`acp_registry.rs`) —
+    /// the frontend only ever passes a registry entry id.
+    Acp,
 }
 
 impl BackendKind {
@@ -26,25 +30,30 @@ impl BackendKind {
             "jucode" => Ok(Self::Jucode),
             "codex" => Ok(Self::Codex),
             "claude" => Ok(Self::Claude),
+            "acp" => Ok(Self::Acp),
             other => Err(format!("unknown backend: {other}")),
         }
     }
 
-    /// Binary base name (without the Windows `.exe` suffix).
+    /// Binary base name (without the Windows `.exe` suffix). For `Acp` this is
+    /// only used in error messages — the actual command comes from the registry.
     pub fn bin_name(self) -> &'static str {
         match self {
             Self::Jucode => "jucode",
             Self::Codex => "codex",
             Self::Claude => "claude",
+            Self::Acp => "acp",
         }
     }
 
-    /// Environment variable that force-overrides binary resolution.
+    /// Environment variable that force-overrides binary resolution. Never
+    /// consulted for `Acp` (its binary resolution goes through the registry).
     pub fn env_override(self) -> &'static str {
         match self {
             Self::Jucode => "JUCODE_BIN",
             Self::Codex => "CODEX_BIN",
             Self::Claude => "CLAUDE_BIN",
+            Self::Acp => "JUCODE_ACP_BIN_UNUSED",
         }
     }
 
@@ -65,6 +74,9 @@ impl BackendKind {
                 "use_shell_env",
                 "env",
             ],
+            // ACP sessions select a registry entry — never a binary path or
+            // argv. Everything else about the spawn is fixed by the registry.
+            Self::Acp => &["agent", "use_shell_env", "env"],
         }
     }
 }
@@ -86,6 +98,8 @@ pub struct BackendOpts {
     pub session_id: Option<String>,
     /// claude: `--model <name>`.
     pub model: Option<String>,
+    /// acp: registry entry id of the agent to launch (`acp_registry.rs`).
+    pub agent: Option<String>,
     /// Build the child env from the login-shell snapshot (default true; see
     /// `shell_env`). Off = inherit the GUI environment as before.
     pub use_shell_env: bool,
@@ -102,6 +116,7 @@ impl Default for BackendOpts {
             resume_session_at: None,
             session_id: None,
             model: None,
+            agent: None,
             use_shell_env: true,
             env: Vec::new(),
         }
@@ -110,7 +125,7 @@ impl Default for BackendOpts {
 
 /// Custom env var names: POSIX-style identifiers only, with dangerous
 /// dynamic-linker prefixes rejected outright.
-fn is_valid_env_name(name: &str) -> bool {
+pub(crate) fn is_valid_env_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 128
         && !name.starts_with("DYLD_")
@@ -123,12 +138,27 @@ fn is_valid_env_name(name: &str) -> bool {
         && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
-const MAX_CUSTOM_ENV_VARS: usize = 50;
-const MAX_CUSTOM_ENV_VALUE_LEN: usize = 4096;
+pub(crate) const MAX_CUSTOM_ENV_VARS: usize = 50;
+pub(crate) const MAX_CUSTOM_ENV_VALUE_LEN: usize = 4096;
+
+/// ACP registry entry ids: short lowercase slugs, so an id can never look
+/// like a flag, a path or contain whitespace tricks.
+pub(crate) fn is_valid_acp_agent_id(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() <= 64
+        && !s.starts_with('-')
+        && s.chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
+}
 
 /// Claude Code permission modes the desktop is allowed to request.
-const CLAUDE_PERMISSION_MODES: &[&str] =
-    &["default", "plan", "auto", "acceptEdits", "bypassPermissions"];
+const CLAUDE_PERMISSION_MODES: &[&str] = &[
+    "default",
+    "plan",
+    "auto",
+    "acceptEdits",
+    "bypassPermissions",
+];
 
 fn expect_string(key: &str, v: &serde_json::Value) -> Result<String, String> {
     v.as_str()
@@ -190,7 +220,9 @@ pub fn validate_opts(
                     .as_object()
                     .ok_or_else(|| "env must be an object of string values".to_string())?;
                 if obj.len() > MAX_CUSTOM_ENV_VARS {
-                    return Err(format!("env accepts at most {MAX_CUSTOM_ENV_VARS} variables"));
+                    return Err(format!(
+                        "env accepts at most {MAX_CUSTOM_ENV_VARS} variables"
+                    ));
                 }
                 let mut vars = Vec::with_capacity(obj.len());
                 for (name, val) in obj {
@@ -249,6 +281,12 @@ pub fn validate_opts(
                 }
                 opts.model = Some(s);
             }
+            "agent" => {
+                if !is_valid_acp_agent_id(&s) {
+                    return Err(format!("invalid acp agent id: {s}"));
+                }
+                opts.agent = Some(s);
+            }
             _ => unreachable!("key was checked against the allowlist"),
         }
     }
@@ -267,6 +305,9 @@ pub fn build_args(kind: BackendKind, opts: &BackendOpts) -> Vec<String> {
     match kind {
         BackendKind::Jucode => vec!["serve".to_string()],
         BackendKind::Codex => vec!["app-server".to_string()],
+        // ACP argv comes from the registry entry, not from options —
+        // create_session never calls build_args for this kind.
+        BackendKind::Acp => Vec::new(),
         BackendKind::Claude => {
             let yolo = opts.permission_mode.as_deref() == Some("bypassPermissions");
             let mut args: Vec<String> = [
@@ -367,19 +408,39 @@ pub fn validate_bin_override(s: &str) -> Result<(), String> {
 /// Well-known install locations probed after PATH (a packaged app inherits a
 /// minimal PATH from launchd / the desktop session).
 fn well_known_paths(kind: BackendKind) -> Vec<PathBuf> {
-    let name = kind.bin_name();
-    let exe = if cfg!(windows) {
+    let mut paths = well_known_candidates(kind.bin_name(), kind == BackendKind::Jucode);
+    if kind == BackendKind::Claude {
+        let exe = exe_name("claude");
+        let home = home_dir();
+        // Claude Code's native installer keeps a launcher here too.
+        paths.push(home.join(".claude").join("local").join(&exe));
+    }
+    paths
+}
+
+fn exe_name(name: &str) -> String {
+    if cfg!(windows) {
         format!("{name}.exe")
     } else {
         name.to_string()
-    };
-    let home = std::env::var_os("HOME")
+    }
+}
+
+fn home_dir() -> PathBuf {
+    std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(PathBuf::from)
-        .unwrap_or_default();
+        .unwrap_or_default()
+}
+
+/// Well-known install dirs for an arbitrary program name (shared by the fixed
+/// backends and the ACP registry's command resolution).
+fn well_known_candidates(name: &str, jucode_installer_dir: bool) -> Vec<PathBuf> {
+    let exe = exe_name(name);
+    let home = home_dir();
     let mut paths: Vec<PathBuf> = Vec::new();
     if cfg!(windows) {
-        if kind == BackendKind::Jucode {
+        if jucode_installer_dir {
             // Per-user installer dir and the npm global prefix.
             if let Some(la) = std::env::var_os("LOCALAPPDATA") {
                 paths.push(PathBuf::from(la).join("Programs").join("jucode").join(&exe));
@@ -396,17 +457,42 @@ fn well_known_paths(kind: BackendKind) -> Vec<PathBuf> {
         paths.push(home.join(".cargo/bin").join(&exe));
         paths.push(home.join(".local/bin").join(&exe)); // per-user installs (incl. Claude Code native)
     }
-    if kind == BackendKind::Claude {
-        // Claude Code's native installer keeps a launcher here too.
-        paths.push(home.join(".claude").join("local").join(&exe));
-    }
     paths
+}
+
+/// Resolves an ACP registry entry's command to a program path. A command with
+/// a path separator is used as-is; the engine binaries reuse the full backend
+/// resolution (env override → PATH → well-known dirs → dev builds); anything
+/// else goes PATH → well-known dirs → bare name (PATH-spawn at run time).
+pub fn resolve_acp_program(command: &str) -> PathBuf {
+    for kind in [BackendKind::Jucode, BackendKind::Codex, BackendKind::Claude] {
+        if command == kind.bin_name() {
+            return resolve_backend_bin(kind, None);
+        }
+    }
+    let p = Path::new(command);
+    if p.components().count() > 1 || p.is_absolute() {
+        return p.to_path_buf();
+    }
+    if let Some(found) = crate::which(command) {
+        return found;
+    }
+    for candidate in well_known_candidates(command, false) {
+        if candidate.is_file() {
+            return candidate;
+        }
+    }
+    PathBuf::from(command)
 }
 
 /// Dev fallback for the native engine only: the freshly-built binary from the
 /// sibling `JuCode-CLI` checkout (mirrors the pre-multi-backend behavior).
 fn jucode_dev_candidates() -> Vec<PathBuf> {
-    let exe = if cfg!(windows) { "jucode.exe" } else { "jucode" };
+    let exe = if cfg!(windows) {
+        "jucode.exe"
+    } else {
+        "jucode"
+    };
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR")); // <repo>/src-tauri
     [
         format!("../../JuCode-CLI/target/debug/{exe}"),
@@ -476,8 +562,52 @@ mod tests {
         assert_eq!(BackendKind::parse("jucode").unwrap(), BackendKind::Jucode);
         assert_eq!(BackendKind::parse("codex").unwrap(), BackendKind::Codex);
         assert_eq!(BackendKind::parse("claude").unwrap(), BackendKind::Claude);
+        assert_eq!(BackendKind::parse("acp").unwrap(), BackendKind::Acp);
         assert!(BackendKind::parse("bash").is_err());
         assert!(BackendKind::parse("").is_err());
+    }
+
+    // --- acp options ---
+
+    #[test]
+    fn acp_accepts_only_a_registry_agent_id() {
+        let opts =
+            validate_opts(BackendKind::Acp, Some(&json!({ "agent": "gemini-cli" }))).unwrap();
+        assert_eq!(opts.agent.as_deref(), Some("gemini-cli"));
+        // No binary override, no argv-shaped anything.
+        assert!(validate_opts(
+            BackendKind::Acp,
+            Some(&json!({ "bin_override": "/bin/sh" }))
+        )
+        .is_err());
+        assert!(validate_opts(BackendKind::Acp, Some(&json!({ "args": ["-x"] }))).is_err());
+        assert!(validate_opts(BackendKind::Acp, Some(&json!({ "command": "sh" }))).is_err());
+        // Ids are slugs: no flags, spaces, dots or uppercase.
+        for bad in ["--help", "a b", "../etc", "UPPER", ""] {
+            assert!(
+                validate_opts(BackendKind::Acp, Some(&json!({ "agent": bad }))).is_err(),
+                "{bad:?} must be rejected"
+            );
+        }
+        // Other backends don't take `agent`.
+        assert!(validate_opts(BackendKind::Jucode, Some(&json!({ "agent": "x" }))).is_err());
+        assert!(validate_opts(BackendKind::Claude, Some(&json!({ "agent": "x" }))).is_err());
+    }
+
+    #[test]
+    fn acp_build_args_is_empty_registry_supplies_argv() {
+        assert!(build_args(BackendKind::Acp, &BackendOpts::default()).is_empty());
+    }
+
+    #[test]
+    fn acp_program_resolution_keeps_explicit_paths_and_reuses_engine_resolution() {
+        // A path with separators is used exactly as configured.
+        let p = resolve_acp_program("/usr/local/bin/my-agent");
+        assert_eq!(p, PathBuf::from("/usr/local/bin/my-agent"));
+        // The engine binaries route through the shared backend resolution
+        // (worst case they fall back to the bare name, never to an empty path).
+        let ju = resolve_acp_program("jucode");
+        assert!(!ju.as_os_str().is_empty());
     }
 
     // --- arg templates ---
@@ -580,7 +710,10 @@ mod tests {
         let args = build_args(BackendKind::Claude, &opts);
         let ri = args.iter().position(|a| a == "--resume").unwrap();
         assert_eq!(args[ri + 1], "0f3d7a1c-9e2b-4b7e-9d4d-2a1b3c4d5e6f");
-        let ai = args.iter().position(|a| a == "--resume-session-at").unwrap();
+        let ai = args
+            .iter()
+            .position(|a| a == "--resume-session-at")
+            .unwrap();
         assert_eq!(args[ai + 1], "aa11bb22-cc33-dd44-ee55-ff6677889900");
         // resume_session_at without resume is rejected.
         assert!(validate_opts(
@@ -615,7 +748,11 @@ mod tests {
             assert!(err.is_err(), "{kind:?} must reject permission_mode");
         }
         assert!(validate_opts(BackendKind::Claude, Some(&json!({ "argv": ["-x"] }))).is_err());
-        assert!(validate_opts(BackendKind::Claude, Some(&json!({ "extra_flag": "--yolo" }))).is_err());
+        assert!(validate_opts(
+            BackendKind::Claude,
+            Some(&json!({ "extra_flag": "--yolo" }))
+        )
+        .is_err());
     }
 
     #[test]
@@ -625,31 +762,29 @@ mod tests {
             Some(&json!({ "model": "--dangerously-skip-permissions" }))
         )
         .is_err());
-        assert!(validate_opts(
-            BackendKind::Claude,
-            Some(&json!({ "resume": "--help" }))
-        )
-        .is_err());
-        assert!(validate_opts(
-            BackendKind::Jucode,
-            Some(&json!({ "bin_override": "-rf" }))
-        )
-        .is_err());
+        assert!(validate_opts(BackendKind::Claude, Some(&json!({ "resume": "--help" }))).is_err());
+        assert!(
+            validate_opts(BackendKind::Jucode, Some(&json!({ "bin_override": "-rf" }))).is_err()
+        );
     }
 
     #[test]
     fn permission_mode_is_a_fixed_enum() {
         for ok in CLAUDE_PERMISSION_MODES {
-            assert!(validate_opts(BackendKind::Claude, Some(&json!({ "permission_mode": ok }))).is_ok());
+            assert!(
+                validate_opts(BackendKind::Claude, Some(&json!({ "permission_mode": ok }))).is_ok()
+            );
         }
         assert!(validate_opts(
             BackendKind::Claude,
             Some(&json!({ "permission_mode": "bypassPermissions --verbose" }))
         )
         .is_err());
-        assert!(
-            validate_opts(BackendKind::Claude, Some(&json!({ "permission_mode": "yolo" }))).is_err()
-        );
+        assert!(validate_opts(
+            BackendKind::Claude,
+            Some(&json!({ "permission_mode": "yolo" }))
+        )
+        .is_err());
     }
 
     #[test]
@@ -690,7 +825,10 @@ mod tests {
 
     #[test]
     fn null_or_missing_opts_mean_defaults() {
-        assert_eq!(validate_opts(BackendKind::Jucode, None).unwrap(), BackendOpts::default());
+        assert_eq!(
+            validate_opts(BackendKind::Jucode, None).unwrap(),
+            BackendOpts::default()
+        );
         assert_eq!(
             validate_opts(BackendKind::Codex, Some(&serde_json::Value::Null)).unwrap(),
             BackendOpts::default()
@@ -707,11 +845,17 @@ mod tests {
     fn use_shell_env_defaults_true_and_accepts_bool_only() {
         for kind in [BackendKind::Jucode, BackendKind::Codex, BackendKind::Claude] {
             assert!(validate_opts(kind, None).unwrap().use_shell_env);
-            assert!(!validate_opts(kind, Some(&json!({ "use_shell_env": false })))
-                .unwrap()
-                .use_shell_env);
+            assert!(
+                !validate_opts(kind, Some(&json!({ "use_shell_env": false })))
+                    .unwrap()
+                    .use_shell_env
+            );
         }
-        assert!(validate_opts(BackendKind::Jucode, Some(&json!({ "use_shell_env": "yes" }))).is_err());
+        assert!(validate_opts(
+            BackendKind::Jucode,
+            Some(&json!({ "use_shell_env": "yes" }))
+        )
+        .is_err());
     }
 
     #[test]
@@ -730,7 +874,10 @@ mod tests {
             json!({ "env": { "A": 42 } }),
             json!({ "env": "PATH=/x" }),
         ] {
-            assert!(validate_opts(BackendKind::Claude, Some(&bad)).is_err(), "{bad}");
+            assert!(
+                validate_opts(BackendKind::Claude, Some(&bad)).is_err(),
+                "{bad}"
+            );
         }
     }
 
@@ -805,7 +952,9 @@ mod tests {
         assert_eq!(p, PathBuf::from("claude"));
         let probed = hits.lock().unwrap();
         assert!(!probed.is_empty());
-        assert!(probed.iter().any(|c| c.ends_with(".local/bin/claude") || c.ends_with(".local\\bin\\claude.exe")));
+        assert!(probed
+            .iter()
+            .any(|c| c.ends_with(".local/bin/claude") || c.ends_with(".local\\bin\\claude.exe")));
     }
 
     // --- TUI spawn allowlists ---
@@ -865,7 +1014,13 @@ mod tests {
             c.to_string_lossy().contains("JuCode-CLI/target/debug")
         });
         assert!(p.to_string_lossy().contains("JuCode-CLI/target/debug"));
-        let none = resolve_with(BackendKind::Jucode, None, &no_env, &no_which, &nothing_exists);
+        let none = resolve_with(
+            BackendKind::Jucode,
+            None,
+            &no_env,
+            &no_which,
+            &nothing_exists,
+        );
         assert_eq!(none, PathBuf::from("jucode"));
     }
 }

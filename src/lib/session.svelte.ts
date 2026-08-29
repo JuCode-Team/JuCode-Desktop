@@ -18,6 +18,8 @@ export interface SavedProject {
 	worktree?: WorktreeMeta;
 	/** 本项目最近一次新建会话所用的引擎后端（缺省 = jucode）。 */
 	lastBackend?: string;
+	/** lastBackend 为 'acp' 时：上次选择的 ACP agent。 */
+	lastAcpAgent?: { id: string; name: string };
 }
 
 const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
@@ -72,14 +74,19 @@ export class SessionStore {
 	}
 
 	/** Builds a session record (chat + per-session adapter) and registers the
-	 *  adapter with the op router. */
-	#newSession(backendId: BackendId): Session {
+	 *  adapter with the op router. `acpAgent` (acp backend only) records which
+	 *  registry agent backs the session, for spawn opts and display. */
+	#newSession(backendId: BackendId, acpAgent?: { id: string; name: string }): Session {
 		const id = this.uid();
 		const chat = new ChatState();
 		chat.backendId = backendId;
+		if (acpAgent) {
+			chat.acpAgentId = acpAgent.id;
+			chat.acpAgentName = acpAgent.name;
+		}
 		const adapter = createAdapter(backendId);
 		registerAdapter(id, adapter);
-		return { id, chat, backendId, adapter };
+		return { id, chat, backendId, adapter, ...(acpAgent ? { acpAgent } : {}) };
 	}
 
 	/** Spawns the engine child for `s`, invokes the adapter's onStart hook once
@@ -100,7 +107,11 @@ export class SessionStore {
 		resume?: string
 	) {
 		const base = buildBackendOpts(s.backendId);
-		const opts = extraOpts ? { ...(base ?? {}), ...extraOpts } : base;
+		// ACP sessions always pass their registry agent id (initial spawn and
+		// every crash auto-restart alike) — the Rust side looks the command up.
+		const agentOpt = s.backendId === 'acp' && s.acpAgent ? { agent: s.acpAgent.id } : undefined;
+		const opts =
+			agentOpt || extraOpts ? { ...(base ?? {}), ...(agentOpt ?? {}), ...(extraOpts ?? {}) } : base;
 		const spawned =
 			s.backendId === 'jucode' && !opts
 				? createSession(s.id, cwd)
@@ -121,12 +132,25 @@ export class SessionStore {
 	/** Spawn a fresh session in `project` and make it active. `firstMessage`
 	 *  (e.g. a parallel task's 任务描述) is sent as the opening user turn once
 	 *  the engine is up. `backend` overrides the project's last-used backend
-	 *  (which itself falls back to the settings default). */
-	addSession(project: Project, firstMessage?: string, backend?: BackendId) {
-		const backendId = backend ?? defaultBackendFor(project.lastBackend);
-		const s = this.#newSession(backendId);
+	 *  (which itself falls back to the settings default). `acpAgent` picks the
+	 *  registry agent for 'acp' sessions (defaults to the project's last one;
+	 *  without any, the session falls back to the native engine). */
+	addSession(
+		project: Project,
+		firstMessage?: string,
+		backend?: BackendId,
+		acpAgent?: { id: string; name: string }
+	) {
+		let backendId = backend ?? defaultBackendFor(project.lastBackend);
+		let agent = backendId === 'acp' ? (acpAgent ?? project.lastAcpAgent) : undefined;
+		if (backendId === 'acp' && !agent) {
+			backendId = 'jucode'; // no agent to launch — never spawn a bare 'acp'
+			agent = undefined;
+		}
+		const s = this.#newSession(backendId, agent);
 		project.sessions.push(s);
 		project.lastBackend = backendId;
+		if (backendId === 'acp' && agent) project.lastAcpAgent = agent;
 		this.activeId = s.id;
 		// Pin a session id we control for claude (via --session-id) so the
 		// conversation persists under a known uuid and --resume can restore its
@@ -151,10 +175,12 @@ export class SessionStore {
 	 * (model catalog, commands, session id…). No-op once the first user message
 	 * has been sent — the conversation can't move engines.
 	 */
-	async switchBackend(id: string, backend: BackendId) {
+	async switchBackend(id: string, backend: BackendId, acpAgent?: { id: string; name: string }) {
 		const s = this.allSessions.find((x) => x.id === id);
-		if (!s || s.backendId === backend) return;
+		if (!s) return;
+		if (s.backendId === backend && (backend !== 'acp' || s.acpAgent?.id === acpAgent?.id)) return;
 		if (s.chat.userTurns > 0 || s.restored) return;
+		if (backend === 'acp' && !acpAgent) return; // nothing to launch
 		const project = this.projects.find((pr) => pr.sessions.some((x) => x.id === id));
 		// Swap the projection + adapter BEFORE the old child exits, so the exit
 		// event lands on the new ChatState with `switching` set and isn't treated
@@ -168,6 +194,14 @@ export class SessionStore {
 		s.chat = chat;
 		s.backendId = backend;
 		s.adapter = adapter;
+		if (backend === 'acp' && acpAgent) {
+			s.acpAgent = acpAgent;
+			chat.acpAgentId = acpAgent.id;
+			chat.acpAgentName = acpAgent.name;
+			if (project) project.lastAcpAgent = acpAgent;
+		} else {
+			s.acpAgent = undefined;
+		}
 		if (project) project.lastBackend = backend;
 		try {
 			await closeSession(id);
@@ -463,6 +497,7 @@ export class SessionStore {
 			path: p.path,
 			...(p.worktree ? { worktree: p.worktree } : {}),
 			...(p.lastBackend && p.lastBackend !== 'jucode' ? { lastBackend: p.lastBackend } : {}),
+			...(p.lastBackend === 'acp' && p.lastAcpAgent ? { lastAcpAgent: p.lastAcpAgent } : {}),
 			tabs: p.sessions
 				.filter((s) => s.chat.resumable)
 				.map((s) => ({
@@ -485,6 +520,14 @@ export class SessionStore {
 			for (const p of saved) {
 				const proj: Project = { id: p.id, name: p.name, path: p.path, sessions: [] };
 				if (p.lastBackend) proj.lastBackend = normalizeBackendId(p.lastBackend);
+				if (
+					proj.lastBackend === 'acp' &&
+					p.lastAcpAgent &&
+					typeof p.lastAcpAgent.id === 'string' &&
+					typeof p.lastAcpAgent.name === 'string'
+				) {
+					proj.lastAcpAgent = { id: p.lastAcpAgent.id, name: p.lastAcpAgent.name };
+				}
 				if (p.worktree) {
 					proj.worktree = p.worktree;
 					try {
