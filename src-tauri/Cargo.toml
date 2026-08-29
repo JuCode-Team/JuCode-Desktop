@@ -21,7 +21,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["protocol-asset", "tray-icon", "macos-private-api"] }
+tauri = { version = "2", features = ["protocol-asset", "tray-icon"] }
 base64 = "0.22"
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
@@ -32,6 +32,10 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 portable-pty = "0.8"
 ureq = { version = "2", features = ["json"] }
+# auth.json 凭据静态加密（见 docs/secrets.md）。纯 Rust、无 C 依赖，
+# default-features 关掉以免多带一份 std/stream 支持。
+chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc", "getrandom"] }
+getrandom = "0.2"
 
 # 仅桌面端的插件（updater / 单实例 / 进程重启）
 [target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]
@@ -39,7 +43,10 @@ tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 
-# macOS 侧栏磨砂（NSVisualEffectView）
+# macOS 侧栏磨砂（NSVisualEffectView）。透明窗口 + macOSPrivateApi 只在
+# tauri.macos.conf.json 里开启，所以对应的 cargo feature 也必须只在 macOS 打开：
+# 否则 tauri-build 在 Linux/Windows 上会因 feature 与配置不符而报错。
 [target."cfg(target_os = \"macos\")".dependencies]
+tauri = { version = "2", features = ["macos-private-api"] }
 window-vibrancy = "0.5"
 
