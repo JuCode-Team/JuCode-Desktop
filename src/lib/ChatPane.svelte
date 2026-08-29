@@ -120,6 +120,9 @@
 	// Picker filter (history / long lists)
 	let pickerQuery = $state('');
 	let selIdx = $state(0);
+	// True once the user arrow-keys through the picker — the model popover only
+	// shows effort chips for a keyboard-focused row (not the default selIdx).
+	let pickerKeyNav = $state(false);
 
 	// Ops flow through this session's backend adapter; an unsupported op
 	// (non-jucode stub backends) surfaces as an inline system notice.
@@ -173,19 +176,33 @@
 	// yet (an optimistic push counts) and not a resumed conversation.
 	const backendLocked = $derived(!!session.restored || chat.userTurns > 0);
 
-	// Current git branch for the composer's footer strip, refetched when the
-	// working directory changes. A detached HEAD reads "detached"; a failed
-	// probe (not a git repo) hides the chip.
+	// Current git branch for the composer's footer strip. A detached HEAD reads
+	// "detached"; a failed probe (not a git repo) hides the chip.
 	let gitBranch = $state('');
-	$effect(() => {
+	function refreshGitBranch() {
 		const cwd = project?.path || chat.cwd;
-		gitBranch = '';
-		if (!cwd) return;
+		if (!cwd) {
+			gitBranch = '';
+			return;
+		}
 		git(['branch', '--show-current'], cwd)
 			.then((out) => {
 				if (cwd === (project?.path || chat.cwd)) gitBranch = out.trim() || 'detached';
 			})
 			.catch(() => {});
+	}
+	// Refetched when the working directory changes (chip resets immediately)…
+	$effect(() => {
+		const cwd = project?.path || chat.cwd;
+		gitBranch = '';
+		if (!cwd) return;
+		refreshGitBranch();
+	});
+	// …and refreshed in place on window focus + a slow poll, so a checkout made
+	// in GitPanel or an external terminal doesn't leave the footer stale.
+	$effect(() => {
+		const iv = setInterval(refreshGitBranch, 12_000);
+		return () => clearInterval(iv);
 	});
 
 	// Open the model picker as a popover. If we already have a cached catalog,
@@ -316,6 +333,7 @@
 		if (chat.picker) {
 			const i = filteredRows.findIndex((r) => r.active);
 			selIdx = i >= 0 ? i : 0;
+			pickerKeyNav = false;
 		}
 	});
 	$effect(() => {
@@ -448,14 +466,12 @@
 	function selectRow(command: string) {
 		// Cross-provider model pick: rewrite config + restart this session (resumes
 		// the conversation) since the engine can't change provider at runtime.
+		// `@switch <provider> <model> [effort]` — the effort chip appends its value.
 		if (command.startsWith('@switch ')) {
-			const rest = command.slice('@switch '.length);
-			const sp = rest.indexOf(' ');
-			const pid = rest.slice(0, sp);
-			const name = rest.slice(sp + 1);
+			const [pid, name, effort] = command.slice('@switch '.length).split(/\s+/);
 			const pv = providersList.find((x) => x.id === pid);
 			chat.closePicker();
-			if (pv) store.switchProvider(session.id, pv, name);
+			if (pv && name) store.switchProvider(session.id, pv, name, effort);
 			return;
 		}
 		// Resuming a history item opens it in a fresh session so the current chat
@@ -493,9 +509,11 @@
 		} else if (e.key === 'ArrowDown') {
 			e.preventDefault();
 			selIdx = Math.min(selIdx + 1, filteredRows.length - 1);
+			pickerKeyNav = true;
 		} else if (e.key === 'ArrowUp') {
 			e.preventDefault();
 			selIdx = Math.max(selIdx - 1, 0);
+			pickerKeyNav = true;
 		} else if (e.key === 'Enter') {
 			e.preventDefault();
 			const r = filteredRows[selIdx];
@@ -666,7 +684,7 @@
 	});
 </script>
 
-<svelte:window onkeydown={onWindowKey} />
+<svelte:window onkeydown={onWindowKey} onfocus={refreshGitBranch} />
 
 <div class="chatpane">
 	{#if Object.keys(chat.subagents).length}
@@ -761,6 +779,7 @@
 			onBackend={(b, acpAgent) => store.switchBackend(session.id, b, acpAgent)}
 			bind:pickerQuery
 			bind:pickerSelIdx={selIdx}
+			bind:pickerKeyNav
 			onApproval={setApprovalMode}
 		/>
 	</div>

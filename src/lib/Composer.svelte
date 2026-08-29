@@ -26,6 +26,7 @@
 		el = $bindable(),
 		pickerQuery = $bindable(''),
 		pickerSelIdx = $bindable(0),
+		pickerKeyNav = $bindable(false),
 		modelRows = [],
 		modelTitle = '',
 		modelSearch = false,
@@ -48,6 +49,8 @@
 		el: HTMLElement | null;
 		pickerQuery?: string;
 		pickerSelIdx?: number;
+		/** Arrow keys moved the picker selection (effort chips follow it then). */
+		pickerKeyNav?: boolean;
 		modelRows?: ModelRow[];
 		modelTitle?: string;
 		modelSearch?: boolean;
@@ -82,11 +85,22 @@
 			return;
 		}
 		modelOpen = true;
+		pickerKeyNav = false;
 		if (bcaps.modelPicker) onModel();
 	}
 	function closeModelPopover() {
 		modelOpen = false;
 		if (chat.picker?.kind === 'model') onModelClose?.();
+	}
+	// Escape closes the popover even when the session has no model picker view
+	// (ACP agents — `modelOpen` is ours, not chat.picker). Capture phase so the
+	// key never reaches the pane's window handler or the editor.
+	function onWindowKeyCapture(e: KeyboardEvent) {
+		if (e.key === 'Escape' && modelPopoverVisible) {
+			e.preventDefault();
+			e.stopPropagation();
+			closeModelPopover();
+		}
 	}
 	function selectFromPopover(command: string) {
 		modelOpen = false;
@@ -461,6 +475,8 @@
 
 </script>
 
+<svelte:window onkeydowncapture={onWindowKeyCapture} />
+
 <div class="composer-wrap">
 	{#if slashMatches.length}
 		<SlashMenu matches={slashMatches} selected={slashIdx} onSelect={(c) => (input = c.command + ' ')} onHover={(i) => (slashIdx = i)} />
@@ -525,6 +541,7 @@
 							{backendLocked}
 							bind:query={pickerQuery}
 							bind:selIdx={pickerSelIdx}
+							bind:keyNav={pickerKeyNav}
 							onClose={closeModelPopover}
 							onSelect={selectFromPopover}
 							{onBackend}

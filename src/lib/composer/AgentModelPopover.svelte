@@ -24,6 +24,7 @@
 		backendLocked = true,
 		query = $bindable(''),
 		selIdx = $bindable(0),
+		keyNav = $bindable(false),
 		onClose,
 		onSelect,
 		onBackend,
@@ -37,6 +38,8 @@
 		backendLocked?: boolean;
 		query?: string;
 		selIdx?: number;
+		/** The pane's arrow keys moved selIdx — chips follow the focused row. */
+		keyNav?: boolean;
 		onClose: () => void;
 		onSelect: (command: string) => void;
 		onBackend?: (b: BackendId, acpAgent?: { id: string; name: string }) => void | Promise<void>;
@@ -68,15 +71,28 @@
 		return p.version ? `${BACKEND_LABELS[id]} · ${p.version}` : BACKEND_LABELS[id];
 	};
 
+	// An agent switch tears down and respawns the session's engine — a second
+	// rail click while one is in flight would race it, so gate on a local flag.
+	let switching = $state(false);
 	async function pickNative(id: BackendId) {
-		if (id === chat.backendId) return;
-		await onBackend?.(id);
-		if (CAPS[id].modelPicker) onRefreshModels();
+		if (switching || id === chat.backendId) return;
+		switching = true;
+		try {
+			await onBackend?.(id);
+			if (CAPS[id].modelPicker) onRefreshModels();
+		} finally {
+			switching = false;
+		}
 	}
 	async function pickAcp(agent: AcpAgent) {
-		if (chat.backendId === 'acp' && chat.acpAgentId === agent.id) return;
-		// ACP agents expose no model catalog — nothing to refresh afterwards.
-		await onBackend?.('acp', { id: agent.id, name: agent.name });
+		if (switching || (chat.backendId === 'acp' && chat.acpAgentId === agent.id)) return;
+		switching = true;
+		try {
+			// ACP agents expose no model catalog — nothing to refresh afterwards.
+			await onBackend?.('acp', { id: agent.id, name: agent.name });
+		} finally {
+			switching = false;
+		}
 	}
 
 	// Effort highlighted on the active row (engine-reported, falling back to
@@ -84,11 +100,21 @@
 	const activeEffort = $derived(
 		chat.picker?.kind === 'model' ? chat.picker.activeEffort || chat.effort : chat.effort
 	);
-	// Effort chips only apply to same-engine rows (/model takes an effort
-	// argument); cross-provider @switch rows restart the engine, which picks
-	// its own default effort.
-	const chipEfforts = (row: ModelRow) =>
-		row.command.startsWith('/model ') ? (row.efforts ?? []) : [];
+	// Every row with efforts gets chips: same-engine rows via `/model <name>
+	// <effort>`, cross-provider rows via `@switch <provider> <model> <effort>`
+	// (the restart applies the picked effort instead of the provider default).
+	const chipEfforts = (row: ModelRow) => row.efforts ?? [];
+
+	// Chips are hover-driven for the mouse (mouseenter on a row, cleared when
+	// the pointer leaves the list) and follow selIdx only after the user
+	// actually arrow-keyed — never on the default/active selection.
+	let hoverIdx = $state<number | null>(null);
+	const chipIdx = $derived(hoverIdx ?? (keyNav ? selIdx : null));
+	function hoverRow(i: number) {
+		hoverIdx = i;
+		selIdx = i;
+		keyNav = false;
+	}
 </script>
 
 <button class="pop-backdrop" aria-label="close" onclick={onClose}></button>
@@ -106,6 +132,7 @@
 						class="railbtn"
 						class:on={chat.backendId === id}
 						class:miss={p ? !p.found : false}
+						disabled={switching}
 						onclick={() => pickNative(id)}
 						title={railTitle(id)}
 						aria-label={BACKEND_LABELS[id]}
@@ -119,6 +146,7 @@
 						<button
 							class="railbtn"
 							class:on={chat.backendId === 'acp' && chat.acpAgentId === agent.id}
+							disabled={switching}
 							onclick={() => pickAcp(agent)}
 							title={agent.name}
 							aria-label={agent.name}
@@ -137,7 +165,7 @@
 					<input bind:value={query} placeholder={t('shell.pickerSearchPlaceholder')} autofocus />
 				</div>
 			{/if}
-			<div class="rows">
+			<div class="rows" role="presentation" onmouseleave={() => (hoverIdx = null)}>
 				{#each rows as row, i (row.id)}
 					{#if row.group && (i === 0 || rows[i - 1]?.group !== row.group)}
 						<div class="row-group">{row.group}</div>
@@ -146,14 +174,14 @@
 						class="prow"
 						class:sel={i === selIdx}
 						onclick={() => onSelect(row.command)}
-						onmouseenter={() => (selIdx = i)}
+						onmouseenter={() => hoverRow(i)}
 					>
 						<Vendor model={row.vendor ?? row.label} size={15} />
 						<span class="prow-main">{row.label || t('shell.empty')}</span>
 						<span class="prow-detail">{row.detail}</span>
 						{#if row.active}<Check size={14} class="prow-check" />{/if}
 					</button>
-					{#if i === selIdx && chipEfforts(row).length}
+					{#if i === chipIdx && chipEfforts(row).length}
 						<div class="effrow">
 							<span class="effcap">{t('chat.effortTitle')}</span>
 							{#each chipEfforts(row) as ef (ef)}
@@ -251,6 +279,10 @@
 	}
 	.railbtn.miss {
 		opacity: 0.45;
+	}
+	.railbtn:disabled {
+		cursor: default;
+		opacity: 0.5;
 	}
 	.railsep {
 		width: 20px;

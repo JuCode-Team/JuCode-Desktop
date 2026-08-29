@@ -12,7 +12,7 @@ vi.mock('./protocol', () => ({
 }));
 
 import { SessionStore } from './session.svelte';
-import { createSession, sendOp, git } from './protocol';
+import { createSession, sendOp, git, writeConfig } from './protocol';
 import { setLocale } from './i18n';
 import type { Project, WorktreeMeta } from './types';
 
@@ -126,6 +126,38 @@ describe('SessionStore lifecycle', () => {
 		const rid = store.restoreSession(p, 'sid-1', 'old', 'jucode');
 		await store.switchBackend(rid, 'codex');
 		expect(p.sessions.find((s) => s.id === rid)?.backendId).toBe('jucode');
+	});
+
+	it('switchProvider honors a valid effort override and falls back otherwise', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p);
+		const provider = {
+			id: 'byo',
+			base_url: 'https://api.example.com',
+			format: 'openai',
+			models: [{ name: 'm1', reasoning_efforts: ['low', 'high'] }]
+		};
+		// A chip pick carries an explicit effort — written verbatim when valid.
+		await store.switchProvider(id, provider, 'm1', 'high');
+		expect(writeConfig).toHaveBeenCalledWith(
+			expect.objectContaining({ provider: 'byo', model: 'm1', reasoning_effort: 'high' })
+		);
+		// An unknown effort falls back to the default (no medium → first listed).
+		await store.switchProvider(id, provider, 'm1', 'bogus');
+		expect(writeConfig).toHaveBeenLastCalledWith(
+			expect.objectContaining({ reasoning_effort: 'low' })
+		);
+		// No effort argument keeps the medium-first default.
+		await store.switchProvider(
+			id,
+			{ ...provider, models: [{ name: 'm1', reasoning_efforts: ['low', 'medium', 'high'] }] },
+			'm1'
+		);
+		expect(writeConfig).toHaveBeenLastCalledWith(
+			expect.objectContaining({ reasoning_effort: 'medium' })
+		);
 	});
 
 	it('removeProject tears down its sessions and clears a dangling activeId', () => {

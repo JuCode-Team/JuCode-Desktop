@@ -452,7 +452,9 @@ export class SessionStore {
 	async switchProvider(
 		id: string,
 		provider: { id: string; base_url: string; format: string; models: { name: string; reasoning_efforts?: string[] }[] },
-		model: string
+		model: string,
+		/** Explicit effort pick (popover chip); must be one of the model's efforts. */
+		effort?: string
 	) {
 		const s = this.allSessions.find((x) => x.id === id);
 		if (!s) return;
@@ -464,7 +466,8 @@ export class SessionStore {
 			models: provider.models,
 			model
 		};
-		if (efforts.length) patch.reasoning_effort = efforts.includes('medium') ? 'medium' : efforts[0];
+		if (effort && efforts.includes(effort)) patch.reasoning_effort = effort;
+		else if (efforts.length) patch.reasoning_effort = efforts.includes('medium') ? 'medium' : efforts[0];
 		try {
 			await writeConfig(patch);
 		} catch (e) {
