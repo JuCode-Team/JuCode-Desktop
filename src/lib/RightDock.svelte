@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { X, Plus, ListTodo, Target, FileDiff, FolderTree, GitBranch, Terminal, Globe, History, Activity } from 'lucide-svelte';
+	import { X, Plus, ListTodo, Target, FileDiff, FolderTree, GitBranch, Terminal, Globe, History, Activity, SquareTerminal } from 'lucide-svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import GoalPanel from './GoalPanel.svelte';
 	import PlanPanel from './PlanPanel.svelte';
@@ -11,7 +11,11 @@
 	import DiagnosticsPanel from './DiagnosticsPanel.svelte';
 	import TerminalPanel from './TerminalPanel.svelte';
 	import BrowserPanel from './BrowserPanel.svelte';
+	import TuiPanel from './TuiPanel.svelte';
 	import Mosaic from '$lib/workbench/Mosaic.svelte';
+	import { tuiBackendOf, tuiPanelKind, tuiTabTitle } from '$lib/workbench/tuiTab';
+	import { tuiOpen } from '$lib/tuiOpen.svelte';
+	import { BACKEND_IDS, type BackendId } from '$lib/backends';
 	import {
 		activateTab,
 		deserializeLayout,
@@ -43,7 +47,8 @@
 		onRevertFile,
 		onOpenFile,
 		onOpenTask,
-		onTaskRemoved
+		onTaskRemoved,
+		onOpenSettings
 	}: {
 		goal: Goal | null;
 		plan?: PlanStep[];
@@ -61,6 +66,8 @@
 		onOpenFile?: (p: string) => void;
 		onOpenTask?: (path: string, meta: WorktreeMeta) => void;
 		onTaskRemoved?: (path: string) => void;
+		/** TUI tabs point here when the CLI binary is missing. */
+		onOpenSettings?: () => void;
 	} = $props();
 
 	const ALL_PANELS = [
@@ -84,7 +91,14 @@
 			return true;
 		})
 	);
-	const labelOf = (key: string) => (ALL_PANELS.some((p) => p.key === key) ? t(`dock.tabs.${key}`) : key);
+	// Native TUI tabs (`tui:<backend>`) run the real interactive CLI in a pty —
+	// each one is an independent process, never a second view of a GUI session.
+	const TUI_OPTIONS = BACKEND_IDS.map((b) => ({ key: tuiPanelKind(b), icon: SquareTerminal }));
+	const labelOf = (key: string) => {
+		const tui = tuiBackendOf(key);
+		if (tui) return tuiTabTitle(tui);
+		return ALL_PANELS.some((p) => p.key === key) ? t(`dock.tabs.${key}`) : key;
+	};
 
 	// A tab is an *instance* of a panel, so several tabs can share a panel type
 	// (e.g. two terminals); each carries its own id.
@@ -102,7 +116,10 @@
 						if (t && typeof t.id === 'string' && typeof t.panel === 'string') return { id: t.id, panel: t.panel };
 						return null;
 					})
-					.filter((t): t is Tab => t !== null && ALL_PANELS.some((p) => p.key === t.panel));
+					.filter(
+						(t): t is Tab =>
+							t !== null && (ALL_PANELS.some((p) => p.key === t.panel) || tuiBackendOf(t.panel) !== null)
+					);
 				if (tabs.length) return tabs;
 			}
 		} catch {
@@ -204,6 +221,36 @@
 		setTiles(openTab(tiles, leafId, { id: newId(), panel }));
 	}
 	const mosaicLabel = (tab: TileTab) => labelOf(tab.panel);
+
+	// "Open TUI" from the palette re-activates an existing tab of that backend
+	// (a second independent process is available via the + menu, but shouldn't
+	// spawn by accident); new tabs land in the layout like any other panel.
+	function openTuiTab(backend: BackendId) {
+		const kind = tuiPanelKind(backend);
+		if (prefs.mosaic) {
+			const existing = leavesOf(tiles.root)
+				.flatMap((l) => l.tabs)
+				.find((tab) => tab.panel === kind);
+			if (existing) {
+				setTiles(activateTab(tiles, existing.id));
+				return;
+			}
+			mosaicAdd(null, kind);
+		} else {
+			const existing = openTabs.find((t) => t.panel === kind);
+			if (existing) {
+				active = existing.id;
+				return;
+			}
+			openPanel(kind);
+		}
+	}
+	$effect(() => {
+		if (tuiOpen.n === 0) return;
+		const backend = tuiOpen.backend;
+		untrack(() => openTuiTab(backend));
+	});
+
 	function closeTab(id: string) {
 		const idx = openTabs.findIndex((t) => t.id === id);
 		openTabs = openTabs.filter((t) => t.id !== id);
@@ -239,6 +286,7 @@
 </script>
 
 {#snippet panelBody(kind: string)}
+	{@const tui = tuiBackendOf(kind)}
 	{#if kind === 'plan'}<PlanPanel {plan} />
 	{:else if kind === 'goal'}<GoalPanel {goal} />
 	{:else if kind === 'changes'}<ChangesPanel {cwd} files={changed} onRevert={onRevertFile} />
@@ -247,7 +295,8 @@
 	{:else if kind === 'git'}<GitPanel {cwd} {worktree} {llm} {onOpenTask} {onTaskRemoved} />
 	{:else if kind === 'term'}<TerminalPanel {cwd} />
 	{:else if kind === 'browser'}<BrowserPanel />
-	{:else if kind === 'diag'}<DiagnosticsPanel {chat} />{/if}
+	{:else if kind === 'diag'}<DiagnosticsPanel {chat} />
+	{:else if tui}<TuiPanel backend={tui} {cwd} {onOpenSettings} />{/if}
 {/snippet}
 
 {#if prefs.mosaic}
@@ -256,7 +305,7 @@
 			layout={tiles}
 			onchange={setTiles}
 			label={mosaicLabel}
-			addOptions={PANELS.map((p) => ({ key: p.key, label: labelOf(p.key) }))}
+			addOptions={[...PANELS, ...TUI_OPTIONS].map((p) => ({ key: p.key, label: labelOf(p.key) }))}
 			onAdd={mosaicAdd}
 			emptyText={t('dock.dock.empty')}
 		>
@@ -300,7 +349,7 @@
 			{#if addOpen}
 				<button class="add-backdrop" aria-label="close" onclick={() => (addOpen = false)}></button>
 				<div class="add-menu">
-					{#each PANELS as p (p.key)}
+					{#each [...PANELS, ...TUI_OPTIONS] as p (p.key)}
 						<button class="add-item" onclick={() => openPanel(p.key)}>{labelOf(p.key)}</button>
 					{/each}
 				</div>

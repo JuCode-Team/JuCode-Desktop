@@ -24,6 +24,15 @@ const dock = {
 			maximize: '最大化',
 			restore: '还原'
 		},
+		tui: {
+			missing: '没有找到 {bin} 命令',
+			missingHint: '先安装 {bin}，或在「设置 → 引擎后端」中填写它的可执行文件路径。',
+			openSettings: '打开设置',
+			retry: '重试',
+			failed: '启动失败',
+			exited: '进程已退出',
+			restart: '重新启动'
+		},
 		turns: {
 			empty: '本会话还没有文件改动',
 			turnN: '第 {n} 回合',
@@ -200,6 +209,15 @@ const dock = {
 			maximizedHint: 'Maximized · Esc to restore',
 			maximize: 'Maximize',
 			restore: 'Restore'
+		},
+		tui: {
+			missing: 'Could not find the {bin} command',
+			missingHint: 'Install {bin}, or set its binary path under Settings → Engine backends.',
+			openSettings: 'Open settings',
+			retry: 'Try again',
+			failed: 'Failed to start',
+			exited: 'Process exited',
+			restart: 'Restart'
 		},
 		turns: {
 			empty: 'No file changes in this session yet',

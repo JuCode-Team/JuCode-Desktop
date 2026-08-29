@@ -189,7 +189,10 @@ const shell = {
 			panel: '切换右侧面板',
 			panelKw: 'panel dock 面板',
 			theme: '切换主题',
-			themeKw: 'theme dark light 主题'
+			themeKw: 'theme dark light 主题',
+			openTui: '打开 TUI：{name}',
+			openTuiHint: '在面板中运行交互式命令行（独立会话）',
+			openTuiKw: 'tui terminal cli 终端 命令行'
 		},
 
 		// session runtime (session.svelte.ts)
@@ -405,7 +408,10 @@ const shell = {
 			panel: 'Toggle right panel',
 			panelKw: 'panel dock',
 			theme: 'Toggle theme',
-			themeKw: 'theme dark light'
+			themeKw: 'theme dark light',
+			openTui: 'Open TUI: {name}',
+			openTuiHint: 'Run the interactive CLI in a panel (own session)',
+			openTuiKw: 'tui terminal cli'
 		},
 
 		// session runtime (session.svelte.ts)

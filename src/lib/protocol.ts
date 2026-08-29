@@ -321,8 +321,31 @@ export function git(args: string[], cwd?: string): Promise<string> {
 export function worktreeBase(cwd: string): Promise<string> {
 	return invoke('worktree_base', { cwd });
 }
-export function ptyOpen(id: string, cols: number, rows: number, cwd?: string): Promise<void> {
-	return invoke('pty_open', { id, cols, rows, cwd });
+/** Non-shell pty target: `command` must be an allowlisted backend name
+ *  (jucode / codex / claude). The Rust side validates it and `args` against
+ *  fixed allowlists and resolves the binary like engine spawns — a missing
+ *  binary rejects with `binary-missing:<name>`. */
+export interface PtyCommand {
+	command: string;
+	args?: string[];
+	binOverride?: string;
+}
+export function ptyOpen(
+	id: string,
+	cols: number,
+	rows: number,
+	cwd?: string,
+	cmd?: PtyCommand
+): Promise<void> {
+	return invoke('pty_open', {
+		id,
+		cols,
+		rows,
+		cwd,
+		command: cmd?.command,
+		args: cmd?.args,
+		binOverride: cmd?.binOverride
+	});
 }
 export function ptyWrite(id: string, data: string): Promise<void> {
 	return invoke('pty_write', { id, data });
