@@ -12,7 +12,7 @@ import {
 	LEGACY_PROJECTS_KEY,
 	WORKSPACES_VERSION
 } from './workspaces';
-import { deserializeLayout, leavesOf } from './tiles';
+import { deserializeLayout, leavesOf, serializeLayout, singleLeafLayout } from './tiles';
 
 const proj = (id: string) => ({ id, name: id, path: `/tmp/${id}` });
 
@@ -46,6 +46,25 @@ describe('workspaces file', () => {
 		const good = { ...proj('p1'), lastBackend: 'codex', tabs: [{ sid: 's', title: 'T' }] };
 		const projects = sanitizeProjects([good, { id: 'x' }, null, 'junk']);
 		expect(projects).toEqual([good]);
+	});
+
+	it('round-trips the main session-mosaic layout', () => {
+		const main = serializeLayout(singleLeafLayout([{ id: 'chat:sid-a', panel: 'chat:sid-a' }]));
+		const file = defaultWorkspacesFile(createWorkspace('a', [], null, main));
+		const parsed = parseWorkspacesFile(serializeWorkspaces(file));
+		expect(parsed?.workspaces[0].main).toEqual(main);
+		const layout = deserializeLayout(parsed!.workspaces[0].main);
+		expect(leavesOf(layout!.root)[0].tabs.map((t) => t.id)).toEqual(['chat:sid-a']);
+	});
+
+	it('migrates pre-mosaic files: a missing/invalid main parses as null', () => {
+		// A v1 file written before the session mosaic existed has no `main` key.
+		const file = defaultWorkspacesFile(createWorkspace('a'));
+		const old = JSON.parse(serializeWorkspaces(file)) as Record<string, unknown>;
+		delete (old.workspaces as Record<string, unknown>[])[0].main;
+		expect(parseWorkspacesFile(JSON.stringify(old))?.workspaces[0].main).toBeNull();
+		(old.workspaces as Record<string, unknown>[])[0].main = 'garbage';
+		expect(parseWorkspacesFile(JSON.stringify(old))?.workspaces[0].main).toBeNull();
 	});
 });
 

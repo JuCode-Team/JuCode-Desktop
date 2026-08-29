@@ -185,6 +185,16 @@ describe('SessionStore lifecycle', () => {
 		expect(store.activeId).toBe(store.projects[0].sessions[0].id);
 		expect(store.loaded).toBe(true);
 	});
+
+	it('restored sessions remember their engine session id (restoredFrom)', async () => {
+		// The main tile layout persists chat tabs under engine session ids;
+		// restoredFrom maps them back to the fresh runtime sessions on launch.
+		const store = new SessionStore();
+		await store.restore([
+			{ id: 'p1', name: 'p1', path: '/tmp/p1', tabs: [{ sid: 's-a', title: 'A' }] }
+		]);
+		expect(store.projects[0].sessions[0].restoredFrom).toBe('s-a');
+	});
 });
 
 describe('SessionStore parallel-task worktrees', () => {

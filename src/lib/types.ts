@@ -17,6 +17,11 @@ export interface Session {
 	/** Opened by resuming a persisted conversation — the engine already holds
 	 *  context, so the backend is locked even before any visible user turn. */
 	restored?: boolean;
+	/** The engine session id this session was restored from. Bridges the gap
+	 *  until the engine confirms `chat.sessionId` (jucode's /resume is async),
+	 *  so the main tile layout can map persisted `chat:<engine sid>` tabs to
+	 *  this runtime session immediately after restore. */
+	restoredFrom?: string;
 }
 
 /** 并行任务（git worktree）项目的元数据，随项目布局持久化。 */

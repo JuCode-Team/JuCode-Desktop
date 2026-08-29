@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { onMount, tick, untrack } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { listen } from '@tauri-apps/api/event';
 	import { getCurrentWebview } from '@tauri-apps/api/webview';
-	import { X, Check, PanelRight, PanelLeft, ChevronDown, ChevronUp, Search, LoaderCircle } from 'lucide-svelte';
+	import { PanelRight, PanelLeft } from 'lucide-svelte';
 	import { open, ask, message } from '@tauri-apps/plugin-dialog';
 	import { cycleTheme } from '$lib/theme.svelte';
 	import {
@@ -11,22 +11,12 @@
 		sendNotification
 	} from '@tauri-apps/plugin-notification';
 	import { ChatState } from '$lib/chat.svelte';
-	import { treeRows } from '$lib/tree';
-	import { buildSetApprovalModeOp, needsClaudeYoloRespawn, type ApprovalMode, type ApproveOp } from '$lib/approval';
-	import { focusTrap } from '$lib/focusTrap';
+	import { needsClaudeYoloRespawn } from '$lib/approval';
 	import {
 		readAuthProviders,
 		listProviders,
 		listDir,
-		captureScreenshot,
-		startScreenRecording,
-		stopScreenRecording,
-		processVideo,
-		claudeSessions,
-		gitCheckpointCapture,
-		gitCheckpointRestore,
-		type EventPayload,
-		type Op
+		type EventPayload
 	} from '$lib/protocol';
 	import { dispatch } from '$lib/backends/router';
 	import { caps, type BackendId } from '$lib/backends';
@@ -38,23 +28,36 @@
 	import { t } from '$lib/i18n';
 	import { SessionStore } from '$lib/session.svelte';
 	import { workspaces } from '$lib/workbench/workspaceStore.svelte';
+	import {
+		deserializeLayout,
+		emptyLayout,
+		findLeaf,
+		leafOfTab,
+		leavesOf,
+		serializeLayout,
+		type SerializedLayout,
+		type TileLayout,
+		type TileTab
+	} from '$lib/workbench/tiles';
+	import {
+		chatSessionOf,
+		chatTabId,
+		ensureChatTab,
+		pruneChatTabs,
+		remapChatTabs
+	} from '$lib/workbench/chatTabs';
+	import type { WorkspaceEntry } from '$lib/workbench/workspaces';
+	import Mosaic from '$lib/workbench/Mosaic.svelte';
+	import ChatPane from '$lib/ChatPane.svelte';
 	import Settings from '$lib/Settings.svelte';
 	import Setup from '$lib/Setup.svelte';
 	import Marketplace from '$lib/Marketplace.svelte';
 	import RightDock from '$lib/RightDock.svelte';
 	import Sidebar from '$lib/Sidebar.svelte';
-	import Composer from '$lib/Composer.svelte';
-	import MessageList from '$lib/MessageList.svelte';
-	import StatusStrip from '$lib/composer/StatusStrip.svelte';
-	import ApprovalCard from '$lib/ApprovalCard.svelte';
-	import RateLimitBanner from '$lib/RateLimitBanner.svelte';
 	import Button from '$lib/ui/Button.svelte';
-	import IconButton from '$lib/ui/IconButton.svelte';
 	import CommandPalette from '$lib/CommandPalette.svelte';
 	import TaskDialog from '$lib/TaskDialog.svelte';
 	import type { Project, WorktreeMeta } from '$lib/types';
-	import Picker from '$lib/shell/Picker.svelte';
-	import FindBar from '$lib/shell/FindBar.svelte';
 	import EditorPane from '$lib/editor/EditorPane.svelte';
 	import QuickOpen from '$lib/editor/QuickOpen.svelte';
 	import { editorStore } from '$lib/editor/editorStore.svelte';
@@ -72,44 +75,7 @@
 	// O(1) session lookup for the hot agent-event path (fires per stream chunk),
 	// instead of an O(n) allSessions.find on every event.
 	const sessionMap = $derived(new Map(allSessions.map((s) => [s.id, s])));
-	let input = $state('');
-	let attachments = $state<{ path: string; image: boolean }[]>([]);
-	// Videos attach as extracted keyframes (images) + a text description — the
-	// engine protocol only understands image paths.
-	let videos = $state<{ path: string; frames: string[]; duration: number }[]>([]);
-	// Page elements picked in the embedded browser. Each pick inserts an inline
-	// token ([网页元素#N:…]) into the composer text at the cursor, so the user can
-	// position/reorder/delete it inline; on submit the token expands in place into
-	// the full reference. Refs whose token was deleted are dropped.
-	type PickedRef = WebRef & { id: number };
-	let webRefs = $state<PickedRef[]>([]);
-	let refSeq = 0;
-	let recording = $state(false);
-	let scroller = $state<HTMLElement | null>(null);
-	let composerEl = $state<HTMLElement | null>(null);
-	let composerRef = $state<{ insertToken: (t: string) => void } | undefined>();
-	let bottomH = $state(120);
-	let atBottom = $state(true);
 	let providers = $state<string[]>([]);
-
-	// In-conversation find (⌘F). The raw input updates per keystroke; the actual
-	// scan (findHits) keys off the debounced `findQuery` so the O(n) message scan
-	// doesn't run on every keystroke (or every stream chunk while typing).
-	let showFind = $state(false);
-	let findInput = $state('');
-	let findQuery = $state('');
-	let findDebounce: ReturnType<typeof setTimeout> | null = null;
-	function onFindInput() {
-		if (findDebounce != null) clearTimeout(findDebounce);
-		findDebounce = setTimeout(() => {
-			findQuery = findInput;
-			findDebounce = null;
-		}, 220);
-	}
-	let findIdx = $state(0);
-	let findInputEl = $state<HTMLInputElement | null>(null);
-	// Picker filter (history / long lists)
-	let pickerQuery = $state('');
 
 	async function notifyDone(title: string) {
 		try {
@@ -120,7 +86,6 @@
 			/* ignore */
 		}
 	}
-	let selIdx = $state(0);
 	let showSettings = $state(false);
 	let settingsInitial = $state<'overview' | 'account' | 'behavior'>('overview');
 	let showMarket = $state(false);
@@ -129,63 +94,12 @@
 	// 「新建并行任务」对话框：为哪个（主仓库）项目开任务。
 	let taskDialogFor = $state<Project | null>(null);
 
-	// Ops flow through the active session's backend adapter; an unsupported op
-	// (non-jucode stub backends) surfaces as an inline system notice.
-	function send(op: Op) {
-		// claude's /resume can't go over the wire: stream-json mode has no session
-		// listing protocol, the history lives in files under ~/.claude/projects.
-		// Bare /resume synthesizes the picker from the claude_sessions command; a
-		// typed `/resume <id>` opens that session in a fresh tab (same flow as a
-		// picker pick — the current chat is never replaced).
-		if (op.op === 'command' && chat?.backendId === 'claude') {
-			const input = op.input.trim();
-			if (input === '/resume') {
-				openClaudeHistory();
-				return;
-			}
-			if (input.startsWith('/resume ') && activeProject) {
-				const sid = input.slice('/resume '.length).trim();
-				chat.closePicker();
-				store.activeId = store.restoreSession(activeProject, sid, '', 'claude');
-				return;
-			}
-		}
-		if (!dispatch(activeId, op)) {
-			chat?.messages.push({ kind: 'system', text: t('shell.backend.opUnsupported', { op: op.op }) });
-		}
-	}
-
-	// Builds the claude /resume picker from the session files Claude Code
-	// persisted for this project (claude_sessions → synthesized resume_view).
-	async function openClaudeHistory() {
-		const c = chat;
-		const proj = activeProject;
-		if (!c || !proj) return;
-		try {
-			const sessions = await claudeSessions(proj.path);
-			c.handle({
-				type: 'resume_view',
-				items: sessions.map((s) => ({
-					id: s.id,
-					label: s.preview || s.id.slice(0, 8),
-					detail: new Date(s.mtime_ms).toLocaleString(),
-					active: s.id === c.sessionId
-				}))
-			});
-		} catch (e) {
-			c.messages.push({ kind: 'system', text: t('shell.backend.claudeHistoryFail', { msg: String(e) }) });
-		}
-	}
 	// New-session flow: create the session immediately with the project's
 	// last-used backend (falling back to the settings default) — the composer's
 	// backend selector lets the user switch until the first message is sent.
 	function newSessionFlow(p: Project) {
 		store.addSession(p);
 	}
-
-	// The backend is only switchable while the session is virgin: no user turn
-	// yet (an optimistic push counts) and not a resumed conversation.
-	const backendLocked = $derived(!active || !!active.restored || (chat?.userTurns ?? 0) > 0);
 
 	function refreshAuth() {
 		readAuthProviders()
@@ -302,7 +216,7 @@
 			showPalette ||
 			showQuickOpen ||
 			!!taskDialogFor ||
-			// The model picker is now an in-composer popover (like effort/approval),
+			// The model picker is an in-composer popover (like effort/approval),
 			// not a centered overlay, so it needn't collapse the browser webview.
 			(!!chat?.picker && chat.picker.kind !== 'model') ||
 			!!chat?.trustPrompt ||
@@ -390,241 +304,224 @@
 		editorStore.open(changed[changed.length - 1], cwd).catch((e) => console.error('open audit', e));
 	}
 
-	// ⌘K in the editor: forward the structured instruction to the active session
-	// engine. Returns false when there's no live session to receive it.
+	// ⌘K in the editor: forward the structured instruction to the focused
+	// session's pane. Returns false when there's no live session to receive it.
 	function sendAiEdit(content: string): boolean {
-		if (!chat || chat.engineState === 'exited') return false;
-		if (!chat.busy) {
-			captureCheckpoint();
-			chat.optimisticUser(content);
+		return paneRefs[store.activeId]?.sendUserMessage(content) ?? false;
+	}
+
+	// Open a workspace file referenced from the dock (turn timeline). HTML opens
+	// in the built-in browser (rendered) or the editor (source) per preference;
+	// everything else opens in the editor. Paths resolve against the active
+	// project root. (Chat links use the same logic inside each ChatPane.)
+	function openChatFile(href: string) {
+		const cwd = activeProject?.path;
+		if (!cwd) return;
+		const rel = href.replace(/^file:\/\//, '').split(/[?#]/)[0].trim();
+		if (!rel) return;
+		const abs = rel.startsWith('/') ? rel : `${cwd.replace(/\/+$/, '')}/${rel.replace(/^\.?\//, '')}`;
+		const ext = abs.split('/').pop()?.split('.').pop()?.toLowerCase() ?? '';
+		if ((ext === 'html' || ext === 'htm') && prefs.htmlOpenInBrowser) {
+			browser.open(`file://${abs}`);
+		} else {
+			editorStore.open(abs, cwd).catch((e) => console.error('open chat file', e));
 		}
-		send({ op: 'user_message', content });
-		return true;
 	}
 
-	// Effort switch is debounced: reflect the pick immediately on the slider
-	// (optimistic chat.effort) so the handle stays put, but only send the actual
-	// `/model` command once the user settles — rapid drags/clicks don't race a
-	// half-dozen switches through the engine.
-	let effortTimer: ReturnType<typeof setTimeout> | undefined;
-	function chooseEffort(ef: string) {
-		if (!chat) return;
-		chat.effort = ef;
-		const model = chat.model;
-		clearTimeout(effortTimer);
-		effortTimer = setTimeout(() => {
-			if (chat) send({ op: 'command', input: `/model ${model} ${ef}` });
-		}, 350);
+	// ---------- main session mosaic ----------
+	// The center of the app is a tile layout whose tabs are chat sessions
+	// (`chat:<sessionId>`): drag a session tab to a pane edge to see two
+	// conversations side by side, drop on the center to stack, double-click a
+	// tab bar to maximize. The layout is workspace state: persisted (under the
+	// engines' session ids) in workspaces.json next to the dock layout.
+	let mainTiles = $state<TileLayout>(emptyLayout());
+	let mainLoaded = $state(false);
+	// The focused leaf: sidebar clicks and new sessions open their tab here.
+	let focusedLeaf = $state<string | null>(null);
+	const multiPane = $derived(leavesOf(mainTiles.root).length > 1);
+
+	type PaneHandle = {
+		addAttachment: (path: string) => void;
+		addWebRef: (ref: WebRef) => void;
+		sendCommand: (cmd: string) => void;
+		sendUserMessage: (content: string) => boolean;
+	};
+	let paneRefs = $state<Record<string, PaneHandle | null | undefined>>({});
+
+	const mainLabel = (tab: TileTab): string => {
+		const sid = chatSessionOf(tab.id);
+		const s = sid ? sessionMap.get(sid) : undefined;
+		return s?.chat.title || t('shell.untitled');
+	};
+
+	function validFocusedLeaf(): string | null {
+		return focusedLeaf && findLeaf(mainTiles.root, focusedLeaf) ? focusedLeaf : null;
 	}
 
-	// Open the model picker as a popover. If we already have a cached catalog,
-	// show it instantly and refresh in the background; otherwise fetch first.
-	function openModelPicker() {
-		if (!chat) return;
-		if (chat.modelCatalog.length) {
-			chat.picker = {
-				kind: 'model',
-				models: chat.modelCatalog,
-				activeEffort: chat.modelCatalogEffort || chat.effort
-			};
-			const act = chat.modelCatalog.findIndex((m) => m.active);
-			selIdx = act >= 0 ? act : 0;
+	/** Serialize the live layout under engine session ids (runtime ids are
+	 *  regenerated every launch). Sessions that can't be resumed drop out —
+	 *  same rule as the sidebar tab persistence. */
+	function currentMainSerialized(): SerializedLayout {
+		return serializeLayout(
+			remapChatTabs(mainTiles, (rid) => {
+				const s = sessionMap.get(rid);
+				if (!s) return null;
+				if (s.chat.resumable && s.chat.sessionId) return s.chat.sessionId;
+				return s.restoredFrom ?? null;
+			})
+		);
+	}
+
+	/** Load (or migrate) the workspace's main layout once its sessions are
+	 *  restored: persisted `chat:<engine sid>` tabs map onto the freshly
+	 *  restored runtime sessions; a file without a usable layout (pre-mosaic
+	 *  install, fresh workspace) seeds one leaf with the active session. */
+	function initMainTiles(entry: WorkspaceEntry) {
+		const bySid = new Map<string, string>();
+		for (const s of store.allSessions) {
+			const sid = s.restoredFrom ?? (s.chat.resumable ? s.chat.sessionId : '');
+			if (sid && !bySid.has(sid)) bySid.set(sid, s.id);
 		}
-		nav('/model');
+		const parsed = deserializeLayout(entry.main ?? null);
+		let layout = parsed ? remapChatTabs(parsed, (sid) => bySid.get(sid) ?? null) : emptyLayout();
+		if (!layout.root && store.activeId) layout = ensureChatTab(layout, store.activeId, null);
+		mainTiles = layout;
+		const activeLeaf = store.activeId ? leafOfTab(layout.root, chatTabId(store.activeId)) : null;
+		focusedLeaf = activeLeaf?.id ?? leavesOf(layout.root)[0]?.id ?? null;
+		mainLoaded = true;
 	}
 
-	// The assistant message that's still streaming: render it as plain text and
-	// only run markdown/highlight once the turn finishes (avoids reparsing the
-	// whole message on every token).
-	// The streaming block is the LAST message (deltas append to the tail). Scanning
-	// backwards would wrongly latch onto a previous turn's reply before this turn's
-	// message exists, re-animating it on send.
-	const streamingMsg = $derived.by(() => {
-		if (!chat?.busy) return null;
-		const last = chat.messages[chat.messages.length - 1];
-		return last?.kind === 'assistant' ? last : null;
-	});
-	// The reasoning block currently receiving deltas — rendered with the
-	// line-by-line streaming animation (others render as static markdown).
-	const streamingReasoning = $derived.by(() => {
-		if (!chat?.busy) return null;
-		const last = chat.messages[chat.messages.length - 1];
-		return last?.kind === 'reasoning' && !last.collapsed ? last : null;
-	});
-	const loggedIn = $derived(!!chat?.provider && providers.includes(chat.provider));
+	/** Layout change reported by the Mosaic (tab click / drag / split / close /
+	 *  resize / maximize). Focus follows the interaction: the leaf whose active
+	 *  tab changed (or a freshly created leaf) becomes the focused leaf and its
+	 *  session becomes the active one — dock/goal/shortcuts follow it. */
+	function handleMainChange(next: TileLayout) {
+		const prev = mainTiles;
+		mainTiles = next;
+		const prevLeaves = new Map(leavesOf(prev.root).map((l) => [l.id, l]));
+		let focus: { id: string; active: string } | null = null;
+		for (const leaf of leavesOf(next.root)) {
+			const old = prevLeaves.get(leaf.id);
+			if (!old) {
+				focus = leaf;
+				break;
+			}
+			if (old.active !== leaf.active) focus = leaf;
+		}
+		if (focus) {
+			focusedLeaf = focus.id;
+			const sid = chatSessionOf(focus.active);
+			if (sid && sessionMap.has(sid)) store.activeId = sid;
+		}
+		if (focusedLeaf && !findLeaf(next.root, focusedLeaf)) {
+			focusedLeaf = leavesOf(next.root)[0]?.id ?? null;
+		}
+		// The active session's tab was closed (tab removed ≠ session closed —
+		// it stays in the sidebar): hand focus to what's visible in its place.
+		if (store.activeId && !leafOfTab(next.root, chatTabId(store.activeId))) {
+			const fallback =
+				(focusedLeaf && findLeaf(next.root, focusedLeaf)) ?? leavesOf(next.root)[0] ?? null;
+			const sid = fallback ? chatSessionOf(fallback.active) : null;
+			if (sid && sessionMap.has(sid)) store.activeId = sid;
+		}
+	}
 
-	// Message indices in the active chat matching the find query, and the current one.
-	const findHits = $derived.by(() => {
-		if (!showFind || !chat) return [];
-		const q = findQuery.trim().toLowerCase();
-		if (!q) return [];
-		const hits: number[] = [];
-		chat.messages.forEach((m, i) => {
-			const text = m.kind === 'tool' ? `${m.name} ${m.output}` : 'text' in m ? m.text : '';
-			if (text.toLowerCase().includes(q)) hits.push(i);
-		});
-		return hits;
-	});
-	const findActive = $derived(findHits.length ? findHits[Math.min(findIdx, findHits.length - 1)] : null);
+	/** A pane was clicked: it becomes the focused leaf + active session. */
+	function focusPane(tabId: string) {
+		const leaf = leafOfTab(mainTiles.root, tabId);
+		if (leaf) focusedLeaf = leaf.id;
+		const sid = chatSessionOf(tabId);
+		if (sid && sessionMap.has(sid)) store.activeId = sid;
+	}
+
+	/** Sidebar click: activate the session's existing tab (wherever it lives),
+	 *  or open one in the focused leaf. */
+	function selectSession(id: string) {
+		store.activeId = id;
+		if (!mainLoaded) return;
+		const next = ensureChatTab(mainTiles, id, validFocusedLeaf());
+		if (next !== mainTiles) mainTiles = next;
+		focusedLeaf = leafOfTab(mainTiles.root, chatTabId(id))?.id ?? focusedLeaf;
+	}
+
+	/** The + menu / empty-state button: a new session opens in that leaf. */
+	function mainAdd(leafId: string | null, _key: string) {
+		const p = activeProject ?? projects[0];
+		if (!p) {
+			addProject();
+			return;
+		}
+		if (leafId) focusedLeaf = leafId;
+		store.addSession(p);
+	}
+
+	// Every path that activates a session (new session, restore, deep link,
+	// tray, palette, history picker…) funnels through store.activeId — make
+	// sure the active session always has a visible, active tab.
 	$effect(() => {
-		findQuery;
-		findIdx = 0;
+		const id = store.activeId;
+		if (!mainLoaded || !id) return;
+		untrack(() => {
+			const next = ensureChatTab(mainTiles, id, validFocusedLeaf());
+			if (next !== mainTiles) mainTiles = next;
+			focusedLeaf = leafOfTab(mainTiles.root, chatTabId(id))?.id ?? focusedLeaf;
+		});
 	});
 
-	// Persist the project layout + open tabs (engine session id + title) into the
-	// active workspace (app-data file, not localStorage) whenever they change.
-	// Gated on `loaded` so it can't clobber the saved data before the initial
-	// restore has run; untracked write so the effect only follows the session tree.
+	// Sessions that closed or were archived lose their tab (emptied leaves
+	// collapse). The reverse is NOT true: closing a tab keeps the session —
+	// it stays in the sidebar and can be re-opened from there.
+	$effect(() => {
+		if (!mainLoaded) return;
+		const live = new Set(allSessions.filter((s) => !s.archived).map((s) => s.id));
+		untrack(() => {
+			const next = pruneChatTabs(mainTiles, (sid) => live.has(sid));
+			if (next !== mainTiles) {
+				mainTiles = next;
+				if (focusedLeaf && !findLeaf(next.root, focusedLeaf)) {
+					focusedLeaf = leavesOf(next.root)[0]?.id ?? null;
+				}
+			}
+		});
+	});
+
+	// Persist the project layout + open tabs (engine session id + title) and
+	// the main tile layout into the active workspace (app-data file, not
+	// localStorage) whenever they change. Gated on `loaded` so it can't clobber
+	// the saved data before the initial restore has run; untracked writes so
+	// the effect only follows the session tree + layout.
 	$effect(() => {
 		if (!store.loaded) return;
 		const saved = store.serialize();
 		untrack(() => workspaces.updateProjects(saved));
+		if (mainLoaded) {
+			void mainTiles;
+			untrack(() => workspaces.updateMain(currentMainSerialized()));
+		}
 	});
 
-	const fmtTokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
-	const isImage = (p: string) => /\.(png|jpe?g|gif|webp|bmp)$/i.test(p);
 	const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
-	// Engine subagent lifecycle status → localized label (falls back to the raw value).
-	// 'done' is an alias of 'completed'.
-	const AGENT_STATUS_KEY: Record<string, string> = {
-		started: 'started',
-		running: 'running',
-		completed: 'completed',
-		done: 'completed',
-		interrupted: 'interrupted',
-		closed: 'closed'
-	};
-	const agentStatus = (s: string) => (AGENT_STATUS_KEY[s] ? t(`shell.agentStatus.${AGENT_STATUS_KEY[s]}`) : s);
 
 	const project = $derived(activeProject?.name ?? (chat?.cwd ? base(chat.cwd) : 'workspace'));
-
-	// pickers (tree / model / resume) — active session
-	const pickerTitle = $derived(
-		chat?.picker?.kind === 'tree'
-			? t('shell.picker.tree')
-			: chat?.picker?.kind === 'model'
-				? t('shell.picker.model')
-				: chat?.picker?.kind === 'resume'
-					? t('shell.picker.resume')
-					: chat?.picker?.kind === 'checkpoint'
-						? t('shell.picker.checkpoint')
-						: ''
-	);
-	const activeModel = $derived(
-		chat?.picker?.kind === 'model' ? chat.picker.models.find((m) => m.active) : undefined
-	);
-	const pickerRows = $derived.by(() => {
-		const p = chat?.picker;
-		const nil = undefined as number | undefined;
-		if (!p) return [];
-		if (p.kind === 'tree')
-			return treeRows(p.nodes).map((r) => ({ id: r.node.id, label: r.node.label, detail: r.node.id.slice(0, 8), active: r.node.active, command: `/checkout ${r.node.id}`, depth: r.depth as number | undefined }));
-		if (p.kind === 'resume')
-			return p.items.map((it) => ({ id: it.id, label: it.label, detail: it.detail, active: it.active, command: `/resume ${it.id}`, depth: nil }));
-		if (p.kind === 'checkpoint')
-			return p.items.map((it) => ({ id: it.id, label: it.label, detail: it.detail, active: it.active, command: `/rewind ${it.id}`, depth: nil }));
-		// Model picker. The active provider's rows come from the engine's model_view
-		// (already filtered — e.g. jucode hides unsupported models — and flagged with
-		// the active one); other providers come from the client-side config list so
-		// you can switch to any of them. Same-provider picks use /model (instant);
-		// cross-provider picks switch via @switch (config rewrite + engine restart).
-		const cur = chat?.provider ?? '';
-		// Mirror the engine's jucode allow-list so we don't offer a model it rejects.
-		const jucodeOk = (n: string) =>
-			['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex', 'gpt-5.2'].includes(n) || n.startsWith('claude-');
-		const groups = {
-			codex: t('shell.modelGroup.codex'),
-			claude: t('shell.modelGroup.claude'),
-			jucode: t('shell.modelGroup.jucode'),
-			byok: t('shell.modelGroup.byok')
-		};
-		const activeGroup =
-			chat?.backendId === 'codex'
-				? groups.codex
-				: chat?.backendId === 'claude'
-					? groups.claude
-					: cur === 'jucode'
-						? groups.jucode
-						: groups.byok;
-		const activeRows = p.models.map((m) => ({
-			id: `${cur}::${m.model}`,
-			label: m.label || m.model,
-			vendor: m.vendor || m.model,
-			detail: m.context_window ? `${cur} · ${fmtTokens(m.context_window)}` : cur,
-			active: m.active,
-			command: `/model ${m.model}`,
-			depth: nil,
-			group: activeGroup
-		}));
-		// Provider switching rewrites the native engine's global config and
-		// restarts it — meaningful for jucode sessions only. Other backends'
-		// pickers list just their own engine's model_view catalog.
-		const otherRows = (chat?.backendId !== 'jucode' ? [] : providersList)
-			.filter((pv) => pv.id !== cur)
-			.flatMap((pv) =>
-				pv.models
-					.filter((m) => pv.id !== 'jucode' || jucodeOk(m.name))
-					.map((m) => ({
-						id: `${pv.id}::${m.name}`,
-						label: m.name,
-						vendor: m.name,
-						detail: `${pv.id}${providers.includes(pv.id) ? '' : ` · ${t('shell.notConfigured')}`} · ${fmtTokens(m.context_window ?? 0)}`,
-						active: false,
-						command: `@switch ${pv.id} ${m.name}`,
-						depth: nil,
-						group: pv.id === 'jucode' ? groups.jucode : groups.byok
-					}))
-			);
-		const groupOrder = [groups.codex, groups.claude, groups.jucode, groups.byok];
-		return [...activeRows, ...otherRows].sort(
-			(a, b) => groupOrder.indexOf(a.group) - groupOrder.indexOf(b.group)
-		);
-	});
-
-	// Whether to offer a filter box (history and other long lists).
-	const showPickerSearch = $derived(
-		pickerRows.length > 8 || chat?.picker?.kind === 'resume' || chat?.picker?.kind === 'checkpoint'
-	);
-	const filteredRows = $derived.by(() => {
-		const q = pickerQuery.trim().toLowerCase();
-		if (!q) return pickerRows;
-		return pickerRows.filter((r) => `${r.label} ${r.detail}`.toLowerCase().includes(q));
-	});
-	$effect(() => {
-		chat?.picker;
-		pickerQuery = '';
-	});
-	$effect(() => {
-		if (chat?.picker) {
-			const i = filteredRows.findIndex((r) => r.active);
-			selIdx = i >= 0 ? i : 0;
-		}
-	});
-	$effect(() => {
-		activeId;
-		atBottom = true;
-		scrollToEnd(true);
-		if (active) active.chat.unseen = false;
-	});
-	$effect(() => {
-		if (chat?.pendingFill != null) {
-			input = chat.pendingFill;
-			chat.pendingFill = null;
-		}
-	});
+	const loggedIn = $derived(!!chat?.provider && providers.includes(chat.provider));
 
 	// ---------- workspaces ----------
-	// A workspace is a saved set of projects + dock layout. Switching swaps the
+	// A workspace is a saved set of projects + tile layouts. Switching swaps the
 	// whole session tree: snapshot the current one into its workspace, close all
 	// live engine sessions, then restore the target's projects (resume by id).
 	async function switchWorkspace(id: string) {
 		if (id === workspaces.activeId) return;
 		workspaces.updateProjects(store.serialize());
+		if (mainLoaded) workspaces.updateMain(currentMainSerialized());
 		const entry = workspaces.setActive(id);
 		if (!entry) return;
+		mainLoaded = false; // gate the layout effects during the swap
+		mainTiles = emptyLayout();
+		focusedLeaf = null;
 		for (const p of [...store.projects]) store.removeProject(p);
 		store.loaded = false; // re-gate the persist effect during the swap
 		await store.restore(entry.projects);
+		initMainTiles(entry);
 	}
 	async function newWorkspace() {
 		const entry = workspaces.create(t('shell.workspace.nth', { n: workspaces.workspaces.length + 1 }));
@@ -658,8 +555,12 @@
 		}
 		store.removeProject(p);
 	}
+	// Run a command in the focused session (command palette → its pane, which
+	// owns the backend-specific quirks like claude's /resume).
 	function nav(command: string) {
-		if (chat) send({ op: 'command', input: command });
+		const pane = paneRefs[store.activeId];
+		if (pane) pane.sendCommand(command);
+		else if (activeId) dispatch(activeId, { op: 'command', input: command });
 	}
 
 	// ---------- 并行任务（git worktree） ----------
@@ -668,7 +569,7 @@
 		taskDialogFor = null;
 		const existing = store.projects.find((p) => normPath(p.path) === normPath(path));
 		if (existing) {
-			store.activeId = existing.sessions[0]?.id ?? store.addSession(existing);
+			selectSession(existing.sessions[0]?.id ?? store.addSession(existing));
 			return;
 		}
 		store.createProject(path, meta, description || undefined);
@@ -695,7 +596,7 @@
 	async function openProjectPath(path: string, focusSession = true): Promise<Project | null> {
 		const existing = store.projects.find((p) => normPath(p.path) === normPath(path));
 		if (existing) {
-			if (focusSession) store.activeId = existing.sessions[0]?.id ?? store.addSession(existing);
+			if (focusSession) selectSession(existing.sessions[0]?.id ?? store.addSession(existing));
 			return existing;
 		}
 		// 目录存在才创建项目（listDir 失败说明路径无效/不可访问）。
@@ -734,145 +635,6 @@
 		}
 	}
 
-	const isVideo = (p: string) => /\.(mp4|mov|webm|mkv|avi|m4v)$/i.test(p);
-
-	function addAttachment(path: string) {
-		if (!path) return;
-		if (isVideo(path)) {
-			attachVideo(path);
-			return;
-		}
-		if (!attachments.some((a) => a.path === path)) attachments.push({ path, image: isImage(path) });
-	}
-	async function pickFiles() {
-		const sel = await open({ multiple: true, title: t('shell.attachTitle') });
-		if (!sel) return;
-		for (const p of Array.isArray(sel) ? sel : [sel]) addAttachment(p);
-	}
-
-	// Video → keyframes: extraction happens on attach (not send) so the chip can
-	// show the result and errors surface immediately.
-	async function attachVideo(path: string) {
-		if (videos.some((v) => v.path === path)) return;
-		try {
-			const info = await processVideo(path);
-			videos.push({ path: info.path, frames: info.frames, duration: info.duration });
-		} catch (e) {
-			await message(String(e), { title: 'JuCode', kind: 'error' });
-		}
-	}
-
-	async function screenshot() {
-		try {
-			const path = await captureScreenshot();
-			if (path) {
-				attachments.push({ path, image: true });
-				composerEl?.focus();
-			}
-		} catch (e) {
-			await message(String(e), { title: 'JuCode', kind: 'error' });
-		}
-	}
-
-	async function toggleRecord() {
-		try {
-			if (!recording) {
-				await startScreenRecording();
-				recording = true;
-			} else {
-				recording = false;
-				const path = await stopScreenRecording();
-				await attachVideo(path);
-				composerEl?.focus();
-			}
-		} catch (e) {
-			recording = false;
-			await message(String(e), { title: 'JuCode', kind: 'error' });
-		}
-	}
-
-	// Serialize a picked element into model-readable context. Inserted in place of
-	// its inline token on submit.
-	function formatWebRef(r: PickedRef): string {
-		const lines = [
-			`[网页元素引用 #${r.id}] ${r.title || r.url}`,
-			`页面: ${r.url}`,
-			`选择器: ${r.selector}`
-		];
-		if (r.text) lines.push(`文本: ${r.text}`);
-		if (r.html) lines.push(`HTML:\n${r.html}`);
-		return lines.join('\n');
-	}
-
-	// Builds a reference token and inserts it as an atomic chip at the composer
-	// caret (via the rich editor). Falls back to appending to the text if the
-	// editor isn't mounted.
-	function insertRefToken(id: number, label: string) {
-		const clean = label.replace(/[\]\n\r]+/g, ' ').trim().slice(0, 24);
-		const token = clean ? `[网页元素#${id}:${clean}]` : `[网页元素#${id}]`;
-		if (composerRef) composerRef.insertToken(token);
-		else input = input && !/\s$/.test(input) ? `${input} ${token} ` : `${input}${token} `;
-	}
-
-	function submit() {
-		if (!chat) return;
-		const text = input.trim();
-		if (!text && attachments.length === 0 && videos.length === 0) return;
-		if (text.startsWith('/')) {
-			send({ op: 'command', input: text });
-		} else {
-			const images = attachments.filter((a) => a.image).map((a) => a.path);
-			const files = attachments.filter((a) => !a.image).map((a) => a.path);
-			let content = text;
-			// Expand each web-element token in place (order = its position in the
-			// text). Match by id so an edited descriptor still resolves; refs whose
-			// token was deleted are simply never expanded.
-			for (const ref of webRefs) {
-				const re = new RegExp(`\\[网页元素#${ref.id}(?::[^\\]]*)?\\]`, 'g');
-				if (re.test(content)) content = content.replace(re, `\n\n${formatWebRef(ref)}\n`);
-			}
-			content = content.replace(/\n{3,}/g, '\n\n').trim();
-			if (files.length)
-				content += `${content ? '\n\n' : ''}Attached files (read these):\n${files.join('\n')}`;
-			for (const v of videos) {
-				images.push(...v.frames);
-				content += `${content ? '\n\n' : ''}[视频附件] ${base(v.path)}（时长 ${v.duration.toFixed(1)} 秒）：已按时间等间隔抽取 ${v.frames.length} 个关键帧，随消息以图片附上（按时间先后排序），请结合这些关键帧理解视频内容。`;
-			}
-			// Echo the message instantly when it starts a turn now (a busy session
-			// queues it instead, shown in the composer's queue strip).
-			if (chat && !chat.busy) {
-				captureCheckpoint(); // snapshot files before this turn (for rewind)
-				chat.optimisticUser(content);
-			}
-			send({ op: 'user_message', content, images: images.length ? images : undefined });
-		}
-		input = '';
-		attachments = [];
-		videos = [];
-		webRefs = [];
-	}
-	function stop() {
-		send({ op: 'interrupt' });
-	}
-	function respondApproval(op: ApproveOp) {
-		if (!chat?.pendingApproval) return;
-		send(op);
-		chat.pendingApproval = null;
-	}
-	// User changed the approval-mode picker: persist locally and push it to this
-	// session's engine (which enforces it and acks with an approval_mode event).
-	function setApprovalMode(m: ApprovalMode) {
-		if (!chat) return;
-		chat.setApprovalMode(m);
-		// Switching claude INTO yolo (bypassPermissions) isn't honored at runtime —
-		// respawn the engine with the flag (resumes the conversation) instead of
-		// sending a live control frame that would silently no-op.
-		if (needsClaudeYoloRespawn(chat.backendId, buildSetApprovalModeOp(m).mode)) {
-			store.respawnClaudeYolo(activeId);
-			return;
-		}
-		send(buildSetApprovalModeOp(m));
-	}
 	// The engine announced its startup approval mode and it diverges from the
 	// desktop's persisted mode (fresh start, crash auto-restart or provider
 	// switch): push ours. Runs off the agent-event stream, per session.
@@ -889,73 +651,11 @@
 		dispatch(sid, { op: 'set_approval_mode', mode });
 	}
 
-	function selectRow(command: string) {
-		// Cross-provider model pick: rewrite config + restart this session (resumes
-		// the conversation) since the engine can't change provider at runtime.
-		if (command.startsWith('@switch ')) {
-			const rest = command.slice('@switch '.length);
-			const sp = rest.indexOf(' ');
-			const pid = rest.slice(0, sp);
-			const name = rest.slice(sp + 1);
-			const pv = providersList.find((x) => x.id === pid);
-			chat?.closePicker();
-			if (pv) store.switchProvider(activeId, pv, name);
-			return;
-		}
-		// Resuming a history item opens it in a fresh session so the current chat
-		// isn't replaced; everything else acts on the active session.
-		if (command.startsWith('/resume ') && activeProject) {
-			const sid = command.slice('/resume '.length).trim();
-			// Codex/claude resume items open in a fresh session of the same backend
-			// (codex: thread/resume via SessionCtx.resume; claude: the --resume
-			// spawn option + transcript replay from the session file).
-			if (chat?.backendId === 'codex' || chat?.backendId === 'claude') {
-				const backend = chat.backendId;
-				const item = chat.picker?.kind === 'resume' ? chat.picker.items.find((i) => i.id === sid) : undefined;
-				chat.closePicker();
-				store.activeId = store.restoreSession(activeProject, sid, item?.label ?? '', backend);
-				return;
-			}
-			// jucode history entries come from the jucode engine, so the new session
-			// is always jucode-backed regardless of the project's last-used backend.
-			chat?.closePicker();
-			const id = store.addSession(activeProject, undefined, 'jucode');
-			dispatch(id, { op: 'command', input: command });
-			return;
-		}
-		send({ op: 'command', input: command });
-		chat?.closePicker();
-	}
-	function setEffort(effort: string) {
-		if (activeModel) selectRow(`/model ${activeModel.model} ${effort}`);
-	}
-	function pickerKey(e: KeyboardEvent) {
-		if (!chat?.picker) return;
-		if (e.key === 'Escape') {
-			e.preventDefault();
-			chat.closePicker();
-		} else if (e.key === 'ArrowDown') {
-			e.preventDefault();
-			selIdx = Math.min(selIdx + 1, filteredRows.length - 1);
-		} else if (e.key === 'ArrowUp') {
-			e.preventDefault();
-			selIdx = Math.max(selIdx - 1, 0);
-		} else if (e.key === 'Enter') {
-			e.preventDefault();
-			const r = filteredRows[selIdx];
-			if (r) selectRow(r.command);
-		}
-	}
-	function respondTrust(answer: 'yes' | 'no' | 'repo') {
-		if (!chat) return;
-		send({ op: 'command', input: `/trust ${answer}` });
-		chat.trustPrompt = null;
-	}
 	function onWindowKey(e: KeyboardEvent) {
 		// Something closer to the target already claimed this key (e.g. the code
-		// editor's own ⌘K / ⌘S keymap) — never double-fire an app shortcut on it.
+		// editor's own ⌘K / ⌘S keymap, or the focused pane's find/picker keys) —
+		// never double-fire an app shortcut on it.
 		if (e.defaultPrevented) return;
-		pickerKey(e);
 		// The setup wizard is a blocking first-run modal — don't fire app shortcuts
 		// under it (e.g. Cmd+K opening the palette behind it).
 		if (showSetup) return;
@@ -963,11 +663,6 @@
 		if (mod && e.key === 'k') {
 			e.preventDefault();
 			showPalette = !showPalette;
-			return;
-		}
-		if (mod && e.key === 'f' && chat) {
-			e.preventDefault();
-			showFind ? closeFind() : openFind();
 			return;
 		}
 		if (!mod) return;
@@ -987,136 +682,6 @@
 			e.preventDefault();
 			if (activeProject) showQuickOpen = !showQuickOpen;
 		}
-	}
-
-	function onScroll() {
-		if (scroller) atBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 60;
-	}
-	// Stick to the bottom as content grows (streaming text, tool output, new cards).
-	// The smoothed reveal changes height every frame, which a scroll-event listener
-	// can't see, so observe the content's size directly.
-	let contentEl = $state<HTMLElement | null>(null);
-	$effect(() => {
-		if (!contentEl || !scroller) return;
-		const ro = new ResizeObserver(() => {
-			if (atBottom && scroller) scroller.scrollTop = scroller.scrollHeight;
-		});
-		ro.observe(contentEl);
-		return () => ro.disconnect();
-	});
-	async function scrollToEnd(force = false) {
-		await tick();
-		if (scroller && (atBottom || force)) {
-			scroller.scrollTop = scroller.scrollHeight;
-			atBottom = true;
-		}
-	}
-	function jumpToBottom() {
-		atBottom = true;
-		scrollToEnd(true);
-	}
-	function editMessage(text: string) {
-		input = text;
-		composerEl?.focus();
-	}
-	function openFind() {
-		showFind = true;
-		tick().then(() => findInputEl?.focus());
-	}
-	function closeFind() {
-		showFind = false;
-		if (findDebounce != null) {
-			clearTimeout(findDebounce);
-			findDebounce = null;
-		}
-		findInput = '';
-		findQuery = '';
-	}
-	const findNext = () => findHits.length && (findIdx = (findIdx + 1) % findHits.length);
-	const findPrev = () => findHits.length && (findIdx = (findIdx - 1 + findHits.length) % findHits.length);
-	function findKey(e: KeyboardEvent) {
-		if (e.key === 'Escape') {
-			e.preventDefault();
-			closeFind();
-		} else if (e.key === 'Enter') {
-			e.preventDefault();
-			e.shiftKey ? findPrev() : findNext();
-		}
-	}
-	// Real edit-and-resend: rewind the conversation (and files) to the turn that
-	// produced this user message, then drop its text back into the composer. The
-	// engine lists user turns in order, so the i-th turn matches the i-th message.
-	// Before each codex/claude turn, snapshot the working tree so a later rewind
-	// can restore files to this turn's starting state (the engines rewind only the
-	// conversation). Fire-and-forget; the sha lands under its turn index.
-	function captureCheckpoint() {
-		const c = chat;
-		const cwd = activeProject?.path;
-		if (!c || !cwd || (c.backendId !== 'codex' && c.backendId !== 'claude')) return;
-		const idx = c.userTurns;
-		gitCheckpointCapture(cwd)
-			.then((sha) => {
-				if (sha) c.fileCheckpoints[idx] = sha;
-			})
-			.catch(() => {});
-	}
-	// Restore the working tree to the checkpoint captured before the target turn.
-	function restoreCheckpoint(userIndex: number) {
-		const c = chat;
-		const cwd = activeProject?.path;
-		const sha = c?.fileCheckpoints[userIndex];
-		if (c && cwd && sha) gitCheckpointRestore(cwd, sha).catch((e) => console.error('checkpoint restore failed', e));
-	}
-
-	// Open a workspace file referenced by a chat link. HTML opens in the built-in
-	// browser (rendered) or the editor (source) per preference; everything else
-	// opens in the editor. Paths resolve relative to the active project root.
-	function openChatFile(href: string) {
-		const cwd = activeProject?.path;
-		if (!cwd) return;
-		const rel = href.replace(/^file:\/\//, '').split(/[?#]/)[0].trim();
-		if (!rel) return;
-		const abs = rel.startsWith('/') ? rel : `${cwd.replace(/\/+$/, '')}/${rel.replace(/^\.?\//, '')}`;
-		const ext = abs.split('/').pop()?.split('.').pop()?.toLowerCase() ?? '';
-		if ((ext === 'html' || ext === 'htm') && prefs.htmlOpenInBrowser) {
-			browser.open(`file://${abs}`);
-		} else {
-			editorStore.open(abs, cwd).catch((e) => console.error('open chat file', e));
-		}
-	}
-
-	function rewindToMessage(text: string, userIndex: number) {
-		if (!chat) return;
-		// codex (thread/rollback) and claude (resume-at-uuid respawn) rewind without
-		// the jucode checkpoint_view round-trip — confirm directly from the index.
-		if (chat.backendId === 'codex' || chat.backendId === 'claude') {
-			chat.pendingRewind = { id: `${chat.backendId}:${userIndex}`, text };
-			return;
-		}
-		chat.rewindIntent = { userIndex, text };
-		send({ op: 'command', input: '/rewind' });
-	}
-	function confirmRewind() {
-		const pr = chat?.pendingRewind;
-		if (!pr || !chat) return;
-		if (pr.id.startsWith('codex:')) {
-			const userIndex = Number(pr.id.slice('codex:'.length));
-			const numTurns = chat.userTurns - userIndex;
-			if (numTurns > 0) send({ op: 'command', input: `/rewind ${numTurns}` });
-			// codex rolls back its own history; mirror it in our projected transcript.
-			chat.truncateToUserTurn(userIndex);
-			restoreCheckpoint(userIndex); // …and the files it changed
-		} else if (pr.id.startsWith('claude:')) {
-			const userIndex = Number(pr.id.slice('claude:'.length));
-			// Respawn resuming at the previous turn's assistant uuid (or fresh at 0).
-			store.rewindClaudeSession(activeId, chat.claudeRewindTarget(userIndex), userIndex);
-			restoreCheckpoint(userIndex);
-		} else {
-			send({ op: 'command', input: `/rewind ${pr.id}` });
-		}
-		input = pr.text;
-		chat.pendingRewind = null;
-		composerEl?.focus();
 	}
 
 	onMount(() => {
@@ -1170,26 +735,27 @@
 				flushModeSync(s.chat, s.id);
 				// Read the current active session at call time (store.activeId is
 				// reactive) — not a value snapshotted when the listener was mounted —
-				// so auto-scroll/notification target the right session after tab switches.
+				// so the done-notification targets the right session after tab switches.
 				const curActive = store.activeId;
 				if (wasBusy && !s.chat.busy && s.id !== curActive) {
 					s.chat.unseen = true;
 					notifyDone(s.chat.title);
 				}
-				if (s.id === curActive) scrollToEnd();
 			});
 			const unexit = await listen<string>('agent-exit', (e) => store.handleExit(e.payload));
+			// Dropped files attach to the focused session's composer.
 			const undrop = await getCurrentWebview().onDragDropEvent((e) => {
-				if (e.payload.type === 'drop') for (const p of e.payload.paths) addAttachment(p);
+				if (e.payload.type !== 'drop') return;
+				const pane = paneRefs[store.activeId];
+				if (pane) for (const p of e.payload.paths) pane.addAttachment(p);
 			});
-			// Embedded-browser events: element picks become composer chips; nav/state
-			// updates flow into the browser store.
+			// Embedded-browser events: element picks become composer chips in the
+			// focused pane; nav/state updates flow into the browser store.
 			const unbrowser = await listen<Record<string, unknown>>('browser-event', (e) => {
 				const p = e.payload;
 				if (p.kind === 'element') {
 					browser.picking = false;
-					const ref: PickedRef = {
-						id: ++refSeq,
+					const ref: WebRef = {
 						url: typeof p.url === 'string' ? p.url : '',
 						title: typeof p.title === 'string' ? p.title : '',
 						selector: typeof p.selector === 'string' ? p.selector : '',
@@ -1197,8 +763,7 @@
 						text: typeof p.text === 'string' ? p.text : '',
 						html: typeof p.html === 'string' ? p.html : ''
 					};
-					webRefs.push(ref);
-					insertRefToken(ref.id, ref.text || ref.tag || 'element');
+					paneRefs[store.activeId]?.addWebRef(ref);
 				} else {
 					browser.handleEvent(p);
 				}
@@ -1221,8 +786,10 @@
 				return;
 			}
 			// Restore the active workspace's projects + their open conversations
-			// (resume by id), or seed a default project on first run.
+			// (resume by id), or seed a default project on first run — then map
+			// the persisted session mosaic onto the restored sessions.
 			await store.restore(wsEntry.projects);
+			initMainTiles(wsEntry);
 			// 深链在项目恢复完成后再注册，冷启动携带的链接（onOpenUrl 会补发当前
 			// 深链）才能作用于已恢复的项目列表。
 			const undeep = await onOpenUrl((urls) => {
@@ -1248,7 +815,6 @@
 		return () => {
 			disposed = true;
 			cleanups.forEach((f) => f());
-			if (findDebounce != null) clearTimeout(findDebounce);
 		};
 	});
 </script>
@@ -1273,7 +839,7 @@
 		activeWorkspace={workspaces.activeId}
 		onSwitchWorkspace={switchWorkspace}
 		onNewWorkspace={newWorkspace}
-		onSelect={(id) => (store.activeId = id)}
+		onSelect={selectSession}
 		onNewProject={addProject}
 		onNewTask={newTask}
 		onNewSession={(p) => newSessionFlow(p)}
@@ -1286,7 +852,7 @@
 	/>
 	<div class="resizer side" class:hidden={!showSidebar} role="separator" aria-label="resize sidebar" onpointerdown={startSidebarResize}></div>
 
-	<!-- CENTER: chat -->
+	<!-- CENTER: the session mosaic — each tile is a full chat session -->
 	<div class="center">
 		{#if chat}
 			<header data-tauri-drag-region class:shifted={!showSidebar}>
@@ -1297,110 +863,39 @@
 				<div class="hspace" data-tauri-drag-region></div>
 				<button class="hicon" class:on={showRight} onclick={toggleRight} aria-label="toggle panel" title={t('shell.togglePanel')}><PanelRight size={16} /></button>
 			</header>
+		{/if}
 
-			{#if Object.keys(chat.subagents).length}
-				<div class="agents">
-					{#each Object.entries(chat.subagents) as [path, info] (path)}
-						<span class="agent"><span class="agent-dot"></span>{path} · {agentStatus(info.status)}</span>
-					{/each}
-				</div>
-			{/if}
-
-			{#if showFind}
-				<FindBar
-					bind:value={findInput}
-					bind:inputEl={findInputEl}
-					hitCount={findHits.length}
-					activeIndex={findIdx}
-					onInput={onFindInput}
-					onKey={findKey}
-					onPrev={findPrev}
-					onNext={findNext}
-					onClose={closeFind}
-				/>
-			{/if}
-
-			<main bind:this={scroller} onscroll={onScroll}>
-				<div bind:this={contentEl}>
-					<MessageList messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} compactionTokens={chat.compactionTokens} {findActive} {scroller} onEdit={editMessage} onRewind={rewindToMessage} onFile={openChatFile} />
-				</div>
-				{#if chat.booting && chat.engineState !== 'exited'}
-					<div class="welcome spawning">
-						<span class="spawn-spin"><LoaderCircle size={26} /></span>
-						<p class="welcome-tip">{t('shell.spawning')}</p>
-					</div>
-				{:else if chat.messages.length === 0 && !chat.busy}
-					<div class="welcome">
-						<p class="welcome-tip">{t('shell.welcomeTip')}</p>
-						<div class="welcome-hints">
-							<span><kbd>/</kbd> {t('shell.hintCommand')}</span>
-							<span><kbd>@</kbd> {t('shell.hintRef')}</span>
-							<span><kbd>⌘K</kbd> {t('shell.hintPalette')}</span>
-							<span>{t('shell.hintImage')}</span>
-						</div>
-					</div>
-				{/if}
-			</main>
-			{#if !atBottom}
-				<button class="jump" style:bottom="{bottomH + 14}px" onclick={jumpToBottom} aria-label="scroll to bottom"><ChevronDown size={18} /></button>
-			{/if}
-
-			<div class="bottom" bind:clientHeight={bottomH}>
-			{#if chat.engineState === 'exited'}
-				<div class="approval-wrap">
-					<div class="enginedown">
-						<span class="ed-text">{t('shell.engineDown')}</span>
-						<Button variant="primary" size="sm" onclick={() => store.restartSession(activeId, true)}>{t('shell.restartEngine')}</Button>
-					</div>
-				</div>
-			{/if}
-			{#if chat.pendingApproval}
-				<div class="approval-wrap">
-					{#key chat.pendingApproval.callId}
-						<ApprovalCard approval={chat.pendingApproval} onRespond={respondApproval} />
-					{/key}
-				</div>
-			{/if}
-
-			{#if chat.rateLimit}
-				<RateLimitBanner rateLimit={chat.rateLimit} onDismiss={() => (chat.rateLimit = null)} />
-			{/if}
-
-			<StatusStrip items={chat.statusLog} />
-
-			<Composer
-				{chat}
-				bind:this={composerRef}
-				bind:input
-				bind:attachments
-				bind:videos
-				bind:el={composerEl}
-				{recording}
-				onSubmit={submit}
-				onStop={stop}
-				onSteer={() => send({ op: 'steer' })}
-				onPick={pickFiles}
-				onScreenshot={screenshot}
-				onRecord={toggleRecord}
-				onModel={openModelPicker}
-				onModelSelect={selectRow}
-				onModelEffort={setEffort}
-				onModelClose={() => chat?.closePicker()}
-				modelRows={filteredRows}
-				modelActive={activeModel}
-				modelTitle={pickerTitle}
-				modelSearch={showPickerSearch}
-				{backendLocked}
-				onBackend={(b, acpAgent) => store.switchBackend(activeId, b, acpAgent)}
-				bind:pickerQuery
-				bind:pickerSelIdx={selIdx}
-				onEffort={chooseEffort}
-				onApproval={setApprovalMode}
-			/>
+		{#if allSessions.length}
+			<div class="tiles">
+				<Mosaic
+					layout={mainTiles}
+					onchange={handleMainChange}
+					label={mainLabel}
+					addOptions={[{ key: 'new-session', label: t('shell.newSession') }]}
+					onAdd={mainAdd}
+					emptyText={t('shell.mosaic.empty')}
+				>
+					{#snippet panel(tab)}
+						{@const sid = chatSessionOf(tab.id)}
+						{@const s = sid ? sessionMap.get(sid) : undefined}
+						{#if s}
+							<ChatPane
+								bind:this={paneRefs[s.id]}
+								{store}
+								session={s}
+								project={projects.find((p) => p.sessions.some((x) => x.id === s.id))}
+								active={s.id === activeId}
+								highlight={multiPane}
+								{providers}
+								{providersList}
+								onFocus={() => focusPane(tab.id)}
+							/>
+						{/if}
+					{/snippet}
+				</Mosaic>
 			</div>
 		{:else}
 			<div class="nochat" data-tauri-drag-region>
-				<span class="welcome-mark">JuCode</span>
 				<p class="welcome-tip">{t('shell.noChat')}</p>
 				<Button variant="primary" size="sm" onclick={addProject}>{t('shell.startFromProject')}</Button>
 			</div>
@@ -1462,54 +957,6 @@
 			}}
 			onClose={() => (showSetup = false)}
 		/>
-	{/if}
-
-	{#if chat?.trustPrompt}
-		<div class="overlay" role="presentation">
-			<div class="modal trust" role="dialog" aria-modal="true" tabindex="-1" aria-label={t('shell.trustLabel')} use:focusTrap>
-				<div class="modal-head"><span>{t('shell.trustQuestion')}</span></div>
-				<div class="trust-body">
-					<p>{t('shell.trustBody')}</p>
-					<code class="trust-path">{chat.trustPrompt.repoRoot ?? chat.trustPrompt.cwd}</code>
-				</div>
-				<div class="trust-actions">
-					<button class="btn ghost" onclick={() => respondTrust('no')}>{t('shell.distrust')}</button>
-					{#if chat.trustPrompt.repoRoot}<button class="btn" onclick={() => respondTrust('repo')}>{t('shell.trustRepo')}</button>{/if}
-					<button class="btn primary" onclick={() => respondTrust('yes')}>{t('shell.trust')}</button>
-				</div>
-			</div>
-		</div>
-	{/if}
-
-	{#if chat?.picker && chat.picker.kind !== 'model'}
-		<Picker
-			{chat}
-			title={pickerTitle}
-			{activeModel}
-			rows={filteredRows}
-			showSearch={showPickerSearch}
-			bind:query={pickerQuery}
-			bind:selIdx
-			onClose={() => chat?.closePicker()}
-			onSelect={selectRow}
-			onEffort={setEffort}
-		/>
-	{/if}
-
-	{#if chat?.pendingRewind}
-		<div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && chat && (chat.pendingRewind = null)}>
-			<div class="modal trust" role="dialog" aria-modal="true" tabindex="-1" aria-label={t('shell.rewindLabel')} use:focusTrap>
-				<div class="modal-head"><span>{t('shell.rewindQuestion')}</span></div>
-				<div class="trust-body">
-					<p>{@html t('shell.rewindBody')}</p>
-					<code class="trust-path">{chat.pendingRewind.text.slice(0, 120)}</code>
-				</div>
-				<div class="trust-actions">
-					<button class="btn ghost" onclick={() => chat && (chat.pendingRewind = null)}>{t('common.cancel')}</button>
-					<button class="btn primary" onclick={confirmRewind}>{t('shell.rewindConfirm')}</button>
-				</div>
-			</div>
-		</div>
 	{/if}
 
 	{#if showQuickOpen && activeProject}
@@ -1603,70 +1050,14 @@
 		background: var(--bg);
 		position: relative;
 	}
-	.jump {
-		position: absolute;
-		left: 50%;
-		bottom: 132px; /* overridden inline to sit just above the composer */
-		transform: translateX(-50%);
-		width: 34px;
-		height: 34px;
-		border-radius: 50%;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		background: var(--panel);
-		border: 1px solid var(--border);
-		color: var(--text);
-		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
-		cursor: pointer;
-		z-index: 10;
-		animation: jump-in var(--t-med) var(--ease-spring);
-		transition:
-			background var(--t-fast) var(--ease-out),
-			transform var(--t-fast) var(--ease-spring),
-			box-shadow var(--t-med) var(--ease-out);
-	}
-	/* pop-in variant that keeps the horizontal centering transform */
-	@keyframes jump-in {
-		from {
-			opacity: 0;
-			transform: translateX(-50%) translateY(6px) scale(0.9);
-		}
-		to {
-			opacity: 1;
-			transform: translateX(-50%);
-		}
-	}
-	.jump:hover {
-		background: var(--surface2);
-		transform: translateX(-50%) translateY(-1px);
-		box-shadow: 0 6px 20px rgba(0, 0, 0, 0.32);
-	}
-	.jump:active {
-		transform: translateX(-50%) scale(0.92);
-	}
-	/* Match the composer's outer frame (max-width 880, 18px side padding) so the
-	   approval box lines up flush with the input box. */
-	.approval-wrap {
-		max-width: 880px;
-		width: 100%;
-		margin: 0 auto;
-		padding: 0 18px 10px;
-	}
-	.enginedown {
+	/* The session mosaic fills everything under the header. */
+	.tiles {
+		flex: 1;
+		min-height: 0;
 		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 12px;
-		padding: 10px 14px;
-		background: color-mix(in oklab, var(--err) 10%, var(--panel));
-		border: 1px solid color-mix(in oklab, var(--err) 38%, transparent);
-		border-radius: var(--r-md);
 	}
-	.ed-text {
-		font-size: 13px;
-		color: var(--err);
-		font-weight: 500;
+	.tiles > :global(.mosaic) {
+		flex: 1;
 	}
 	header {
 		display: flex;
@@ -1732,95 +1123,10 @@
 		color: var(--accent-bright);
 	}
 
-	.agents {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 8px;
-		padding: 8px 18px;
-		border-bottom: 1px solid var(--hairline);
-	}
-	.agent {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		font-family: var(--font-mono);
-		font-size: 11px;
-		color: var(--dim);
-	}
-	.agent-dot {
-		width: 6px;
-		height: 6px;
-		border-radius: 50%;
-		background: var(--accent-bright);
-		animation: pulse 1.2s ease-in-out infinite;
-	}
-
-	main {
-		flex: 1;
-		overflow-y: auto;
-		padding: 22px 18px 26px;
-		display: flex;
-		flex-direction: column;
-		gap: 16px;
-		max-width: 880px;
-		width: 100%;
-		margin: 0 auto;
-	}
-	.welcome {
-		margin: auto;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 10px;
-		padding: 24px;
-		text-align: center;
-		animation: rise var(--t-slow) var(--ease-out) both;
-	}
-	.spawn-spin {
-		display: inline-flex;
-		color: var(--accent);
-		animation: spawn-spin 0.8s linear infinite;
-	}
-	@keyframes spawn-spin {
-		to {
-			transform: rotate(360deg);
-		}
-	}
-	.welcome-mark {
-		font-family: var(--font-display);
-		font-weight: 800;
-		font-size: 30px;
-		letter-spacing: -0.02em;
-		color: var(--text);
-		opacity: 0.16;
-	}
 	.welcome-tip {
 		margin: 0;
 		font-size: 14px;
 		color: var(--dim);
-	}
-	.welcome-hints {
-		display: flex;
-		flex-wrap: wrap;
-		justify-content: center;
-		gap: 8px 16px;
-		margin-top: 6px;
-		font-size: 12px;
-		color: var(--dim2);
-	}
-	.welcome-hints span {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-	}
-	.welcome-hints kbd {
-		font-family: var(--font-mono);
-		font-size: 11px;
-		color: var(--dim);
-		background: var(--surface2);
-		border: 1px solid var(--hairline);
-		border-radius: 5px;
-		padding: 1px 6px;
 	}
 	.nochat {
 		flex: 1;
@@ -1879,98 +1185,5 @@
 	}
 	.right-inner {
 		height: 100%;
-	}
-
-	/* ---------- modals (picker / trust) ---------- */
-	.overlay {
-		position: fixed;
-		inset: 0;
-		background: rgba(0, 0, 0, 0.5);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 50;
-		animation: fade var(--t-fast) var(--ease-out);
-	}
-	.modal {
-		width: min(560px, 92vw);
-		max-height: 76vh;
-		display: flex;
-		flex-direction: column;
-		background: var(--panel);
-		border: 1px solid var(--border);
-		border-radius: var(--r-lg);
-		box-shadow: var(--shadow-modal);
-		overflow: hidden;
-		animation: pop-in var(--t-med) var(--ease-spring);
-	}
-	.modal-head {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 13px 16px;
-		font-weight: 600;
-		font-size: 14px;
-		border-bottom: 1px solid var(--hairline);
-	}
-	:global(.prow-check) {
-		color: var(--accent-bright);
-		flex-shrink: 0;
-	}
-	.modal.trust {
-		width: min(460px, 92vw);
-	}
-	.trust-body {
-		padding: 16px;
-		font-size: 14px;
-		line-height: 1.55;
-	}
-	.trust-body p {
-		margin: 0 0 12px;
-	}
-	.trust-path {
-		display: block;
-		font-family: var(--font-mono);
-		font-size: 12px;
-		color: var(--dim);
-		background: var(--surface2);
-		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
-		padding: 8px 10px;
-		word-break: break-all;
-	}
-	.trust-actions {
-		display: flex;
-		justify-content: flex-end;
-		gap: 8px;
-		padding: 12px 16px 16px;
-	}
-	.btn {
-		font-size: 13px;
-		padding: 8px 14px;
-		border-radius: var(--r-sm);
-		border: 1px solid var(--border);
-		background: var(--surface2);
-		color: var(--text);
-		cursor: pointer;
-		transition:
-			background var(--t-fast) var(--ease-out),
-			border-color var(--t-fast) var(--ease-out),
-			transform var(--t-fast) var(--ease-spring);
-	}
-	.btn:hover {
-		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
-	}
-	.btn:active {
-		transform: scale(0.97);
-	}
-	.btn.ghost {
-		color: var(--dim);
-	}
-	.btn.primary {
-		background: var(--accent);
-		border-color: var(--accent);
-		color: var(--on-accent);
-		font-weight: 600;
 	}
 </style>

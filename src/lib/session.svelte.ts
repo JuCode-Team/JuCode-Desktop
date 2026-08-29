@@ -252,6 +252,7 @@ export class SessionStore {
 		// The engine resumes persisted context — the backend can't be switched
 		// even while the replayed transcript is still empty.
 		s.restored = true;
+		s.restoredFrom = sid;
 		project.sessions.push(s);
 		if (backend === 'claude' || backend === 'codex') s.chat.sessionId = sid;
 		const spawned =

@@ -60,8 +60,14 @@ const shell = {
 		hintRef: '引用文件',
 		hintPalette: '命令面板',
 		hintImage: '拖入 / 粘贴图片',
+		hintTile: '把标签拖到边缘就能并排两个会话',
 		noChat: '没有打开的对话',
 		startFromProject: '选择项目，开始对话',
+
+		// main session mosaic
+		mosaic: {
+			empty: '这里还没有会话 — 打开后把标签拖到边缘，就能并排两个会话'
+		},
 
 		// engine
 		engineDown: '引擎已停止运行',
@@ -288,8 +294,14 @@ const shell = {
 		hintRef: 'Reference files',
 		hintPalette: 'Command palette',
 		hintImage: 'Drop / paste images',
+		hintTile: 'Drag a tab to an edge to view two sessions side by side',
 		noChat: 'No open conversation',
 		startFromProject: 'Pick a project to start',
+
+		// main session mosaic
+		mosaic: {
+			empty: 'No sessions here yet — once open, drag a tab to an edge to view two side by side'
+		},
 
 		// engine
 		engineDown: 'Engine has stopped',

@@ -96,6 +96,14 @@ export class WorkspaceStore {
 		this.#schedule();
 	}
 
+	/** Replace the active workspace's main (session mosaic) layout. */
+	updateMain(main: SerializedLayout | null) {
+		const ws = this.active;
+		if (!ws) return;
+		ws.main = main;
+		this.#schedule();
+	}
+
 	/** Mark `id` active; the caller swaps the live sessions. */
 	setActive(id: string): WorkspaceEntry | null {
 		if (!this.file || !this.file.workspaces.some((w) => w.id === id)) return null;

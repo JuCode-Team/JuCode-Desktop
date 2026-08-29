@@ -24,6 +24,12 @@ export interface WorkspaceEntry {
 	projects: SavedProject[];
 	/** Serialized dock tile layout; null until the user arranges one. */
 	layout: SerializedLayout | null;
+	/** Serialized main (center) session-mosaic layout. Chat tabs are stored
+	 *  under the *engine* session ids (`chat:<engine sid>`); the page remaps
+	 *  them to the runtime session ids on load. null on files written before
+	 *  the session mosaic existed — the page then seeds one leaf holding the
+	 *  last active session. */
+	main: SerializedLayout | null;
 }
 
 export interface WorkspacesFile {
@@ -36,8 +42,13 @@ export interface WorkspacesFile {
 let counter = 0;
 const newId = () => `w${Date.now().toString(36)}-${(counter++).toString(36)}`;
 
-export function createWorkspace(name: string, projects: SavedProject[] = [], layout: SerializedLayout | null = null): WorkspaceEntry {
-	return { id: newId(), name, projects, layout };
+export function createWorkspace(
+	name: string,
+	projects: SavedProject[] = [],
+	layout: SerializedLayout | null = null,
+	main: SerializedLayout | null = null
+): WorkspaceEntry {
+	return { id: newId(), name, projects, layout, main };
 }
 
 export function defaultWorkspacesFile(first: WorkspaceEntry): WorkspacesFile {
@@ -85,7 +96,9 @@ export function parseWorkspacesFile(text: string): WorkspacesFile | null {
 			name: o.name,
 			projects: sanitizeProjects(o.projects),
 			// Layout blobs are validated lazily by tiles.deserializeLayout at use.
-			layout: o.layout && typeof o.layout === 'object' ? (o.layout as SerializedLayout) : null
+			layout: o.layout && typeof o.layout === 'object' ? (o.layout as SerializedLayout) : null,
+			// Absent on pre-session-mosaic files → null; the page migrates.
+			main: o.main && typeof o.main === 'object' ? (o.main as SerializedLayout) : null
 		});
 	}
 	if (!workspaces.length) return null;
