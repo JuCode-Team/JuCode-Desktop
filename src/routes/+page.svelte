@@ -1414,7 +1414,7 @@
 	{/if}
 
 	{#if showMarket}
-		<Marketplace sessionId={activeId} onClose={() => (showMarket = false)} />
+		<Marketplace backend={active?.backendId ?? 'jucode'} onClose={() => (showMarket = false)} />
 	{/if}
 
 	{#if showSetup && activeId}

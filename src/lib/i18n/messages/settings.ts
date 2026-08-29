@@ -219,14 +219,21 @@ const settings = {
 		},
 		marketplace: {
 			title: '扩展市场',
-			subtitle: '为 JuCode 安装技能扩展。',
+			subtitle: '从 JuCode 与 Anthropic 安装技能扩展。',
 			search: '搜索扩展…',
 			all: '全部',
+			allTags: '全部标签',
+			sourceFilter: '技能来源',
 			needLogin: '需要登录 JuCode 账号后才能浏览市场（设置 → 登录）。',
 			loadFailed: '加载失败：{error}',
 			noMatch: '没有匹配的扩展',
 			installing: '安装中',
-			install: '安装'
+			install: '安装',
+			installed: '已安装',
+			installDir: '安装到 {path}',
+			sourceAvailable: '仅源码可见 · 不可再分发',
+			licenseNotice:
+				'Anthropic 的 docx、pdf、pptx 与 xlsx 技能仅源码可见且不可再分发。Claude Code 不提供 API 的预置文档技能；此处安装的是仓库中的自定义技能副本，并受 Anthropic 条款约束。'
 		},
 		overview: {
 			dailyTitle: '每日 Token 用量',
@@ -471,14 +478,21 @@ const settings = {
 		},
 		marketplace: {
 			title: 'Marketplace',
-			subtitle: 'Install skill extensions for JuCode.',
+			subtitle: 'Install skills from JuCode and Anthropic.',
 			search: 'Search extensions…',
 			all: 'All',
+			allTags: 'All tags',
+			sourceFilter: 'Skill source',
 			needLogin: 'Log in to your JuCode account to browse the marketplace (Settings → Log in).',
 			loadFailed: 'Failed to load: {error}',
 			noMatch: 'No matching extensions',
 			installing: 'Installing',
-			install: 'Install'
+			install: 'Install',
+			installed: 'Installed',
+			installDir: 'Installing to {path}',
+			sourceAvailable: 'Source-available · redistribution prohibited',
+			licenseNotice:
+				'Anthropic’s docx, pdf, pptx, and xlsx skills are source-available and not for redistribution. Claude Code does not include the API’s preset document skills; installs here are custom repository copies governed by Anthropic’s terms.'
 		},
 		overview: {
 			dailyTitle: 'Daily token usage',

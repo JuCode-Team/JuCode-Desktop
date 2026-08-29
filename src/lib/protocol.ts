@@ -117,27 +117,30 @@ export function removeAuthKey(provider: string): Promise<void> {
 	return invoke('remove_auth_key', { provider });
 }
 
-// Skills marketplace (Tauri fetches it directly from the JuCode API).
+// Skills marketplace (Tauri combines JuCode with github.com/anthropics/skills).
+export type SkillSource = 'jucode' | 'anthropic';
 export interface MarketSkill {
 	id: string;
 	name: string;
 	description: string;
 	tags: string[];
+	source: SkillSource;
 	isDefault: boolean;
+	installed: boolean;
+	license: string;
+	redistributable: boolean;
+	homepage: string;
 }
-export async function fetchMarketplace(): Promise<MarketSkill[]> {
-	const v = await invoke<{ skills?: unknown[]; default_skill_ids?: unknown[] }>('fetch_marketplace');
-	const defaults = new Set((Array.isArray(v.default_skill_ids) ? v.default_skill_ids : []).map(String));
-	return (Array.isArray(v.skills) ? v.skills : [])
-		.map((s) => s as Record<string, unknown>)
-		.filter((s) => s.enabled !== false)
-		.map((s) => ({
-			id: String(s.id ?? ''),
-			name: String(s.name ?? s.id ?? ''),
-			description: String(s.description ?? ''),
-			tags: Array.isArray(s.tags) ? (s.tags as unknown[]).map(String) : [],
-			isDefault: defaults.has(String(s.id))
-		}));
+export interface SkillCatalog {
+	skills: MarketSkill[];
+	warnings: string[];
+	installDir: string;
+}
+export function fetchMarketplace(backend: string): Promise<SkillCatalog> {
+	return invoke('fetch_marketplace', { backend });
+}
+export function installMarketplaceSkill(source: SkillSource, id: string, backend: string): Promise<string> {
+	return invoke('install_marketplace_skill', { source, id, backend });
 }
 
 // JuCode account: plan / balance / usage / call-details, fetched via the

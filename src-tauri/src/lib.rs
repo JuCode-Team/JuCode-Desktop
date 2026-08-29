@@ -15,6 +15,7 @@ mod installer;
 mod plugins;
 mod secrets;
 mod shell_env;
+mod skills;
 
 use backend::BackendKind;
 
@@ -690,10 +691,9 @@ fn jucode_get(path: &str) -> Result<serde_json::Value, String> {
         .map_err(|e| e.to_string())
 }
 
-/// Fetches the JuCode skills marketplace. The endpoint is public; the access
-/// token (when present) is sent best-effort without forcing a refresh.
-#[tauri::command(async)]
-fn fetch_marketplace() -> Result<serde_json::Value, String> {
+/// Fetches the JuCode source payload. The endpoint is public; the access token
+/// (when present) is sent best-effort without forcing a refresh.
+fn fetch_jucode_marketplace() -> Result<serde_json::Value, String> {
     let url = format!("{}/v1/skills/marketplace", jucode_api_url());
     let key = read_auth()
         .get("jucode")
@@ -708,6 +708,32 @@ fn fetch_marketplace() -> Result<serde_json::Value, String> {
         .map_err(|e| e.to_string())?
         .into_json::<serde_json::Value>()
         .map_err(|e| e.to_string())
+}
+
+/// Combines the official JuCode marketplace with the vendored public metadata
+/// index for github.com/anthropics/skills. A JuCode network failure is returned
+/// as a source warning so the independently installable Anthropic catalog stays
+/// available.
+#[tauri::command(async)]
+fn fetch_marketplace(backend: String) -> Result<skills::SkillCatalog, String> {
+    skills::catalog(fetch_jucode_marketplace(), &backend)
+}
+
+/// Installs directly into the active backend's personal skill directory. The
+/// source is re-fetched here instead of trusting package URLs or content sent by
+/// the webview.
+#[tauri::command(async)]
+fn install_marketplace_skill(
+    source: String,
+    id: String,
+    backend: String,
+) -> Result<String, String> {
+    let jucode = if source == "jucode" {
+        Some(fetch_jucode_marketplace()?)
+    } else {
+        None
+    };
+    skills::install(&source, &id, &backend, jucode.as_ref())
 }
 
 /// Account overview (profile + balance + active plan) for the GUI.
@@ -2692,6 +2718,7 @@ pub fn run() {
             set_auth_key,
             remove_auth_key,
             fetch_marketplace,
+            install_marketplace_skill,
             fetch_account_info,
             fetch_usage,
             fetch_usage_logs,
