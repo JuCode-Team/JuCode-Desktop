@@ -29,6 +29,7 @@
 	import { SessionStore } from '$lib/session.svelte';
 	import { workspaces } from '$lib/workbench/workspaceStore.svelte';
 	import {
+		closeTab,
 		deserializeLayout,
 		emptyLayout,
 		findLeaf,
@@ -468,12 +469,14 @@
 		});
 	});
 
-	// Sessions that closed or were archived lose their tab (emptied leaves
-	// collapse). The reverse is NOT true: closing a tab keeps the session —
-	// it stays in the sidebar and can be re-opened from there.
+	// Sessions that closed lose their tab (emptied leaves collapse). The
+	// reverse is NOT true: closing a tab keeps the session — it stays in the
+	// sidebar and can be re-opened from there. Archived sessions keep any tab
+	// the user explicitly opens (viewing an archived thread), but the archive
+	// action itself hides the tab (see archiveSession below).
 	$effect(() => {
 		if (!mainLoaded) return;
-		const live = new Set(allSessions.filter((s) => !s.archived).map((s) => s.id));
+		const live = new Set(allSessions.map((s) => s.id));
 		untrack(() => {
 			const next = pruneChatTabs(mainTiles, (sid) => live.has(sid));
 			if (next !== mainTiles) {
@@ -484,6 +487,18 @@
 			}
 		});
 	});
+
+	/** Archive = hide: the thread leaves the mosaic too (clicking it in the
+	 *  sidebar's archived section re-opens a tab). */
+	function archiveSession(id: string) {
+		store.archiveSession(id);
+		if (!mainLoaded) return;
+		const next = closeTab(mainTiles, chatTabId(id));
+		if (next !== mainTiles) mainTiles = next;
+		if (focusedLeaf && !findLeaf(mainTiles.root, focusedLeaf)) {
+			focusedLeaf = leavesOf(mainTiles.root)[0]?.id ?? null;
+		}
+	}
 
 	// Persist the project layout + open tabs (engine session id + title) and
 	// the main tile layout into the active workspace (app-data file, not
@@ -845,7 +860,7 @@
 		onNewSession={(p) => newSessionFlow(p)}
 		onCloseSession={(id) => store.removeSession(id)}
 		onCloseProject={removeProject}
-		onArchiveSession={(id) => store.archiveSession(id)}
+		onArchiveSession={archiveSession}
 		onUnarchiveSession={(id) => store.unarchiveSession(id)}
 		onHistory={(p) => store.openHistory(p)}
 		onSettings={() => (showSettings = true)}
@@ -870,6 +885,7 @@
 				<Mosaic
 					layout={mainTiles}
 					onchange={handleMainChange}
+					onActivate={focusPane}
 					label={mainLabel}
 					addOptions={[{ key: 'new-session', label: t('shell.newSession') }]}
 					onAdd={mainAdd}

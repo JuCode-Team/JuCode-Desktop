@@ -28,6 +28,7 @@
 		label,
 		addOptions = [],
 		onAdd,
+		onActivate,
 		emptyText = ''
 	}: {
 		layout: TileLayout;
@@ -39,6 +40,9 @@
 		/** Panel kinds offered by each leaf's + menu. */
 		addOptions?: { key: string; label: string }[];
 		onAdd?: (leafId: string | null, key: string) => void;
+		/** A tab was explicitly clicked/Enter-activated — fires even when the
+		 *  tab was already active in its leaf, so the host can move focus there. */
+		onActivate?: (tabId: string) => void;
 		emptyText?: string;
 	} = $props();
 
@@ -109,8 +113,10 @@
 			drag = null;
 			hover = null;
 			if (!d) return;
-			if (!d.live) onchange(activateTab(layout, d.tabId));
-			else if (h) onchange(moveTab(layout, d.tabId, h.leafId, h.zone));
+			if (!d.live) {
+				onchange(activateTab(layout, d.tabId));
+				onActivate?.(d.tabId);
+			} else if (h) onchange(moveTab(layout, d.tabId, h.leafId, h.zone));
 		};
 		window.addEventListener('pointermove', move);
 		window.addEventListener('pointerup', up);
@@ -207,7 +213,11 @@
 						tabindex="0"
 						aria-selected={leaf.active === tab.id}
 						onpointerdown={(e) => tabPointerDown(e, tab)}
-						onkeydown={(e) => e.key === 'Enter' && onchange(activateTab(layout, tab.id))}
+						onkeydown={(e) => {
+							if (e.key !== 'Enter') return;
+							onchange(activateTab(layout, tab.id));
+							onActivate?.(tab.id);
+						}}
 					>
 						<span class="ldot" class:on={leaf.active === tab.id}></span>
 						<span class="llabel">{label(tab)}</span>
