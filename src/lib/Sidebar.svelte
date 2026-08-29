@@ -1,8 +1,10 @@
 <script lang="ts">
-	import { Plus, History, X, LoaderCircle, GitBranch, GitBranchPlus, Archive, ArchiveRestore, ChevronRight, ChevronsUpDown, Check, Layers, Settings } from 'lucide-svelte';
+	import { tick } from 'svelte';
+	import { Plus, History, X, LoaderCircle, GitBranch, GitBranchPlus, Archive, ArchiveRestore, ChevronRight, Search, Settings } from 'lucide-svelte';
 	import { t } from '$lib/i18n';
 	import { BACKEND_LABELS } from '$lib/backends';
 	import BackendIcon from '$lib/BackendIcon.svelte';
+	import TabGlyph from '$lib/workbench/TabGlyph.svelte';
 	import type { Project } from '$lib/types';
 
 	let {
@@ -13,10 +15,6 @@
 		loggedIn,
 		providerName,
 		updateAvailable = false,
-		workspaceList = [],
-		activeWorkspace = '',
-		onSwitchWorkspace,
-		onNewWorkspace,
 		onSelect,
 		onNewProject,
 		onNewSession,
@@ -25,6 +23,8 @@
 		onCloseProject,
 		onArchiveSession,
 		onUnarchiveSession,
+		onRenameSession,
+		onSessionMenu,
 		onHistory,
 		onSettings
 	}: {
@@ -36,11 +36,6 @@
 		loggedIn: boolean;
 		providerName: string;
 		updateAvailable?: boolean;
-		/** Workspaces to offer in the switcher (hidden while empty/loading). */
-		workspaceList?: { id: string; name: string }[];
-		activeWorkspace?: string;
-		onSwitchWorkspace?: (id: string) => void;
-		onNewWorkspace?: () => void;
 		onSelect: (id: string) => void;
 		onNewProject: () => void;
 		onNewSession: (p: Project) => void;
@@ -49,15 +44,60 @@
 		onCloseProject: (p: Project) => void;
 		onArchiveSession: (id: string) => void;
 		onUnarchiveSession: (id: string) => void;
+		/** Inline rename committed on a session row (dblclick the title). */
+		onRenameSession: (id: string, title: string) => void;
+		/** Right-click on a session row: the page opens the chrome popover. */
+		onSessionMenu: (id: string, ev: MouseEvent) => void;
 		onHistory: (p: Project) => void;
 		onSettings: () => void;
 	} = $props();
 
 	// Which projects have their archived section expanded (collapsed by default).
 	let showArchived = $state<Record<string, boolean>>({});
-	// Workspace switcher popover.
-	let wsOpen = $state(false);
-	const wsName = $derived(workspaceList.find((w) => w.id === activeWorkspace)?.name ?? '');
+
+	// Session filter: case-insensitive substring over session title + project
+	// name; empty project groups are hidden while a query is set.
+	let searchOpen = $state(false);
+	let searchQuery = $state('');
+	let searchEl = $state<HTMLInputElement | null>(null);
+	const query = $derived(searchQuery.trim().toLowerCase());
+	function toggleSearch() {
+		searchOpen = !searchOpen;
+		if (searchOpen) tick().then(() => searchEl?.focus());
+		else searchQuery = '';
+	}
+	function searchKey(e: KeyboardEvent) {
+		if (e.key === 'Escape') {
+			e.preventDefault();
+			searchQuery = '';
+			searchOpen = false;
+		}
+	}
+	const sessionMatches = (p: Project, s: Project['sessions'][number]) =>
+		!query || s.chat.title.toLowerCase().includes(query) || p.name.toLowerCase().includes(query);
+
+	// Inline rename (dblclick a session title).
+	let renaming = $state<string | null>(null);
+	let renameVal = $state('');
+	let renameEl = $state<HTMLInputElement | null>(null);
+	function startRename(s: Project['sessions'][number]) {
+		renaming = s.id;
+		renameVal = s.chat.title;
+		tick().then(() => renameEl?.select());
+	}
+	function commitRename() {
+		if (renaming && renameVal.trim()) onRenameSession(renaming, renameVal);
+		renaming = null;
+	}
+	function renameKey(e: KeyboardEvent) {
+		if (e.key === 'Enter') {
+			e.preventDefault();
+			commitRename();
+		} else if (e.key === 'Escape') {
+			e.preventDefault();
+			renaming = null;
+		}
+	}
 
 	// "New session" targets the active session's project (fallback: first project);
 	// with no project open it falls through to the new-project flow.
@@ -73,45 +113,6 @@
 		<span class="word">JuCode</span>
 	</div>
 
-	{#if workspaceList.length}
-		<div class="ws">
-			<button class="ws-btn" onclick={() => (wsOpen = !wsOpen)} title={t('shell.workspace.switch')}>
-				<Layers size={13} class="ws-icon" />
-				<span class="ws-name">{wsName || t('shell.workspace.label')}</span>
-				<ChevronsUpDown size={12} class="ws-chev" />
-			</button>
-			{#if wsOpen}
-				<button class="ws-backdrop" aria-label="close" onclick={() => (wsOpen = false)}></button>
-				<div class="ws-menu">
-					{#each workspaceList as w (w.id)}
-						<button
-							class="ws-item"
-							class:on={w.id === activeWorkspace}
-							onclick={() => {
-								wsOpen = false;
-								onSwitchWorkspace?.(w.id);
-							}}
-						>
-							<span class="ws-item-name">{w.name}</span>
-							{#if w.id === activeWorkspace}<Check size={13} />{/if}
-						</button>
-					{/each}
-					<div class="ws-sep"></div>
-					<button
-						class="ws-item"
-						onclick={() => {
-							wsOpen = false;
-							onNewWorkspace?.();
-						}}
-					>
-						<Plus size={13} />
-						<span class="ws-item-name">{t('shell.workspace.new')}</span>
-					</button>
-				</div>
-			{/if}
-		</div>
-	{/if}
-
 	<div class="nav">
 		<button class="navcard" onclick={newSessionHere}><Plus size={14} /><span>{t('shell.newSession')}</span></button>
 	</div>
@@ -119,14 +120,49 @@
 	<div class="sess-head">
 		<span>{t('shell.sessionsByProject')}</span>
 		<div class="sess-actions">
+			<button class:on={searchOpen} onclick={toggleSearch} aria-label="search sessions" title={t('shell.searchSessions')}><Search size={14} /></button>
 			<button onclick={onNewProject} aria-label="new project" title={t('shell.newProjectTitle')}><Plus size={15} /></button>
 		</div>
 	</div>
 
+	{#if searchOpen}
+		<div class="sess-search">
+			<input
+				bind:this={searchEl}
+				bind:value={searchQuery}
+				placeholder={t('shell.searchSessions')}
+				onkeydown={searchKey}
+			/>
+		</div>
+	{/if}
+
 	{#snippet sessRow(s: Project['sessions'][number])}
-		<button class="sess" class:on={s.id === activeId} class:arch={s.archived} onclick={() => onSelect(s.id)}>
+		<button
+			class="sess"
+			class:on={s.id === activeId}
+			class:arch={s.archived}
+			style:box-shadow={s.color ? `inset 2px 0 0 ${s.color}` : undefined}
+			onclick={() => onSelect(s.id)}
+			oncontextmenu={(e) => onSessionMenu(s.id, e)}
+		>
 			<span class="sess-dot" class:busy={s.chat.busy} class:err={s.chat.engineState === 'exited'} class:unseen={s.chat.unseen && !s.chat.busy} class:attn={!!(s.chat.pendingApproval || s.chat.trustPrompt)} title={s.chat.pendingApproval || s.chat.trustPrompt ? t('shell.awaitConfirm') : ''}></span>
-			<span class="sess-title">{s.chat.title}</span>
+			{#if s.icon}
+				<TabGlyph icon={s.icon} color={s.color} size={12} />
+			{/if}
+			{#if renaming === s.id}
+				<!-- svelte-ignore a11y_no_static_element_interactions (keep row clicks out of the editor) -->
+				<input
+					class="sess-edit"
+					bind:this={renameEl}
+					bind:value={renameVal}
+					onblur={commitRename}
+					onkeydown={renameKey}
+					onclick={(e) => e.stopPropagation()}
+					ondblclick={(e) => e.stopPropagation()}
+				/>
+			{:else}
+				<span class="sess-title" ondblclick={(e) => { e.stopPropagation(); startRename(s); }} role="presentation">{s.chat.title}</span>
+			{/if}
 			{#if s.backendId && s.backendId !== 'jucode'}
 				<!-- engine-backend badge (only when not the native engine) -->
 				<span class="backend-chip" title={BACKEND_LABELS[s.backendId]}>
@@ -164,6 +200,9 @@
 
 	<div class="sess-list">
 		{#each projects as p (p.id)}
+			{@const active = p.sessions.filter((s) => !s.archived && sessionMatches(p, s))}
+			{@const arch = p.sessions.filter((s) => s.archived && sessionMatches(p, s))}
+			{#if !query || active.length || arch.length}
 			<div class="group">
 				{#if p.worktree}
 					<!-- 并行任务 worktree 项目：分支角标 + 「task/<slug> ← base」提示 -->
@@ -186,12 +225,10 @@
 					<button class="group-x" class:always={p.stale} onclick={() => onCloseProject(p)} aria-label="close project" title={p.stale ? t('shell.task.staleRemove') : t('shell.closeProject')}><X size={12} /></button>
 				{/if}
 			</div>
-			{@const active = p.sessions.filter((s) => !s.archived)}
-			{@const arch = p.sessions.filter((s) => s.archived)}
 			{#each active as s (s.id)}
 				{@render sessRow(s)}
 			{/each}
-			{#if active.length === 0 && arch.length === 0 && !p.stale}
+			{#if active.length === 0 && arch.length === 0 && !p.stale && !query}
 				<button class="sess-empty" onclick={() => onNewSession(p)}>{t('shell.newSession')}</button>
 			{/if}
 			{#if arch.length}
@@ -200,11 +237,12 @@
 					<Archive size={11} />
 					<span>{t('shell.archived')} · {arch.length}</span>
 				</button>
-				{#if showArchived[p.id]}
+				{#if showArchived[p.id] || query}
 					{#each arch as s (s.id)}
 						{@render sessRow(s)}
 					{/each}
 				{/if}
+			{/if}
 			{/if}
 		{/each}
 	</div>
@@ -303,100 +341,6 @@
 		font-size: 17px;
 		letter-spacing: -0.01em;
 	}
-	/* Workspace switcher: a quiet row between the brand and the actions. */
-	.ws {
-		position: relative;
-		padding: 0 14px 8px;
-	}
-	.ws-btn {
-		display: flex;
-		align-items: center;
-		gap: 7px;
-		width: 100%;
-		padding: 6px 9px;
-		border: none;
-		border-radius: var(--r-md);
-		background: none;
-		color: var(--dim);
-		font-size: 12px;
-		cursor: pointer;
-		transition:
-			background var(--t-fast) var(--ease-out),
-			color var(--t-fast) var(--ease-out);
-	}
-	.ws-btn:hover {
-		background: var(--surface);
-		color: var(--text);
-	}
-	.ws :global(.ws-icon) {
-		color: var(--dim2);
-		flex-shrink: 0;
-	}
-	.ws :global(.ws-chev) {
-		color: var(--dim2);
-		flex-shrink: 0;
-	}
-	.ws-name {
-		flex: 1;
-		text-align: left;
-		font-weight: 600;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	.ws-backdrop {
-		position: fixed;
-		inset: 0;
-		z-index: 80;
-		border: none;
-		background: none;
-		cursor: default;
-	}
-	.ws-menu {
-		position: absolute;
-		top: calc(100% - 4px);
-		left: 14px;
-		right: 14px;
-		z-index: 81;
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		padding: 5px;
-		background: var(--panel);
-		border: 1px solid var(--border);
-		border-radius: var(--r-md);
-		box-shadow: var(--shadow-pop);
-	}
-	.ws-item {
-		display: flex;
-		align-items: center;
-		gap: 7px;
-		text-align: left;
-		padding: 7px 9px;
-		border: none;
-		background: none;
-		border-radius: var(--r-sm);
-		color: var(--text);
-		font-size: 12.5px;
-		cursor: pointer;
-	}
-	.ws-item:hover {
-		background: var(--surface2);
-	}
-	.ws-item.on {
-		color: var(--accent-bright);
-	}
-	.ws-item-name {
-		flex: 1;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	.ws-sep {
-		height: 1px;
-		margin: 3px 6px;
-		background: var(--hairline);
-	}
 	.nav {
 		display: flex;
 		gap: 6px;
@@ -454,6 +398,28 @@
 	.sess-actions button:hover:not(:disabled) {
 		background: var(--surface2);
 		color: var(--text);
+	}
+	.sess-actions button.on {
+		color: var(--accent-bright);
+		background: var(--accent-soft);
+	}
+	/* Compact session filter, revealed by the search icon. */
+	.sess-search {
+		padding: 0 14px 8px;
+	}
+	.sess-search input {
+		width: 100%;
+		padding: 6px 9px;
+		border: 1px solid var(--hairline);
+		border-radius: var(--r-md);
+		background: var(--surface);
+		color: var(--text);
+		font-size: 12px;
+		font-family: var(--font-sans);
+		outline: none;
+	}
+	.sess-search input:focus {
+		border-color: color-mix(in oklab, var(--accent) 40%, var(--hairline));
 	}
 	.sess-list {
 		flex: 1;
@@ -566,7 +532,22 @@
 		color: var(--text);
 		cursor: pointer;
 		font-size: 13px;
+		/* dblclick renames — never select the title text instead */
+		user-select: none;
+		-webkit-user-select: none;
 		transition: background var(--t-fast) var(--ease-out);
+	}
+	.sess-edit {
+		flex: 1;
+		min-width: 0;
+		padding: 2px 6px;
+		border: 1px solid color-mix(in oklab, var(--accent) 45%, var(--hairline));
+		border-radius: var(--r-sm);
+		background: var(--surface);
+		color: var(--text);
+		font-size: 12.5px;
+		font-family: var(--font-sans);
+		outline: none;
 	}
 	.sess:hover {
 		background: var(--surface);

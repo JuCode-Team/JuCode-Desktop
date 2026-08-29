@@ -30,6 +30,15 @@ describe('ChatState.handle', () => {
 		expect(c.title).toBe('Fix the bug in foo');
 	});
 
+	it('a locked title is never overwritten by auto-titling', () => {
+		const c = new ChatState();
+		c.titleLocked = true; // renamed while still 'New session'
+		c.optimisticUser('do the thing');
+		expect(c.title).toBe('New session');
+		c.handle({ type: 'user_message', content: 'do the thing again' });
+		expect(c.title).toBe('New session');
+	});
+
 	it('de-duplicates the optimistic echo', () => {
 		const c = new ChatState();
 		c.optimisticUser('refactor foo');

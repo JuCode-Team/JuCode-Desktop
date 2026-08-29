@@ -48,7 +48,10 @@
 		reconcileLayout
 	} from '$lib/workbench/canvas';
 	import { tuiBackendOf, tuiPanelKind, tuiTabTitle } from '$lib/workbench/tuiTab';
+	import type { TabIcon } from '$lib/workbench/tabChrome';
 	import Mosaic from '$lib/workbench/Mosaic.svelte';
+	import WorkspaceTabs from '$lib/workbench/WorkspaceTabs.svelte';
+	import TabChromePopover from '$lib/workbench/TabChromePopover.svelte';
 	import ChatPane, { type ChatPaneApi, type ProviderOption } from '$lib/ChatPane.svelte';
 	import Settings from '$lib/Settings.svelte';
 	import Setup from '$lib/Setup.svelte';
@@ -436,7 +439,6 @@
 	});
 
 	const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
-	const project = $derived(activeProject?.name ?? (chat?.cwd ? base(chat.cwd) : 'workspace'));
 
 	// The engine announced its startup approval mode and it diverges from the
 	// desktop's persisted mode (fresh start, crash auto-restart or provider
@@ -473,6 +475,53 @@
 	async function newWorkspace() {
 		const entry = workspaces.create(t('shell.workspace.nth', { n: workspaces.workspaces.length + 1 }));
 		if (entry) await switchWorkspace(entry.id);
+	}
+	/** Delete a workspace (confirmed). Deleting the active one swaps the live
+	 *  session tree to the default workspace returned by the store. */
+	async function deleteWorkspace(id: string) {
+		const ws = workspaces.workspaces.find((w) => w.id === id);
+		if (!ws) return;
+		if (ws.isDefault) {
+			await message(t('shell.workspace.cannotDeleteDefault'), { title: 'JuCode', kind: 'warning' });
+			return;
+		}
+		const ok = await ask(t('shell.workspace.deleteConfirm', { name: ws.name }), {
+			title: t('shell.workspace.delete'),
+			kind: 'warning'
+		});
+		if (!ok) return;
+		const next = workspaces.remove(id);
+		if (!next) return; // removed an inactive workspace — nothing to swap
+		tilesReady = false;
+		for (const p of [...store.projects]) store.removeProject(p);
+		store.loaded = false;
+		await store.restore(next.projects);
+		initTiles();
+	}
+
+	// ---------- session tab chrome (color / icon / rename) ----------
+	// One shared popover serves the mosaic tabs and the sidebar rows.
+	let sessionChromeFor = $state<{ sid: string; x: number; y: number } | null>(null);
+	const chromeSession = $derived(sessionChromeFor ? (sessionMap.get(sessionChromeFor.sid) ?? null) : null);
+
+	function tileChrome(tab: TileTab): { color?: string; icon?: TabIcon } | null {
+		const sid = chatSessionOf(tab.panel);
+		const s = sid ? sessionMap.get(sid) : null;
+		if (!s || (!s.color && !s.icon)) return null;
+		return { color: s.color, icon: s.icon };
+	}
+	/** Open the chrome popover for a chat tab (context menu / dblclick).
+	 *  Tool/TUI/audit tabs have no chrome and keep their default behavior. */
+	function openTileChrome(tab: TileTab, ev: MouseEvent) {
+		const sid = chatSessionOf(tab.panel);
+		if (!sid || !sessionMap.has(sid)) return;
+		ev.preventDefault();
+		sessionChromeFor = { sid, x: ev.clientX, y: ev.clientY };
+	}
+	function openSessionMenu(sid: string, ev: MouseEvent) {
+		if (!sessionMap.has(sid)) return;
+		ev.preventDefault();
+		sessionChromeFor = { sid, x: ev.clientX, y: ev.clientY };
 	}
 
 	async function addProject() {
@@ -778,10 +827,6 @@
 		{loggedIn}
 		providerName={chat?.provider ?? ''}
 		updateAvailable={updater.available}
-		workspaceList={workspaces.workspaces.map((w) => ({ id: w.id, name: w.name }))}
-		activeWorkspace={workspaces.activeId}
-		onSwitchWorkspace={switchWorkspace}
-		onNewWorkspace={newWorkspace}
 		onSelect={(id) => (store.activeId = id)}
 		onNewProject={addProject}
 		onNewTask={newTask}
@@ -790,20 +835,26 @@
 		onCloseProject={removeProject}
 		onArchiveSession={(id) => store.archiveSession(id)}
 		onUnarchiveSession={(id) => store.unarchiveSession(id)}
+		onRenameSession={(id, title) => store.renameSession(id, title)}
+		onSessionMenu={openSessionMenu}
 		onHistory={(p) => store.openHistory(p)}
 		onSettings={() => (showSettings = true)}
 	/>
 	<div class="resizer side" class:hidden={!showSidebar} role="separator" aria-label="resize sidebar" onpointerdown={startSidebarResize}></div>
 
-	<!-- THE CANVAS: one mosaic for chats, tool panels, TUI and audit tiles. -->
+	<!-- THE CANVAS: workspace tabs on top, one mosaic for chats, tool panels,
+	     TUI and audit tiles below. -->
 	<div class="canvas">
-		<header data-tauri-drag-region class:shifted={!showSidebar}>
-			<div class="htitle" data-tauri-drag-region>
-				<span class="hname">{chat?.title ?? 'JuCode'}</span>
-				{#if chat}<span class="hcrumb">{project}</span>{/if}
-			</div>
-			<div class="hspace" data-tauri-drag-region></div>
-		</header>
+		<WorkspaceTabs
+			workspaces={workspaces.workspaces}
+			activeId={workspaces.activeId}
+			shifted={!showSidebar}
+			onSwitch={switchWorkspace}
+			onNew={newWorkspace}
+			onRename={(id, name) => workspaces.rename(id, name)}
+			onChrome={(id, chrome) => workspaces.setChrome(id, chrome)}
+			onDelete={deleteWorkspace}
+		/>
 
 		<div class="stage">
 			{#if store.loaded && projects.length === 0}
@@ -822,6 +873,9 @@
 					emptyText={t('dock.dock.empty')}
 					focused={focusedLeaf}
 					onFocus={onLeafFocus}
+					decorate={tileChrome}
+					onTabContext={openTileChrome}
+					onTabRename={openTileChrome}
 				>
 					{#snippet panel(tab)}
 						{@const sid = chatSessionOf(tab.panel)}
@@ -896,6 +950,20 @@
 
 	{#if taskDialogFor}
 		<TaskDialog project={taskDialogFor} onClose={() => (taskDialogFor = null)} onCreated={openTaskProject} />
+	{/if}
+
+	{#if sessionChromeFor && chromeSession}
+		<TabChromePopover
+			x={sessionChromeFor.x}
+			y={sessionChromeFor.y}
+			name={chromeSession.chat.title}
+			color={chromeSession.color ?? null}
+			icon={chromeSession.icon ?? null}
+			onRename={(n) => store.renameSession(chromeSession.id, n)}
+			onColor={(c) => store.setSessionChrome(chromeSession.id, { color: c })}
+			onIcon={(i) => store.setSessionChrome(chromeSession.id, { icon: i })}
+			onClose={() => (sessionChromeFor = null)}
+		/>
 	{/if}
 
 	{#if showPalette}
@@ -974,48 +1042,6 @@
 		min-width: 0;
 		background: var(--bg);
 		position: relative;
-	}
-	/* Slim window-drag strip; also names the active session for orientation. */
-	header {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		padding: 8px 18px;
-		border-bottom: 1px solid var(--hairline);
-		transition: padding-left var(--t-med) var(--ease-out);
-	}
-	/* Sidebar hidden → the traffic lights + sidebar toggle overlay the header;
-	   shift the title clear of them. */
-	header.shifted {
-		padding-left: 122px;
-	}
-	/* Windows/Linux: no traffic lights, so only the toggle overlays the header. */
-	:global(:root[data-os='windows']) header.shifted,
-	:global(:root[data-os='linux']) header.shifted {
-		padding-left: 52px;
-	}
-	.htitle {
-		display: flex;
-		align-items: baseline;
-		gap: 8px;
-		min-width: 0;
-	}
-	.hname {
-		font-family: var(--font-display);
-		font-weight: 700;
-		font-size: 13px;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		max-width: 280px;
-	}
-	.hcrumb {
-		font-size: 11px;
-		color: var(--dim2);
-		font-family: var(--font-mono);
-	}
-	.hspace {
-		flex: 1;
 	}
 	.stage {
 		flex: 1;

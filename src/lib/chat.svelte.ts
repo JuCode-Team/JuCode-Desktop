@@ -149,6 +149,9 @@ export class ChatState {
 	pendingMessages = $state<string[]>([]);
 	picker = $state<Picker>(null);
 	title = $state('New session');
+	/** True after an explicit user rename: auto-titling from the first user
+	 *  message must never overwrite a chosen name (persisted with the tab). */
+	titleLocked = $state(false);
 	pendingFill = $state<string | null>(null);
 	trustPrompt = $state<{ cwd: string; repoRoot: string | null } | null>(null);
 	goal = $state<Goal | null>(null);
@@ -255,7 +258,7 @@ export class ChatState {
 	optimisticUser(content: string) {
 		this.messages.push({ kind: 'user', text: content });
 		this.#pendingUserEcho = content;
-		if (this.title === 'New session' && content.trim()) this.title = content.trim().slice(0, 40);
+		if (this.title === 'New session' && !this.titleLocked && content.trim()) this.title = content.trim().slice(0, 40);
 		this.#resetCurrent();
 	}
 
@@ -523,7 +526,7 @@ export class ChatState {
 				// later swallow an identical message.
 				this.#pendingUserEcho = null;
 				this.messages.push({ kind: 'user', text });
-				if (this.title === 'New session' && text.trim()) {
+				if (this.title === 'New session' && !this.titleLocked && text.trim()) {
 					this.title = text.trim().slice(0, 40);
 				}
 				this.#resetCurrent();
@@ -712,7 +715,7 @@ export class ChatState {
 						return null;
 					})
 					.filter((m): m is Msg => m !== null);
-				if (this.title === 'New session') {
+				if (this.title === 'New session' && !this.titleLocked) {
 					const firstUser = this.messages.find((m) => m.kind === 'user');
 					if (firstUser && firstUser.kind === 'user' && firstUser.text.trim())
 						this.title = firstUser.text.trim().slice(0, 40);

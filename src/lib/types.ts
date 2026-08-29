@@ -1,11 +1,16 @@
 import type { ChatState } from './chat.svelte';
 import type { BackendId, EngineAdapter } from './backends/types';
+import type { TabIcon } from './workbench/tabChrome';
 
 export interface Session {
 	id: string;
 	chat: ChatState;
 	/** Engine backend driving this session (persisted; 'jucode' default). */
 	backendId: BackendId;
+	/** Tab tag color (persisted with the session's saved tab). */
+	color?: string;
+	/** Tab icon: builtin id, slug/emoji, or sanitized SVG (persisted). */
+	icon?: TabIcon;
 	/** For 'acp' sessions: the registry id + display name of the launched agent
 	 *  (passed as the allowlisted `agent` spawn option on every (re)spawn). */
 	acpAgent?: { id: string; name: string };

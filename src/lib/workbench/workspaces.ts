@@ -6,6 +6,7 @@
 
 import type { SavedProject } from '$lib/session.svelte';
 import { serializeLayout, singleLeafLayout, type SerializedLayout, type TileTab } from './tiles';
+import { normalizeColor, parseTabIcon, type TabIcon } from './tabChrome';
 
 export const WORKSPACES_FILE = 'workspaces.json';
 export const WORKSPACES_VERSION = 1;
@@ -25,6 +26,12 @@ export interface WorkspaceEntry {
 	projects: SavedProject[];
 	/** Serialized dock tile layout; null until the user arranges one. */
 	layout: SerializedLayout | null;
+	/** The one always-present workspace: cannot be deleted. Exactly one per file. */
+	isDefault?: boolean;
+	/** Tab tag color (`#rgb` / `#rrggbb`). */
+	color?: string;
+	/** Tab icon (builtin id, slug/emoji, or sanitized SVG). */
+	icon?: TabIcon;
 }
 
 export interface WorkspacesFile {
@@ -37,12 +44,26 @@ export interface WorkspacesFile {
 let counter = 0;
 const newId = () => `w${Date.now().toString(36)}-${(counter++).toString(36)}`;
 
-export function createWorkspace(name: string, projects: SavedProject[] = [], layout: SerializedLayout | null = null): WorkspaceEntry {
-	return { id: newId(), name, projects, layout };
+export function createWorkspace(
+	name: string,
+	projects: SavedProject[] = [],
+	layout: SerializedLayout | null = null,
+	opts?: { isDefault?: boolean; color?: string; icon?: TabIcon }
+): WorkspaceEntry {
+	return {
+		id: newId(),
+		name,
+		projects,
+		layout,
+		...(opts?.isDefault ? { isDefault: true } : {}),
+		...(opts?.color ? { color: opts.color } : {}),
+		...(opts?.icon ? { icon: opts.icon } : {})
+	};
 }
 
 export function defaultWorkspacesFile(first: WorkspaceEntry): WorkspacesFile {
-	return { version: WORKSPACES_VERSION, active: first.id, workspaces: [first] };
+	const seed = first.isDefault ? first : { ...first, isDefault: true };
+	return { version: WORKSPACES_VERSION, active: seed.id, workspaces: [seed] };
 }
 
 export function serializeWorkspaces(file: WorkspacesFile): string {
@@ -81,15 +102,24 @@ export function parseWorkspacesFile(text: string): WorkspacesFile | null {
 	for (const w of data.workspaces) {
 		const o = w as Record<string, unknown>;
 		if (!o || !isStr(o.id) || !isStr(o.name)) continue;
-		workspaces.push({
+		const entry: WorkspaceEntry = {
 			id: o.id,
 			name: o.name,
 			projects: sanitizeProjects(o.projects),
 			// Layout blobs are validated lazily by tiles.deserializeLayout at use.
 			layout: o.layout && typeof o.layout === 'object' ? (o.layout as SerializedLayout) : null
-		});
+		};
+		if (o.isDefault === true) entry.isDefault = true;
+		const color = normalizeColor(o.color);
+		if (color) entry.color = color;
+		const icon = parseTabIcon(o.icon);
+		if (icon) entry.icon = icon;
+		workspaces.push(entry);
 	}
 	if (!workspaces.length) return null;
+	// Pre-chrome files carried no isDefault: the first workspace becomes the
+	// default so old files upgrade in place without a version bump.
+	if (!workspaces.some((w) => w.isDefault)) workspaces[0].isDefault = true;
 	const active = isStr(data.active) && workspaces.some((w) => w.id === data.active) ? data.active : workspaces[0].id;
 	return { version: WORKSPACES_VERSION, active, workspaces };
 }

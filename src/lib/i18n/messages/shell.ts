@@ -45,8 +45,30 @@ const shell = {
 			default: '默认工作区',
 			nth: '工作区 {n}',
 			switch: '切换工作区',
-			new: '新建工作区'
+			new: '新建工作区',
+			menu: '工作区选项',
+			rename: '重命名工作区',
+			delete: '删除工作区',
+			deleteConfirm: '删除工作区「{name}」？其中的项目布局与会话标签将被移除（对话记录仍保留在引擎侧）。',
+			cannotDeleteDefault: '默认工作区不能删除。',
+			defaultBadge: '默认工作区（不可删除）'
 		},
+		// shared tab chrome editor (workspace tabs + session tabs)
+		chrome: {
+			title: '标签外观',
+			name: '名称',
+			color: '标签颜色',
+			noColor: '无颜色',
+			icon: '图标',
+			clearIcon: '清除图标',
+			slug: '自定义图标（名称或 emoji）',
+			slugPlaceholder: '例如 rocket 或 🚀',
+			svg: '自定义 SVG',
+			svgPlaceholder: '粘贴 <svg>…</svg>',
+			svgInvalid: 'SVG 无效或包含不允许的内容',
+			delete: '删除'
+		},
+		searchSessions: '搜索会话（标题 / 项目名）',
 
 		// find bar
 		findPlaceholder: '在对话中查找…',
@@ -276,8 +298,30 @@ const shell = {
 			default: 'Default workspace',
 			nth: 'Workspace {n}',
 			switch: 'Switch workspace',
-			new: 'New workspace'
+			new: 'New workspace',
+			menu: 'Workspace options',
+			rename: 'Rename workspace',
+			delete: 'Delete workspace',
+			deleteConfirm: 'Delete workspace "{name}"? Its project layout and session tabs are removed (conversations remain on the engine side).',
+			cannotDeleteDefault: 'The default workspace cannot be deleted.',
+			defaultBadge: 'Default workspace (cannot be deleted)'
 		},
+		// shared tab chrome editor (workspace tabs + session tabs)
+		chrome: {
+			title: 'Tab appearance',
+			name: 'Name',
+			color: 'Tag color',
+			noColor: 'No color',
+			icon: 'Icon',
+			clearIcon: 'Clear icon',
+			slug: 'Custom icon (name or emoji)',
+			slugPlaceholder: 'e.g. rocket or 🚀',
+			svg: 'Custom SVG',
+			svgPlaceholder: 'Paste <svg>…</svg>',
+			svgInvalid: 'Invalid SVG or disallowed content',
+			delete: 'Delete'
+		},
+		searchSessions: 'Search sessions (title / project name)',
 
 		// find bar
 		findPlaceholder: 'Find in conversation…',

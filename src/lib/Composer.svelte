@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Send, Square, Paperclip, FastForward, ShieldCheck, Camera, Video, CircleStop, Mic, LoaderCircle, Check, ChevronDown } from 'lucide-svelte';
+	import { Send, Square, Paperclip, FastForward, ShieldCheck, CircleStop, Mic, LoaderCircle, Check, ChevronDown, MoreHorizontal } from 'lucide-svelte';
 	import { message } from '@tauri-apps/plugin-dialog';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Vendor from '$lib/Vendor.svelte';
@@ -37,7 +37,6 @@
 		attachments = $bindable(),
 		videos = $bindable([]),
 		el = $bindable(),
-		recording = false,
 		pickerQuery = $bindable(''),
 		pickerSelIdx = $bindable(0),
 		modelRows = [],
@@ -50,8 +49,6 @@
 		onStop,
 		onSteer,
 		onPick,
-		onScreenshot,
-		onRecord,
 		onModel,
 		onModelSelect,
 		onModelEffort,
@@ -64,7 +61,6 @@
 		attachments: { path: string; image: boolean }[];
 		videos?: { path: string; frames: string[]; duration: number }[];
 		el: HTMLElement | null;
-		recording?: boolean;
 		pickerQuery?: string;
 		pickerSelIdx?: number;
 		modelRows?: PickerRow[];
@@ -79,8 +75,6 @@
 		onStop: () => void;
 		onSteer: () => void;
 		onPick: () => void;
-		onScreenshot?: () => void;
-		onRecord?: () => void;
 		onModel: () => void;
 		onModelSelect?: (command: string) => void;
 		onModelEffort?: (effort: string) => void;
@@ -92,6 +86,9 @@
 	let slashIdx = $state(0);
 	let showEffort = $state(false);
 	let showApproval = $state(false);
+	// The ⋯ overflow menu hosting the secondary controls (mic / backend /
+	// effort / approval / context) so the visible bar stays slim.
+	let showMore = $state(false);
 
 	// Backend selector (new sessions only — locked after the first user turn).
 	// Availability is probed best-effort on first open, same as the old modal.
@@ -540,73 +537,6 @@
 		></div>
 		<div class="composer-bar">
 			<IconButton onclick={onPick} label="attach" title={t('chat.attachTitle')}><Paperclip size={16} /></IconButton>
-			{#if onScreenshot}
-				<IconButton onclick={onScreenshot} label="screenshot" title={t('chat.screenshotTitle')}><Camera size={16} /></IconButton>
-			{/if}
-			{#if onRecord}
-				<button
-					class="recbtn"
-					class:on={recording}
-					onclick={onRecord}
-					aria-label="record screen"
-					title={recording ? t('chat.recordStopTitle') : t('chat.recordTitle')}
-				>
-					{#if recording}<CircleStop size={16} />{:else}<Video size={16} />{/if}
-				</button>
-			{/if}
-			<button
-				class="recbtn"
-				class:on={voice === 'rec'}
-				onclick={toggleVoice}
-				disabled={voice === 'busy'}
-				aria-label="voice input"
-				title={voice === 'rec' ? t('chat.voiceStopTitle') : voice === 'busy' ? t('chat.voiceBusyTitle') : t('chat.voiceTitle')}
-			>
-				{#if voice === 'busy'}<span class="vspin"><LoaderCircle size={16} /></span>{:else if voice === 'rec'}<CircleStop size={16} />{:else}<Mic size={16} />{/if}
-			</button>
-			<!-- Engine backend: interactive picker until the first message locks it. -->
-			<div class="effortsel">
-				{#if backendLocked}
-					<span class="flatbtn bkd static" title={t('chat.backendLocked')}>
-						<BackendIcon backend={chat.backendId} size={14} /><span>{backendLabel}</span>
-					</span>
-				{:else}
-					<button class="flatbtn bkd" onclick={toggleBackend} title={t('chat.switchBackend')}>
-						<BackendIcon backend={chat.backendId} size={14} /><span>{backendLabel}</span>
-						<span class="bkd-chev"><ChevronDown size={12} /></span>
-					</button>
-					{#if showBackend}
-						<button class="pop-backdrop" aria-label="close" onclick={() => (showBackend = false)}></button>
-						<div class="effort-pop bkd-pop">
-							{#each NATIVE_BACKEND_IDS as id (id)}
-								{@const probe = backendProbe[id]}
-								<button class="bkd-row" class:on={id === chat.backendId} onclick={() => pickBackend(id)}>
-									<BackendIcon backend={id} size={14} />
-									<span class="bkd-name">{BACKEND_LABELS[id]}</span>
-									{#if probe && !probe.found}
-										<span class="bkd-miss">{t('shell.backend.notFound')}</span>
-									{:else if probe?.version}
-										<span class="bkd-ver">{probe.version}</span>
-									{/if}
-									{#if id === chat.backendId}<span class="bkd-check"><Check size={13} /></span>{/if}
-								</button>
-							{/each}
-							{#if acpAgents.length}
-								<div class="bkd-sep">{t('chat.acpAgents')}</div>
-								{#each acpAgents as agent (agent.id)}
-									{@const on = chat.backendId === 'acp' && chat.acpAgentId === agent.id}
-									<button class="bkd-row" class:on onclick={() => pickAcpAgent(agent)}>
-										<BackendIcon backend="acp" size={14} />
-										<span class="bkd-name">{agent.name}</span>
-										<span class="bkd-ver">{agent.command}</span>
-										{#if on}<span class="bkd-check"><Check size={13} /></span>{/if}
-									</button>
-								{/each}
-							{/if}
-						</div>
-					{/if}
-				{/if}
-			</div>
 			{#if bcaps.modelPicker}
 				<div class="effortsel">
 					<button
@@ -635,36 +565,102 @@
 			{:else if chat.model}
 				<span class="flatbtn model static"><Vendor model={chat.model} size={15} /><span>{chat.modelLabel || chat.model}</span></span>
 			{/if}
-			{#if bcaps.modelPicker && chat.efforts.length}
-				<div class="effortsel">
-					<button class="flatbtn" onclick={() => (showEffort = !showEffort)} title={t('chat.effortTitle')}>
-						{cap(chat.effort) || 'Effort'}
-					</button>
-					{#if showEffort}
-						<button class="pop-backdrop" aria-label="close" onclick={() => (showEffort = false)}></button>
-						<div class="effort-pop wide">
-							<EffortSlider value={chat.effort} options={chat.efforts} backendId={chat.backendId} onChange={onEffort} />
+			<!-- ⋯ overflow: mic / backend / effort / approval / context usage. -->
+			<div class="effortsel">
+				<button class="recbtn more" class:on={voice === 'rec'} onclick={() => (showMore = !showMore)} aria-label="more options" title={t('chat.more')}>
+					<MoreHorizontal size={16} />
+				</button>
+				{#if showMore}
+					<button class="pop-backdrop" aria-label="close" onclick={() => (showMore = false)}></button>
+					<div class="effort-pop more-pop">
+						<button
+							class="recbtn mrow"
+							class:on={voice === 'rec'}
+							onclick={toggleVoice}
+							disabled={voice === 'busy'}
+							aria-label="voice input"
+						>
+							{#if voice === 'busy'}<span class="vspin"><LoaderCircle size={15} /></span>{:else if voice === 'rec'}<CircleStop size={15} />{:else}<Mic size={15} />{/if}
+							<span>{voice === 'rec' ? t('chat.voiceStopTitle') : voice === 'busy' ? t('chat.voiceBusyTitle') : t('chat.voiceTitle')}</span>
+						</button>
+						<!-- Engine backend: interactive picker until the first message locks it. -->
+						<div class="effortsel mline">
+							{#if backendLocked}
+								<span class="flatbtn bkd static mrow" title={t('chat.backendLocked')}>
+									<BackendIcon backend={chat.backendId} size={14} /><span>{backendLabel}</span>
+								</span>
+							{:else}
+								<button class="flatbtn bkd mrow" onclick={toggleBackend} title={t('chat.switchBackend')}>
+									<BackendIcon backend={chat.backendId} size={14} /><span>{backendLabel}</span>
+									<span class="bkd-chev"><ChevronDown size={12} /></span>
+								</button>
+								{#if showBackend}
+									<button class="pop-backdrop" aria-label="close" onclick={() => (showBackend = false)}></button>
+									<div class="effort-pop bkd-pop">
+										{#each NATIVE_BACKEND_IDS as id (id)}
+											{@const probe = backendProbe[id]}
+											<button class="bkd-row" class:on={id === chat.backendId} onclick={() => pickBackend(id)}>
+												<BackendIcon backend={id} size={14} />
+												<span class="bkd-name">{BACKEND_LABELS[id]}</span>
+												{#if probe && !probe.found}
+													<span class="bkd-miss">{t('shell.backend.notFound')}</span>
+												{:else if probe?.version}
+													<span class="bkd-ver">{probe.version}</span>
+												{/if}
+												{#if id === chat.backendId}<span class="bkd-check"><Check size={13} /></span>{/if}
+											</button>
+										{/each}
+										{#if acpAgents.length}
+											<div class="bkd-sep">{t('chat.acpAgents')}</div>
+											{#each acpAgents as agent (agent.id)}
+												{@const on = chat.backendId === 'acp' && chat.acpAgentId === agent.id}
+												<button class="bkd-row" class:on onclick={() => pickAcpAgent(agent)}>
+													<BackendIcon backend="acp" size={14} />
+													<span class="bkd-name">{agent.name}</span>
+													<span class="bkd-ver">{agent.command}</span>
+													{#if on}<span class="bkd-check"><Check size={13} /></span>{/if}
+												</button>
+											{/each}
+										{/if}
+									</div>
+								{/if}
+							{/if}
 						</div>
-					{/if}
-				</div>
-			{/if}
-			{#if bcaps.approvalModes}
-				<div class="effortsel">
-					<button class="flatbtn appr" class:auto={chat.approvalMode !== 'ask'} onclick={() => (showApproval = !showApproval)} title={t('chat.approvalModeTitle')}>
-						<ShieldCheck size={14} /><span>{approvalLabel}</span>
-					</button>
-					{#if showApproval}
-						<button class="pop-backdrop" aria-label="close" onclick={() => (showApproval = false)}></button>
-						<div class="effort-pop">
-							<Segmented value={chat.approvalMode} options={APPROVAL} onChange={setApproval} />
-						</div>
-					{/if}
-				</div>
-			{/if}
+						{#if bcaps.modelPicker && chat.efforts.length}
+							<div class="effortsel mline">
+								<button class="flatbtn mrow" onclick={() => (showEffort = !showEffort)} title={t('chat.effortTitle')}>
+									{cap(chat.effort) || 'Effort'}
+								</button>
+								{#if showEffort}
+									<button class="pop-backdrop" aria-label="close" onclick={() => (showEffort = false)}></button>
+									<div class="effort-pop wide">
+										<EffortSlider value={chat.effort} options={chat.efforts} backendId={chat.backendId} onChange={onEffort} />
+									</div>
+								{/if}
+							</div>
+						{/if}
+						{#if bcaps.approvalModes}
+							<div class="effortsel mline">
+								<button class="flatbtn appr mrow" class:auto={chat.approvalMode !== 'ask'} onclick={() => (showApproval = !showApproval)} title={t('chat.approvalModeTitle')}>
+									<ShieldCheck size={14} /><span>{approvalLabel}</span>
+								</button>
+								{#if showApproval}
+									<button class="pop-backdrop" aria-label="close" onclick={() => (showApproval = false)}></button>
+									<div class="effort-pop">
+										<Segmented value={chat.approvalMode} options={APPROVAL} onChange={setApproval} />
+									</div>
+								{/if}
+							</div>
+						{/if}
+						{#if bcaps.contextUsage && ctxLimit > 0}
+							<div class="mctx">
+								<ContextIndicator pct={ctxPct} atThreshold={ctxAtThreshold} contextTokens={chat.contextTokens} contextLimit={ctxLimit} totalIn={chat.totalIn} totalOut={chat.totalOut} cost={chat.cost} />
+							</div>
+						{/if}
+					</div>
+				{/if}
+			</div>
 			<div class="cspace"></div>
-			{#if bcaps.contextUsage && ctxLimit > 0}
-				<ContextIndicator pct={ctxPct} atThreshold={ctxAtThreshold} contextTokens={chat.contextTokens} contextLimit={ctxLimit} totalIn={chat.totalIn} totalOut={chat.totalOut} cost={chat.cost} />
-			{/if}
 			{#if chat.busy}
 				<button class="cact stop" onclick={onStop} aria-label="stop" title={t('chat.stopTitle')}><Square size={16} /></button>
 			{:else}
@@ -951,6 +947,33 @@
 	.recbtn:disabled {
 		cursor: default;
 		color: var(--dim2);
+	}
+	/* ⋯ overflow menu: one column of the secondary controls. Nested pickers
+	   (backend / effort / approval) pop above their row, same as in the bar. */
+	.more-pop {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 190px;
+	}
+	.mline {
+		width: 100%;
+	}
+	.mrow {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		width: 100%;
+		text-align: left;
+		justify-content: flex-start;
+		font-size: 12.5px;
+	}
+	.mctx {
+		display: flex;
+		justify-content: flex-start;
+		padding: 4px 8px 2px;
+		border-top: 1px solid var(--hairline);
+		margin-top: 3px;
 	}
 	.vspin {
 		display: inline-flex;

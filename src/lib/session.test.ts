@@ -185,6 +185,54 @@ describe('SessionStore lifecycle', () => {
 		expect(store.activeId).toBe(store.projects[0].sessions[0].id);
 		expect(store.loaded).toBe(true);
 	});
+
+	it('serialize includes tab chrome only when set, and restore re-applies it', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p);
+		p.sessions[0].chat.sessionId = 'sid-0';
+		p.sessions[0].chat.messages.push({ kind: 'user', text: 'hi' });
+		store.renameSession(id, ' Release train ');
+		store.setSessionChrome(id, { color: '#DB2777', icon: { kind: 'slug', value: '🚀' } });
+		const snap = store.serialize();
+		expect(snap[0].tabs).toEqual([
+			{
+				sid: 'sid-0',
+				title: 'Release train',
+				color: '#db2777',
+				icon: { kind: 'slug', value: '🚀' },
+				titleLocked: true
+			}
+		]);
+
+		const store2 = new SessionStore();
+		await store2.restore(snap);
+		const s = store2.projects[0].sessions[0];
+		expect(s.color).toBe('#db2777');
+		expect(s.icon).toEqual({ kind: 'slug', value: '🚀' });
+		expect(s.chat.titleLocked).toBe(true);
+		expect(s.chat.title).toBe('Release train');
+	});
+
+	it('setSessionChrome null clears and invalid values are dropped', () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p);
+		store.setSessionChrome(id, { color: '#abc', icon: { kind: 'builtin', id: 'star' } });
+		expect(p.sessions[0].color).toBe('#abc');
+		store.setSessionChrome(id, { color: null, icon: { kind: 'builtin', id: 'bogus' } });
+		expect(p.sessions[0].color).toBeUndefined();
+		expect(p.sessions[0].icon).toBeUndefined();
+		// chrome never set → serialize omits the keys entirely
+		p.sessions[0].chat.sessionId = 'sid-0';
+		p.sessions[0].chat.messages.push({ kind: 'user', text: 'hi' });
+		const tab = store.serialize()[0].tabs![0];
+		expect('color' in tab).toBe(false);
+		expect('icon' in tab).toBe(false);
+		expect('titleLocked' in tab).toBe(false);
+	});
 });
 
 describe('SessionStore parallel-task worktrees', () => {

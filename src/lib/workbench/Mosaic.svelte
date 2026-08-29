@@ -15,6 +15,8 @@
 		type TileNode,
 		type TileTab
 	} from './tiles';
+	import type { TabIcon } from './tabChrome';
+	import TabGlyph from './TabGlyph.svelte';
 
 	// Renders a TileLayout: recursive splits with draggable gutters, per-leaf
 	// tab stacks, pointer-drag of tabs between leaves (edge drop = split, with
@@ -30,7 +32,10 @@
 		onAdd,
 		emptyText = '',
 		focused = null,
-		onFocus
+		onFocus,
+		decorate,
+		onTabContext,
+		onTabRename
 	}: {
 		layout: TileLayout;
 		onchange: (next: TileLayout) => void;
@@ -46,6 +51,12 @@
 		focused?: string | null;
 		/** Pointer went down inside a leaf — report it as the focused one. */
 		onFocus?: (leafId: string) => void;
+		/** Per-tab chrome (session tag color / icon); null keeps the plain dot. */
+		decorate?: (tab: TileTab) => { color?: string; icon?: TabIcon } | null;
+		/** Right-click on a tab (the caller decides whether to open a menu). */
+		onTabContext?: (tab: TileTab, ev: MouseEvent) => void;
+		/** Double-click on a tab (rename affordance — never maximizes). */
+		onTabRename?: (tab: TileTab, ev: MouseEvent) => void;
 	} = $props();
 
 	let rootEl = $state<HTMLElement | null>(null);
@@ -97,9 +108,15 @@
 	// a drag with a floating label and a landing preview under the cursor.
 	function tabPointerDown(e: PointerEvent, tab: TileTab) {
 		if (e.button !== 0) return;
+		// Stop the browser from starting a text selection under the drag
+		// (user-select:none alone doesn't cover text outside the mosaic).
+		e.preventDefault();
 		const startX = e.clientX;
 		const startY = e.clientY;
 		drag = { tabId: tab.id, label: label(tab), x: startX, y: startY, live: false };
+		const preventSelect = (ev: Event) => {
+			if (drag) ev.preventDefault();
+		};
 		const move = (ev: PointerEvent) => {
 			if (!drag) return;
 			if (!drag.live && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 5) return;
@@ -111,6 +128,7 @@
 		const up = () => {
 			window.removeEventListener('pointermove', move);
 			window.removeEventListener('pointerup', up);
+			window.removeEventListener('selectstart', preventSelect);
 			const d = drag;
 			const h = hover;
 			drag = null;
@@ -121,6 +139,7 @@
 		};
 		window.addEventListener('pointermove', move);
 		window.addEventListener('pointerup', up);
+		window.addEventListener('selectstart', preventSelect);
 	}
 
 	function gutterDown(e: PointerEvent, split: SplitNode) {
@@ -143,9 +162,11 @@
 		window.addEventListener('pointerup', up);
 	}
 
-	// Dblclick on the bar (not its buttons) toggles maximize for the leaf.
+	// Dblclick on the EMPTY bar (not buttons, not tabs) toggles maximize for
+	// the leaf — dblclick on a tab is the rename affordance instead.
 	function barDblClick(e: MouseEvent, leaf: LeafNode) {
-		if ((e.target as HTMLElement).closest('button')) return;
+		const el = e.target as HTMLElement;
+		if (el.closest('button') || el.closest('.ltab')) return;
 		onchange(toggleMaximize(layout, leaf.id));
 	}
 </script>
@@ -209,6 +230,7 @@
 		<div class="lbar" ondblclick={(e) => barDblClick(e, leaf)} role="tablist" tabindex="-1">
 			<div class="ltabs">
 				{#each leaf.tabs as tab (tab.id)}
+					{@const chrome = decorate?.(tab) ?? null}
 					<div
 						class="ltab"
 						class:on={leaf.active === tab.id}
@@ -217,10 +239,16 @@
 						tabindex="0"
 						aria-selected={leaf.active === tab.id}
 						onpointerdown={(e) => tabPointerDown(e, tab)}
+						ondblclick={(e) => onTabRename?.(tab, e)}
+						oncontextmenu={(e) => onTabContext?.(tab, e)}
 						onkeydown={(e) => e.key === 'Enter' && onchange(activateTab(layout, tab.id))}
 					>
-						<span class="ldot" class:on={leaf.active === tab.id}></span>
-						<span class="llabel">{label(tab)}</span>
+						{#if chrome && (chrome.icon || chrome.color)}
+							<TabGlyph icon={chrome.icon} color={chrome.color} active={leaf.active === tab.id} size={12} />
+						{:else}
+							<span class="ldot" class:on={leaf.active === tab.id}></span>
+						{/if}
+						<span class="llabel" style:color={chrome?.color && leaf.active === tab.id ? chrome.color : undefined}>{label(tab)}</span>
 						<button
 							class="lclose"
 							aria-label="close tab"

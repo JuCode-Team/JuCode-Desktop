@@ -47,6 +47,50 @@ describe('workspaces file', () => {
 		const projects = sanitizeProjects([good, { id: 'x' }, null, 'junk']);
 		expect(projects).toEqual([good]);
 	});
+
+	it('keeps version 1 and parses an old file without chrome, promoting the first workspace to default', () => {
+		expect(WORKSPACES_VERSION).toBe(1);
+		const old = JSON.stringify({
+			version: 1,
+			active: 'b',
+			workspaces: [
+				{ id: 'a', name: 'A', projects: [], layout: null },
+				{ id: 'b', name: 'B', projects: [], layout: null }
+			]
+		});
+		const parsed = parseWorkspacesFile(old);
+		expect(parsed?.workspaces.map((w) => !!w.isDefault)).toEqual([true, false]);
+		expect(parsed?.active).toBe('b');
+		expect(parsed?.workspaces[0].color).toBeUndefined();
+		expect(parsed?.workspaces[0].icon).toBeUndefined();
+	});
+
+	it('round-trips workspace chrome (color + icon) and drops invalid values', () => {
+		const ws = createWorkspace('tagged', [], null, {
+			color: '#2563eb',
+			icon: { kind: 'builtin', id: 'rocket' }
+		});
+		const file = defaultWorkspacesFile(ws);
+		const parsed = parseWorkspacesFile(serializeWorkspaces(file));
+		expect(parsed?.workspaces[0].color).toBe('#2563eb');
+		expect(parsed?.workspaces[0].icon).toEqual({ kind: 'builtin', id: 'rocket' });
+		expect(parsed?.workspaces[0].isDefault).toBe(true);
+		expect(parsed?.version).toBe(WORKSPACES_VERSION);
+
+		const dirty = JSON.stringify({
+			version: 1,
+			active: 'a',
+			workspaces: [{ id: 'a', name: 'A', color: 'red', icon: { kind: 'builtin', id: 'nope' }, extra: 1 }]
+		});
+		const p2 = parseWorkspacesFile(dirty);
+		expect(p2?.workspaces[0].color).toBeUndefined();
+		expect(p2?.workspaces[0].icon).toBeUndefined();
+		expect('extra' in (p2?.workspaces[0] ?? {})).toBe(false);
+	});
+
+	it('user-created workspaces are not default', () => {
+		expect(createWorkspace('mine').isDefault).toBeUndefined();
+	});
 });
 
 describe('legacy migration', () => {
@@ -65,6 +109,7 @@ describe('legacy migration', () => {
 		expect(file?.workspaces).toHaveLength(1);
 		const ws = file!.workspaces[0];
 		expect(ws.name).toBe('默认工作区');
+		expect(ws.isDefault).toBe(true);
 		expect(ws.projects).toEqual([proj('p1')]);
 		const layout = deserializeLayout(ws.layout);
 		const leaf = leavesOf(layout!.root)[0];

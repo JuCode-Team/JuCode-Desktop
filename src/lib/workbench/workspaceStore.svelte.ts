@@ -6,6 +6,7 @@
 import { appDataRead, appDataWrite } from '$lib/protocol';
 import type { SavedProject } from '$lib/session.svelte';
 import type { SerializedLayout } from './tiles';
+import { normalizeColor, parseTabIcon, type TabIcon } from './tabChrome';
 import {
 	createWorkspace,
 	defaultWorkspacesFile,
@@ -110,6 +111,48 @@ export class WorkspaceStore {
 		this.file.workspaces.push(ws);
 		this.#schedule();
 		return ws;
+	}
+
+	/** Rename a workspace tab (empty names are ignored). */
+	rename(id: string, name: string) {
+		const ws = this.workspaces.find((w) => w.id === id);
+		const trimmed = name.trim();
+		if (!ws || !trimmed) return;
+		ws.name = trimmed;
+		this.#schedule();
+	}
+
+	/** Set or clear a workspace's tag color / icon (null clears). */
+	setChrome(id: string, chrome: { color?: string | null; icon?: TabIcon | null }) {
+		const ws = this.workspaces.find((w) => w.id === id);
+		if (!ws) return;
+		if (chrome.color !== undefined) {
+			ws.color = chrome.color === null ? undefined : normalizeColor(chrome.color);
+		}
+		if (chrome.icon !== undefined) {
+			ws.icon = chrome.icon === null ? undefined : parseTabIcon(chrome.icon);
+		}
+		this.#schedule();
+	}
+
+	/**
+	 * Delete a workspace. Refuses the default workspace and the last one left.
+	 * Removing the active workspace re-activates the default (or the first
+	 * remaining) and returns that entry so the caller can swap the live
+	 * session tree; removing an inactive one returns null (nothing to swap).
+	 */
+	remove(id: string): WorkspaceEntry | null {
+		const file = this.file;
+		const ws = file?.workspaces.find((w) => w.id === id);
+		if (!file || !ws || ws.isDefault || file.workspaces.length <= 1) return null;
+		file.workspaces = file.workspaces.filter((w) => w.id !== id);
+		let next: WorkspaceEntry | null = null;
+		if (file.active === id) {
+			next = file.workspaces.find((w) => w.isDefault) ?? file.workspaces[0];
+			file.active = next.id;
+		}
+		this.#schedule();
+		return next;
 	}
 
 	#schedule() {

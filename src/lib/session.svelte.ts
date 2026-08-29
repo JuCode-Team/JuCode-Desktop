@@ -6,14 +6,23 @@ import { buildBackendOpts, defaultBackendFor } from './backends/settings';
 import { needsClaudeYoloRespawn, toEngineMode } from './approval';
 import { toClaudeMode } from './backends/claude';
 import { t } from '$lib/i18n';
+import { normalizeColor, parseTabIcon, type TabIcon } from './workbench/tabChrome';
 import type { Project, Session, WorktreeMeta } from './types';
+
+/** Optional per-tab chrome persisted alongside the session id + title. */
+export interface SavedTabChrome {
+	color?: string;
+	icon?: TabIcon;
+	/** The title was set by an explicit rename (auto-titling stays off). */
+	titleLocked?: boolean;
+}
 
 // The persisted shape of a project + its open tabs (engine session id + title).
 export interface SavedProject {
 	id: string;
 	name: string;
 	path: string;
-	tabs?: { sid: string; title: string; backend?: string; archived?: boolean }[];
+	tabs?: ({ sid: string; title: string; backend?: string; archived?: boolean } & SavedTabChrome)[];
 	/** 并行任务 worktree 项目的元数据（isWorktree/mainRepoPath/branch/baseBranch/slug）。 */
 	worktree?: WorktreeMeta;
 	/** 本项目最近一次新建会话所用的引擎后端（缺省 = jucode）。 */
@@ -238,6 +247,27 @@ export class SessionStore {
 		if (s) s.archived = false;
 	}
 
+	/** Explicit rename: sets the title and locks out auto-titling. */
+	renameSession(id: string, title: string) {
+		const s = this.allSessions.find((x) => x.id === id);
+		const trimmed = title.trim();
+		if (!s || !trimmed) return;
+		s.chat.title = trimmed;
+		s.chat.titleLocked = true;
+	}
+
+	/** Set or clear a session's tag color / tab icon (null clears). */
+	setSessionChrome(id: string, chrome: { color?: string | null; icon?: TabIcon | null }) {
+		const s = this.allSessions.find((x) => x.id === id);
+		if (!s) return;
+		if (chrome.color !== undefined) {
+			s.color = chrome.color === null ? undefined : normalizeColor(chrome.color);
+		}
+		if (chrome.icon !== undefined) {
+			s.icon = chrome.icon === null ? undefined : parseTabIcon(chrome.icon);
+		}
+	}
+
 	/** Re-open a persisted conversation in a new session (resume by id).
 	 *  jucode resumes via the `/resume` command; claude has no such command in
 	 *  stream-json mode and resumes via the allowlisted `--resume` spawn option
@@ -245,10 +275,20 @@ export class SessionStore {
 	 *  engine-side context is preserved by --resume regardless);
 	 *  codex resumes via the thread/resume RPC after the handshake (the thread
 	 *  id rides the SessionCtx, and the response replays the transcript). */
-	restoreSession(project: Project, sid: string, title: string, backend: BackendId = 'jucode', archived = false) {
+	restoreSession(
+		project: Project,
+		sid: string,
+		title: string,
+		backend: BackendId = 'jucode',
+		archived = false,
+		chrome?: SavedTabChrome
+	) {
 		const s = this.#newSession(backend);
 		if (title) s.chat.title = title;
 		s.archived = archived;
+		if (chrome?.color) s.color = chrome.color;
+		if (chrome?.icon) s.icon = chrome.icon;
+		if (chrome?.titleLocked) s.chat.titleLocked = true;
 		// The engine resumes persisted context — the backend can't be switched
 		// even while the replayed transcript is still empty.
 		s.restored = true;
@@ -504,7 +544,10 @@ export class SessionStore {
 					sid: s.chat.sessionId,
 					title: s.chat.title,
 					...(s.backendId !== 'jucode' ? { backend: s.backendId } : {}),
-					...(s.archived ? { archived: true } : {})
+					...(s.archived ? { archived: true } : {}),
+					...(s.color ? { color: s.color } : {}),
+					...(s.icon ? { icon: s.icon } : {}),
+					...(s.chat.titleLocked ? { titleLocked: true } : {})
 				}))
 		}));
 	}
@@ -542,7 +585,12 @@ export class SessionStore {
 					if (!t.sid) continue;
 					// Tabs saved before multi-backend support carry no backend field →
 					// jucode (normalizeBackendId maps unknown/missing to the default).
-					const id = this.restoreSession(proj, t.sid, t.title, normalizeBackendId(t.backend), !!t.archived);
+					// Chrome fields are re-validated here (the file is user-editable).
+					const id = this.restoreSession(proj, t.sid, t.title, normalizeBackendId(t.backend), !!t.archived, {
+						color: normalizeColor(t.color),
+						icon: parseTabIcon(t.icon),
+						titleLocked: !!t.titleLocked
+					});
 					if (!first && !t.archived) first = id;
 				}
 			}

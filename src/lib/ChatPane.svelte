@@ -30,9 +30,6 @@
 	import { buildSetApprovalModeOp, needsClaudeYoloRespawn, type ApprovalMode, type ApproveOp } from '$lib/approval';
 	import { focusTrap } from '$lib/focusTrap';
 	import {
-		captureScreenshot,
-		startScreenRecording,
-		stopScreenRecording,
 		processVideo,
 		claudeSessions,
 		gitCheckpointCapture,
@@ -96,7 +93,6 @@
 	type PickedRef = WebRef & { id: number };
 	let webRefs = $state<PickedRef[]>([]);
 	let refSeq = 0;
-	let recording = $state(false);
 	let scroller = $state<HTMLElement | null>(null);
 	let composerEl = $state<HTMLElement | null>(null);
 	let composerRef = $state<{ insertToken: (t: string) => void } | undefined>();
@@ -393,35 +389,6 @@
 			const info = await processVideo(path);
 			videos.push({ path: info.path, frames: info.frames, duration: info.duration });
 		} catch (e) {
-			await message(String(e), { title: 'JuCode', kind: 'error' });
-		}
-	}
-
-	async function screenshot() {
-		try {
-			const path = await captureScreenshot();
-			if (path) {
-				attachments.push({ path, image: true });
-				composerEl?.focus();
-			}
-		} catch (e) {
-			await message(String(e), { title: 'JuCode', kind: 'error' });
-		}
-	}
-
-	async function toggleRecord() {
-		try {
-			if (!recording) {
-				await startScreenRecording();
-				recording = true;
-			} else {
-				recording = false;
-				const path = await stopScreenRecording();
-				await attachVideo(path);
-				composerEl?.focus();
-			}
-		} catch (e) {
-			recording = false;
 			await message(String(e), { title: 'JuCode', kind: 'error' });
 		}
 	}
@@ -816,13 +783,10 @@
 			bind:attachments
 			bind:videos
 			bind:el={composerEl}
-			{recording}
 			onSubmit={submit}
 			onStop={stop}
 			onSteer={() => send({ op: 'steer' })}
 			onPick={pickFiles}
-			onScreenshot={screenshot}
-			onRecord={toggleRecord}
 			onModel={openModelPicker}
 			onModelSelect={selectRow}
 			onModelEffort={setEffort}
