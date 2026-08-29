@@ -11,9 +11,12 @@ type PrefsShape = {
 	 *  effect layer is always present but stays invisible unless this opts the CSS
 	 *  in (the root `data-vibrancy` flag), so toggling needs no window round-trip. */
 	sidebarVibrancy: boolean;
+	/** Feature flag: tiled (mosaic) right dock — splittable/drag-arranged panel
+	 *  tiles instead of the single tab stack. Off by default while it bakes. */
+	mosaic: boolean;
 };
 
-const DEFAULTS: PrefsShape = { htmlOpenInBrowser: true, sidebarVibrancy: true };
+const DEFAULTS: PrefsShape = { htmlOpenInBrowser: true, sidebarVibrancy: true, mosaic: false };
 
 function load(): PrefsShape {
 	try {
@@ -47,11 +50,13 @@ export const vibrancySupported = () =>
 class PrefsStore {
 	htmlOpenInBrowser = $state(DEFAULTS.htmlOpenInBrowser);
 	sidebarVibrancy = $state(DEFAULTS.sidebarVibrancy);
+	mosaic = $state(DEFAULTS.mosaic);
 
 	init() {
 		const p = load();
 		this.htmlOpenInBrowser = p.htmlOpenInBrowser;
 		this.sidebarVibrancy = p.sidebarVibrancy;
+		this.mosaic = p.mosaic;
 		this.#applyVibrancy();
 	}
 
@@ -59,7 +64,11 @@ class PrefsStore {
 		try {
 			localStorage.setItem(
 				KEY,
-				JSON.stringify({ htmlOpenInBrowser: this.htmlOpenInBrowser, sidebarVibrancy: this.sidebarVibrancy })
+				JSON.stringify({
+					htmlOpenInBrowser: this.htmlOpenInBrowser,
+					sidebarVibrancy: this.sidebarVibrancy,
+					mosaic: this.mosaic
+				})
 			);
 		} catch {
 			/* private mode / no storage — in-memory only */
@@ -84,6 +93,11 @@ class PrefsStore {
 	setSidebarVibrancy(v: boolean) {
 		this.sidebarVibrancy = v;
 		this.#applyVibrancy();
+		this.#save();
+	}
+
+	setMosaic(v: boolean) {
+		this.mosaic = v;
 		this.#save();
 	}
 }

@@ -33,6 +33,15 @@ const shell = {
 		togglePanel: '侧边面板 · ⌘B',
 		toggleSidebar: '会话列表',
 
+		// workspaces
+		workspace: {
+			label: '工作区',
+			default: '默认工作区',
+			nth: '工作区 {n}',
+			switch: '切换工作区',
+			new: '新建工作区'
+		},
+
 		// find bar
 		findPlaceholder: '在对话中查找…',
 		findNoResult: '无结果',
@@ -239,6 +248,15 @@ const shell = {
 		// header / panel
 		togglePanel: 'Side panel · ⌘B',
 		toggleSidebar: 'Session list',
+
+		// workspaces
+		workspace: {
+			label: 'Workspace',
+			default: 'Default workspace',
+			nth: 'Workspace {n}',
+			switch: 'Switch workspace',
+			new: 'New workspace'
+		},
 
 		// find bar
 		findPlaceholder: 'Find in conversation…',

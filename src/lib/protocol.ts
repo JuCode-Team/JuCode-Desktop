@@ -101,6 +101,15 @@ export function writeConfig(patch: Record<string, unknown>): Promise<void> {
 export function readAuthProviders(): Promise<string[]> {
 	return invoke('read_auth_providers');
 }
+// Desktop app-data files (workspaces / layout), stored under the per-app
+// config dir. Read resolves null when the file doesn't exist yet; write is
+// atomic (write-then-rename) Rust-side.
+export function appDataRead(file: string): Promise<string | null> {
+	return invoke('app_data_read', { file });
+}
+export function appDataWrite(file: string, content: string): Promise<void> {
+	return invoke('app_data_write', { file, content });
+}
 export function setAuthKey(provider: string, key: string): Promise<void> {
 	return invoke('set_auth_key', { provider, key });
 }
