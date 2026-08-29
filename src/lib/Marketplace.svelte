@@ -341,9 +341,6 @@
 		font-size: 14px;
 		text-align: center;
 	}
-	.state.err {
-		color: var(--err);
-	}
 	.install-dir {
 		flex-shrink: 0;
 		padding: 8px 20px;
