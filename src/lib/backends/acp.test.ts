@@ -183,8 +183,11 @@ describe('acp adapter: prompt turns', () => {
 		handshake(adapter);
 		const frames = adapter.encodeOp({ op: 'user_message', content: 'hi' });
 		const promptId = parse(frames![0]).id;
+		// The response is the FIRST frame after the prompt here, so the batch
+		// opens with the busy flip and still settles back to ready.
 		const events = adapter.translate({ jsonrpc: '2.0', id: promptId, result: { stopReason: 'refusal' } });
-		expect(events[0].type).toBe('info');
+		expect(events[0]).toEqual({ type: 'connecting' });
+		expect(events[1].type).toBe('info');
 		expect(events.at(-1)).toEqual({ type: 'status', message: 'ready' });
 	});
 
@@ -198,7 +201,8 @@ describe('acp adapter: prompt turns', () => {
 			id: promptId,
 			error: { code: -32603, message: 'model overloaded' }
 		});
-		expect(events[0]).toMatchObject({ type: 'error', message: '[acp] model overloaded' });
+		expect(events[0]).toEqual({ type: 'connecting' });
+		expect(events[1]).toMatchObject({ type: 'error', message: '[acp] model overloaded' });
 		expect(events.at(-1)).toEqual({ type: 'status', message: 'ready' });
 	});
 });
@@ -268,7 +272,7 @@ describe('acp adapter: tool calls → ToolCard events', () => {
 		);
 		expect(done).toHaveLength(1);
 		expect(done[0]).toMatchObject({ type: 'tool_output', call_id: 'call-1', is_error: false });
-		const payload = JSON.parse((done[0] as { output: string }).output);
+		const payload = JSON.parse((done[0] as unknown as { output: string }).output);
 		expect(payload).toMatchObject({ kind: 'read', path: '/proj/config.toml', content: 'key = "value"' });
 	});
 
@@ -297,7 +301,7 @@ describe('acp adapter: tool calls → ToolCard events', () => {
 				content: [{ type: 'diff', path: '/proj/main.rs', oldText: 'old line', newText: 'new line' }]
 			})
 		);
-		const out = JSON.parse((events.at(-1) as { output: string }).output);
+		const out = JSON.parse((events.at(-1) as unknown as { output: string }).output);
 		expect(out.diff).toBe('--- /proj/main.rs\n+++ /proj/main.rs\n-old line\n+new line');
 		expect(out.path).toBe('/proj/main.rs');
 	});
@@ -384,9 +388,9 @@ describe('acp adapter: permission requests → ApprovalCard', () => {
 	});
 
 	it('approve/deny/always pick the matching advertised option id', () => {
-		const cases: { op: { decision: 'approve' | 'deny'; always?: boolean }; optionId: string }[] = [
-			{ op: { decision: 'approve' }, optionId: 'allow' },
-			{ op: { decision: 'approve', always: true }, optionId: 'always' },
+		const cases: { op: { decision: 'allow' | 'deny'; always?: boolean }; optionId: string }[] = [
+			{ op: { decision: 'allow' }, optionId: 'allow' },
+			{ op: { decision: 'allow', always: true }, optionId: 'always' },
 			{ op: { decision: 'deny' }, optionId: 'deny' }
 		];
 		for (const { op, optionId } of cases) {
@@ -405,7 +409,7 @@ describe('acp adapter: permission requests → ApprovalCard', () => {
 	it('a stale approval (unknown call id) is unsupported → null', () => {
 		const { adapter } = makeAdapter();
 		handshake(adapter);
-		expect(adapter.encodeOp({ op: 'approve', call_id: 'nope', decision: 'approve' })).toBeNull();
+		expect(adapter.encodeOp({ op: 'approve', call_id: 'nope', decision: 'allow' })).toBeNull();
 	});
 
 	it('answers cancelled when the agent offers no usable option', () => {
@@ -418,7 +422,7 @@ describe('acp adapter: permission requests → ApprovalCard', () => {
 			params: { toolCall: { title: 'x' }, options: [] }
 		});
 		const callId = (events[0] as Record<string, any>).call_id;
-		const frames = adapter.encodeOp({ op: 'approve', call_id: callId, decision: 'approve' });
+		const frames = adapter.encodeOp({ op: 'approve', call_id: callId, decision: 'allow' });
 		expect(parse(frames![0])).toMatchObject({ id: 5, result: { outcome: { outcome: 'cancelled' } } });
 	});
 });
@@ -444,7 +448,7 @@ describe('acp adapter: interrupt', () => {
 			params: { sessionId: 'agent-sess-1' }
 		});
 		// The approval entry is gone; the queued turn was dropped too.
-		expect(adapter.encodeOp({ op: 'approve', call_id: ev.call_id, decision: 'approve' })).toBeNull();
+		expect(adapter.encodeOp({ op: 'approve', call_id: ev.call_id, decision: 'allow' })).toBeNull();
 	});
 });
 

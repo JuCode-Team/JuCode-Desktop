@@ -281,7 +281,9 @@ mod tests {
     #[test]
     fn env_entries_are_validated_like_backend_env() {
         let mut bad_env = agent("ok");
-        bad_env.env.insert("DYLD_INSERT_LIBRARIES".to_string(), "/evil".to_string());
+        bad_env
+            .env
+            .insert("DYLD_INSERT_LIBRARIES".to_string(), "/evil".to_string());
         assert!(validate_agent(&bad_env).is_err());
         let mut bad_name = agent("ok");
         bad_name.env.insert("1BAD".to_string(), "x".to_string());
@@ -305,6 +307,9 @@ mod tests {
         assert!(parse_registry(bad).is_err());
         assert!(parse_registry("not json").is_err());
         // An explicitly emptied registry stays empty (no re-seeding).
-        assert_eq!(parse_registry(r#"{"agents":[]}"#).unwrap(), Vec::<AcpAgent>::new());
+        assert_eq!(
+            parse_registry(r#"{"agents":[]}"#).unwrap(),
+            Vec::<AcpAgent>::new()
+        );
     }
 }

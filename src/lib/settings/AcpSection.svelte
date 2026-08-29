@@ -134,7 +134,7 @@
 						<span class="aname">{agent.name}</span>
 						{#if st === 'checking'}
 							<span class="astate dim">{t('settings.acp.checking')}</span>
-						{:else if st && st !== 'checking' && st.found}
+						{:else if st && st.found}
 							<span class="astate ok"><CircleCheck size={12} /> {versionLabel(st) || t('settings.acp.found')}</span>
 						{:else if st}
 							<span class="astate warn"><CircleAlert size={12} /> {t('settings.acp.notFound')}</span>

@@ -469,8 +469,15 @@ export function createAcpAdapter(): EngineAdapter {
 					const entry = approvals.get(op.call_id);
 					if (!entry) return null; // stale (restart / cancelled turn)
 					approvals.delete(op.call_id);
-					const pick = (kinds: string[]) =>
-						entry.options.find((o) => kinds.includes(str(o.kind)) && str(o.optionId));
+					// Preference order matters: try each kind in turn (an agent's
+					// option ORDER is presentation, not priority).
+					const pick = (kinds: string[]) => {
+						for (const kind of kinds) {
+							const o = entry.options.find((x) => str(x.kind) === kind && str(x.optionId));
+							if (o) return o;
+						}
+						return undefined;
+					};
 					const option =
 						op.decision === 'deny'
 							? pick(['reject_once', 'reject_always'])

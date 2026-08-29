@@ -297,7 +297,9 @@ mod tests {
             &home,
             cwd,
             "aaaaaaaa-1111-4111-8111-111111111111",
-            &[r#"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"fix the login bug"}]}}"#],
+            &[
+                r#"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"fix the login bug"}]}}"#,
+            ],
         );
         let newer = write_session(
             &home,
@@ -375,9 +377,18 @@ mod tests {
         assert_eq!(
             rows,
             vec![
-                ClaudeTranscriptRow { role: "user".into(), content: "run a command".into() },
-                ClaudeTranscriptRow { role: "assistant".into(), content: "on it".into() },
-                ClaudeTranscriptRow { role: "assistant".into(), content: "done".into() },
+                ClaudeTranscriptRow {
+                    role: "user".into(),
+                    content: "run a command".into()
+                },
+                ClaudeTranscriptRow {
+                    role: "assistant".into(),
+                    content: "on it".into()
+                },
+                ClaudeTranscriptRow {
+                    role: "assistant".into(),
+                    content: "done".into()
+                },
             ]
         );
     }
@@ -431,6 +442,9 @@ mod tests {
         assert_eq!(rows.len(), MAX_TRANSCRIPT_ROWS);
         // The oldest rows were dropped, the newest kept.
         assert_eq!(rows.last().unwrap().role, "assistant");
-        assert_eq!(rows.last().unwrap().content.chars().count(), MAX_ROW_CHARS + 1); // +1 = ellipsis
+        assert_eq!(
+            rows.last().unwrap().content.chars().count(),
+            MAX_ROW_CHARS + 1
+        ); // +1 = ellipsis
     }
 }
