@@ -1,8 +1,11 @@
 <script lang="ts">
-	// A native TUI tab: the real interactive CLI (jucode / codex / claude)
-	// running in a pty, rendered by xterm. Independent of any GUI session —
-	// closing the tab kills the process. The backend name is the only thing
-	// sent to Rust; argv and binary resolution are validated there.
+	// A native TUI panel: the real interactive CLI (jucode / codex / claude)
+	// running in a pty, rendered by xterm. Two uses: a standalone `tui:*` tab
+	// (no args, independent of any GUI session) and a session handoff, where
+	// the chat tile hands its conversation over via resume argv / a `/resume`
+	// line (`onBackToGui` present). Closing the panel kills the process. Only
+	// the backend name + allowlisted args reach Rust; argv and binary
+	// resolution are validated there.
 	import { onMount, onDestroy } from 'svelte';
 	import { listen } from '@tauri-apps/api/event';
 	import { Terminal } from '@xterm/xterm';
@@ -17,10 +20,22 @@
 	let {
 		backend,
 		cwd = '',
+		args = [],
+		resumeCommand,
+		onBackToGui,
 		onOpenSettings
 	}: {
 		backend: BackendId;
 		cwd?: string;
+		/** Session-handoff resume argv (must match the Rust TUI allowlist,
+		 *  e.g. `['--resume', '<id>']`). Empty for standalone TUI tabs. */
+		args?: string[];
+		/** Line written into the pty once it is running — the jucode TUI has
+		 *  no resume argv and resumes via `/resume <id>\n` instead. */
+		resumeCommand?: string;
+		/** Present only for session handoffs: hand the conversation back to
+		 *  the GUI chat (shows the "back to GUI" bar). */
+		onBackToGui?: () => void;
 		onOpenSettings?: () => void;
 	} = $props();
 
@@ -52,9 +67,13 @@
 			fit?.fit();
 			await ptyOpen(id, term.cols, term.rows, cwd || undefined, {
 				command: backend,
+				args: args.length ? args : undefined,
 				binOverride: loadBackendSettings().paths[backend]
 			});
 			status = 'running';
+			// Session handoff into the jucode TUI: resume the conversation with
+			// its slash command (the pty buffers the line until the TUI reads).
+			if (resumeCommand) ptyWrite(id, resumeCommand).catch(() => {});
 		} catch (e) {
 			const msg = String(e);
 			status = msg.includes('binary-missing:') ? 'missing' : 'error';
@@ -129,6 +148,12 @@
 </script>
 
 <div class="tui-wrap">
+	{#if onBackToGui}
+		<div class="handoffbar">
+			<span class="hb-text">{t('dock.tui.handoff')}</span>
+			<button class="btn sm" onclick={onBackToGui}>{t('dock.tui.backToGui')}</button>
+		</div>
+	{/if}
 	<div class="term-host" bind:this={host}></div>
 	{#if status === 'missing' || status === 'error'}
 		<div class="notice">
@@ -151,6 +176,9 @@
 		<div class="exitbar">
 			<span>{t('dock.tui.exited')}</span>
 			<button class="btn sm" onclick={restart}>{t('dock.tui.restart')}</button>
+			{#if onBackToGui}
+				<button class="btn sm" onclick={onBackToGui}>{t('dock.tui.backToGui')}</button>
+			{/if}
 		</div>
 	{/if}
 </div>
@@ -158,11 +186,30 @@
 <style>
 	.tui-wrap {
 		position: relative;
+		display: flex;
+		flex-direction: column;
 		height: 100%;
 		width: 100%;
 	}
+	.handoffbar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 10px;
+		padding: 4px 10px;
+		font-size: 12px;
+		color: var(--dim);
+		background: var(--surface);
+		border-bottom: 1px solid var(--hairline);
+	}
+	.hb-text {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
 	.term-host {
-		height: 100%;
+		flex: 1;
+		min-height: 0;
 		width: 100%;
 		padding: 8px 6px 6px 10px;
 		background: var(--panel);

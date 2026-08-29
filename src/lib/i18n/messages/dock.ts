@@ -32,7 +32,9 @@ const dock = {
 			retry: '重试',
 			failed: '启动失败',
 			exited: '进程已退出',
-			restart: '重新启动'
+			restart: '重新启动',
+			handoff: '会话已移交给原生 TUI',
+			backToGui: '回到 GUI'
 		},
 		turns: {
 			empty: '本会话还没有文件改动',
@@ -218,7 +220,9 @@ const dock = {
 			retry: 'Try again',
 			failed: 'Failed to start',
 			exited: 'Process exited',
-			restart: 'Restart'
+			restart: 'Restart',
+			handoff: 'Session handed to the native TUI',
+			backToGui: 'Back to GUI'
 		},
 		turns: {
 			empty: 'No file changes in this session yet',

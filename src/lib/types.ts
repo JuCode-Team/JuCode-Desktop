@@ -22,6 +22,11 @@ export interface Session {
 	/** Opened by resuming a persisted conversation — the engine already holds
 	 *  context, so the backend is locked even before any visible user turn. */
 	restored?: boolean;
+	/** Which surface currently owns the conversation: the GUI chat (default,
+	 *  undefined) or the native TUI resumed by session id. Exactly one process
+	 *  holds the conversation at a time — the store closes the GUI engine
+	 *  before flipping to 'tui' and the TUI pty before flipping back. */
+	surface?: 'gui' | 'tui';
 }
 
 /** 并行任务（git worktree）项目的元数据，随项目布局持久化。 */

@@ -12,7 +12,7 @@ vi.mock('./protocol', () => ({
 }));
 
 import { SessionStore } from './session.svelte';
-import { createSession, sendOp, git, writeConfig } from './protocol';
+import { createSession, closeSession, sendOp, git, writeConfig } from './protocol';
 import { setLocale } from './i18n';
 import type { Project, WorktreeMeta } from './types';
 
@@ -371,6 +371,130 @@ describe('SessionStore lifecycle', () => {
 		expect('color' in tab).toBe(false);
 		expect('icon' in tab).toBe(false);
 		expect('titleLocked' in tab).toBe(false);
+	});
+});
+
+describe('SessionStore GUI ⇄ TUI handoff', () => {
+	const SID = '0f3d7a1c-9e2b-4b7e-9d4d-2a1b3c4d5e6f';
+
+	/** A session whose engine conversation is resumable (sid + one user turn). */
+	function readySession(store: SessionStore, p: Project, backend: 'jucode' | 'claude' | 'codex') {
+		const id = store.addSession(p, undefined, backend);
+		const s = p.sessions.find((x) => x.id === id)!;
+		s.chat.sessionId = SID;
+		s.chat.messages.push({ kind: 'user', text: 'hi' });
+		return s;
+	}
+
+	it('openInTui closes the GUI engine before flipping the surface', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const s = readySession(store, p, 'claude');
+		let surfaceAtClose: string | undefined = 'not-called';
+		vi.mocked(closeSession).mockImplementationOnce(async () => {
+			surfaceAtClose = s.surface;
+		});
+		await store.openInTui(s.id);
+		expect(closeSession).toHaveBeenCalledWith(s.id);
+		expect(surfaceAtClose).toBeUndefined(); // still on the GUI when the engine died
+		expect(s.surface).toBe('tui');
+		// The intentional close must not be treated as a crash to auto-restart.
+		expect(s.chat.switching).toBe(true);
+	});
+
+	it('openInTui refuses acp sessions', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p, undefined, 'acp', { id: 'gemini', name: 'Gemini CLI' });
+		const s = p.sessions.find((x) => x.id === id)!;
+		s.chat.sessionId = SID;
+		s.chat.messages.push({ kind: 'user', text: 'hi' });
+		vi.clearAllMocks();
+		await store.openInTui(id);
+		expect(closeSession).not.toHaveBeenCalled();
+		expect(s.surface).toBeUndefined();
+	});
+
+	it('openInTui without a usable engine session id is a no-op', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		// jucode session with no engine session id at all.
+		const a = store.addSession(p, undefined, 'jucode');
+		// claude session with a pinned id but no user turn (never persisted).
+		const b = store.addSession(p, undefined, 'claude');
+		// resumable, but the id would fail the rust validator.
+		const c = store.addSession(p, undefined, 'jucode');
+		const sc = p.sessions.find((x) => x.id === c)!;
+		sc.chat.sessionId = 'a b';
+		sc.chat.messages.push({ kind: 'user', text: 'hi' });
+		vi.clearAllMocks();
+		for (const id of [a, b, c]) await store.openInTui(id);
+		expect(closeSession).not.toHaveBeenCalled();
+		for (const s of p.sessions) expect(s.surface).toBeUndefined();
+	});
+
+	it('returnToGui respawns the engine resuming the conversation', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const s = readySession(store, p, 'claude');
+		await store.openInTui(s.id);
+		vi.clearAllMocks();
+		await store.returnToGui(s.id);
+		expect(s.surface).toBe('gui');
+		const call = vi.mocked(createSession).mock.calls.at(-1)!;
+		expect(call[2]).toBe('claude');
+		expect((call[3] as { resume?: string }).resume).toBe(SID);
+	});
+
+	it('returnToGui resumes a jucode conversation via /resume', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const s = readySession(store, p, 'jucode');
+		await store.openInTui(s.id);
+		vi.clearAllMocks();
+		await store.returnToGui(s.id);
+		await Promise.resolve(); // let the spawn continuation run
+		expect(createSession).toHaveBeenCalled();
+		expect(sendOp).toHaveBeenCalledWith(s.id, { op: 'command', input: `/resume ${SID}` });
+	});
+
+	it('serialize writes surface only for tui tabs', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const tui = readySession(store, p, 'claude');
+		const gui = readySession(store, p, 'jucode');
+		await store.openInTui(tui.id);
+		const tabs = store.serialize()[0].tabs!;
+		expect(tabs.find((t) => t.id === tui.id)?.surface).toBe('tui');
+		expect('surface' in tabs.find((t) => t.id === gui.id)!).toBe(false);
+	});
+
+	it('a restored tui tab spawns no engine until returnToGui resumes it', async () => {
+		const store = new SessionStore();
+		await store.restore([
+			{
+				id: 'p1',
+				name: 'p1',
+				path: '/tmp/p1',
+				tabs: [{ id: 'live-a', sid: SID, title: 'A', backend: 'claude', surface: 'tui' }]
+			}
+		]);
+		const s = store.projects[0].sessions[0];
+		expect(s.surface).toBe('tui');
+		expect(s.chat.sessionId).toBe(SID);
+		// The TUI owns the conversation — no GUI engine beside it.
+		expect(createSession).not.toHaveBeenCalled();
+		await store.returnToGui('live-a');
+		expect(s.surface).toBe('gui');
+		const call = vi.mocked(createSession).mock.calls.at(-1)!;
+		expect(call[2]).toBe('claude');
+		expect((call[3] as { resume?: string }).resume).toBe(SID);
 	});
 });
 

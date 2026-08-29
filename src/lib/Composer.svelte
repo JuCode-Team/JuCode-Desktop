@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Send, Square, Paperclip, FastForward, ShieldCheck, CircleStop, Mic, LoaderCircle, GitBranch } from 'lucide-svelte';
+	import { Send, Square, Paperclip, FastForward, ShieldCheck, CircleStop, Mic, LoaderCircle, GitBranch, SquareTerminal } from 'lucide-svelte';
 	import { message } from '@tauri-apps/plugin-dialog';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import BackendIcon from '$lib/BackendIcon.svelte';
@@ -32,6 +32,8 @@
 		modelSearch = false,
 		backendLocked = true,
 		gitBranch = '',
+		tuiReady = false,
+		onOpenTui,
 		onBackend,
 		onSubmit,
 		onStop,
@@ -59,6 +61,12 @@
 		backendLocked?: boolean;
 		/** Current git branch for the footer strip ('' hides the chip). */
 		gitBranch?: string;
+		/** The session holds a resumable engine conversation the native TUI
+		 *  can continue (gates the "continue in TUI" chip). */
+		tuiReady?: boolean;
+		/** Hand the conversation to the native TUI. Absent (e.g. ACP) hides
+		 *  the chip entirely. */
+		onOpenTui?: () => void;
 		onBackend?: (b: BackendId, acpAgent?: { id: string; name: string }) => void | Promise<void>;
 		onSubmit: () => void;
 		onStop: () => void;
@@ -588,6 +596,16 @@
 				{/if}
 			</div>
 		{/if}
+		{#if onOpenTui}
+			<button
+				class="foot-chip"
+				disabled={!tuiReady}
+				onclick={onOpenTui}
+				title={tuiReady ? t('chat.tuiContinueTitle') : t('chat.tuiNotReady')}
+			>
+				<SquareTerminal size={12} /><span>{t('chat.tuiContinue')}</span>
+			</button>
+		{/if}
 		<div class="fspace"></div>
 		{#if bcaps.contextUsage && ctxLimit > 0}
 			<div class="foot-ctx">
@@ -845,6 +863,14 @@
 	.foot-chip:hover {
 		background: var(--surface2);
 		color: var(--text);
+	}
+	.foot-chip:disabled {
+		opacity: 0.45;
+		cursor: default;
+	}
+	.foot-chip:disabled:hover {
+		background: none;
+		color: var(--dim);
 	}
 	.foot-chip.auto {
 		color: var(--warn);
