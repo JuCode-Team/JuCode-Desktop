@@ -636,6 +636,11 @@ export class SessionStore {
 		// The tab/project may have been removed while the close was in flight.
 		if (!this.allSessions.includes(s)) return;
 		s.surface = 'tui';
+		// TUI ownership is established: a late exit event from the closed GUI
+		// child lands on handleExit's `surface === 'tui'` branch, and if the
+		// engine was already dead no exit event arrives at all — so the flag
+		// must be cleared here or it latches forever.
+		s.chat.switching = false;
 	}
 
 	/** Bring a handed-off conversation back to the GUI. TuiPanel invokes this
@@ -645,6 +650,9 @@ export class SessionStore {
 		const s = this.allSessions.find((x) => x.id === id);
 		if (!s || s.surface !== 'tui') return;
 		s.surface = 'gui';
+		// Never carry a latched handoff flag back to the GUI — it would block
+		// later openInTui calls and make handleExit swallow the next real crash.
+		s.chat.switching = false;
 		this.restartSession(id, true);
 	}
 

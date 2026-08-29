@@ -399,8 +399,9 @@ describe('SessionStore GUI ⇄ TUI handoff', () => {
 		expect(closeSession).toHaveBeenCalledWith(s.id);
 		expect(surfaceAtClose).toBeUndefined(); // still on the GUI when the engine died
 		expect(s.surface).toBe('tui');
-		// The intentional close must not be treated as a crash to auto-restart.
-		expect(s.chat.switching).toBe(true);
+		// Once the TUI owns the conversation the flag must not stay latched —
+		// handleExit's `surface === 'tui'` branch already suppresses auto-restart.
+		expect(s.chat.switching).toBe(false);
 	});
 
 	it('openInTui serializes concurrent requests behind the GUI close', async () => {
@@ -449,6 +450,31 @@ describe('SessionStore GUI ⇄ TUI handoff', () => {
 		store.handleExit(s.id);
 		store.restartSession(s.id, true);
 		expect(createSession).not.toHaveBeenCalled();
+		expect(s.surface).toBe('tui');
+		expect(s.chat.switching).toBe(false);
+	});
+
+	it('openInTui on an already-exited engine does not latch switching', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const s = readySession(store, p, 'claude');
+		// The GUI engine already exited (e.g. crash budget exhausted): the close
+		// is a no-op and no exit event will ever arrive to clear `switching`.
+		s.chat.engineState = 'exited';
+
+		await store.openInTui(s.id);
+		expect(s.surface).toBe('tui');
+		expect(s.chat.switching).toBe(false);
+
+		await store.returnToGui(s.id);
+		expect(s.surface).toBe('gui');
+		expect(s.chat.switching).toBe(false);
+
+		// The switching guard must not reject a later handoff.
+		vi.clearAllMocks();
+		await store.openInTui(s.id);
+		expect(closeSession).toHaveBeenCalledWith(s.id);
 		expect(s.surface).toBe('tui');
 		expect(s.chat.switching).toBe(false);
 	});
