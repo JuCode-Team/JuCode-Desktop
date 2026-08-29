@@ -29,7 +29,8 @@
 		type Op
 	} from '$lib/protocol';
 	import { dispatch } from '$lib/backends/router';
-	import { caps } from '$lib/backends';
+	import { caps, type BackendId } from '$lib/backends';
+	import { tuiOpen } from '$lib/tuiOpen.svelte';
 	import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
 	import { updater } from '$lib/updater.svelte';
 	import { browser, type WebRef } from '$lib/browser.svelte';
@@ -265,6 +266,14 @@
 	// responsive effect won't later override the user's choice.
 	function toggleRight() {
 		showRight = !showRight;
+		autoCollapsedRight = false;
+	}
+
+	// "Open TUI" (command palette): signal RightDock to add/activate the tab
+	// and make sure the dock it lives in is actually visible.
+	function openTui(backend: BackendId) {
+		tuiOpen.open(backend);
+		showRight = true;
 		autoCollapsedRight = false;
 	}
 
@@ -1405,6 +1414,10 @@
 				onOpenFile={openChatFile}
 				onOpenTask={(path, meta) => openTaskProject(path, meta)}
 				onTaskRemoved={closeTaskProject}
+				onOpenSettings={() => {
+					settingsInitial = 'behavior';
+					showSettings = true;
+				}}
 			/>
 		</div>
 	</aside>
@@ -1511,6 +1524,7 @@
 			onTogglePanel={toggleRight}
 			onToggleTheme={cycleTheme}
 			onSetup={() => (showSetup = true)}
+			onOpenTui={openTui}
 		/>
 	{/if}
 </div>

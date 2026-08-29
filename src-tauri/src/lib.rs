@@ -2435,18 +2435,59 @@ fn default_shell() -> String {
     "/bin/sh".to_string()
 }
 
-/// Opens a pseudo-terminal running the user's shell in the project root. Output
-/// is streamed to the webview as `pty-output` events tagged with `id`.
+/// Opens a pseudo-terminal in the project root. Without `command` it runs the
+/// user's shell (the embedded terminal panel), exactly as before. With
+/// `command` it runs one of the allowlisted agent CLIs (`jucode` / `codex` /
+/// `claude`) as a real interactive TUI: the name is parsed against the fixed
+/// backend set, extra `args` are validated against a per-backend token
+/// allowlist (see `backend::validate_tui_args` — raw argv from the webview is
+/// never accepted), and the binary resolves exactly like engine spawns (env
+/// override → settings `bin_override` → PATH → well-known dirs). A missing
+/// binary fails fast with a `binary-missing:<name>` error the frontend can
+/// turn into install guidance. Output is streamed to the webview as
+/// `pty-output` events tagged with `id`.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)] // tauri command: every webview arg is a parameter
 fn pty_open(
     id: String,
     cols: u16,
     rows: u16,
     cwd: Option<String>,
+    command: Option<String>,
+    args: Option<Vec<String>>,
+    bin_override: Option<String>,
     app: AppHandle,
     ptys: tauri::State<Ptys>,
 ) -> Result<(), String> {
     use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+
+    let extra_args = args.unwrap_or_default();
+    let program = match command.as_deref() {
+        None => {
+            if !extra_args.is_empty() || bin_override.is_some() {
+                return Err("args and bin_override require a command".to_string());
+            }
+            PathBuf::from(default_shell())
+        }
+        Some(name) => {
+            let kind = BackendKind::parse(name)?;
+            backend::validate_tui_args(kind, &extra_args)?;
+            if let Some(o) = bin_override.as_deref() {
+                backend::validate_bin_override(o)?;
+            }
+            let bin = backend::resolve_backend_bin(kind, bin_override.as_deref());
+            // A bare name means resolution found nothing anywhere; an explicit
+            // path must exist. Fail fast with a matchable error instead of
+            // leaving the user a dead terminal.
+            let resolved = if bin.components().count() == 1 {
+                which(&bin.to_string_lossy())
+            } else {
+                bin.is_file().then_some(bin)
+            };
+            resolved.ok_or_else(|| format!("binary-missing:{}", kind.bin_name()))?
+        }
+    };
+
     let pair = native_pty_system()
         .openpty(PtySize {
             rows,
@@ -2460,8 +2501,23 @@ fn pty_open(
         .map(PathBuf::from)
         .filter(|p| p.is_dir())
         .unwrap_or_else(resolve_cwd);
-    let mut cmd = CommandBuilder::new(default_shell());
+    let mut cmd = CommandBuilder::new(&program);
+    for arg in &extra_args {
+        cmd.arg(arg);
+    }
     cmd.cwd(dir);
+    if command.is_some() {
+        // Terminal-equivalent env for TUI CLIs (see shell_env): overlay the
+        // login-shell snapshot so PATH / proxies / CA vars match the user's
+        // terminal. The plain-shell branch stays untouched — that shell loads
+        // its own rc files anyway.
+        if let Some(vars) = shell_env::snapshot_vars() {
+            for (k, v) in vars {
+                cmd.env(k, v);
+            }
+        }
+        cmd.env("TERM", "xterm-256color");
+    }
     let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
     drop(pair.slave);
 

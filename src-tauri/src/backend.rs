@@ -322,6 +322,48 @@ pub fn build_args(kind: BackendKind, opts: &BackendOpts) -> Vec<String> {
     }
 }
 
+// --- native TUI tabs (pty-backed interactive CLI sessions) ---
+
+/// argv tokens `pty_open` accepts per backend when spawning the interactive
+/// TUI. Exact-match tokens only — no values, no free-form flags — so the
+/// webview can never smuggle arbitrary argv into a spawn.
+pub fn tui_allowed_args(kind: BackendKind) -> &'static [&'static str] {
+    match kind {
+        // Bare `jucode` runs the TUI; it has no safe extra tokens.
+        BackendKind::Jucode => &[],
+        // `codex resume` opens the interactive session picker.
+        BackendKind::Codex => &["resume"],
+        // `claude --continue` resumes the last session; a bare `claude
+        // --resume` opens the interactive session picker.
+        BackendKind::Claude => &["--continue", "--resume"],
+    }
+}
+
+/// Validates the extra argv for a TUI spawn against the backend's fixed
+/// token allowlist. Anything else — flags, values, whitespace tricks — is
+/// rejected outright.
+pub fn validate_tui_args(kind: BackendKind, args: &[String]) -> Result<(), String> {
+    for arg in args {
+        if !tui_allowed_args(kind).contains(&arg.as_str()) {
+            return Err(format!(
+                "argument not allowed for {} TUI: {arg}",
+                kind.bin_name()
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Validates a settings-provided binary path for a TUI spawn (same rule as
+/// the `bin_override` backend option: no leading dash, no control chars).
+pub fn validate_bin_override(s: &str) -> Result<(), String> {
+    if is_valid_value(s) {
+        Ok(())
+    } else {
+        Err(format!("invalid bin_override: {s}"))
+    }
+}
+
 /// Well-known install locations probed after PATH (a packaged app inherits a
 /// minimal PATH from launchd / the desktop session).
 fn well_known_paths(kind: BackendKind) -> Vec<PathBuf> {
@@ -764,6 +806,57 @@ mod tests {
         let probed = hits.lock().unwrap();
         assert!(!probed.is_empty());
         assert!(probed.iter().any(|c| c.ends_with(".local/bin/claude") || c.ends_with(".local\\bin\\claude.exe")));
+    }
+
+    // --- TUI spawn allowlists ---
+
+    #[test]
+    fn tui_accepts_empty_args_for_every_backend() {
+        for kind in [BackendKind::Jucode, BackendKind::Codex, BackendKind::Claude] {
+            assert!(validate_tui_args(kind, &[]).is_ok(), "{kind:?}");
+        }
+    }
+
+    #[test]
+    fn tui_args_are_fixed_tokens_per_backend() {
+        assert!(validate_tui_args(BackendKind::Codex, &["resume".into()]).is_ok());
+        assert!(validate_tui_args(BackendKind::Claude, &["--continue".into()]).is_ok());
+        assert!(validate_tui_args(BackendKind::Claude, &["--resume".into()]).is_ok());
+        // Tokens don't leak across backends.
+        assert!(validate_tui_args(BackendKind::Jucode, &["resume".into()]).is_err());
+        assert!(validate_tui_args(BackendKind::Codex, &["--continue".into()]).is_err());
+        assert!(validate_tui_args(BackendKind::Claude, &["resume".into()]).is_err());
+    }
+
+    #[test]
+    fn tui_rejects_arbitrary_and_dangerous_argv() {
+        for bad in [
+            "-rf",
+            "--dangerously-skip-permissions",
+            "--resume=abc",
+            "--resume x",
+            "; rm -rf ~",
+            "serve",
+            "app-server",
+            "",
+        ] {
+            assert!(
+                validate_tui_args(BackendKind::Claude, &[bad.to_string()]).is_err(),
+                "{bad:?} must be rejected"
+            );
+        }
+        // One good token doesn't smuggle a bad one through.
+        assert!(
+            validate_tui_args(BackendKind::Claude, &["--continue".into(), "-x".into()]).is_err()
+        );
+    }
+
+    #[test]
+    fn tui_bin_override_rejects_flag_like_and_control_values() {
+        assert!(validate_bin_override("/usr/local/bin/claude").is_ok());
+        assert!(validate_bin_override("-rf").is_err());
+        assert!(validate_bin_override("a\u{7}b").is_err());
+        assert!(validate_bin_override("").is_err());
     }
 
     #[test]

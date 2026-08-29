@@ -181,6 +181,11 @@ pub fn snapshot_path() -> Option<String> {
     state().read().unwrap().as_ref().and_then(|e| e.vars.get("PATH").cloned())
 }
 
+/// 快照的完整变量表（PTY 里跑 TUI 后端时叠加使用，不做全清重建）。
+pub fn snapshot_vars() -> Option<HashMap<String, String>> {
+    state().read().unwrap().as_ref().map(|e| e.vars.clone())
+}
+
 /// 在不清空现有环境的前提下合并快照（git/gh 这类命令用：既要终端 PATH/
 /// 凭据环境，又不值得为它们做全清重建）。
 pub fn merge_into(cmd: &mut Command) {
