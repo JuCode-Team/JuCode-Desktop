@@ -35,7 +35,7 @@
 		resumeCommand?: string;
 		/** Present only for session handoffs: hand the conversation back to
 		 *  the GUI chat (shows the "back to GUI" bar). */
-		onBackToGui?: () => void;
+		onBackToGui?: () => void | Promise<void>;
 		onOpenSettings?: () => void;
 	} = $props();
 
@@ -48,6 +48,9 @@
 	// pty-output/pty-exit events from the old process can't leak in.
 	let id = newId();
 	let cleanups: Array<() => void> = [];
+	let disposed = false;
+	let closing = $state(false);
+	let launchTask: Promise<void> | undefined;
 
 	function newId() {
 		return `tui-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
@@ -61,20 +64,28 @@
 
 	async function launch() {
 		if (!term) return;
+		const launchId = id;
 		status = 'starting';
 		errMsg = '';
 		try {
 			fit?.fit();
-			await ptyOpen(id, term.cols, term.rows, cwd || undefined, {
+			await ptyOpen(launchId, term.cols, term.rows, cwd || undefined, {
 				command: backend,
 				args: args.length ? args : undefined,
 				binOverride: loadBackendSettings().paths[backend]
 			});
+			// An unmount/back-to-GUI request may race an in-flight ptyOpen. Close
+			// the child it just created before allowing any GUI owner to start.
+			if (disposed || closing || launchId !== id) {
+				await ptyClose(launchId);
+				return;
+			}
 			status = 'running';
 			// Session handoff into the jucode TUI: resume the conversation with
 			// its slash command (the pty buffers the line until the TUI reads).
-			if (resumeCommand) ptyWrite(id, resumeCommand).catch(() => {});
+			if (resumeCommand) ptyWrite(launchId, resumeCommand).catch(() => {});
 		} catch (e) {
+			if (disposed || closing || launchId !== id) return;
 			const msg = String(e);
 			status = msg.includes('binary-missing:') ? 'missing' : 'error';
 			errMsg = msg;
@@ -82,14 +93,37 @@
 	}
 
 	function restart() {
+		if (disposed || closing) return;
 		ptyClose(id).catch(() => {});
 		id = newId();
 		term?.reset();
-		launch();
+		launchTask = launch();
+	}
+
+	/** Establish exclusive ownership in the other direction too: the callback
+	 *  flips the session to GUI and respawns its engine, so it must not run
+	 *  until the current (or still-opening) pty has definitely been reaped. */
+	async function backToGui() {
+		if (!onBackToGui || closing) return;
+		closing = true;
+		const ptyId = id;
+		try {
+			await ptyClose(ptyId);
+			await launchTask;
+			// If ptyOpen was still crossing the IPC boundary, the first close
+			// may have found nothing. launch() also closes in that case; this is
+			// a final idempotent barrier before the GUI process can start.
+			await ptyClose(ptyId);
+			await onBackToGui();
+		} catch (e) {
+			if (disposed) return;
+			closing = false;
+			status = 'error';
+			errMsg = String(e);
+		}
 	}
 
 	onMount(() => {
-		let disposed = false;
 		(async () => {
 			term = new Terminal({
 				fontFamily:
@@ -116,7 +150,12 @@
 				ptyWrite(id, d).catch(() => {});
 			});
 
-			await launch();
+			if (disposed || closing) {
+				cleanups.forEach((f) => f());
+				return;
+			}
+			launchTask = launch();
+			await launchTask;
 
 			const ro = new ResizeObserver(() => {
 				try {
@@ -133,6 +172,7 @@
 		})();
 		return () => {
 			disposed = true;
+			closing = true;
 		};
 	});
 
@@ -141,6 +181,8 @@
 	});
 
 	onDestroy(() => {
+		disposed = true;
+		closing = true;
 		cleanups.forEach((f) => f());
 		ptyClose(id).catch(() => {});
 		term?.dispose();
@@ -151,7 +193,7 @@
 	{#if onBackToGui}
 		<div class="handoffbar">
 			<span class="hb-text">{t('dock.tui.handoff')}</span>
-			<button class="btn sm" onclick={onBackToGui}>{t('dock.tui.backToGui')}</button>
+			<button class="btn sm" disabled={closing} onclick={backToGui}>{t('dock.tui.backToGui')}</button>
 		</div>
 	{/if}
 	<div class="term-host" bind:this={host}></div>
@@ -177,7 +219,7 @@
 			<span>{t('dock.tui.exited')}</span>
 			<button class="btn sm" onclick={restart}>{t('dock.tui.restart')}</button>
 			{#if onBackToGui}
-				<button class="btn sm" onclick={onBackToGui}>{t('dock.tui.backToGui')}</button>
+				<button class="btn sm" disabled={closing} onclick={backToGui}>{t('dock.tui.backToGui')}</button>
 			{/if}
 		</div>
 	{/if}

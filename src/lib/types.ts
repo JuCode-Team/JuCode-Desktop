@@ -25,7 +25,8 @@ export interface Session {
 	/** Which surface currently owns the conversation: the GUI chat (default,
 	 *  undefined) or the native TUI resumed by session id. Exactly one process
 	 *  holds the conversation at a time — the store closes the GUI engine
-	 *  before flipping to 'tui' and the TUI pty before flipping back. */
+	 *  before flipping to 'tui', and TuiPanel closes its pty before asking the
+	 *  store to flip back. */
 	surface?: 'gui' | 'tui';
 }
 

@@ -596,12 +596,11 @@
 				{/if}
 			</div>
 		{/if}
-		{#if onOpenTui}
+		{#if onOpenTui && tuiReady}
 			<button
 				class="foot-chip"
-				disabled={!tuiReady}
 				onclick={onOpenTui}
-				title={tuiReady ? t('chat.tuiContinueTitle') : t('chat.tuiNotReady')}
+				title={t('chat.tuiContinueTitle')}
 			>
 				<SquareTerminal size={12} /><span>{t('chat.tuiContinue')}</span>
 			</button>
@@ -863,14 +862,6 @@
 	.foot-chip:hover {
 		background: var(--surface2);
 		color: var(--text);
-	}
-	.foot-chip:disabled {
-		opacity: 0.45;
-		cursor: default;
-	}
-	.foot-chip:disabled:hover {
-		background: none;
-		color: var(--dim);
 	}
 	.foot-chip.auto {
 		color: var(--warn);
