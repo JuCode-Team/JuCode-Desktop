@@ -32,10 +32,12 @@
 	import {
 		processVideo,
 		claudeSessions,
+		git,
 		gitCheckpointCapture,
 		gitCheckpointRestore,
 		type Op
 	} from '$lib/protocol';
+	import { buildModelRows } from '$lib/composer/modelRows';
 	import { dispatch } from '$lib/backends/router';
 	import { browser } from '$lib/browser.svelte';
 	import { prefs } from '$lib/prefs.svelte';
@@ -171,19 +173,20 @@
 	// yet (an optimistic push counts) and not a resumed conversation.
 	const backendLocked = $derived(!!session.restored || chat.userTurns > 0);
 
-	// Effort switch is debounced: reflect the pick immediately on the slider
-	// (optimistic chat.effort) so the handle stays put, but only send the actual
-	// `/model` command once the user settles — rapid drags/clicks don't race a
-	// half-dozen switches through the engine.
-	let effortTimer: ReturnType<typeof setTimeout> | undefined;
-	function chooseEffort(ef: string) {
-		chat.effort = ef;
-		const model = chat.model;
-		clearTimeout(effortTimer);
-		effortTimer = setTimeout(() => {
-			send({ op: 'command', input: `/model ${model} ${ef}` });
-		}, 350);
-	}
+	// Current git branch for the composer's footer strip, refetched when the
+	// working directory changes. A detached HEAD reads "detached"; a failed
+	// probe (not a git repo) hides the chip.
+	let gitBranch = $state('');
+	$effect(() => {
+		const cwd = project?.path || chat.cwd;
+		gitBranch = '';
+		if (!cwd) return;
+		git(['branch', '--show-current'], cwd)
+			.then((out) => {
+				if (cwd === (project?.path || chat.cwd)) gitBranch = out.trim() || 'detached';
+			})
+			.catch(() => {});
+	});
 
 	// Open the model picker as a popover. If we already have a cached catalog,
 	// show it instantly and refresh in the background; otherwise fetch first.
@@ -237,7 +240,6 @@
 		findIdx = 0;
 	});
 
-	const fmtTokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
 	const isImage = (p: string) => /\.(png|jpe?g|gif|webp|bmp)$/i.test(p);
 	const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
 	// Engine subagent lifecycle status → localized label (falls back to the raw value).
@@ -277,62 +279,24 @@
 			return p.items.map((it) => ({ id: it.id, label: it.label, detail: it.detail, active: it.active, command: `/resume ${it.id}`, depth: nil }));
 		if (p.kind === 'checkpoint')
 			return p.items.map((it) => ({ id: it.id, label: it.label, detail: it.detail, active: it.active, command: `/rewind ${it.id}`, depth: nil }));
-		// Model picker. The active provider's rows come from the engine's model_view
-		// (already filtered — e.g. jucode hides unsupported models — and flagged with
-		// the active one); other providers come from the client-side config list so
-		// you can switch to any of them. Same-provider picks use /model (instant);
-		// cross-provider picks switch via @switch (config rewrite + engine restart).
-		const cur = chat.provider ?? '';
-		// Mirror the engine's jucode allow-list so we don't offer a model it rejects.
-		const jucodeOk = (n: string) =>
-			['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex', 'gpt-5.2'].includes(n) || n.startsWith('claude-');
-		const groups = {
-			codex: t('shell.modelGroup.codex'),
-			claude: t('shell.modelGroup.claude'),
-			jucode: t('shell.modelGroup.jucode'),
-			byok: t('shell.modelGroup.byok')
-		};
-		const activeGroup =
-			chat.backendId === 'codex'
-				? groups.codex
-				: chat.backendId === 'claude'
-					? groups.claude
-					: cur === 'jucode'
-						? groups.jucode
-						: groups.byok;
-		const activeRows = p.models.map((m) => ({
-			id: `${cur}::${m.model}`,
-			label: m.label || m.model,
-			vendor: m.vendor || m.model,
-			detail: m.context_window ? `${cur} · ${fmtTokens(m.context_window)}` : cur,
-			active: m.active,
-			command: `/model ${m.model}`,
-			depth: nil,
-			group: activeGroup
-		}));
-		// Provider switching rewrites the native engine's global config and
-		// restarts it — meaningful for jucode sessions only. Other backends'
-		// pickers list just their own engine's model_view catalog.
-		const otherRows = (chat.backendId !== 'jucode' ? [] : providersList)
-			.filter((pv) => pv.id !== cur)
-			.flatMap((pv) =>
-				pv.models
-					.filter((m) => pv.id !== 'jucode' || jucodeOk(m.name))
-					.map((m) => ({
-						id: `${pv.id}::${m.name}`,
-						label: m.name,
-						vendor: m.name,
-						detail: `${pv.id}${providers.includes(pv.id) ? '' : ` · ${t('shell.notConfigured')}`} · ${fmtTokens(m.context_window ?? 0)}`,
-						active: false,
-						command: `@switch ${pv.id} ${m.name}`,
-						depth: nil,
-						group: pv.id === 'jucode' ? groups.jucode : groups.byok
-					}))
-			);
-		const groupOrder = [groups.codex, groups.claude, groups.jucode, groups.byok];
-		return [...activeRows, ...otherRows].sort(
-			(a, b) => groupOrder.indexOf(a.group) - groupOrder.indexOf(b.group)
-		);
+		// Model picker rows (pure packing in $lib/composer/modelRows): the active
+		// provider's models from the engine's model_view plus, for jucode
+		// sessions, every other configured provider's catalog — each row carrying
+		// its model's reasoning-effort options for the popover's hover chips.
+		return buildModelRows({
+			models: p.models,
+			backendId: chat.backendId,
+			provider: chat.provider ?? '',
+			providersList,
+			configured: providers,
+			groups: {
+				codex: t('shell.modelGroup.codex'),
+				claude: t('shell.modelGroup.claude'),
+				jucode: t('shell.modelGroup.jucode'),
+				byok: t('shell.modelGroup.byok')
+			},
+			notConfigured: t('shell.notConfigured')
+		});
 	});
 
 	// Whether to offer a filter box (history and other long lists).
@@ -696,7 +660,6 @@
 	});
 	onDestroy(() => {
 		if (findDebounce != null) clearTimeout(findDebounce);
-		clearTimeout(effortTimer);
 		// Moving the tile to another leaf remounts the pane — stash the draft so
 		// the composer text survives the drag (pendingFill restores it).
 		if (input.trim()) chat.pendingFill = input;
@@ -789,17 +752,15 @@
 			onPick={pickFiles}
 			onModel={openModelPicker}
 			onModelSelect={selectRow}
-			onModelEffort={setEffort}
 			onModelClose={() => chat.closePicker()}
 			modelRows={filteredRows}
-			modelActive={activeModel}
 			modelTitle={pickerTitle}
 			modelSearch={showPickerSearch}
 			{backendLocked}
+			{gitBranch}
 			onBackend={(b, acpAgent) => store.switchBackend(session.id, b, acpAgent)}
 			bind:pickerQuery
 			bind:pickerSelIdx={selIdx}
-			onEffort={chooseEffort}
 			onApproval={setApprovalMode}
 		/>
 	</div>

@@ -20,7 +20,7 @@
 		type EventPayload
 	} from '$lib/protocol';
 	import { dispatch } from '$lib/backends/router';
-	import { caps, BACKEND_IDS, type BackendId } from '$lib/backends';
+	import { caps } from '$lib/backends';
 	import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
 	import { updater } from '$lib/updater.svelte';
 	import { browser, type WebRef } from '$lib/browser.svelte';
@@ -47,7 +47,7 @@
 		openChatTab,
 		reconcileLayout
 	} from '$lib/workbench/canvas';
-	import { tuiBackendOf, tuiPanelKind, tuiTabTitle } from '$lib/workbench/tuiTab';
+	import { tuiBackendOf, tuiTabTitle } from '$lib/workbench/tuiTab';
 	import type { WorkspaceEntry } from '$lib/workbench/workspaces';
 	import type { TabIcon } from '$lib/workbench/tabChrome';
 	import Mosaic from '$lib/workbench/Mosaic.svelte';
@@ -199,10 +199,12 @@
 			return true;
 		})
 	);
+	// One agent-session type only: the coding agent is picked INSIDE the
+	// session (model popup), never at tab creation. Persisted `tui:*` tabs
+	// still render, but TUI tabs are no longer offered as new options.
 	const addOptions = $derived([
-		{ key: 'chat', label: t('shell.newSession') },
-		...panelKeys.map((k) => ({ key: k, label: t(`dock.tabs.${k}`) })),
-		...BACKEND_IDS.map((b) => ({ key: tuiPanelKind(b), label: tuiTabTitle(b) }))
+		{ key: 'chat', label: t('shell.agentSession') },
+		...panelKeys.map((k) => ({ key: k, label: t(`dock.tabs.${k}`) }))
 	]);
 
 	function tileLabel(tab: TileTab): string {
@@ -295,7 +297,6 @@
 		if (existing) applyTiles(activateTab(tiles, existing.id));
 		else applyTiles(openTab(tiles, focusedLeaf, { id: newTabId(), panel: kind }));
 	}
-	const openTui = (backend: BackendId) => openPanelTile(tuiPanelKind(backend));
 
 	// The workbench-active session always has a chat tile: activating a session
 	// (sidebar click, ⌘N, resume, deep link…) opens or focuses it.
@@ -999,7 +1000,6 @@
 			onToggleSidebar={toggleSidebar}
 			onToggleTheme={cycleTheme}
 			onSetup={() => (showSetup = true)}
-			onOpenTui={openTui}
 		/>
 	{/if}
 </div>

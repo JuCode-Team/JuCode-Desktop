@@ -114,7 +114,7 @@
 	</div>
 
 	<div class="nav">
-		<button class="navcard" onclick={newSessionHere}><Plus size={14} /><span>{t('shell.newSession')}</span></button>
+		<button class="navcard" onclick={newSessionHere}><Plus size={14} /><span>{t('shell.agentSession')}</span></button>
 	</div>
 
 	<div class="sess-head">
@@ -229,7 +229,7 @@
 				{@render sessRow(s)}
 			{/each}
 			{#if active.length === 0 && arch.length === 0 && !p.stale && !query}
-				<button class="sess-empty" onclick={() => onNewSession(p)}>{t('shell.newSession')}</button>
+				<button class="sess-empty" onclick={() => onNewSession(p)}>{t('shell.agentSession')}</button>
 			{/if}
 			{#if arch.length}
 				<button class="arch-head" onclick={() => (showArchived[p.id] = !showArchived[p.id])}>

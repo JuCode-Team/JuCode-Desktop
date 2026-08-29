@@ -3,10 +3,10 @@
 	import {
 		Search, Plus, FolderPlus, Cpu, RotateCcw, History, Layers,
 		Gauge, Activity, Stethoscope, GitBranch, GitBranchPlus, Store, Settings as SettingsIcon,
-		PanelLeft, LayoutGrid, SunMoon, ChevronRight, Wrench, SquareTerminal
+		PanelLeft, LayoutGrid, SunMoon, ChevronRight, Wrench
 	} from 'lucide-svelte';
 	import type { ChatState } from '$lib/chat.svelte';
-	import { caps, BACKEND_IDS, BACKEND_LABELS, type BackendCaps, type BackendId } from '$lib/backends';
+	import { caps, type BackendCaps } from '$lib/backends';
 	import { focusTrap } from '$lib/focusTrap';
 	import { t } from '$lib/i18n';
 
@@ -25,8 +25,7 @@
 		onOpenPanel,
 		onToggleSidebar,
 		onToggleTheme,
-		onSetup,
-		onOpenTui
+		onSetup
 	}: {
 		chat: ChatState | undefined;
 		hasProject: boolean;
@@ -46,8 +45,6 @@
 		onToggleSidebar: () => void;
 		onToggleTheme: () => void;
 		onSetup: () => void;
-		/** Open a native TUI tile (real interactive CLI in a pty) for a backend. */
-		onOpenTui: (backend: BackendId) => void;
 	} = $props();
 
 	type Action = {
@@ -99,14 +96,6 @@
 				icon: LayoutGrid,
 				keywords: `${t('shell.cmd.openPanelKw')} ${p.key} ${p.label}`,
 				run: wrap(() => onOpenPanel(p.key))
-			})),
-			...BACKEND_IDS.map((b): Action => ({
-				id: `tui-${b}`,
-				label: t('shell.cmd.openTui', { name: BACKEND_LABELS[b] }),
-				hint: t('shell.cmd.openTuiHint'),
-				icon: SquareTerminal,
-				keywords: `${t('shell.cmd.openTuiKw')} ${b}`,
-				run: wrap(() => onOpenTui(b))
 			})),
 			{ id: 'settings', label: t('shell.cmd.settings'), keys: '⌘,', icon: SettingsIcon, keywords: t('shell.cmd.settingsKw'), run: wrap(onSettings) },
 			{ id: 'setup', label: t('shell.cmd.setup'), hint: t('shell.cmd.setupHint'), icon: Wrench, keywords: t('shell.cmd.setupKw'), run: wrap(onSetup) },

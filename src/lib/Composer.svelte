@@ -1,12 +1,10 @@
 <script lang="ts">
-	import { Send, Square, Paperclip, FastForward, ShieldCheck, CircleStop, Mic, LoaderCircle, Check, ChevronDown, MoreHorizontal } from 'lucide-svelte';
+	import { Send, Square, Paperclip, FastForward, ShieldCheck, CircleStop, Mic, LoaderCircle, GitBranch } from 'lucide-svelte';
 	import { message } from '@tauri-apps/plugin-dialog';
 	import IconButton from '$lib/ui/IconButton.svelte';
-	import Vendor from '$lib/Vendor.svelte';
 	import BackendIcon from '$lib/BackendIcon.svelte';
 	import Segmented from '$lib/ui/Segmented.svelte';
-	import EffortSlider from '$lib/ui/EffortSlider.svelte';
-	import { acpAgentsList, checkBackend, listFiles, saveTempImage, transcribeAudio, type AcpAgent } from '$lib/protocol';
+	import { listFiles, saveTempImage, transcribeAudio } from '$lib/protocol';
 	import { VoiceRecorder } from '$lib/audio';
 	import { buildEntries, mentionMatches, type AtEntry } from '$lib/mention';
 	import { t } from '$lib/i18n';
@@ -14,22 +12,11 @@
 	import MentionMenu from '$lib/composer/MentionMenu.svelte';
 	import AttachmentChips from '$lib/composer/AttachmentChips.svelte';
 	import ContextIndicator from '$lib/composer/ContextIndicator.svelte';
-	import Picker from '$lib/shell/Picker.svelte';
+	import AgentModelPopover from '$lib/composer/AgentModelPopover.svelte';
+	import type { ModelRow } from '$lib/composer/modelRows';
 	import type { ChatState } from '$lib/chat.svelte';
 	import type { ApprovalMode } from '$lib/approval';
-	import { caps, NATIVE_BACKEND_IDS, BACKEND_LABELS, type BackendId } from '$lib/backends';
-	import { loadBackendSettings, versionLabel } from '$lib/backends/settings';
-
-	type PickerRow = {
-		id: string;
-		label: string;
-		vendor?: string;
-		detail: string;
-		active: boolean;
-		command: string;
-		depth: number | undefined;
-		group?: string;
-	};
+	import { caps, BACKEND_LABELS, type BackendId } from '$lib/backends';
 
 	let {
 		chat,
@@ -40,10 +27,10 @@
 		pickerQuery = $bindable(''),
 		pickerSelIdx = $bindable(0),
 		modelRows = [],
-		modelActive,
 		modelTitle = '',
 		modelSearch = false,
 		backendLocked = true,
+		gitBranch = '',
 		onBackend,
 		onSubmit,
 		onStop,
@@ -51,9 +38,7 @@
 		onPick,
 		onModel,
 		onModelSelect,
-		onModelEffort,
 		onModelClose,
-		onEffort,
 		onApproval
 	}: {
 		chat: ChatState;
@@ -63,65 +48,53 @@
 		el: HTMLElement | null;
 		pickerQuery?: string;
 		pickerSelIdx?: number;
-		modelRows?: PickerRow[];
-		modelActive?: { model: string; reasoning_efforts: string[]; active: boolean };
+		modelRows?: ModelRow[];
 		modelTitle?: string;
 		modelSearch?: boolean;
 		/** False only while the session is still virgin (no user turn) — the
-		 *  backend selector is interactive then and a fixed label afterwards. */
+		 *  agent rail in the model popover shows then and disappears afterwards. */
 		backendLocked?: boolean;
-		onBackend?: (b: BackendId, acpAgent?: { id: string; name: string }) => void;
+		/** Current git branch for the footer strip ('' hides the chip). */
+		gitBranch?: string;
+		onBackend?: (b: BackendId, acpAgent?: { id: string; name: string }) => void | Promise<void>;
 		onSubmit: () => void;
 		onStop: () => void;
 		onSteer: () => void;
 		onPick: () => void;
 		onModel: () => void;
 		onModelSelect?: (command: string) => void;
-		onModelEffort?: (effort: string) => void;
 		onModelClose?: () => void;
-		onEffort: (ef: string) => void;
 		onApproval: (mode: ApprovalMode) => void;
 	} = $props();
 
 	let slashIdx = $state(0);
-	let showEffort = $state(false);
 	let showApproval = $state(false);
-	// The ⋯ overflow menu hosting the secondary controls (mic / backend /
-	// effort / approval / context) so the visible bar stays slim.
-	let showMore = $state(false);
 
-	// Backend selector (new sessions only — locked after the first user turn).
-	// Availability is probed best-effort on first open, same as the old modal.
-	let showBackend = $state(false);
-	let backendProbe = $state<Partial<Record<BackendId, { found: boolean; version: string }>>>({});
-	// Registered ACP agents (one picker row each, below the native engines).
-	let acpAgents = $state<AcpAgent[]>([]);
-	let probed = false;
-	function toggleBackend() {
-		showBackend = !showBackend;
-		if (!showBackend || probed) return;
-		probed = true;
-		const settings = loadBackendSettings();
-		for (const id of NATIVE_BACKEND_IDS) {
-			checkBackend(id, settings.paths[id])
-				.then((s) => (backendProbe[id] = { found: s.found, version: versionLabel(s) }))
-				.catch(() => {});
+	// The model popover holds its own open flag so it can outlive an agent
+	// switch (the new session ChatState starts with no picker) and open for
+	// agents without a model catalog (ACP) — the rail inside it is the only
+	// way to pick a coding agent.
+	let modelOpen = $state(false);
+	const modelPopoverVisible = $derived(modelOpen || chat.picker?.kind === 'model');
+	function toggleModelPopover() {
+		if (modelPopoverVisible) {
+			closeModelPopover();
+			return;
 		}
-		acpAgentsList()
-			.then((agents) => (acpAgents = agents))
-			.catch(() => {});
+		modelOpen = true;
+		if (bcaps.modelPicker) onModel();
 	}
-	function pickBackend(id: BackendId) {
-		showBackend = false;
-		if (id !== chat.backendId) onBackend?.(id);
+	function closeModelPopover() {
+		modelOpen = false;
+		if (chat.picker?.kind === 'model') onModelClose?.();
 	}
-	function pickAcpAgent(agent: AcpAgent) {
-		showBackend = false;
-		if (chat.backendId !== 'acp' || chat.acpAgentId !== agent.id)
-			onBackend?.('acp', { id: agent.id, name: agent.name });
+	function selectFromPopover(command: string) {
+		modelOpen = false;
+		onModelSelect?.(command);
 	}
-	// The label on the backend button: the ACP agent's registered name when an
-	// ACP agent drives the session, else the engine's brand name.
+
+	// The fallback label on the model button before the engine reports a model:
+	// the ACP agent's registered name, else the engine's brand name.
 	const backendLabel = $derived(
 		chat.backendId === 'acp' ? chat.acpAgentName || BACKEND_LABELS.acp : BACKEND_LABELS[chat.backendId]
 	);
@@ -266,7 +239,7 @@
 		showApproval = false;
 	}
 
-	const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+	const fmtTokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
 
 	const slashMatches = $derived.by(() => {
 		const t = input.trim();
@@ -537,136 +510,74 @@
 		></div>
 		<div class="composer-bar">
 			<IconButton onclick={onPick} label="attach" title={t('chat.attachTitle')}><Paperclip size={16} /></IconButton>
-			{#if bcaps.modelPicker}
-				<div class="effortsel">
-					<button
-						class="flatbtn model"
-						onclick={() => (chat.picker?.kind === 'model' ? onModelClose?.() : onModel())}
-						title={t('chat.switchModel')}
-					>
-						<Vendor model={chat.model} size={15} /><span>{chat.modelLabel || chat.model || 'model'}</span>
+			{#if bcaps.modelPicker || !backendLocked}
+				<div class="modelsel">
+					<button class="flatbtn model" onclick={toggleModelPopover} title={t('chat.switchModel')}>
+						<BackendIcon backend={chat.backendId} size={15} />
+						<span>{chat.modelLabel || chat.model || backendLabel}</span>
 					</button>
-					{#if chat.picker?.kind === 'model'}
-						<Picker
-							anchored
+					{#if modelPopoverVisible}
+						<AgentModelPopover
 							{chat}
-							title={modelTitle}
-							activeModel={modelActive}
+							title={modelTitle || t('shell.picker.model')}
 							rows={modelRows}
 							showSearch={modelSearch}
+							{backendLocked}
 							bind:query={pickerQuery}
 							bind:selIdx={pickerSelIdx}
-							onClose={() => onModelClose?.()}
-							onSelect={(c) => onModelSelect?.(c)}
-							onEffort={(e) => onModelEffort?.(e)}
+							onClose={closeModelPopover}
+							onSelect={selectFromPopover}
+							{onBackend}
+							onRefreshModels={() => onModel()}
 						/>
 					{/if}
 				</div>
 			{:else if chat.model}
-				<span class="flatbtn model static"><Vendor model={chat.model} size={15} /><span>{chat.modelLabel || chat.model}</span></span>
+				<span class="flatbtn model static"><BackendIcon backend={chat.backendId} size={15} /><span>{chat.modelLabel || chat.model}</span></span>
 			{/if}
-			<!-- ⋯ overflow: mic / backend / effort / approval / context usage. -->
-			<div class="effortsel">
-				<button class="recbtn more" class:on={voice === 'rec'} onclick={() => (showMore = !showMore)} aria-label="more options" title={t('chat.more')}>
-					<MoreHorizontal size={16} />
+			<div class="cspace"></div>
+			<button
+				class="cact voice"
+				class:on={voice === 'rec'}
+				onclick={toggleVoice}
+				disabled={voice === 'busy'}
+				aria-label="voice input"
+				title={voice === 'rec' ? t('chat.voiceStopTitle') : voice === 'busy' ? t('chat.voiceBusyTitle') : t('chat.voiceTitle')}
+			>
+				{#if voice === 'busy'}<span class="vspin"><LoaderCircle size={15} /></span>{:else if voice === 'rec'}<CircleStop size={15} />{:else}<Mic size={15} />{/if}
+			</button>
+			{#if chat.busy}
+				<button class="cact stop" onclick={onStop} aria-label="stop" title={t('chat.stopTitle')}><Square size={15} /></button>
+			{:else}
+				<button class="cact send" onclick={onSubmit} disabled={!input.trim() && !attachments.length && !videos.length} aria-label="send" title={t('chat.sendTitle')}><Send size={15} /></button>
+			{/if}
+		</div>
+	</div>
+	<!-- Slim strip in the blank area under the card: branch · approval | context. -->
+	<div class="composer-foot">
+		{#if gitBranch}
+			<span class="foot-branch" title={t('chat.gitBranch')}><GitBranch size={12} /><span class="branch-name">{gitBranch}</span></span>
+		{/if}
+		{#if bcaps.approvalModes}
+			<div class="footsel">
+				<button class="foot-chip" class:auto={chat.approvalMode !== 'ask'} onclick={() => (showApproval = !showApproval)} title={t('chat.approvalModeTitle')}>
+					<ShieldCheck size={12} /><span>{approvalLabel}</span>
 				</button>
-				{#if showMore}
-					<button class="pop-backdrop" aria-label="close" onclick={() => (showMore = false)}></button>
-					<div class="effort-pop more-pop">
-						<button
-							class="recbtn mrow"
-							class:on={voice === 'rec'}
-							onclick={toggleVoice}
-							disabled={voice === 'busy'}
-							aria-label="voice input"
-						>
-							{#if voice === 'busy'}<span class="vspin"><LoaderCircle size={15} /></span>{:else if voice === 'rec'}<CircleStop size={15} />{:else}<Mic size={15} />{/if}
-							<span>{voice === 'rec' ? t('chat.voiceStopTitle') : voice === 'busy' ? t('chat.voiceBusyTitle') : t('chat.voiceTitle')}</span>
-						</button>
-						<!-- Engine backend: interactive picker until the first message locks it. -->
-						<div class="effortsel mline">
-							{#if backendLocked}
-								<span class="flatbtn bkd static mrow" title={t('chat.backendLocked')}>
-									<BackendIcon backend={chat.backendId} size={14} /><span>{backendLabel}</span>
-								</span>
-							{:else}
-								<button class="flatbtn bkd mrow" onclick={toggleBackend} title={t('chat.switchBackend')}>
-									<BackendIcon backend={chat.backendId} size={14} /><span>{backendLabel}</span>
-									<span class="bkd-chev"><ChevronDown size={12} /></span>
-								</button>
-								{#if showBackend}
-									<button class="pop-backdrop" aria-label="close" onclick={() => (showBackend = false)}></button>
-									<div class="effort-pop bkd-pop">
-										{#each NATIVE_BACKEND_IDS as id (id)}
-											{@const probe = backendProbe[id]}
-											<button class="bkd-row" class:on={id === chat.backendId} onclick={() => pickBackend(id)}>
-												<BackendIcon backend={id} size={14} />
-												<span class="bkd-name">{BACKEND_LABELS[id]}</span>
-												{#if probe && !probe.found}
-													<span class="bkd-miss">{t('shell.backend.notFound')}</span>
-												{:else if probe?.version}
-													<span class="bkd-ver">{probe.version}</span>
-												{/if}
-												{#if id === chat.backendId}<span class="bkd-check"><Check size={13} /></span>{/if}
-											</button>
-										{/each}
-										{#if acpAgents.length}
-											<div class="bkd-sep">{t('chat.acpAgents')}</div>
-											{#each acpAgents as agent (agent.id)}
-												{@const on = chat.backendId === 'acp' && chat.acpAgentId === agent.id}
-												<button class="bkd-row" class:on onclick={() => pickAcpAgent(agent)}>
-													<BackendIcon backend="acp" size={14} />
-													<span class="bkd-name">{agent.name}</span>
-													<span class="bkd-ver">{agent.command}</span>
-													{#if on}<span class="bkd-check"><Check size={13} /></span>{/if}
-												</button>
-											{/each}
-										{/if}
-									</div>
-								{/if}
-							{/if}
-						</div>
-						{#if bcaps.modelPicker && chat.efforts.length}
-							<div class="effortsel mline">
-								<button class="flatbtn mrow" onclick={() => (showEffort = !showEffort)} title={t('chat.effortTitle')}>
-									{cap(chat.effort) || 'Effort'}
-								</button>
-								{#if showEffort}
-									<button class="pop-backdrop" aria-label="close" onclick={() => (showEffort = false)}></button>
-									<div class="effort-pop wide">
-										<EffortSlider value={chat.effort} options={chat.efforts} backendId={chat.backendId} onChange={onEffort} />
-									</div>
-								{/if}
-							</div>
-						{/if}
-						{#if bcaps.approvalModes}
-							<div class="effortsel mline">
-								<button class="flatbtn appr mrow" class:auto={chat.approvalMode !== 'ask'} onclick={() => (showApproval = !showApproval)} title={t('chat.approvalModeTitle')}>
-									<ShieldCheck size={14} /><span>{approvalLabel}</span>
-								</button>
-								{#if showApproval}
-									<button class="pop-backdrop" aria-label="close" onclick={() => (showApproval = false)}></button>
-									<div class="effort-pop">
-										<Segmented value={chat.approvalMode} options={APPROVAL} onChange={setApproval} />
-									</div>
-								{/if}
-							</div>
-						{/if}
-						{#if bcaps.contextUsage && ctxLimit > 0}
-							<div class="mctx">
-								<ContextIndicator pct={ctxPct} atThreshold={ctxAtThreshold} contextTokens={chat.contextTokens} contextLimit={ctxLimit} totalIn={chat.totalIn} totalOut={chat.totalOut} cost={chat.cost} />
-							</div>
-						{/if}
+				{#if showApproval}
+					<button class="pop-backdrop" aria-label="close" onclick={() => (showApproval = false)}></button>
+					<div class="effort-pop">
+						<Segmented value={chat.approvalMode} options={APPROVAL} onChange={setApproval} />
 					</div>
 				{/if}
 			</div>
-			<div class="cspace"></div>
-			{#if chat.busy}
-				<button class="cact stop" onclick={onStop} aria-label="stop" title={t('chat.stopTitle')}><Square size={16} /></button>
-			{:else}
-				<button class="cact send" onclick={onSubmit} disabled={!input.trim() && !attachments.length && !videos.length} aria-label="send" title={t('chat.sendTitle')}><Send size={16} /></button>
-			{/if}
-		</div>
+		{/if}
+		<div class="fspace"></div>
+		{#if bcaps.contextUsage && ctxLimit > 0}
+			<div class="foot-ctx">
+				<ContextIndicator pct={ctxPct} atThreshold={ctxAtThreshold} contextTokens={chat.contextTokens} contextLimit={ctxLimit} totalIn={chat.totalIn} totalOut={chat.totalOut} cost={chat.cost} />
+				<span class="ctx-text">{fmtTokens(chat.contextTokens)} / {fmtTokens(ctxLimit)}</span>
+			</div>
+		{/if}
 	</div>
 </div>
 
@@ -760,76 +671,10 @@
 	.flatbtn.model span {
 		font-family: var(--font-mono);
 		font-size: 12px;
-	}
-	.flatbtn.bkd span {
-		font-size: 12px;
-	}
-	.bkd-chev {
-		display: inline-flex;
-		color: var(--dim2);
-	}
-	/* Backend popover rows (mirrors the effort/approval popover pattern). */
-	.bkd-pop {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		min-width: 210px;
-	}
-	.bkd-row {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		width: 100%;
-		text-align: left;
-		padding: 7px 9px;
-		border: none;
-		border-radius: var(--r-sm);
-		background: none;
-		color: var(--text);
-		font-size: 12.5px;
-		cursor: pointer;
-		transition: background var(--t-fast) var(--ease-out);
-	}
-	.bkd-row:hover,
-	.bkd-row.on {
-		background: var(--surface2);
-	}
-	.bkd-name {
-		flex: 1;
-		white-space: nowrap;
-	}
-	.bkd-ver {
-		font-size: 10.5px;
-		font-family: var(--font-mono);
-		color: var(--dim2);
-		max-width: 110px;
+		max-width: 220px;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
-	}
-	.bkd-miss {
-		font-size: 10px;
-		color: var(--warn);
-		border: 1px solid color-mix(in oklab, var(--warn) 35%, transparent);
-		border-radius: 4px;
-		padding: 0 5px;
-		flex-shrink: 0;
-	}
-	.bkd-check {
-		display: inline-flex;
-		color: var(--accent-bright);
-		flex-shrink: 0;
-	}
-	/* Section divider between the native engines and the ACP agent rows. */
-	.bkd-sep {
-		margin-top: 4px;
-		padding: 5px 9px 2px;
-		border-top: 1px solid var(--hairline);
-		font-size: 10px;
-		font-weight: 600;
-		letter-spacing: 0.05em;
-		text-transform: uppercase;
-		color: var(--dim2);
 	}
 	/* read-only model label for backends without an in-chat model picker */
 	.flatbtn.static {
@@ -841,13 +686,9 @@
 	.flatbtn.static:active {
 		transform: none;
 	}
-	.flatbtn.appr span {
-		font-size: 12px;
-	}
-	.flatbtn.appr.auto {
-		color: var(--warn);
-	}
-	.effortsel {
+	/* position:relative anchors for the model popover / the approval popover */
+	.modelsel,
+	.footsel {
 		position: relative;
 		display: inline-flex;
 	}
@@ -872,9 +713,6 @@
 		transform-origin: bottom left;
 		animation: pop-in var(--t-med) var(--ease-spring);
 	}
-	.effort-pop.wide {
-		padding: 12px 14px 8px;
-	}
 	.cspace {
 		flex: 1;
 	}
@@ -882,8 +720,8 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 38px;
-		height: 38px;
+		width: 32px;
+		height: 32px;
 		border-radius: var(--r-full);
 		border: none;
 		cursor: pointer;
@@ -892,6 +730,7 @@
 			transform var(--t-fast) var(--ease-spring),
 			box-shadow var(--t-med) var(--ease-out),
 			background var(--t-fast) var(--ease-out),
+			color var(--t-fast) var(--ease-out),
 			opacity var(--t-med) var(--ease-out);
 	}
 	.cact:active:not(:disabled) {
@@ -921,59 +760,22 @@
 	.cact.stop:hover {
 		background: color-mix(in oklab, var(--err) 22%, transparent);
 	}
-	.recbtn {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		padding: 7px;
-		border: none;
-		border-radius: var(--r-sm);
-		background: none;
-		color: var(--dim);
-		cursor: pointer;
-		transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
-	}
-	.recbtn:hover {
+	/* Small circular voice button, quiet until it records. */
+	.cact.voice {
 		background: var(--surface2);
+		color: var(--dim);
+	}
+	.cact.voice:hover:not(:disabled) {
 		color: var(--text);
 	}
-	.recbtn:active:not(:disabled) {
-		transform: scale(0.92);
-	}
-	.recbtn.on {
+	.cact.voice.on {
 		color: var(--err);
+		background: color-mix(in oklab, var(--err) 12%, transparent);
 		animation: pulse 1.2s ease-in-out infinite;
 	}
-	.recbtn:disabled {
+	.cact.voice:disabled {
 		cursor: default;
 		color: var(--dim2);
-	}
-	/* ⋯ overflow menu: one column of the secondary controls. Nested pickers
-	   (backend / effort / approval) pop above their row, same as in the bar. */
-	.more-pop {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		min-width: 190px;
-	}
-	.mline {
-		width: 100%;
-	}
-	.mrow {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		width: 100%;
-		text-align: left;
-		justify-content: flex-start;
-		font-size: 12.5px;
-	}
-	.mctx {
-		display: flex;
-		justify-content: flex-start;
-		padding: 4px 8px 2px;
-		border-top: 1px solid var(--hairline);
-		margin-top: 3px;
 	}
 	.vspin {
 		display: inline-flex;
@@ -983,6 +785,66 @@
 		to {
 			transform: rotate(360deg);
 		}
+	}
+
+	/* ---------- footer strip (outside the card) ---------- */
+	.composer-foot {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 7px 10px 0;
+		min-height: 24px;
+		color: var(--dim);
+	}
+	.foot-branch {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		font-family: var(--font-mono);
+		font-size: 11px;
+		color: var(--dim);
+		min-width: 0;
+	}
+	.branch-name {
+		max-width: 180px;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.foot-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		padding: 2px 9px;
+		border: 1px solid var(--hairline);
+		border-radius: 999px;
+		background: none;
+		color: var(--dim);
+		font-size: 11px;
+		font-family: var(--font-sans);
+		cursor: pointer;
+		transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
+	}
+	.foot-chip:hover {
+		background: var(--surface2);
+		color: var(--text);
+	}
+	.foot-chip.auto {
+		color: var(--warn);
+		border-color: color-mix(in oklab, var(--warn) 35%, transparent);
+	}
+	.fspace {
+		flex: 1;
+	}
+	.foot-ctx {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+	}
+	.ctx-text {
+		font-family: var(--font-mono);
+		font-size: 11px;
+		color: var(--dim);
 	}
 
 	.queued {

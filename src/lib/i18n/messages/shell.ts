@@ -151,7 +151,9 @@ const shell = {
 		archive: '归档对话',
 		unarchive: '取消归档',
 		archived: '已归档',
-		newSession: '新建对话',
+		// The one-and-only creatable session type (mosaic +, sidebar, palette):
+		// the coding agent is picked inside the session, not at creation.
+		agentSession: '创建 Agent 会话',
 		newTask: '新建并行任务',
 		task: {
 			dialogTitle: '新建并行任务',
@@ -183,8 +185,8 @@ const shell = {
 		paletteEmpty: '没有匹配的命令',
 		paletteFoot: '↑↓ 选择 · Enter 执行 · Esc 关闭',
 		cmd: {
-			newSession: '新建对话',
-			newSessionKw: 'new session 对话',
+			newSession: '创建 Agent 会话',
+			newSessionKw: 'new agent session 对话 会话',
 			newProject: '新建项目',
 			newProjectKw: 'new project 项目 目录',
 			newTask: '新建并行任务',
@@ -220,10 +222,7 @@ const shell = {
 			sidebar: '切换会话列表',
 			sidebarKw: 'sidebar sessions navigator 侧边栏 会话 列表',
 			theme: '切换主题',
-			themeKw: 'theme dark light 主题',
-			openTui: '打开 TUI：{name}',
-			openTuiHint: '在画布上运行交互式命令行（独立会话）',
-			openTuiKw: 'tui terminal cli 终端 命令行'
+			themeKw: 'theme dark light 主题'
 		},
 
 		// session runtime (session.svelte.ts)
@@ -404,7 +403,9 @@ const shell = {
 		archive: 'Archive thread',
 		unarchive: 'Unarchive',
 		archived: 'Archived',
-		newSession: 'New conversation',
+		// The one-and-only creatable session type (mosaic +, sidebar, palette):
+		// the coding agent is picked inside the session, not at creation.
+		agentSession: 'New agent session',
 		newTask: 'New parallel task',
 		task: {
 			dialogTitle: 'New parallel task',
@@ -436,8 +437,8 @@ const shell = {
 		paletteEmpty: 'No matching commands',
 		paletteFoot: '↑↓ Navigate · Enter Run · Esc Close',
 		cmd: {
-			newSession: 'New conversation',
-			newSessionKw: 'new session',
+			newSession: 'New agent session',
+			newSessionKw: 'new agent session conversation',
 			newProject: 'New project',
 			newProjectKw: 'new project directory',
 			newTask: 'New parallel task',
@@ -473,10 +474,7 @@ const shell = {
 			sidebar: 'Toggle session list',
 			sidebarKw: 'sidebar sessions navigator',
 			theme: 'Toggle theme',
-			themeKw: 'theme dark light',
-			openTui: 'Open TUI: {name}',
-			openTuiHint: 'Run the interactive CLI on the canvas (own session)',
-			openTuiKw: 'tui terminal cli'
+			themeKw: 'theme dark light'
 		},
 
 		// session runtime (session.svelte.ts)
