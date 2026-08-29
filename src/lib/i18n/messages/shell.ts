@@ -35,9 +35,9 @@ const shell = {
 		noOptions: '暂无可选项',
 		pickerFoot: '↑↓ 选择 · Enter 确认 · Esc 关闭',
 
-		// header / panel
-		togglePanel: '侧边面板 · ⌘B',
-		toggleSidebar: '会话列表',
+		// header / navigator
+		toggleSidebar: '会话列表 · ⌘B',
+		chatGone: '该对话已关闭',
 
 		// workspaces
 		workspace: {
@@ -192,12 +192,15 @@ const shell = {
 			setup: '安装向导 / 环境检查',
 			setupHint: 'git、登录',
 			setupKw: 'setup wizard env git login 安装 向导 环境 登录',
-			panel: '切换右侧面板',
-			panelKw: 'panel dock 面板',
+			openPanel: '打开面板：{name}',
+			openPanelHint: '在画布上平铺',
+			openPanelKw: 'panel tile open 面板 平铺 打开',
+			sidebar: '切换会话列表',
+			sidebarKw: 'sidebar sessions navigator 侧边栏 会话 列表',
 			theme: '切换主题',
 			themeKw: 'theme dark light 主题',
 			openTui: '打开 TUI：{name}',
-			openTuiHint: '在面板中运行交互式命令行（独立会话）',
+			openTuiHint: '在画布上运行交互式命令行（独立会话）',
 			openTuiKw: 'tui terminal cli 终端 命令行'
 		},
 
@@ -263,9 +266,9 @@ const shell = {
 		noOptions: 'No options available',
 		pickerFoot: '↑↓ Navigate · Enter Select · Esc Close',
 
-		// header / panel
-		togglePanel: 'Side panel · ⌘B',
-		toggleSidebar: 'Session list',
+		// header / navigator
+		toggleSidebar: 'Session list · ⌘B',
+		chatGone: 'This conversation is closed',
 
 		// workspaces
 		workspace: {
@@ -420,12 +423,15 @@ const shell = {
 			setup: 'Setup wizard / env check',
 			setupHint: 'git, sign-in',
 			setupKw: 'setup wizard env git login',
-			panel: 'Toggle right panel',
-			panelKw: 'panel dock',
+			openPanel: 'Open panel: {name}',
+			openPanelHint: 'as a tile on the canvas',
+			openPanelKw: 'panel tile open',
+			sidebar: 'Toggle session list',
+			sidebarKw: 'sidebar sessions navigator',
 			theme: 'Toggle theme',
 			themeKw: 'theme dark light',
 			openTui: 'Open TUI: {name}',
-			openTuiHint: 'Run the interactive CLI in a panel (own session)',
+			openTuiHint: 'Run the interactive CLI on the canvas (own session)',
 			openTuiKw: 'tui terminal cli'
 		},
 

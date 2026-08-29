@@ -63,7 +63,7 @@ export const ACP_CAPS: BackendCaps = {
 	steer: false, // no mid-turn injection; queued messages run as the next turn
 	interrupt: true, // session/cancel (core protocol, all agents)
 	branchTree: false,
-	goals: false, // plan updates still render (RightDock shows plan when present)
+	goals: false, // plan updates still render (the plan tile shows them when present)
 	skills: false,
 	mcpManage: false,
 	checkpoints: false,

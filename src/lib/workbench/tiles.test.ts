@@ -14,6 +14,7 @@ import {
 	singleLeafLayout,
 	splitLeaf,
 	toggleMaximize,
+	wrapRoot,
 	LAYOUT_VERSION,
 	RATIO_MAX,
 	RATIO_MIN,
@@ -178,6 +179,34 @@ describe('move', () => {
 		const layout = singleLeafLayout([tab('a')]);
 		const leaf = leavesOf(layout.root)[0];
 		expect(moveTab(layout, 'a', leaf.id, 'left')).toBe(layout);
+	});
+});
+
+describe('wrapRoot', () => {
+	it('grafts a fresh leaf before the whole tree for left/top', () => {
+		const { layout } = twoLeaves('right');
+		const next = wrapRoot(layout, 'left', tab('z'), 0.6);
+		const root = next.root as SplitNode;
+		expect(root.kind).toBe('split');
+		expect(root.dir).toBe('row');
+		expect(root.ratio).toBe(0.6);
+		expect((root.a as LeafNode).tabs.map((t) => t.id)).toEqual(['z']);
+		expect(root.b).toBe(layout.root); // untouched subtree keeps identity
+	});
+
+	it('puts the fresh leaf after the tree for right/bottom, ratio still its share', () => {
+		const layout = singleLeafLayout([tab('a')]);
+		const next = wrapRoot(layout, 'bottom', tab('z'), 0.3);
+		const root = next.root as SplitNode;
+		expect(root.dir).toBe('col');
+		expect(root.ratio).toBeCloseTo(0.7);
+		expect((root.b as LeafNode).tabs.map((t) => t.id)).toEqual(['z']);
+	});
+
+	it('turns an empty tree into a single leaf', () => {
+		const next = wrapRoot(emptyLayout(), 'left', tab('z'));
+		expect(next.root?.kind).toBe('leaf');
+		expect((next.root as LeafNode).tabs.map((t) => t.id)).toEqual(['z']);
 	});
 });
 

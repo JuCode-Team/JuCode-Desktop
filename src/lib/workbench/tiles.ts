@@ -198,6 +198,31 @@ export function splitLeaf(
 	};
 }
 
+/** Split the whole tree against a fresh leaf holding `tab` (left/top puts the
+ *  new leaf first); `ratio` is the fresh leaf's share. Used to graft a primary
+ *  pane onto a restored layout (e.g. a chat leaf beside an old dock-only
+ *  arrangement). An empty tree just becomes that single leaf. */
+export function wrapRoot(
+	layout: TileLayout,
+	zone: Exclude<DropZone, 'center'>,
+	tab: TileTab,
+	ratio = 0.5
+): TileLayout {
+	if (!layout.root) return { root: makeLeaf([tab]), maximized: null };
+	const fresh = makeLeaf([tab]);
+	const dir: SplitDir = zone === 'left' || zone === 'right' ? 'row' : 'col';
+	const first = zone === 'left' || zone === 'top';
+	const split: SplitNode = {
+		kind: 'split',
+		id: newId('s'),
+		dir,
+		ratio: clampRatio(first ? ratio : 1 - ratio),
+		a: first ? fresh : layout.root,
+		b: first ? layout.root : fresh
+	};
+	return { root: split, maximized: layout.maximized };
+}
+
 /**
  * Move `tabId` onto `targetLeafId`: 'center' joins that stack (or moves the tab
  * to the stack's end when it is already there), an edge zone splits the target

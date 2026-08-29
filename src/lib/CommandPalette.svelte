@@ -3,7 +3,7 @@
 	import {
 		Search, Plus, FolderPlus, Cpu, RotateCcw, History, Layers,
 		Gauge, Activity, Stethoscope, GitBranch, GitBranchPlus, Store, Settings as SettingsIcon,
-		PanelRight, SunMoon, ChevronRight, Wrench, SquareTerminal
+		PanelLeft, LayoutGrid, SunMoon, ChevronRight, Wrench, SquareTerminal
 	} from 'lucide-svelte';
 	import type { ChatState } from '$lib/chat.svelte';
 	import { caps, BACKEND_IDS, BACKEND_LABELS, type BackendCaps, type BackendId } from '$lib/backends';
@@ -14,6 +14,7 @@
 		chat,
 		hasProject,
 		canNewTask = false,
+		panelOptions = [],
 		onClose,
 		onRun,
 		onNewSession,
@@ -21,7 +22,8 @@
 		onNewTask,
 		onSettings,
 		onMarket,
-		onTogglePanel,
+		onOpenPanel,
+		onToggleSidebar,
 		onToggleTheme,
 		onSetup,
 		onOpenTui
@@ -30,6 +32,8 @@
 		hasProject: boolean;
 		/** 当前激活项目可以开并行任务（是普通项目而非 worktree）。 */
 		canNewTask?: boolean;
+		/** Tool tiles the canvas can open (Git / Terminal / Files / Browser / …). */
+		panelOptions?: { key: string; label: string }[];
 		onClose: () => void;
 		onRun: (cmd: string) => void;
 		onNewSession: () => void;
@@ -37,10 +41,12 @@
 		onNewTask: () => void;
 		onSettings: () => void;
 		onMarket: () => void;
-		onTogglePanel: () => void;
+		/** Open (or focus) a tool tile on the canvas mosaic. */
+		onOpenPanel: (kind: string) => void;
+		onToggleSidebar: () => void;
 		onToggleTheme: () => void;
 		onSetup: () => void;
-		/** Open a native TUI tab (real interactive CLI in a pty) for a backend. */
+		/** Open a native TUI tile (real interactive CLI in a pty) for a backend. */
 		onOpenTui: (backend: BackendId) => void;
 	} = $props();
 
@@ -85,6 +91,15 @@
 			{ id: 'stats', label: t('shell.cmd.stats'), icon: Activity, keywords: t('shell.cmd.statsKw'), cap: 'slashCommands', run: wrap(() => onRun('/stats')) },
 			{ id: 'doctor', label: t('shell.cmd.doctor'), icon: Stethoscope, keywords: t('shell.cmd.doctorKw'), cap: 'slashCommands', run: wrap(() => onRun('/doctor')) },
 			{ id: 'market', label: t('shell.cmd.market'), icon: Store, keywords: t('shell.cmd.marketKw'), cap: 'skills', run: wrap(onMarket) },
+			// Tool tiles on the canvas: Git, Terminal, Files, Browser, Plan, …
+			...panelOptions.map((p): Action => ({
+				id: `panel-${p.key}`,
+				label: t('shell.cmd.openPanel', { name: p.label }),
+				hint: t('shell.cmd.openPanelHint'),
+				icon: LayoutGrid,
+				keywords: `${t('shell.cmd.openPanelKw')} ${p.key} ${p.label}`,
+				run: wrap(() => onOpenPanel(p.key))
+			})),
 			...BACKEND_IDS.map((b): Action => ({
 				id: `tui-${b}`,
 				label: t('shell.cmd.openTui', { name: BACKEND_LABELS[b] }),
@@ -95,7 +110,7 @@
 			})),
 			{ id: 'settings', label: t('shell.cmd.settings'), keys: '⌘,', icon: SettingsIcon, keywords: t('shell.cmd.settingsKw'), run: wrap(onSettings) },
 			{ id: 'setup', label: t('shell.cmd.setup'), hint: t('shell.cmd.setupHint'), icon: Wrench, keywords: t('shell.cmd.setupKw'), run: wrap(onSetup) },
-			{ id: 'panel', label: t('shell.cmd.panel'), keys: '⌘B', icon: PanelRight, keywords: t('shell.cmd.panelKw'), run: wrap(onTogglePanel) },
+			{ id: 'sidebar', label: t('shell.cmd.sidebar'), keys: '⌘B', icon: PanelLeft, keywords: t('shell.cmd.sidebarKw'), run: wrap(onToggleSidebar) },
 			{ id: 'theme', label: t('shell.cmd.theme'), icon: SunMoon, keywords: t('shell.cmd.themeKw'), run: wrap(onToggleTheme) }
 		];
 		const known = new Set(['/model', '/rewind', '/undo', '/resume', '/tree', '/compact', '/context', '/stats', '/doctor', '/new']);

@@ -1,5 +1,6 @@
-// Right-dock area: RightDock, GitPanel, ChangesPanel, FilesPanel, PlanPanel,
-// GoalPanel, TerminalPanel. Populated during the dock-area i18n migration.
+// Tool-panel area: GitPanel, ChangesPanel, FilesPanel, PlanPanel, GoalPanel,
+// TerminalPanel and the Mosaic chrome. Populated during the dock-area i18n
+// migration; the keys keep their historical names.
 const dock = {
 	zh: {
 		tabs: {

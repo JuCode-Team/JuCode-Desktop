@@ -20,7 +20,7 @@
 	// tab stacks, pointer-drag of tabs between leaves (edge drop = split, with
 	// a translucent landing preview), dblclick on a tab bar to maximize. All
 	// state transforms come from tiles.ts; this component only reports the next
-	// layout through `onchange`.
+	// layout through `onchange` (and pointer focus through `onFocus`).
 	let {
 		layout,
 		onchange,
@@ -28,7 +28,9 @@
 		label,
 		addOptions = [],
 		onAdd,
-		emptyText = ''
+		emptyText = '',
+		focused = null,
+		onFocus
 	}: {
 		layout: TileLayout;
 		onchange: (next: TileLayout) => void;
@@ -40,6 +42,10 @@
 		addOptions?: { key: string; label: string }[];
 		onAdd?: (leafId: string | null, key: string) => void;
 		emptyText?: string;
+		/** The focused leaf (owned by the caller; drives engine-action targeting). */
+		focused?: string | null;
+		/** Pointer went down inside a leaf — report it as the focused one. */
+		onFocus?: (leafId: string) => void;
 	} = $props();
 
 	let rootEl = $state<HTMLElement | null>(null);
@@ -53,9 +59,10 @@
 	const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), Math.max(min, max));
 
 	// Esc: cancel an in-flight drag, close the add menu, or restore a
-	// maximized leaf — in that priority order.
+	// maximized leaf — in that priority order. A pane that already claimed
+	// Escape (e.g. a chat pane closing its picker) wins.
 	function windowKeydown(e: KeyboardEvent) {
-		if (e.key !== 'Escape') return;
+		if (e.key !== 'Escape' || e.defaultPrevented) return;
 		if (drag?.live) {
 			drag = null;
 			hover = null;
@@ -190,11 +197,14 @@
 {/snippet}
 
 {#snippet leafView(leaf: LeafNode)}
+	<!-- svelte-ignore a11y_no_static_element_interactions (pointer focus tracking only) -->
 	<section
 		class="leaf"
 		class:maxed={layout.maximized === leaf.id}
+		class:focus={focused === leaf.id}
 		class:droptarget={drag?.live && hover?.leafId === leaf.id}
 		data-leaf={leaf.id}
+		onpointerdowncapture={() => onFocus?.(leaf.id)}
 	>
 		<div class="lbar" ondblclick={(e) => barDblClick(e, leaf)} role="tablist" tabindex="-1">
 			<div class="ltabs">
@@ -358,6 +368,11 @@
 	/* The pane a dragged tab would land in: a border on the pane itself. */
 	.leaf.droptarget {
 		box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--accent) 65%, transparent);
+	}
+	/* Focused leaf: the tab bar's hairline warms up — engine actions (model,
+	   approvals, palette commands) target this pane's chat session. */
+	.leaf.focus .lbar {
+		border-bottom-color: color-mix(in oklab, var(--accent) 40%, var(--hairline));
 	}
 	.lbar {
 		position: relative;

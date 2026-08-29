@@ -1,7 +1,8 @@
 // Workspace model + on-disk format. A workspace owns a set of projects (the
-// existing SavedProject shape, unchanged) plus its dock tile layout; the file
-// holds every workspace and which one is active. Pure data + pure transforms —
-// the reactive store and the Tauri IO live in workspaceStore.svelte.ts.
+// existing SavedProject shape, unchanged) plus its canvas tile layout; the
+// file holds every workspace and which one is active. Pure data + pure
+// transforms — the reactive store and the Tauri IO live in
+// workspaceStore.svelte.ts.
 
 import type { SavedProject } from '$lib/session.svelte';
 import { serializeLayout, singleLeafLayout, type SerializedLayout, type TileTab } from './tiles';
@@ -15,7 +16,7 @@ export const LEGACY_PROJECTS_KEY = 'jucode-projects';
 export const LEGACY_DOCK_TABS_KEY = 'jucode-dock-tabs';
 export const LEGACY_DOCK_ACTIVE_KEY = 'jucode-dock-active';
 
-/** Dock panel kinds a tile tab may reference (RightDock keeps the icons). */
+/** Tool panel kinds a tile tab may reference (besides chat:/tui: tabs). */
 export const DOCK_PANELS = ['plan', 'goal', 'changes', 'turns', 'files', 'git', 'term', 'browser', 'diag'] as const;
 
 export interface WorkspaceEntry {
