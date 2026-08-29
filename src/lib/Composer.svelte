@@ -6,7 +6,7 @@
 	import BackendIcon from '$lib/BackendIcon.svelte';
 	import Segmented from '$lib/ui/Segmented.svelte';
 	import EffortSlider from '$lib/ui/EffortSlider.svelte';
-	import { checkBackend, listFiles, saveTempImage, transcribeAudio } from '$lib/protocol';
+	import { acpAgentsList, checkBackend, listFiles, saveTempImage, transcribeAudio, type AcpAgent } from '$lib/protocol';
 	import { VoiceRecorder } from '$lib/audio';
 	import { buildEntries, mentionMatches, type AtEntry } from '$lib/mention';
 	import { t } from '$lib/i18n';
@@ -17,7 +17,7 @@
 	import Picker from '$lib/shell/Picker.svelte';
 	import type { ChatState } from '$lib/chat.svelte';
 	import type { ApprovalMode } from '$lib/approval';
-	import { caps, BACKEND_IDS, BACKEND_LABELS, type BackendId } from '$lib/backends';
+	import { caps, NATIVE_BACKEND_IDS, BACKEND_LABELS, type BackendId } from '$lib/backends';
 	import { loadBackendSettings, versionLabel } from '$lib/backends/settings';
 
 	type PickerRow = {
@@ -73,7 +73,7 @@
 		/** False only while the session is still virgin (no user turn) — the
 		 *  backend selector is interactive then and a fixed label afterwards. */
 		backendLocked?: boolean;
-		onBackend?: (b: BackendId) => void;
+		onBackend?: (b: BackendId, acpAgent?: { id: string; name: string }) => void;
 		onSubmit: () => void;
 		onStop: () => void;
 		onSteer: () => void;
@@ -96,22 +96,37 @@
 	// Availability is probed best-effort on first open, same as the old modal.
 	let showBackend = $state(false);
 	let backendProbe = $state<Partial<Record<BackendId, { found: boolean; version: string }>>>({});
+	// Registered ACP agents (one picker row each, below the native engines).
+	let acpAgents = $state<AcpAgent[]>([]);
 	let probed = false;
 	function toggleBackend() {
 		showBackend = !showBackend;
 		if (!showBackend || probed) return;
 		probed = true;
 		const settings = loadBackendSettings();
-		for (const id of BACKEND_IDS) {
+		for (const id of NATIVE_BACKEND_IDS) {
 			checkBackend(id, settings.paths[id])
 				.then((s) => (backendProbe[id] = { found: s.found, version: versionLabel(s) }))
 				.catch(() => {});
 		}
+		acpAgentsList()
+			.then((agents) => (acpAgents = agents))
+			.catch(() => {});
 	}
 	function pickBackend(id: BackendId) {
 		showBackend = false;
 		if (id !== chat.backendId) onBackend?.(id);
 	}
+	function pickAcpAgent(agent: AcpAgent) {
+		showBackend = false;
+		if (chat.backendId !== 'acp' || chat.acpAgentId !== agent.id)
+			onBackend?.('acp', { id: agent.id, name: agent.name });
+	}
+	// The label on the backend button: the ACP agent's registered name when an
+	// ACP agent drives the session, else the engine's brand name.
+	const backendLabel = $derived(
+		chat.backendId === 'acp' ? chat.acpAgentName || BACKEND_LABELS.acp : BACKEND_LABELS[chat.backendId]
+	);
 
 	// Capability gating for the session's engine backend (jucode = everything).
 	const bcaps = $derived(caps(chat));
@@ -552,17 +567,17 @@
 			<div class="effortsel">
 				{#if backendLocked}
 					<span class="flatbtn bkd static" title={t('chat.backendLocked')}>
-						<BackendIcon backend={chat.backendId} size={14} /><span>{BACKEND_LABELS[chat.backendId]}</span>
+						<BackendIcon backend={chat.backendId} size={14} /><span>{backendLabel}</span>
 					</span>
 				{:else}
 					<button class="flatbtn bkd" onclick={toggleBackend} title={t('chat.switchBackend')}>
-						<BackendIcon backend={chat.backendId} size={14} /><span>{BACKEND_LABELS[chat.backendId]}</span>
+						<BackendIcon backend={chat.backendId} size={14} /><span>{backendLabel}</span>
 						<span class="bkd-chev"><ChevronDown size={12} /></span>
 					</button>
 					{#if showBackend}
 						<button class="pop-backdrop" aria-label="close" onclick={() => (showBackend = false)}></button>
 						<div class="effort-pop bkd-pop">
-							{#each BACKEND_IDS as id (id)}
+							{#each NATIVE_BACKEND_IDS as id (id)}
 								{@const probe = backendProbe[id]}
 								<button class="bkd-row" class:on={id === chat.backendId} onclick={() => pickBackend(id)}>
 									<BackendIcon backend={id} size={14} />
@@ -575,6 +590,18 @@
 									{#if id === chat.backendId}<span class="bkd-check"><Check size={13} /></span>{/if}
 								</button>
 							{/each}
+							{#if acpAgents.length}
+								<div class="bkd-sep">{t('chat.acpAgents')}</div>
+								{#each acpAgents as agent (agent.id)}
+									{@const on = chat.backendId === 'acp' && chat.acpAgentId === agent.id}
+									<button class="bkd-row" class:on onclick={() => pickAcpAgent(agent)}>
+										<BackendIcon backend="acp" size={14} />
+										<span class="bkd-name">{agent.name}</span>
+										<span class="bkd-ver">{agent.command}</span>
+										{#if on}<span class="bkd-check"><Check size={13} /></span>{/if}
+									</button>
+								{/each}
+							{/if}
 						</div>
 					{/if}
 				{/if}
@@ -795,6 +822,17 @@
 		display: inline-flex;
 		color: var(--accent-bright);
 		flex-shrink: 0;
+	}
+	/* Section divider between the native engines and the ACP agent rows. */
+	.bkd-sep {
+		margin-top: 4px;
+		padding: 5px 9px 2px;
+		border-top: 1px solid var(--hairline);
+		font-size: 10px;
+		font-weight: 600;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+		color: var(--dim2);
 	}
 	/* read-only model label for backends without an in-chat model picker */
 	.flatbtn.static {

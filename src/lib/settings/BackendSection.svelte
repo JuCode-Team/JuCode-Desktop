@@ -12,7 +12,7 @@
 		type BackendStatus,
 		type ShellEnvStatus
 	} from '$lib/protocol';
-	import { BACKEND_IDS, BACKEND_LABELS, type BackendId } from '$lib/backends';
+	import { NATIVE_BACKEND_IDS, BACKEND_LABELS, type BackendId } from '$lib/backends';
 	import {
 		loadBackendSettings,
 		saveBackendSettings,
@@ -91,7 +91,7 @@
 	}
 
 	onMount(() => {
-		for (const id of BACKEND_IDS) {
+		for (const id of NATIVE_BACKEND_IDS) {
 			check(id);
 			envText[id] = formatEnvLines(settings.env[id]);
 		}
@@ -100,7 +100,7 @@
 			.catch(() => {});
 	});
 
-	const defaultOpts = $derived(BACKEND_IDS.map((id) => ({ value: id, label: BACKEND_LABELS[id] })));
+	const defaultOpts = $derived(NATIVE_BACKEND_IDS.map((id) => ({ value: id, label: BACKEND_LABELS[id] })));
 </script>
 
 <div class="group">
@@ -135,7 +135,7 @@
 	{/if}
 
 	<div class="blist">
-		{#each BACKEND_IDS as id (id)}
+		{#each NATIVE_BACKEND_IDS as id (id)}
 			{@const st = status[id]}
 			<div class="brow">
 				<span class="btile"><BackendIcon backend={id} size={16} /></span>

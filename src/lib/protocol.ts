@@ -57,6 +57,30 @@ export function checkBackend(backend: string, binOverride?: string): Promise<Bac
 	return invoke('check_backend', { backend, binOverride });
 }
 
+// ACP agent registry (Rust-owned: ~app-config/acp-agents.json). The frontend
+// only ever references agents by id; command/args/env are validated Rust-side
+// on every read and write, and create_session looks the entry up by id.
+export interface AcpAgent {
+	id: string;
+	name: string;
+	command: string;
+	args: string[];
+	env: Record<string, string>;
+}
+export function acpAgentsList(): Promise<AcpAgent[]> {
+	return invoke('acp_agents_list');
+}
+export function acpAgentUpsert(agent: AcpAgent): Promise<AcpAgent[]> {
+	return invoke('acp_agent_upsert', { agent });
+}
+export function acpAgentRemove(id: string): Promise<AcpAgent[]> {
+	return invoke('acp_agent_remove', { id });
+}
+/** Availability probe for one registered ACP agent (`<command> --version`). */
+export function acpAgentCheck(id: string): Promise<BackendStatus> {
+	return invoke('acp_agent_check', { id });
+}
+
 /** Login-shell environment snapshot state (see src-tauri/src/shell_env.rs). */
 export interface ShellEnvStatus {
 	supported: boolean;

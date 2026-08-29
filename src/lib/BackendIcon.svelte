@@ -1,8 +1,9 @@
 <script lang="ts">
-	// Engine-backend mark: vendor SVGs for codex (OpenAI) / claude, and the
-	// JuCode wordmark initial for the native engine.
+	// Engine-backend mark: vendor SVGs for codex (OpenAI) / claude, a generic
+	// plug for ACP agents, and the JuCode wordmark initial for the native engine.
 	import openai from '@lobehub/icons-static-svg/icons/openai.svg?raw';
 	import claude from '@lobehub/icons-static-svg/icons/claude.svg?raw';
+	import { Plug } from 'lucide-svelte';
 	import type { BackendId } from '$lib/backends';
 
 	let { backend, size = 14 }: { backend: BackendId; size?: number } = $props();
@@ -12,6 +13,8 @@
 	<span class="mark" style:font-size="{size}px" aria-hidden="true">{@html openai}</span>
 {:else if backend === 'claude'}
 	<span class="mark claude" style:font-size="{size}px" aria-hidden="true">{@html claude}</span>
+{:else if backend === 'acp'}
+	<span class="mark acp" style:font-size="{size}px" aria-hidden="true"><Plug size={size} /></span>
 {:else}
 	<span class="mark ju" style:font-size="{size}px" style:width="{size}px" style:height="{size}px" aria-hidden="true">Ju</span>
 {/if}
@@ -27,6 +30,9 @@
 	}
 	.mark.claude {
 		color: #d97757;
+	}
+	.mark.acp {
+		color: var(--dim);
 	}
 	.mark :global(svg) {
 		width: 1em;

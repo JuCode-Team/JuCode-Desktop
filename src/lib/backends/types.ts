@@ -5,19 +5,25 @@
 
 import type { Op, AgentEvent } from '$lib/protocol';
 
-export type BackendId = 'jucode' | 'codex' | 'claude';
+export type BackendId = 'jucode' | 'codex' | 'claude' | 'acp';
 
-export const BACKEND_IDS: BackendId[] = ['jucode', 'codex', 'claude'];
+export const BACKEND_IDS: BackendId[] = ['jucode', 'codex', 'claude', 'acp'];
 
-/** Display names (brand names — not localized). */
+/** The backends with a single well-known binary (probe rows, path overrides).
+ *  'acp' is excluded: it launches whichever agent the registry entry names. */
+export const NATIVE_BACKEND_IDS: BackendId[] = ['jucode', 'codex', 'claude'];
+
+/** Display names (brand names — not localized). The 'acp' label is a generic
+ *  fallback; sessions display their registry entry's name instead. */
 export const BACKEND_LABELS: Record<BackendId, string> = {
 	jucode: 'JuCode',
 	codex: 'Codex',
-	claude: 'Claude Code'
+	claude: 'Claude Code',
+	acp: 'ACP'
 };
 
 export function isBackendId(v: unknown): v is BackendId {
-	return v === 'jucode' || v === 'codex' || v === 'claude';
+	return v === 'jucode' || v === 'codex' || v === 'claude' || v === 'acp';
 }
 
 /** Restore path: unknown / missing backend ids collapse to 'jucode'. */

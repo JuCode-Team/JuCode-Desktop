@@ -6,6 +6,9 @@ export interface Session {
 	chat: ChatState;
 	/** Engine backend driving this session (persisted; 'jucode' default). */
 	backendId: BackendId;
+	/** For 'acp' sessions: the registry id + display name of the launched agent
+	 *  (passed as the allowlisted `agent` spawn option on every (re)spawn). */
+	acpAgent?: { id: string; name: string };
 	/** Per-session adapter instance (stateful for codex/claude; not persisted). */
 	adapter: EngineAdapter;
 	/** Archived threads are hidden from the sidebar by default (persisted); the
@@ -39,4 +42,6 @@ export interface Project {
 	stale?: boolean;
 	/** 本项目最近一次新建会话所用的引擎后端（新建会话的默认值）。 */
 	lastBackend?: BackendId;
+	/** lastBackend 为 'acp' 时：上次选择的 ACP agent（注册表 id + 名称）。 */
+	lastAcpAgent?: { id: string; name: string };
 }

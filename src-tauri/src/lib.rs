@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
+mod acp_registry;
 mod backend;
 mod browser;
 mod capture;
@@ -130,8 +131,31 @@ fn create_session(
 ) -> Result<(), String> {
     let kind = BackendKind::parse(backend.as_deref().unwrap_or("jucode"))?;
     let opts = backend::validate_opts(kind, backend_opts.as_ref())?;
-    let bin = backend::resolve_backend_bin(kind, opts.bin_override.as_deref());
-    let args = backend::build_args(kind, &opts);
+    // ACP sessions spawn a registered agent: the command line is looked up in
+    // the validated registry by id — never composed from request data.
+    let (bin, args, agent_env) = if kind == BackendKind::Acp {
+        let agent_id = opts
+            .agent
+            .as_deref()
+            .ok_or_else(|| "acp backend requires an `agent` registry id".to_string())?;
+        let agent = acp_registry::find_agent(&app, agent_id)?;
+        let env: Vec<(String, String)> = agent
+            .env
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        (
+            backend::resolve_acp_program(&agent.command),
+            agent.args,
+            env,
+        )
+    } else {
+        (
+            backend::resolve_backend_bin(kind, opts.bin_override.as_deref()),
+            backend::build_args(kind, &opts),
+            Vec::new(),
+        )
+    };
     let dir = cwd
         .map(PathBuf::from)
         .filter(|p| p.is_dir())
@@ -159,7 +183,11 @@ fn create_session(
     } else {
         &[]
     };
-    shell_env::apply_to_command(&mut cmd, opts.use_shell_env, explicit, &opts.env);
+    // Per-backend custom env first, then the registry entry's per-agent env
+    // (the more specific configuration wins).
+    let mut custom_env = opts.env.clone();
+    custom_env.extend(agent_env);
+    shell_env::apply_to_command(&mut cmd, opts.use_shell_env, explicit, &custom_env);
     let mut child = cmd.spawn().map_err(|error| match kind {
         BackendKind::Jucode => format!("failed to start jucode serve: {error}"),
         _ => format!("failed to start {} backend: {error}", kind.bin_name()),
@@ -280,10 +308,10 @@ fn send_line(
 
 /// Availability report for one backend binary (settings / new-session UI).
 #[derive(Serialize)]
-struct BackendStatus {
-    found: bool,
-    path: Option<String>,
-    version: Option<String>,
+pub(crate) struct BackendStatus {
+    pub(crate) found: bool,
+    pub(crate) path: Option<String>,
+    pub(crate) version: Option<String>,
 }
 
 /// Probes a backend binary: resolves it (honoring `bin_override`) and runs
@@ -292,6 +320,10 @@ struct BackendStatus {
 #[tauri::command(async)]
 fn check_backend(backend: String, bin_override: Option<String>) -> Result<BackendStatus, String> {
     let kind = BackendKind::parse(&backend)?;
+    if kind == BackendKind::Acp {
+        // ACP has no single binary — probe a specific agent with acp_agent_check.
+        return Err("use acp_agent_check to probe a registered ACP agent".to_string());
+    }
     let bin = backend::resolve_backend_bin(kind, bin_override.as_deref());
     // A bare name means "nothing found, hope PATH has it at spawn time" —
     // resolve it through PATH for the report (None when truly absent).
@@ -2222,7 +2254,7 @@ fn worktree_base(cwd: String) -> Result<String, String> {
 /// Runs a spawned command to completion with a hard deadline: stdout/stderr are
 /// drained on threads, and the child is killed if it outlives `timeout` (e.g. a
 /// remote op stuck on the network even with prompts disabled).
-fn run_with_timeout(
+pub(crate) fn run_with_timeout(
     mut cmd: Command,
     timeout: std::time::Duration,
 ) -> Result<std::process::Output, String> {
@@ -2681,6 +2713,10 @@ pub fn run() {
             send_op,
             send_line,
             check_backend,
+            acp_registry::acp_agents_list,
+            acp_registry::acp_agent_upsert,
+            acp_registry::acp_agent_remove,
+            acp_registry::acp_agent_check,
             shell_env::shell_env_status,
             shell_env::refresh_shell_env,
             close_session,

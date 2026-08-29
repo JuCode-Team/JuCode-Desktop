@@ -114,6 +114,11 @@ export class ChatState {
 	 *  session creation; the `caps()` helper gates UI surfaces off it. */
 	backendId: BackendId = 'jucode';
 
+	/** For 'acp' sessions: which registry agent backs it, and its display name
+	 *  (shown instead of the generic ACP label). Set once at session creation. */
+	acpAgentId = '';
+	acpAgentName = '';
+
 	messages = $state<Msg[]>([]);
 	provider = $state('');
 	model = $state('');

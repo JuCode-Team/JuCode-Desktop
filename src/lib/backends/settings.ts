@@ -133,7 +133,9 @@ export function buildBackendOpts(
 	settings: BackendSettings = loadBackendSettings()
 ): SpawnBackendOpts | undefined {
 	const opts: SpawnBackendOpts = {};
-	const path = settings.paths[id];
+	// ACP sessions have no bin_override — the command comes from the Rust-side
+	// agent registry (per-agent), never from a per-backend path setting.
+	const path = id === 'acp' ? undefined : settings.paths[id];
 	if (path) opts.bin_override = path;
 	if (!settings.useShellEnv) opts.use_shell_env = false;
 	const env = settings.env[id];

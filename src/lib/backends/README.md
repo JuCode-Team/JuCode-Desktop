@@ -7,6 +7,7 @@ The desktop drives three agent backends through one abstraction:
 | `jucode` | `jucode serve` (env `JUCODE_DESKTOP=1`)                                       | jucode Ops (JSON lines) | jucode AgentEvents   |
 | `codex`  | `codex app-server`                                                            | JSON-RPC requests       | JSON-RPC responses/notifications |
 | `claude` | `claude --print --input-format stream-json --output-format stream-json --include-partial-messages --verbose --replay-user-messages --permission-prompt-tool stdio [--permission-mode m] [--resume sid \| --session-id uuid] [--model m]` | stream-json + control frames | stream-json events |
+| `acp`    | any registered ACP agent (`jucode acp`, `gemini --experimental-acp`, …) — command/args/env from the Rust-side registry, see `docs/acp.md` | JSON-RPC 2.0 requests/responses | JSON-RPC responses/notifications |
 
 `ChatState` (the reducer behind the whole chat UI) only understands the jucode
 event dialect. Adapters translate INTO that dialect and encode OUT of the
@@ -16,7 +17,7 @@ desktop `Op` union — ChatState and the UI stay backend-agnostic.
 
 ```ts
 interface EngineAdapter {
-  readonly id: BackendId;          // 'jucode' | 'codex' | 'claude'
+  readonly id: BackendId;          // 'jucode' | 'codex' | 'claude' | 'acp'
   readonly caps: BackendCaps;      // static capability flags, see below
   onStart(io: AdapterIO, ctx: SessionCtx): void;
   translate(raw: unknown): NormalizedEvent[];   // NormalizedEvent = jucode AgentEvent
