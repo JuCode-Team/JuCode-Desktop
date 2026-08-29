@@ -776,7 +776,19 @@ export class ChatState {
 				this.totalOut += out;
 				// Estimate cost from tokens when the engine doesn't report it itself.
 				if (!this.#engineCost) this.cost += costUsd(this.model, inn, out);
-				recordUsage(inn, out, this.provider);
+				recordUsage(inn, out, {
+					provider: this.provider,
+					model: this.model,
+					// Stable agent keys: native backend ids as-is; acp sessions keyed
+					// by registry id so renames don't split history.
+					agent:
+						this.backendId === 'acp'
+							? this.acpAgentId
+								? `acp:${this.acpAgentId}`
+								: 'acp'
+							: this.backendId,
+					agentLabel: this.backendId === 'acp' ? this.acpAgentName : undefined
+				});
 				// Prefer the active assistant message (jucode reports usage per
 				// message, mid-turn). When it's already reset — e.g. claude reports
 				// one usage at the end of the turn, after the assistant finished —
