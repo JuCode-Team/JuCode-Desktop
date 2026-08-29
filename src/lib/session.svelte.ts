@@ -25,7 +25,15 @@ export interface SavedProject {
 	id: string;
 	name: string;
 	path: string;
-	tabs?: ({ id?: string; sid?: string; title: string; backend?: string; archived?: boolean } & SavedTabChrome)[];
+	tabs?: ({
+		id?: string;
+		sid?: string;
+		title: string;
+		backend?: string;
+		/** backend 为 'acp' 时：驱动该会话的 registry agent（重启动/恢复时必需）。 */
+		acpAgent?: { id: string; name: string };
+		archived?: boolean;
+	} & SavedTabChrome)[];
 	/** 并行任务 worktree 项目的元数据（isWorktree/mainRepoPath/branch/baseBranch/slug）。 */
 	worktree?: WorktreeMeta;
 	/** 本项目最近一次新建会话所用的引擎后端（缺省 = jucode）。 */
@@ -287,9 +295,10 @@ export class SessionStore {
 		backend: BackendId = 'jucode',
 		archived = false,
 		chrome?: SavedTabChrome,
-		reuseId?: string
+		reuseId?: string,
+		acpAgent?: { id: string; name: string }
 	) {
-		const s = this.#newSession(backend, undefined, reuseId);
+		const s = this.#newSession(backend, backend === 'acp' ? acpAgent : undefined, reuseId);
 		if (title) s.chat.title = title;
 		s.archived = archived;
 		if (chrome?.color) s.color = chrome.color;
@@ -321,9 +330,10 @@ export class SessionStore {
 		title: string,
 		backend: BackendId = 'jucode',
 		archived = false,
-		chrome?: SavedTabChrome
+		chrome?: SavedTabChrome,
+		acpAgent?: { id: string; name: string }
 	) {
-		const s = this.#newSession(backend, undefined, reuseId);
+		const s = this.#newSession(backend, backend === 'acp' ? acpAgent : undefined, reuseId);
 		if (title) s.chat.title = title;
 		s.archived = archived;
 		if (chrome?.color) s.color = chrome.color;
@@ -561,8 +571,11 @@ export class SessionStore {
 	/** Snapshot of the layout + open tabs for persistence. Every session is
 	 *  written (empty windows survive a workspace switch under their desktop
 	 *  id); `sid` only when the engine actually persisted the conversation —
-	 *  never `/resume` one it didn't. The backend id is only written when it
-	 *  isn't the default, so pre-existing layouts stay byte-identical. */
+	 *  never `/resume` one it didn't. A restored session keeps its `sid` even
+	 *  while its replayed transcript is still empty (replay is async and may
+	 *  fail; the engine-side conversation exists regardless). The backend id
+	 *  is only written when it isn't the default, so pre-existing layouts stay
+	 *  byte-identical; 'acp' tabs also carry their agent so restore can respawn. */
 	serialize(): SavedProject[] {
 		return this.projects.map((p) => ({
 			id: p.id,
@@ -574,9 +587,10 @@ export class SessionStore {
 			tabs: p.sessions
 				.map((s) => ({
 					id: s.id,
-					...(s.chat.resumable ? { sid: s.chat.sessionId } : {}),
+					...(s.chat.sessionId && (s.chat.resumable || s.restored) ? { sid: s.chat.sessionId } : {}),
 					title: s.chat.title,
 					...(s.backendId !== 'jucode' ? { backend: s.backendId } : {}),
+					...(s.backendId === 'acp' && s.acpAgent ? { acpAgent: s.acpAgent } : {}),
 					...(s.archived ? { archived: true } : {}),
 					...(s.color ? { color: s.color } : {}),
 					...(s.icon ? { icon: s.icon } : {}),
@@ -619,7 +633,19 @@ export class SessionStore {
 					// Tabs saved before multi-backend support carry no backend field →
 					// jucode (normalizeBackendId maps unknown/missing to the default).
 					// Chrome fields are re-validated here (the file is user-editable).
-					const backend = normalizeBackendId(t.backend);
+					let backend = normalizeBackendId(t.backend);
+					// An 'acp' tab needs its agent back to respawn; older files carry
+					// none on the tab → fall back to the project's last agent. Without
+					// any, never spawn a bare 'acp' (create_session rejects it).
+					const savedAgent =
+						t.acpAgent && typeof t.acpAgent.id === 'string' && typeof t.acpAgent.name === 'string'
+							? { id: t.acpAgent.id, name: t.acpAgent.name }
+							: undefined;
+					let acpAgent = backend === 'acp' ? (savedAgent ?? proj.lastAcpAgent) : undefined;
+					if (backend === 'acp' && !acpAgent) {
+						backend = 'jucode';
+						acpAgent = undefined;
+					}
 					const chrome = {
 						color: normalizeColor(t.color),
 						icon: parseTabIcon(t.icon),
@@ -628,8 +654,8 @@ export class SessionStore {
 					// With a conversation to resume, resume it; an empty window spawns
 					// fresh. Both keep the saved desktop id (pre-id files mint anew).
 					const id = t.sid
-						? this.restoreSession(proj, t.sid, t.title, backend, !!t.archived, chrome, t.id)
-						: this.#spawnSaved(proj, t.id!, t.title, backend, !!t.archived, chrome);
+						? this.restoreSession(proj, t.sid, t.title, backend, !!t.archived, chrome, t.id, acpAgent)
+						: this.#spawnSaved(proj, t.id!, t.title, backend, !!t.archived, chrome, acpAgent);
 					if (!first && !t.archived) first = id;
 				}
 			}

@@ -38,6 +38,13 @@ describe('sanitizeSvg', () => {
 		expect(sanitizeSvg('<svg><rect x="0" y="0" stroke="URL(http://evil)"/></svg>')).toBeNull();
 	});
 
+	it('rejects entity-encoded attribute values (url&#40; bypass)', () => {
+		expect(sanitizeSvg('<svg><path fill="url&#40;https://evil#p&#41;" d="M0 0"/></svg>')).toBeNull();
+		expect(sanitizeSvg('<svg><path fill="url&#x28;#x&#x29;" d="M0 0"/></svg>')).toBeNull();
+		expect(sanitizeSvg('<svg><path fill="url&lpar;#x&rpar;" d="M0 0"/></svg>')).toBeNull();
+		expect(sanitizeSvg('<svg><path fill="a&amp;b" d="M0 0"/></svg>')).toBeNull();
+	});
+
 	it('rejects non-svg roots, comments and oversized markup', () => {
 		expect(sanitizeSvg('<div>hi</div>')).toBeNull();
 		expect(sanitizeSvg('<svg><!-- sneaky --><path d="M0 0"/></svg>')).toBeNull();

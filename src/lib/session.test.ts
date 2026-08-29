@@ -7,7 +7,8 @@ vi.mock('./protocol', () => ({
 	sendOp: vi.fn(() => Promise.resolve()),
 	projectRoot: vi.fn(() => Promise.resolve('/tmp/demo')),
 	writeConfig: vi.fn(() => Promise.resolve()),
-	git: vi.fn(() => Promise.resolve(''))
+	git: vi.fn(() => Promise.resolve('')),
+	claudeSessionTranscript: vi.fn(() => Promise.resolve([]))
 }));
 
 import { SessionStore } from './session.svelte';
@@ -175,6 +176,61 @@ describe('SessionStore lifecycle', () => {
 				]
 			}
 		]);
+	});
+
+	it('a restored session serializes its sid even before the replay lands', () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		// claude restore pins chat.sessionId immediately; the transcript replay is
+		// async (and may fail), so messages are still empty here.
+		const id = store.restoreSession(p, 'sid-r', 'old', 'claude');
+		const s = p.sessions[0];
+		expect(s.restored).toBe(true);
+		expect(s.chat.sessionId).toBe('sid-r');
+		expect(s.chat.messages.some((m) => m.kind === 'user')).toBe(false);
+		expect(s.chat.resumable).toBe(false);
+		const tab = store.serialize()[0].tabs![0];
+		expect(tab).toEqual({ id, sid: 'sid-r', title: 'old', backend: 'claude' });
+	});
+
+	it('serialize includes the acp agent and restore reapplies it on the session', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const agent = { id: 'gemini', name: 'Gemini CLI' };
+		const id = store.addSession(p, undefined, 'acp', agent);
+		const snap = store.serialize();
+		expect(snap[0].tabs).toEqual([{ id, title: 'New session', backend: 'acp', acpAgent: agent }]);
+
+		const store2 = new SessionStore();
+		await store2.restore(snap);
+		const s = store2.projects[0].sessions[0];
+		expect(s.backendId).toBe('acp');
+		expect(s.acpAgent).toEqual(agent);
+		expect(s.chat.acpAgentId).toBe('gemini');
+		expect(s.chat.acpAgentName).toBe('Gemini CLI');
+		// The spawn carried the agent option so create_session can look it up.
+		const call = (createSession as unknown as { mock: { calls: unknown[][] } }).mock.calls.at(-1)!;
+		expect(call[2]).toBe('acp');
+		expect((call[3] as { agent?: string }).agent).toBe('gemini');
+	});
+
+	it('acp tabs without a saved agent fall back to the project lastAcpAgent', async () => {
+		const agent = { id: 'g', name: 'G' };
+		const store = new SessionStore();
+		await store.restore([
+			{
+				id: 'p1',
+				name: 'p1',
+				path: '/tmp/p1',
+				lastBackend: 'acp',
+				lastAcpAgent: agent,
+				tabs: [{ id: 't1', title: 'A', backend: 'acp' }]
+			}
+		]);
+		expect(store.projects[0].sessions[0].acpAgent).toEqual(agent);
+		expect(store.projects[0].sessions[0].backendId).toBe('acp');
 	});
 
 	it('restore seeds a default project when nothing is saved', async () => {

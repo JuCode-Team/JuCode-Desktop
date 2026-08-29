@@ -63,6 +63,10 @@ export function sanitizeSvg(markup: string): string | null {
 			const name = a[1].toLowerCase();
 			if (name.startsWith('on') || !SVG_ATTRS.has(name)) return null;
 			const value = (a[2] ?? a[3] ?? a[4] ?? '').toLowerCase();
+			// Entity sequences (&#40; → '(', &lpar; …) decode in the browser and
+			// would smuggle url(...) past the raw-string checks below. No allowed
+			// attribute legitimately needs '&', so reject it outright — never repair.
+			if (value.includes('&')) return null;
 			// url(...) paint servers can reference external resources.
 			if (value.includes('javascript:') || value.includes('data:') || value.includes('url(')) return null;
 		}
