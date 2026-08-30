@@ -1,7 +1,7 @@
 // Pure packing of the in-chat model picker rows: the current engine's
 // model_view catalog plus (for jucode sessions) every other configured
-// provider's models, grouped for display. Framework-free so the row shape —
-// including each model's reasoning-effort options — stays unit-testable.
+// provider's models, grouped for display. Framework-free so the row shape
+// stays unit-testable.
 
 export interface ModelRow {
 	id: string;
@@ -12,8 +12,6 @@ export interface ModelRow {
 	command: string;
 	depth: number | undefined;
 	group?: string;
-	/** Reasoning-effort options for this model (empty = none). */
-	efforts?: string[];
 }
 
 export interface EngineModel {
@@ -22,12 +20,11 @@ export interface EngineModel {
 	vendor?: string;
 	active: boolean;
 	context_window?: number;
-	reasoning_efforts?: string[];
 }
 
 export interface CatalogProvider {
 	id: string;
-	models: { name: string; context_window?: number; reasoning_efforts?: string[] }[];
+	models: { name: string; context_window?: number }[];
 }
 
 export interface ModelGroupLabels {
@@ -78,8 +75,7 @@ export function buildModelRows(input: {
 		active: m.active,
 		command: `/model ${m.model}`,
 		depth: undefined,
-		group: activeGroup,
-		efforts: m.reasoning_efforts ?? []
+		group: activeGroup
 	}));
 	// Provider switching rewrites the native engine's global config and
 	// restarts it — meaningful for jucode sessions only. Other backends'
@@ -97,8 +93,7 @@ export function buildModelRows(input: {
 					active: false,
 					command: `@switch ${pv.id} ${m.name}`,
 					depth: undefined,
-					group: pv.id === 'jucode' ? groups.jucode : groups.byok,
-					efforts: m.reasoning_efforts ?? []
+					group: pv.id === 'jucode' ? groups.jucode : groups.byok
 				}))
 		);
 	const order = [groups.codex, groups.claude, groups.jucode, groups.byok];

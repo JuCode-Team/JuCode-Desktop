@@ -34,6 +34,7 @@
 		focused = null,
 		onFocus,
 		decorate,
+		actions,
 		onTabContext,
 		onTabRename
 	}: {
@@ -53,6 +54,8 @@
 		onFocus?: (leafId: string) => void;
 		/** Per-tab chrome (session tag color / icon); null keeps the plain dot. */
 		decorate?: (tab: TileTab) => { color?: string; icon?: TabIcon } | null;
+		/** Optional controls for the active tab, rendered at the right of its bar. */
+		actions?: Snippet<[TileTab]>;
 		/** Right-click on a tab (the caller decides whether to open a menu). */
 		onTabContext?: (tab: TileTab, ev: MouseEvent) => void;
 		/** Double-click on a tab (rename affordance — never maximizes). */
@@ -218,6 +221,7 @@
 {/snippet}
 
 {#snippet leafView(leaf: LeafNode)}
+	{@const activeTab = leaf.tabs.find((tab) => tab.id === leaf.active)}
 	<!-- svelte-ignore a11y_no_static_element_interactions (pointer focus tracking only) -->
 	<section
 		class="leaf"
@@ -262,23 +266,24 @@
 					</div>
 				{/each}
 			</div>
-		<div class="lactions">
-			{#if layout.maximized === leaf.id}
-				<span class="lmax-hint">{t('dock.mosaic.maximizedHint')}</span>
-			{/if}
-			{#if addOptions.length}
+			<div class="lactions">
+				{#if actions && activeTab}{@render actions(activeTab)}{/if}
+				{#if layout.maximized === leaf.id}
+					<span class="lmax-hint">{t('dock.mosaic.maximizedHint')}</span>
+				{/if}
+				{#if addOptions.length}
 					<button
 						class="lbtn"
 						aria-label="add panel"
 						onclick={() => (addMenuFor = addMenuFor === leaf.id ? null : leaf.id)}><Plus size={13} /></button
 					>
 				{/if}
-			<button
-				class="lbtn"
-				title={layout.maximized === leaf.id ? t('dock.mosaic.restore') : t('dock.mosaic.maximize')}
-				aria-label={layout.maximized === leaf.id ? t('dock.mosaic.restore') : t('dock.mosaic.maximize')}
-				onclick={() => onchange(toggleMaximize(layout, leaf.id))}
-			>
+				<button
+					class="lbtn"
+					title={layout.maximized === leaf.id ? t('dock.mosaic.restore') : t('dock.mosaic.maximize')}
+					aria-label={layout.maximized === leaf.id ? t('dock.mosaic.restore') : t('dock.mosaic.maximize')}
+					onclick={() => onchange(toggleMaximize(layout, leaf.id))}
+				>
 					{#if layout.maximized === leaf.id}<Minimize2 size={12} />{:else}<Maximize2 size={12} />{/if}
 				</button>
 			</div>

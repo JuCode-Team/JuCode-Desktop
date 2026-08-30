@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Send, Square, Paperclip, FastForward, ShieldCheck, CircleStop, Mic, LoaderCircle, GitBranch, SquareTerminal } from 'lucide-svelte';
+	import { Send, Square, Paperclip, FastForward, ShieldCheck, CircleStop, Mic, LoaderCircle, GitBranch, Brain } from 'lucide-svelte';
 	import { message } from '@tauri-apps/plugin-dialog';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import BackendIcon from '$lib/BackendIcon.svelte';
@@ -26,14 +26,11 @@
 		el = $bindable(),
 		pickerQuery = $bindable(''),
 		pickerSelIdx = $bindable(0),
-		pickerKeyNav = $bindable(false),
 		modelRows = [],
 		modelTitle = '',
 		modelSearch = false,
 		backendLocked = true,
 		gitBranch = '',
-		tuiReady = false,
-		onOpenTui,
 		onBackend,
 		onSubmit,
 		onStop,
@@ -42,6 +39,8 @@
 		onModel,
 		onModelSelect,
 		onModelClose,
+		onEffort,
+		effortDisabled = false,
 		onApproval
 	}: {
 		chat: ChatState;
@@ -51,8 +50,6 @@
 		el: HTMLElement | null;
 		pickerQuery?: string;
 		pickerSelIdx?: number;
-		/** Arrow keys moved the picker selection (effort chips follow it then). */
-		pickerKeyNav?: boolean;
 		modelRows?: ModelRow[];
 		modelTitle?: string;
 		modelSearch?: boolean;
@@ -61,12 +58,6 @@
 		backendLocked?: boolean;
 		/** Current git branch for the footer strip ('' hides the chip). */
 		gitBranch?: string;
-		/** The session holds a resumable engine conversation the native TUI
-		 *  can continue (gates the "continue in TUI" chip). */
-		tuiReady?: boolean;
-		/** Hand the conversation to the native TUI. Absent (e.g. ACP) hides
-		 *  the chip entirely. */
-		onOpenTui?: () => void;
 		onBackend?: (b: BackendId, acpAgent?: { id: string; name: string }) => void | Promise<void>;
 		onSubmit: () => void;
 		onStop: () => void;
@@ -75,10 +66,13 @@
 		onModel: () => void;
 		onModelSelect?: (command: string) => void;
 		onModelClose?: () => void;
+		onEffort: (effort: string) => void;
+		effortDisabled?: boolean;
 		onApproval: (mode: ApprovalMode) => void;
 	} = $props();
 
 	let slashIdx = $state(0);
+	let showEffort = $state(false);
 	let showApproval = $state(false);
 
 	// The model popover holds its own open flag so it can outlive an agent
@@ -86,14 +80,14 @@
 	// agents without a model catalog (ACP) — the rail inside it is the only
 	// way to pick a coding agent.
 	let modelOpen = $state(false);
-	const modelPopoverVisible = $derived(modelOpen || chat.picker?.kind === 'model');
+	const modelPopoverVisible = $derived(modelOpen);
 	function toggleModelPopover() {
 		if (modelPopoverVisible) {
 			closeModelPopover();
 			return;
 		}
+		showEffort = false;
 		modelOpen = true;
-		pickerKeyNav = false;
 		if (bcaps.modelPicker) onModel();
 	}
 	function closeModelPopover() {
@@ -104,15 +98,21 @@
 	// (ACP agents — `modelOpen` is ours, not chat.picker). Capture phase so the
 	// key never reaches the pane's window handler or the editor.
 	function onWindowKeyCapture(e: KeyboardEvent) {
-		if (e.key === 'Escape' && modelPopoverVisible) {
+		if (e.key === 'Escape' && (modelPopoverVisible || showEffort)) {
 			e.preventDefault();
 			e.stopPropagation();
-			closeModelPopover();
+			if (modelPopoverVisible) closeModelPopover();
+			showEffort = false;
 		}
 	}
 	function selectFromPopover(command: string) {
 		modelOpen = false;
 		onModelSelect?.(command);
+	}
+	function setEffort(effort: string) {
+		if (effortDisabled) return;
+		onEffort(effort);
+		showEffort = false;
 	}
 
 	// The fallback label on the model button before the engine reports a model:
@@ -254,6 +254,7 @@
 				]
 	);
 	const approvalLabel = $derived(APPROVAL.find((a) => a.value === chat.approvalMode)?.label ?? t('chat.approvalAsk'));
+	const effortOptions = $derived(chat.efforts.map((effort) => ({ value: effort })));
 	// Persisting + pushing the mode to the engine lives with the page (it owns
 	// the session id); the picker only reports the choice.
 	function setApproval(m: string) {
@@ -549,7 +550,6 @@
 							{backendLocked}
 							bind:query={pickerQuery}
 							bind:selIdx={pickerSelIdx}
-							bind:keyNav={pickerKeyNav}
 							onClose={closeModelPopover}
 							onSelect={selectFromPopover}
 							{onBackend}
@@ -559,6 +559,29 @@
 				</div>
 			{:else if chat.model}
 				<span class="flatbtn model static"><BackendIcon backend={chat.backendId} size={15} /><span>{chat.modelLabel || chat.model}</span></span>
+			{/if}
+			{#if chat.efforts.length}
+				<div class="effortsel">
+					<button
+						class="flatbtn effort"
+						disabled={effortDisabled}
+						class:pending={effortDisabled}
+						onclick={() => {
+							if (modelPopoverVisible) closeModelPopover();
+							showEffort = !showEffort;
+						}}
+						title={t('chat.effortTitle')}
+						aria-label={t('chat.effortTitle')}
+					>
+						<Brain size={15} /><span>{chat.effort || t('chat.effortTitle')}</span>
+					</button>
+					{#if showEffort}
+						<button class="pop-backdrop" aria-label="close" onclick={() => (showEffort = false)}></button>
+						<div class="effort-pop">
+							<Segmented value={chat.effort} options={effortOptions} onChange={setEffort} />
+						</div>
+					{/if}
+				</div>
 			{/if}
 			<div class="cspace"></div>
 			<button
@@ -595,15 +618,6 @@
 					</div>
 				{/if}
 			</div>
-		{/if}
-		{#if onOpenTui && tuiReady}
-			<button
-				class="foot-chip"
-				onclick={onOpenTui}
-				title={t('chat.tuiContinueTitle')}
-			>
-				<SquareTerminal size={12} /><span>{t('chat.tuiContinue')}</span>
-			</button>
 		{/if}
 		<div class="fspace"></div>
 		{#if bcaps.contextUsage && ctxLimit > 0}
@@ -705,10 +719,15 @@
 	.flatbtn.model span {
 		font-family: var(--font-mono);
 		font-size: 12px;
+		min-width: 0;
 		max-width: 220px;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+	.flatbtn.effort span {
+		font-family: var(--font-mono);
+		font-size: 12px;
 	}
 	/* read-only model label for backends without an in-chat model picker */
 	.flatbtn.static {
@@ -720,11 +739,19 @@
 	.flatbtn.static:active {
 		transform: none;
 	}
-	/* position:relative anchors for the model popover / the approval popover */
+	/* position:relative anchors for the compact composer popovers */
 	.modelsel,
+	.effortsel,
 	.footsel {
 		position: relative;
 		display: inline-flex;
+	}
+	.modelsel,
+	.flatbtn.model {
+		min-width: 0;
+	}
+	.effortsel {
+		flex-shrink: 0;
 	}
 	.pop-backdrop {
 		position: fixed;
@@ -735,9 +762,10 @@
 		cursor: default;
 	}
 	.effort-pop {
-		position: absolute;
-		bottom: calc(100% + 8px);
-		left: 0;
+		position: fixed;
+		bottom: 72px;
+		left: 18px;
+		max-width: calc(100vw - 36px);
 		z-index: 21;
 		padding: 6px;
 		background: var(--panel);
@@ -746,6 +774,10 @@
 		box-shadow: var(--shadow-pop);
 		transform-origin: bottom left;
 		animation: pop-in var(--t-med) var(--ease-spring);
+	}
+	.effort-pop :global(.seg) {
+		max-width: 100%;
+		overflow-x: auto;
 	}
 	.cspace {
 		flex: 1;

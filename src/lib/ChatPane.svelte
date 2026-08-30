@@ -38,7 +38,6 @@
 		type Op
 	} from '$lib/protocol';
 	import { buildModelRows } from '$lib/composer/modelRows';
-	import { canHandOffToTui, isValidResumeSessionId } from '$lib/tuiHandoff';
 	import { dispatch } from '$lib/backends/router';
 	import { browser } from '$lib/browser.svelte';
 	import { prefs } from '$lib/prefs.svelte';
@@ -121,9 +120,7 @@
 	// Picker filter (history / long lists)
 	let pickerQuery = $state('');
 	let selIdx = $state(0);
-	// True once the user arrow-keys through the picker — the model popover only
-	// shows effort chips for a keyboard-focused row (not the default selIdx).
-	let pickerKeyNav = $state(false);
+	let pendingModel = $state('');
 
 	// Ops flow through this session's backend adapter; an unsupported op
 	// (non-jucode stub backends) surfaces as an inline system notice.
@@ -176,14 +173,6 @@
 	// The backend is only switchable while the session is virgin: no user turn
 	// yet (an optimistic push counts) and not a resumed conversation.
 	const backendLocked = $derived(!!session.restored || chat.userTurns > 0);
-
-	// GUI → TUI handoff: offered for the native CLIs only (never ACP), enabled
-	// once the engine holds a resumable conversation under a valid session id
-	// (same gate as SessionStore.openInTui).
-	const tuiCapable = $derived(canHandOffToTui(session.backendId));
-	const tuiReady = $derived(
-		isValidResumeSessionId(chat.sessionId) && (chat.resumable || !!session.restored)
-	);
 
 	// Current git branch for the composer's footer strip. A detached HEAD reads
 	// "detached"; a failed probe (not a git repo) hides the chip.
@@ -307,8 +296,7 @@
 			return p.items.map((it) => ({ id: it.id, label: it.label, detail: it.detail, active: it.active, command: `/rewind ${it.id}`, depth: nil }));
 		// Model picker rows (pure packing in $lib/composer/modelRows): the active
 		// provider's models from the engine's model_view plus, for jucode
-		// sessions, every other configured provider's catalog — each row carrying
-		// its model's reasoning-effort options for the popover's hover chips.
+		// sessions, every other configured provider's catalog.
 		return buildModelRows({
 			models: p.models,
 			backendId: chat.backendId,
@@ -339,10 +327,10 @@
 		pickerQuery = '';
 	});
 	$effect(() => {
+		if (pendingModel && chat.model === pendingModel) pendingModel = '';
 		if (chat.picker) {
 			const i = filteredRows.findIndex((r) => r.active);
 			selIdx = i >= 0 ? i : 0;
-			pickerKeyNav = false;
 		}
 	});
 	$effect(() => {
@@ -473,6 +461,10 @@
 	}
 
 	function selectRow(command: string) {
+		if (command.startsWith('/model ')) {
+			const target = command.slice('/model '.length).trim().split(/\s+/)[0] || '';
+			if (target && target !== chat.model) pendingModel = target;
+		}
 		// Cross-provider model pick: rewrite config + restart this session (resumes
 		// the conversation) since the engine can't change provider at runtime.
 		// `@switch <provider> <model> [effort]` — the effort chip appends its value.
@@ -508,7 +500,7 @@
 		chat.closePicker();
 	}
 	function setEffort(effort: string) {
-		if (activeModel) selectRow(`/model ${activeModel.model} ${effort}`);
+		if (chat.model && !pendingModel && !chat.switching) selectRow(`/model ${chat.model} ${effort}`);
 	}
 	function pickerKey(e: KeyboardEvent) {
 		if (!chat.picker) return;
@@ -518,11 +510,9 @@
 		} else if (e.key === 'ArrowDown') {
 			e.preventDefault();
 			selIdx = Math.min(selIdx + 1, filteredRows.length - 1);
-			pickerKeyNav = true;
 		} else if (e.key === 'ArrowUp') {
 			e.preventDefault();
 			selIdx = Math.max(selIdx - 1, 0);
-			pickerKeyNav = true;
 		} else if (e.key === 'Enter') {
 			e.preventDefault();
 			const r = filteredRows[selIdx];
@@ -785,12 +775,11 @@
 			modelSearch={showPickerSearch}
 			{backendLocked}
 			{gitBranch}
-			{tuiReady}
-			onOpenTui={tuiCapable ? () => store.openInTui(session.id) : undefined}
 			onBackend={(b, acpAgent) => store.switchBackend(session.id, b, acpAgent)}
 			bind:pickerQuery
-			bind:pickerSelIdx={selIdx}
-			bind:pickerKeyNav
+		bind:pickerSelIdx={selIdx}
+			onEffort={setEffort}
+			effortDisabled={!!pendingModel || chat.switching}
 			onApproval={setApprovalMode}
 		/>
 	</div>

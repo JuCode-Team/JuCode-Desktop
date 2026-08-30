@@ -12,12 +12,12 @@ const base = {
 };
 
 describe('buildModelRows', () => {
-	it('packs engine rows with /model commands, active flag and efforts', () => {
+	it('packs engine rows with /model commands and active flag', () => {
 		const rows = buildModelRows({
 			...base,
 			backendId: 'jucode',
 			models: [
-				{ model: 'gpt-5.5', active: true, context_window: 200_000, reasoning_efforts: ['low', 'high'] },
+				{ model: 'gpt-5.5', active: true, context_window: 200_000 },
 				{ model: 'claude-x', active: false }
 			]
 		});
@@ -25,16 +25,14 @@ describe('buildModelRows', () => {
 		expect(rows[0]).toMatchObject({
 			active: true,
 			group: 'JuCode',
-			detail: 'jucode · 200.0k',
-			efforts: ['low', 'high']
+			detail: 'jucode · 200.0k'
 		});
-		expect(rows[1].efforts).toEqual([]);
 	});
 
-	it('appends other providers as @switch rows carrying catalog efforts (jucode only)', () => {
+	it('appends other providers as @switch rows (jucode only)', () => {
 		const providersList = [
-			{ id: 'jucode', models: [{ name: 'gpt-5.5', context_window: 1000, reasoning_efforts: ['medium'] }] },
-			{ id: 'byo', models: [{ name: 'my-model', reasoning_efforts: ['low'] }] }
+			{ id: 'jucode', models: [{ name: 'gpt-5.5', context_window: 1000 }] },
+			{ id: 'byo', models: [{ name: 'my-model' }] }
 		];
 		const rows = buildModelRows({
 			...base,
@@ -47,7 +45,6 @@ describe('buildModelRows', () => {
 		const byo = rows.find((r) => r.id === 'byo::my-model');
 		expect(byo).toMatchObject({
 			command: '@switch byo my-model',
-			efforts: ['low'],
 			detail: 'byo · not configured · 0'
 		});
 		expect(rows.find((r) => r.id === 'jucode::gpt-5.5')?.command).toBe('@switch jucode gpt-5.5');

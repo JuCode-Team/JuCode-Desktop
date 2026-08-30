@@ -10,14 +10,10 @@
 	import { t } from '$lib/i18n';
 	import type { ChatState } from '$lib/chat.svelte';
 	import type { ModelRow } from './modelRows';
-	import { effortColumnIdx } from './effortColumn';
 
 	// The composer's model popover: the coding agent lives INSIDE the session,
 	// so an unlocked session shows an agent rail (native engines + registered
-	// ACP agents) on the left and the current agent's models in the center.
-	// A fixed-width column on the right lists the hovered/focused model's
-	// reasoning-effort chips (never inserted between rows, so the list never
-	// reflows); a chip picks that model AND that effort in one step.
+	// ACP agents) on the left and the current agent's models beside it.
 	let {
 		chat,
 		title,
@@ -26,7 +22,6 @@
 		backendLocked = true,
 		query = $bindable(''),
 		selIdx = $bindable(0),
-		keyNav = $bindable(false),
 		onClose,
 		onSelect,
 		onBackend,
@@ -40,8 +35,6 @@
 		backendLocked?: boolean;
 		query?: string;
 		selIdx?: number;
-		/** The pane's arrow keys moved selIdx — chips follow the focused row. */
-		keyNav?: boolean;
 		onClose: () => void;
 		onSelect: (command: string) => void;
 		onBackend?: (b: BackendId, acpAgent?: { id: string; name: string }) => void | Promise<void>;
@@ -97,33 +90,8 @@
 		}
 	}
 
-	// Effort highlighted on the active row (engine-reported, falling back to
-	// the session's current effort).
-	const activeEffort = $derived(
-		chat.picker?.kind === 'model' ? chat.picker.activeEffort || chat.effort : chat.effort
-	);
-	// Every row with efforts gets chips: same-engine rows via `/model <name>
-	// <effort>`, cross-provider rows via `@switch <provider> <model> <effort>`
-	// (the restart applies the picked effort instead of the provider default).
-	const chipEfforts = (row: ModelRow) => row.efforts ?? [];
-
-	// Chips are hover-driven for the mouse (mouseenter on a row, cleared when
-	// the pointer leaves the list) and follow selIdx only after the user
-	// actually arrow-keyed — never on the default/active selection. With no
-	// focus the column falls back to the currently active model.
-	let hoverIdx = $state<number | null>(null);
-	let rowsEl: HTMLDivElement;
-	let effortColumnEl: HTMLDivElement;
-	const chipIdx = $derived(effortColumnIdx(rows, hoverIdx, keyNav, selIdx));
-	const chipRow = $derived(chipIdx !== null ? rows[chipIdx] : null);
 	function hoverRow(i: number) {
-		hoverIdx = i;
 		selIdx = i;
-		keyNav = false;
-	}
-	function clearHoverUnlessEntering(event: MouseEvent, destination: HTMLElement) {
-		const next = event.relatedTarget;
-		if (!(next instanceof Node) || !destination.contains(next)) hoverIdx = null;
 	}
 </script>
 
@@ -175,12 +143,7 @@
 					<input bind:value={query} placeholder={t('shell.pickerSearchPlaceholder')} autofocus />
 				</div>
 			{/if}
-			<div
-				class="rows"
-				role="presentation"
-				bind:this={rowsEl}
-				onmouseleave={(event) => clearHoverUnlessEntering(event, effortColumnEl)}
-			>
+			<div class="rows" role="presentation">
 				{#each rows as row, i (row.id)}
 					{#if row.group && (i === 0 || rows[i - 1]?.group !== row.group)}
 						<div class="row-group">{row.group}</div>
@@ -203,32 +166,6 @@
 			</div>
 			<div class="pop-foot">{t('shell.pickerFoot')}</div>
 		</div>
-		<!-- Reserved-width effort column: content swaps with the focused row but
-		     the column itself never appears/disappears, so the popover width and
-		     the model rows' heights stay put. -->
-		<div
-			class="effcol"
-			role="group"
-			aria-label={t('chat.effortTitle')}
-			bind:this={effortColumnEl}
-			onmouseleave={(event) => clearHoverUnlessEntering(event, rowsEl)}
-		>
-			<span class="effcap">{t('chat.effortTitle')}</span>
-			{#if chipRow && chipEfforts(chipRow).length}
-				{@const row = chipRow}
-				<span class="effmodel" title={row.label}>{row.label}</span>
-				{#each chipEfforts(row) as ef (ef)}
-					<button
-						class="eff"
-						class:on={row.active && ef === activeEffort}
-						aria-label={`${row.label} ${ef}`}
-						onclick={() => onSelect(`${row.command} ${ef}`)}
-					>{ef}</button>
-				{/each}
-			{:else}
-				<span class="effempty">{t('chat.effortNone')}</span>
-			{/if}
-		</div>
 	</div>
 </div>
 
@@ -241,18 +178,16 @@
 		z-index: 20;
 		cursor: default;
 	}
-	/* Anchored above the composer's model button (the caller wraps us in a
-	   position:relative container), matching the shared popover pattern. */
+	/* Viewport-level modal: tile leaves intentionally clip their pane content,
+	   so anchoring here would cut the picker at split boundaries. */
 	.pop {
-		position: absolute;
-		bottom: calc(100% + 8px);
-		left: 0;
+		position: fixed;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
 		z-index: 21;
-		width: min(544px, 92vw);
-		/* Fixed (not max) height: the body is the max of rail/models/efforts,
-		   so swapping effort-chip content on hover must never change the
-		   popover's size — the bottom-anchored top edge would jump. Inner
-		   lists scroll instead. */
+		width: min(440px, 92vw);
+		/* Fixed height keeps long model lists scrolling inside the modal. */
 		height: min(60vh, 440px);
 		display: flex;
 		flex-direction: column;
@@ -261,12 +196,10 @@
 		border-radius: var(--r-md);
 		box-shadow: var(--shadow-pop);
 		overflow: hidden;
-		transform-origin: bottom left;
-		animation: pop-in var(--t-med) var(--ease-spring);
 	}
-	/* Locked sessions drop the agent rail — two columns need less room. */
+	/* Locked sessions drop the agent rail and need less room. */
 	.pop.norail {
-		width: min(500px, 90vw);
+		width: min(400px, 90vw);
 	}
 	.pop-head {
 		display: flex;
@@ -405,61 +338,6 @@
 	:global(.prow-check) {
 		color: var(--accent-bright);
 		flex-shrink: 0;
-	}
-	/* Fixed-width column of the focused model's thinking levels: one chip per
-	   effort, chip = model+effort. Width is reserved even when empty so
-	   hovering never resizes the popover or reflows the model list. */
-	.effcol {
-		display: flex;
-		flex-direction: column;
-		align-items: stretch;
-		gap: 5px;
-		width: 118px;
-		flex-shrink: 0;
-		padding: 10px;
-		border-left: 1px solid var(--hairline);
-		overflow-y: auto;
-	}
-	.effcap {
-		font-size: 10.5px;
-		font-weight: 600;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		color: var(--dim2);
-	}
-	.effmodel {
-		font-family: var(--font-mono);
-		font-size: 10.5px;
-		color: var(--dim);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		margin-bottom: 2px;
-	}
-	.effempty {
-		font-size: 11px;
-		color: var(--dim2);
-	}
-	.eff {
-		font-family: var(--font-mono);
-		font-size: 11px;
-		text-align: center;
-		padding: 3px 9px;
-		border-radius: 999px;
-		border: 1px solid var(--border);
-		background: var(--surface2);
-		color: var(--dim);
-		cursor: pointer;
-		transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
-	}
-	.eff:hover {
-		color: var(--text);
-		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
-	}
-	.eff.on {
-		color: var(--on-accent);
-		background: var(--accent);
-		border-color: var(--accent);
 	}
 	.pempty {
 		padding: 18px;

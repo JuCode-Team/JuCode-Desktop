@@ -2,7 +2,7 @@
 	import { onMount, untrack } from 'svelte';
 	import { listen } from '@tauri-apps/api/event';
 	import { getCurrentWebview } from '@tauri-apps/api/webview';
-	import { PanelLeft } from 'lucide-svelte';
+	import { PanelLeft, SquareTerminal } from 'lucide-svelte';
 	import { open, ask, message } from '@tauri-apps/plugin-dialog';
 	import { cycleTheme } from '$lib/theme.svelte';
 	import {
@@ -48,7 +48,7 @@
 		reconcileLayout
 	} from '$lib/workbench/canvas';
 	import { tuiBackendOf, tuiTabTitle } from '$lib/workbench/tuiTab';
-	import { tuiResumeArgs, tuiResumeCommand } from '$lib/tuiHandoff';
+	import { canHandOffToTui, isValidResumeSessionId, tuiResumeArgs, tuiResumeCommand } from '$lib/tuiHandoff';
 	import type { WorkspaceEntry } from '$lib/workbench/workspaces';
 	import type { TabIcon } from '$lib/workbench/tabChrome';
 	import Mosaic from '$lib/workbench/Mosaic.svelte';
@@ -215,6 +215,13 @@
 		if (tui) return tuiTabTitle(tui);
 		if (tab.panel === 'audit') return t('editor.title');
 		return (ALL_PANELS as readonly string[]).includes(tab.panel) ? t(`dock.tabs.${tab.panel}`) : tab.panel;
+	}
+	function tuiReady(sid: string): boolean {
+		const session = sessionMap.get(sid);
+		return !!session &&
+			isValidResumeSessionId(session.chat.sessionId) &&
+			(session.chat.resumable || !!session.restored) &&
+			!session.chat.switching;
 	}
 
 	// A tool tab is an *instance* of a panel kind (two terminals are two tabs);
@@ -895,7 +902,22 @@
 					onTabContext={openTileChrome}
 					onTabRename={openTileChrome}
 				>
-					{#snippet panel(tab)}
+						{#snippet actions(tab)}
+							{@const sid = chatSessionOf(tab.panel)}
+							{@const session = sid ? sessionMap.get(sid) : undefined}
+							{#if sid && session && session.surface !== 'tui' && canHandOffToTui(session.backendId)}
+								<button
+									class="tile-action"
+									disabled={!tuiReady(sid)}
+									title={tuiReady(sid) ? t('chat.tuiContinueTitle') : t('chat.tuiContinueUnavailable')}
+									aria-label={t('chat.tuiContinue')}
+									onclick={() => store.openInTui(sid)}
+								>
+									<SquareTerminal size={13} />
+								</button>
+							{/if}
+						{/snippet}
+						{#snippet panel(tab)}
 						{@const sid = chatSessionOf(tab.panel)}
 						{@const tui = tuiBackendOf(tab.panel)}
 						{#if sid}
@@ -1081,6 +1103,25 @@
 	}
 	.stage > :global(.mosaic) {
 		flex: 1;
+	}
+	.tile-action {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 4px;
+		border: none;
+		border-radius: var(--r-sm);
+		background: none;
+		color: var(--dim2);
+		cursor: pointer;
+	}
+	.tile-action:hover:not(:disabled) {
+		background: var(--surface2);
+		color: var(--text);
+	}
+	.tile-action:disabled {
+		opacity: 0.4;
+		cursor: default;
 	}
 	.gone {
 		height: 100%;
