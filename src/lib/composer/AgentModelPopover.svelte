@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { X, Check, Search } from 'lucide-svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Vendor from '$lib/Vendor.svelte';
@@ -20,6 +20,7 @@
 		rows = [],
 		showSearch = false,
 		backendLocked = true,
+		anchor,
 		query = $bindable(''),
 		selIdx = $bindable(0),
 		onClose,
@@ -33,6 +34,7 @@
 		showSearch?: boolean;
 		/** Locked sessions (restored / first user turn sent) hide the agent rail. */
 		backendLocked?: boolean;
+		anchor?: HTMLElement;
 		query?: string;
 		selIdx?: number;
 		onClose: () => void;
@@ -41,6 +43,22 @@
 		/** Re-request the model catalog (after an agent switch). */
 		onRefreshModels: () => void;
 	} = $props();
+	let popEl = $state<HTMLDivElement>();
+	let popTop = $state(0);
+	let popLeft = $state(0);
+	function positionPopover() {
+		if (!anchor || !popEl) return;
+		const trigger = anchor.getBoundingClientRect();
+		const margin = 12;
+		const top = trigger.top - popEl.offsetHeight - 8;
+		popLeft = Math.min(Math.max(trigger.left, margin), window.innerWidth - popEl.offsetWidth - margin);
+		popTop = top >= margin ? top : Math.min(trigger.bottom + 8, window.innerHeight - popEl.offsetHeight - margin);
+	}
+	onMount(() => {
+		tick().then(positionPopover);
+		window.addEventListener('resize', positionPopover);
+		return () => window.removeEventListener('resize', positionPopover);
+	});
 
 	// Availability probe for the agent rail (best-effort, same as the old
 	// backend picker) + the registered ACP agents.
@@ -96,7 +114,7 @@
 </script>
 
 <button class="pop-backdrop" aria-label="close" onclick={onClose}></button>
-<div class="pop" class:norail={backendLocked} role="dialog" aria-label={title}>
+<div class="pop" class:norail={backendLocked} role="dialog" aria-label={title} bind:this={popEl} style:left="{popLeft}px" style:top="{popTop}px">
 	<div class="pop-head">
 		<span>{title}</span>
 		<IconButton onclick={onClose} label="close"><X size={15} /></IconButton>
@@ -184,7 +202,7 @@
 		position: fixed;
 		top: 50%;
 		left: 50%;
-		transform: translate(-50%, -50%);
+		/* Coordinates are measured from the model trigger in viewport space. */
 		z-index: 21;
 		width: min(440px, 92vw);
 		/* Fixed height keeps long model lists scrolling inside the modal. */

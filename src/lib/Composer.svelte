@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { Send, Square, Paperclip, FastForward, ShieldCheck, CircleStop, Mic, LoaderCircle, GitBranch, Brain } from 'lucide-svelte';
 	import { message } from '@tauri-apps/plugin-dialog';
 	import IconButton from '$lib/ui/IconButton.svelte';
@@ -74,6 +75,31 @@
 	let slashIdx = $state(0);
 	let showEffort = $state(false);
 	let showApproval = $state(false);
+	let effortButton = $state<HTMLButtonElement>();
+	let effortPopover = $state<HTMLDivElement>();
+	let modelButton = $state<HTMLButtonElement>();
+	let effortLeft = $state(0);
+	let effortTop = $state(0);
+
+	async function toggleEffort() {
+		if (modelPopoverVisible) closeModelPopover();
+		showEffort = !showEffort;
+		if (!showEffort) return;
+		await tick();
+		positionEffort();
+	}
+	function positionEffort() {
+		if (!showEffort || !effortButton || !effortPopover) return;
+		const trigger = effortButton.getBoundingClientRect();
+		const margin = 12;
+		const popHeight = effortPopover.offsetHeight;
+		effortLeft = Math.min(
+			Math.max(trigger.left, margin),
+			window.innerWidth - effortPopover.offsetWidth - margin
+		);
+		effortTop = trigger.top - popHeight - 8;
+		if (effortTop < margin) effortTop = Math.min(trigger.bottom + 8, window.innerHeight - popHeight - margin);
+	}
 
 	// The model popover holds its own open flag so it can outlive an agent
 	// switch (the new session ChatState starts with no picker) and open for
@@ -484,7 +510,7 @@
 
 </script>
 
-<svelte:window onkeydowncapture={onWindowKeyCapture} />
+<svelte:window onkeydowncapture={onWindowKeyCapture} onresize={positionEffort} />
 
 <div class="composer-wrap">
 	{#if slashMatches.length}
@@ -537,7 +563,7 @@
 			<IconButton onclick={onPick} label="attach" title={t('chat.attachTitle')}><Paperclip size={16} /></IconButton>
 			{#if bcaps.modelPicker || !backendLocked}
 				<div class="modelsel">
-					<button class="flatbtn model" onclick={toggleModelPopover} title={t('chat.switchModel')}>
+					<button class="flatbtn model" bind:this={modelButton} onclick={toggleModelPopover} title={t('chat.switchModel')}>
 						<BackendIcon backend={chat.backendId} size={15} />
 						<span>{chat.modelLabel || chat.model || backendLabel}</span>
 					</button>
@@ -548,6 +574,7 @@
 							rows={modelRows}
 							showSearch={modelSearch}
 							{backendLocked}
+							anchor={modelButton}
 							bind:query={pickerQuery}
 							bind:selIdx={pickerSelIdx}
 							onClose={closeModelPopover}
@@ -564,12 +591,10 @@
 				<div class="effortsel">
 					<button
 						class="flatbtn effort"
+						bind:this={effortButton}
 						disabled={effortDisabled}
 						class:pending={effortDisabled}
-						onclick={() => {
-							if (modelPopoverVisible) closeModelPopover();
-							showEffort = !showEffort;
-						}}
+						onclick={toggleEffort}
 						title={t('chat.effortTitle')}
 						aria-label={t('chat.effortTitle')}
 					>
@@ -577,7 +602,12 @@
 					</button>
 					{#if showEffort}
 						<button class="pop-backdrop" aria-label="close" onclick={() => (showEffort = false)}></button>
-						<div class="effort-pop">
+					<div
+							class="effort-pop"
+							bind:this={effortPopover}
+							style:left="{effortLeft}px"
+							style:top="{effortTop}px"
+						>
 							<Segmented value={chat.effort} options={effortOptions} onChange={setEffort} />
 						</div>
 					{/if}
@@ -763,8 +793,6 @@
 	}
 	.effort-pop {
 		position: fixed;
-		bottom: 72px;
-		left: 18px;
 		max-width: calc(100vw - 36px);
 		z-index: 21;
 		padding: 6px;
