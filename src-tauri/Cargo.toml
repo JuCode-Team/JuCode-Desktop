@@ -3,7 +3,7 @@
 
 [package]
 name = "desktop"
-version = "0.3.1"
+version = "0.3.2"
 description = "JuCode desktop GUI"
 authors = ["you"]
 edition = "2021"
