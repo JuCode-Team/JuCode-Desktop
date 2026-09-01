@@ -811,8 +811,8 @@
 				for (const u of urls) handleDeepLink(u);
 			});
 			cleanups.push(undeep);
-			// 启动约 5 秒后静默检查一次更新；有新版本时设置入口显示小圆点。
-			const updateTimer = setTimeout(() => updater.check(true), 5000);
+			// Check GitHub after startup and install updates; relaunch stays user-controlled.
+			const updateTimer = setTimeout(() => updater.check(true, true), 5000);
 			cleanups.push(() => clearTimeout(updateTimer));
 			loadProviders();
 			readAuthProviders()

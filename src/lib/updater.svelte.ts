@@ -5,7 +5,7 @@ import { relaunch } from '@tauri-apps/plugin-process';
 
 export type UpdatePhase = 'idle' | 'checking' | 'latest' | 'available' | 'downloading' | 'ready' | 'error';
 
-class UpdaterState {
+export class UpdaterState {
 	phase = $state<UpdatePhase>('idle');
 	/** 可用的新版本号（phase 为 available/downloading/ready 时有效）。 */
 	version = $state('');
@@ -19,16 +19,20 @@ class UpdaterState {
 		return this.phase === 'available' || this.phase === 'downloading' || this.phase === 'ready';
 	}
 
-	/** 检查更新。`silent` 用于启动时的后台检查：失败/无更新都保持安静。 */
-	async check(silent = false) {
+	/**
+	 * Check for updates. Startup checks can pass `autoInstall` to download and
+	 * install immediately. Relaunch stays user-controlled to avoid lost work.
+	 */
+	async check(silent = false, autoInstall = false) {
 		if (this.phase === 'checking' || this.phase === 'downloading' || this.phase === 'ready') return;
-		if (!silent) this.phase = 'checking';
+		this.phase = 'checking';
 		try {
 			const u = await check();
 			if (u) {
 				this.#update = u;
 				this.version = u.version;
 				this.phase = 'available';
+				if (autoInstall) await this.download();
 			} else {
 				this.phase = silent ? 'idle' : 'latest';
 			}
