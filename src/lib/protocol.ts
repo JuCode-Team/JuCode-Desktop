@@ -141,6 +141,14 @@ export function removeAuthKey(provider: string): Promise<void> {
 	return invoke('remove_auth_key', { provider });
 }
 
+/** `"system"` = the tool's own config; `"jucode"` = JuCode overlay. */
+export function toolProfile(backend: string): Promise<string> {
+	return invoke('tool_profile', { backend });
+}
+export function switchToolProfile(backend: string, mode: string, model?: string): Promise<void> {
+	return invoke('switch_tool_profile', { backend, mode, model });
+}
+
 // Skills marketplace (Tauri combines JuCode with github.com/anthropics/skills).
 export type SkillSource = 'jucode' | 'anthropic';
 export interface MarketSkill {

@@ -35,6 +35,7 @@
 		git,
 		gitCheckpointCapture,
 		gitCheckpointRestore,
+		toolProfile,
 		type Op
 	} from '$lib/protocol';
 	import { buildModelRows } from '$lib/composer/modelRows';
@@ -121,6 +122,17 @@
 	let pickerQuery = $state('');
 	let selIdx = $state(0);
 	let pendingModel = $state('');
+	let toolMode = $state<'system' | 'jucode'>('system');
+	$effect(() => {
+		const id = chat.backendId;
+		if (chat.picker?.kind !== 'model') return;
+		if (id !== 'claude' && id !== 'codex') return;
+		toolProfile(id)
+			.then((m) => {
+				toolMode = m === 'jucode' ? 'jucode' : 'system';
+			})
+			.catch(() => {});
+	});
 
 	// Ops flow through this session's backend adapter; an unsupported op
 	// (non-jucode stub backends) surfaces as an inline system notice.
@@ -307,9 +319,12 @@
 				codex: t('shell.modelGroup.codex'),
 				claude: t('shell.modelGroup.claude'),
 				jucode: t('shell.modelGroup.jucode'),
-				byok: t('shell.modelGroup.byok')
+				byok: t('shell.modelGroup.byok'),
+				system: t('shell.modelGroup.system')
 			},
-			notConfigured: t('shell.notConfigured')
+			notConfigured: t('shell.notConfigured'),
+			toolMode,
+			systemLabel: t('shell.toolSwitch.system')
 		});
 	});
 
@@ -473,6 +488,14 @@
 			const pv = providersList.find((x) => x.id === pid);
 			chat.closePicker();
 			if (pv && name) store.switchProvider(session.id, pv, name, effort);
+			return;
+		}
+		if (command.startsWith('@tool ')) {
+			const [mode, name] = command.slice('@tool '.length).trim().split(/\s+/);
+			chat.closePicker();
+			if (mode === 'system' || mode === 'jucode') {
+				store.applyToolProfile(session.id, mode, name);
+			}
 			return;
 		}
 		// Resuming a history item opens it in a fresh session so the current chat

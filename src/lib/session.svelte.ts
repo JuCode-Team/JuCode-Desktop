@@ -1,5 +1,5 @@
 import { ChatState } from './chat.svelte';
-import { createSession, closeSession, projectRoot, writeConfig, git, claudeSessionTranscript } from './protocol';
+import { createSession, closeSession, projectRoot, writeConfig, git, claudeSessionTranscript, switchToolProfile } from './protocol';
 import { canHandOffToTui, isValidResumeSessionId } from './tuiHandoff';
 import { createAdapter, normalizeBackendId, type BackendId } from './backends';
 import { dispatch, ioFor, registerAdapter, unregisterAdapter } from './backends/router';
@@ -509,6 +509,46 @@ export class SessionStore {
 			await closeSession(id);
 			await this.#spawn(s, this.projectPathOf(id));
 			if (sid && canResume) dispatch(id, { op: 'command', input: `/resume ${sid}` });
+		} catch (e) {
+			s.chat.switching = false;
+			this.#engineFailed(s.chat, e);
+		}
+	}
+
+	/** Rewrite Claude Code / Codex live config (JuCode overlay or restore) and
+	 *  respawn this session so the child re-reads the files. */
+	async applyToolProfile(id: string, mode: 'system' | 'jucode', model?: string) {
+		const s = this.allSessions.find((x) => x.id === id);
+		if (!s) return;
+		if (s.backendId !== 'claude' && s.backendId !== 'codex') return;
+		s.chat.switching = true;
+		s.chat.engineState = 'connecting';
+		s.chat.messages.push({
+			kind: 'system',
+			text: mode === 'jucode' ? t('shell.toolSwitch.toJucode') : t('shell.toolSwitch.toSystem')
+		});
+		const sid = s.chat.sessionId;
+		const canResume = s.chat.resumable || (!!sid && !!s.restored);
+		try {
+			await switchToolProfile(s.backendId, mode, model);
+			if (s.surface === 'tui') {
+				s.chat.switching = false;
+				s.chat.engineState = 'ready';
+				return;
+			}
+			await closeSession(id);
+			s.chat.resumeBroken = false;
+			const mayResume = !!(sid && canResume);
+			const extra: Record<string, unknown> = {};
+			if (s.backendId === 'claude' && mayResume) extra.resume = sid;
+			if (s.backendId === 'claude') extra.permission_mode = toClaudeMode(toEngineMode(s.chat.approvalMode));
+			await this.#spawn(
+				s,
+				this.projectPathOf(id),
+				undefined,
+				Object.keys(extra).length ? extra : undefined,
+				s.backendId === 'codex' && mayResume ? sid : undefined
+			);
 		} catch (e) {
 			s.chat.switching = false;
 			this.#engineFailed(s.chat, e);

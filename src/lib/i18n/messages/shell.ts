@@ -26,7 +26,13 @@ const shell = {
 			codex: 'Codex 官方',
 			claude: 'Claude 官方',
 			jucode: 'JuCode 内置',
-			byok: '自定义 / BYOK'
+			byok: '自定义 / BYOK',
+			system: '系统配置'
+		},
+		toolSwitch: {
+			system: '使用系统配置',
+			toJucode: '已切换到 JuCode，正在重启引擎…',
+			toSystem: '已恢复系统配置，正在重启引擎…'
 		},
 		notConfigured: '未配置',
 		pickerSearchPlaceholder: '筛选…',
@@ -278,7 +284,13 @@ const shell = {
 			codex: 'Codex official',
 			claude: 'Claude official',
 			jucode: 'JuCode built-in',
-			byok: 'Custom / BYOK'
+			byok: 'Custom / BYOK',
+			system: 'System config'
+		},
+		toolSwitch: {
+			system: 'Use system config',
+			toJucode: 'Switched to JuCode, restarting engine…',
+			toSystem: 'Restored system config, restarting engine…'
 		},
 		notConfigured: 'not configured',
 		pickerSearchPlaceholder: 'Filter…',

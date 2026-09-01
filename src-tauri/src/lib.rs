@@ -17,6 +17,8 @@ mod plugins;
 mod secrets;
 mod shell_env;
 mod skills;
+mod tool_switch;
+
 
 use backend::BackendKind;
 
@@ -802,6 +804,35 @@ fn fetch_usage() -> Result<serde_json::Value, String> {
 fn fetch_usage_logs() -> Result<serde_json::Value, String> {
     jucode_get("/v1/oauth/usage-logs?limit=10")
 }
+
+/// Current overlay for Claude Code / Codex: `"system"` or `"jucode"`.
+#[tauri::command]
+fn tool_profile(backend: String) -> Result<String, String> {
+    tool_switch::current_mode(&backend)
+}
+
+/// Write (or restore) Claude Code / Codex live config. Caller restarts the
+/// session so the child re-reads the files.
+#[tauri::command]
+fn switch_tool_profile(
+    backend: String,
+    mode: String,
+    model: Option<String>,
+) -> Result<(), String> {
+    match mode.as_str() {
+        "system" => tool_switch::switch_to_system(&backend),
+        "jucode" => {
+            let api = jucode_api_url();
+            if !api.starts_with("https://") {
+                return Err("refusing to write JuCode endpoint over non-https".into());
+            }
+            let token = jucode_access_token()?;
+            tool_switch::switch_to_jucode(&backend, &api, &token, model.as_deref())
+        }
+        _ => Err(format!("unknown tool profile mode: {mode}")),
+    }
+}
+
 
 /// DeepSeek account balance (https://api.deepseek.com/user/balance), using the
 /// API key stored under providers.deepseek in auth.json.
@@ -2914,6 +2945,8 @@ pub fn run() {
             fetch_marketplace,
             install_marketplace_skill,
             fetch_account_info,
+            tool_profile,
+            switch_tool_profile,
             fetch_usage,
             fetch_usage_logs,
             fetch_deepseek_balance,

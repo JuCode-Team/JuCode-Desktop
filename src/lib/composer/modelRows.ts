@@ -32,6 +32,7 @@ export interface ModelGroupLabels {
 	claude: string;
 	jucode: string;
 	byok: string;
+	system: string;
 }
 
 const fmtTokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
@@ -57,10 +58,27 @@ export function buildModelRows(input: {
 	configured: string[];
 	groups: ModelGroupLabels;
 	notConfigured: string;
+	/** Claude/Codex live overlay. Ignored for the jucode backend. */
+	toolMode?: 'system' | 'jucode';
+	/** Shown as a switch-back row when the overlay is on. */
+	systemLabel?: string;
 }): ModelRow[] {
-	const { models, backendId, provider: cur, providersList, configured, groups, notConfigured } = input;
-	const activeGroup =
-		backendId === 'codex'
+	const {
+		models,
+		backendId,
+		provider: cur,
+		providersList,
+		configured,
+		groups,
+		notConfigured,
+		toolMode,
+		systemLabel
+	} = input;
+	const overlay = backendId === 'claude' || backendId === 'codex';
+	const onJucode = overlay && toolMode === 'jucode';
+	const activeGroup = onJucode
+		? groups.jucode
+		: backendId === 'codex'
 			? groups.codex
 			: backendId === 'claude'
 				? groups.claude
@@ -77,9 +95,6 @@ export function buildModelRows(input: {
 		depth: undefined,
 		group: activeGroup
 	}));
-	// Provider switching rewrites the native engine's global config and
-	// restarts it — meaningful for jucode sessions only. Other backends'
-	// pickers list just their own engine's model_view catalog.
 	const otherRows: ModelRow[] = (backendId !== 'jucode' ? [] : providersList)
 		.filter((pv) => pv.id !== cur)
 		.flatMap((pv) =>
@@ -96,8 +111,37 @@ export function buildModelRows(input: {
 					group: pv.id === 'jucode' ? groups.jucode : groups.byok
 				}))
 		);
-	const order = [groups.codex, groups.claude, groups.jucode, groups.byok];
-	return [...activeRows, ...otherRows].sort(
+	const toolRows: ModelRow[] = [];
+	if (overlay && configured.includes('jucode')) {
+		if (onJucode && systemLabel) {
+			toolRows.push({
+				id: 'tool::system',
+				label: systemLabel,
+				detail: groups.system,
+				active: false,
+				command: '@tool system',
+				depth: undefined,
+				group: groups.system
+			});
+		}
+		if (!onJucode) {
+			const catalog = providersList.find((p) => p.id === 'jucode')?.models ?? [];
+			for (const m of catalog.filter((m) => jucodeOk(m.name))) {
+				toolRows.push({
+					id: `tool::jucode::${m.name}`,
+					label: m.name,
+					vendor: m.name,
+					detail: groups.jucode,
+					active: false,
+					command: `@tool jucode ${m.name}`,
+					depth: undefined,
+					group: groups.jucode
+				});
+			}
+		}
+	}
+	const order = [groups.system, groups.codex, groups.claude, groups.jucode, groups.byok];
+	return [...toolRows, ...activeRows, ...otherRows].sort(
 		(a, b) => order.indexOf(a.group ?? '') - order.indexOf(b.group ?? '')
 	);
 }
