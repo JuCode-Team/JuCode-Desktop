@@ -1,13 +1,14 @@
 <script lang="ts">
 	// One long-lived agent: its settings, brief, memory and sessions.
 	import { onMount } from 'svelte';
-	import { X, Bot, Plus, LoaderCircle } from 'lucide-svelte';
+	import { X, Bot, Plus, LoaderCircle, FolderPlus } from 'lucide-svelte';
+	import { open } from '@tauri-apps/plugin-dialog';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import Select from '$lib/ui/Select.svelte';
 	import Switch from '$lib/ui/Switch.svelte';
 	import { focusTrap } from '$lib/focusTrap';
-	import { agentDirectory, type AgentDetail } from '$lib/agents.svelte';
+	import { agentDirectory, type AgentChanges, type AgentDetail, type AgentView } from '$lib/agents.svelte';
 	import { t } from '$lib/i18n';
 
 	let {
@@ -40,7 +41,7 @@
 	}
 	onMount(load);
 
-	async function change(changes: { enabled?: boolean; approval_mode?: string }) {
+	async function change(changes: AgentChanges) {
 		if (!detail) return;
 		try {
 			detail.agent = await agentDirectory.update(agentId, changes);
@@ -48,6 +49,39 @@
 			error = e instanceof Error ? e.message : String(e);
 			await load();
 		}
+	}
+
+	const SANDBOXES = $derived([
+		{ value: 'read-only', label: t('shell.agentPage.sandboxReadOnly') },
+		{ value: 'workspace-write', label: t('shell.agentPage.sandboxWorkspace') },
+		{ value: 'full-access', label: t('shell.agentPage.sandboxFull') }
+	]);
+	const DIR_MODES = $derived([
+		{ value: 'ro', label: t('shell.agentPage.readOnly') },
+		{ value: 'rw', label: t('shell.agentPage.readWrite') }
+	]);
+	const ACTIONS = $derived([
+		{ value: 'allow', label: t('shell.agentPage.allow') },
+		{ value: 'ask', label: t('shell.agentPage.ask') },
+		{ value: 'forbid', label: t('shell.agentPage.forbid') }
+	]);
+
+	// Rules are edited locally and saved when a complete one changes, so a
+	// half-typed prefix is never sent.
+	let rules = $state<AgentView['command_rules']>([]);
+	$effect(() => {
+		if (detail) rules = detail.agent.command_rules.map((rule) => ({ ...rule }));
+	});
+	function saveRules() {
+		const complete = rules.filter((rule) => rule.prefix.trim());
+		void change({ command_rules: complete.map((r) => ({ prefix: r.prefix.trim(), action: r.action })) });
+	}
+
+	async function addDirectory() {
+		if (!detail) return;
+		const path = await open({ directory: true, title: t('shell.agentPage.addDirectory') });
+		if (!path || Array.isArray(path)) return;
+		await change({ directories: [...detail.agent.directories, { path, mode: 'ro' }] });
 	}
 
 	function when(ms: number): string {
@@ -89,6 +123,90 @@
 							onChange={(approval_mode) => change({ approval_mode })}
 						/>
 					</div>
+				</section>
+
+				<section>
+					<h3>{t('shell.agentPage.sandbox')}</h3>
+					<p class="hint">{t('shell.agentPage.sandboxHint')}</p>
+					<div class="row">
+						<span>{t('shell.agentPage.sandbox')}</span>
+						<Select
+							value={detail.agent.sandbox}
+							options={SANDBOXES}
+							onChange={(sandbox) => change({ sandbox: sandbox as AgentView['sandbox'] })}
+						/>
+					</div>
+					<div class="row">
+						<span>{t('shell.agentPage.network')}</span>
+						<Switch
+							checked={detail.agent.network}
+							label={t('shell.agentPage.network')}
+							onChange={(network) => change({ network })}
+						/>
+					</div>
+
+					<div class="section-head sub">
+						<span>{t('shell.agentPage.directories')}</span>
+						<Button size="sm" onclick={addDirectory}><FolderPlus size={13} /> {t('shell.agentPage.addDirectory')}</Button>
+					</div>
+					<p class="hint">{t('shell.agentPage.directoriesHint')}</p>
+					{#each detail.agent.directories as dir, index (dir.path)}
+						<div class="item">
+							<code class="grow">{dir.path}</code>
+							<Select
+								value={dir.mode}
+								options={DIR_MODES}
+								onChange={(mode) =>
+									change({
+										directories: detail!.agent.directories.map((d, i) =>
+											i === index ? { ...d, mode: mode as 'ro' | 'rw' } : d
+										)
+									})}
+							/>
+							<IconButton
+								label={t('shell.agentPage.remove')}
+								onclick={() =>
+									change({ directories: detail!.agent.directories.filter((_, i) => i !== index) })}
+							>
+								<X size={13} />
+							</IconButton>
+						</div>
+					{/each}
+
+					<div class="section-head sub">
+						<span>{t('shell.agentPage.rules')}</span>
+						<Button size="sm" onclick={() => (rules = [...rules, { prefix: '', action: 'ask' }])}>
+							<Plus size={13} /> {t('shell.agentPage.addRule')}
+						</Button>
+					</div>
+					<p class="hint">{t('shell.agentPage.rulesHint')}</p>
+					{#each rules as rule, index (index)}
+						<div class="item">
+							<input
+								class="grow"
+								bind:value={rule.prefix}
+								placeholder={t('shell.agentPage.rulePrefix')}
+								onchange={saveRules}
+							/>
+							<Select
+								value={rule.action}
+								options={ACTIONS}
+								onChange={(action) => {
+									rule.action = action as typeof rule.action;
+									saveRules();
+								}}
+							/>
+							<IconButton
+								label={t('shell.agentPage.remove')}
+								onclick={() => {
+									rules = rules.filter((_, i) => i !== index);
+									saveRules();
+								}}
+							>
+								<X size={13} />
+							</IconButton>
+						</div>
+					{/each}
 				</section>
 
 				<section>
@@ -200,6 +318,39 @@
 		font-weight: 600;
 		color: var(--dim);
 		font-family: var(--font-mono);
+	}
+	.hint {
+		margin: 0 0 8px;
+		font-size: 11.5px;
+		color: var(--dim2);
+		line-height: 1.5;
+	}
+	.section-head.sub {
+		margin-top: 12px;
+		font-size: 12.5px;
+	}
+	.item {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 4px 0;
+	}
+	.item .grow {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.item input {
+		border: 1px solid var(--border);
+		border-radius: var(--r-sm);
+		background: var(--surface2);
+		color: var(--text);
+		font-family: var(--font-mono);
+		font-size: 12px;
+		padding: 6px 9px;
+		outline: none;
 	}
 	.row {
 		display: flex;

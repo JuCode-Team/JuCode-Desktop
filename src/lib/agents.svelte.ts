@@ -15,7 +15,19 @@ export interface AgentView {
 	sessions: number;
 	/** One of its sessions is running or has queued messages. */
 	busy: boolean;
+	sandbox: 'read-only' | 'workspace-write' | 'full-access';
+	network: boolean;
+	directories: { path: string; mode: 'ro' | 'rw' }[];
+	command_rules: { prefix: string; action: 'allow' | 'ask' | 'forbid' }[];
 }
+
+/** Settings `agent_update` accepts; omitted fields stay as they are. */
+export type AgentChanges = Partial<
+	Pick<
+		AgentView,
+		'name' | 'enabled' | 'approval_mode' | 'sandbox' | 'network' | 'directories' | 'command_rules'
+	>
+>;
 
 export interface DaemonSessionView {
 	session: string;
@@ -162,10 +174,7 @@ export class AgentDirectory {
 		return (await daemon.request({ op: 'agent_get', agent })) as unknown as AgentDetail;
 	}
 
-	async update(
-		agent: string,
-		changes: { name?: string; enabled?: boolean; approval_mode?: string }
-	): Promise<AgentView> {
+	async update(agent: string, changes: AgentChanges): Promise<AgentView> {
 		const reply = await daemon.request({ op: 'agent_update', agent, ...changes });
 		return reply.agent as AgentView;
 	}
