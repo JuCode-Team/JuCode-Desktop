@@ -28,6 +28,9 @@ export interface Session {
 	 *  before flipping to 'tui', and TuiPanel closes its pty before asking the
 	 *  store to flip back. */
 	surface?: 'gui' | 'tui';
+	/** A JuCode session hosted by the local `jucode daemon` instead of a
+	 *  child process: it keeps running when the desktop closes (persisted). */
+	hosted?: boolean;
 }
 
 /** 并行任务（git worktree）项目的元数据，随项目布局持久化。 */

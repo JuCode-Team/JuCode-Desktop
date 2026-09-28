@@ -13,6 +13,24 @@ The desktop drives three agent backends through one abstraction:
 event dialect. Adapters translate INTO that dialect and encode OUT of the
 desktop `Op` union — ChatState and the UI stay backend-agnostic.
 
+## Sessions hosted by `jucode daemon`
+
+With *Settings → Backends → Background service* on, new JuCode sessions run in
+the local `jucode daemon` (JuCode-CLI `docs/daemon-protocol.md`) instead of a
+`jucode serve` child. `src/lib/daemon.ts` keeps one WebSocket to the daemon and
+presents each hosted session like a child process: frames go through the same
+page handler as `agent-event`, `closeSession` / `sendOp` / `sendLine` route by
+`daemon.owns(id)`, and a stopped session or a dropped connection calls
+`store.handleExit`, whose restart reopens the same daemon session. The jucode
+adapter, `ChatState` and every view are unchanged.
+
+- Closing the desktop only disconnects: hosted sessions keep running, and
+  deferred actions wait in the daemon.
+- Closing a tab ends its daemon session (`session_close`).
+- A hosted tab persists `hosted: true` and its daemon session id as `sid`;
+  restore, restart and provider switches reopen it by id (`session_open`)
+  instead of sending `/resume`.
+
 ## The contract (`types.ts`)
 
 ```ts

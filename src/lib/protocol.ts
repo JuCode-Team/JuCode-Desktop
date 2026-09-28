@@ -1,5 +1,16 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { McpServerEntry } from './mcp';
+import { DaemonClient, type DaemonEndpoint } from './daemon';
+
+/** The shared connection to the local `jucode daemon`. Sessions it hosts are
+ *  routed here by `closeSession` / `sendOp` / `sendLine`; the page wires its
+ *  `onFrame` / `onExit` into the same path as child-process events. */
+export const daemon = new DaemonClient(() => invoke<DaemonEndpoint>('daemon_endpoint'));
+
+/** Starts (or, with `resume`, reopens) a session hosted by the daemon. */
+export function hostSession(session: string, cwd: string, resume?: string): Promise<void> {
+	return daemon.open(session, cwd, resume);
+}
 
 // Commands the GUI sends to a session's `jucode serve` over stdin.
 export type Op =
@@ -34,16 +45,19 @@ export function createSession(
 }
 
 export function closeSession(session: string): Promise<void> {
+	if (daemon.owns(session)) return daemon.close(session);
 	return invoke('close_session', { session });
 }
 
 export function sendOp(session: string, op: Op): Promise<void> {
+	if (daemon.owns(session)) return daemon.send(session, JSON.stringify(op));
 	return invoke('send_op', { session, op });
 }
 
 /** Writes one raw line (a single protocol frame composed by a backend adapter)
  *  to the session child's stdin. */
 export function sendLine(session: string, line: string): Promise<void> {
+	if (daemon.owns(session)) return daemon.send(session, line);
 	return invoke('send_line', { session, line });
 }
 

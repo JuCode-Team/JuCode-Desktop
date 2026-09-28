@@ -15,6 +15,9 @@ export interface BackendSettings {
 	useShellEnv: boolean;
 	/** Per-backend custom env vars, applied after the snapshot. */
 	env: Partial<Record<BackendId, Record<string, string>>>;
+	/** Run new JuCode sessions in the local `jucode daemon`, so they keep
+	 *  working after the desktop closes (default false). */
+	daemon: boolean;
 }
 
 const KEY = 'jucode-backend-settings';
@@ -23,7 +26,8 @@ export const DEFAULT_BACKEND_SETTINGS: BackendSettings = {
 	default: 'jucode',
 	paths: {},
 	useShellEnv: true,
-	env: {}
+	env: {},
+	daemon: false
 };
 
 function freshDefaults(): BackendSettings {
@@ -92,7 +96,8 @@ export function parseBackendSettings(raw: string | null): BackendSettings {
 			default: normalizeBackendId(v?.default),
 			paths,
 			useShellEnv: v?.useShellEnv !== false,
-			env
+			env,
+			daemon: v?.daemon === true
 		};
 	} catch {
 		return freshDefaults();

@@ -18,12 +18,13 @@ beforeEach(() => {
 });
 
 describe('backend router dispatch', () => {
-	it('jucode sessions use the structured send_op path (byte-for-byte compat)', () => {
+	it('jucode sessions encode through their adapter (approval-mode names mapped)', () => {
 		registerAdapter('s-ju', createJucodeAdapter());
-		const ok = dispatch('s-ju', { op: 'user_message', content: 'hi' });
-		expect(ok).toBe(true);
-		expect(sendOp).toHaveBeenCalledWith('s-ju', { op: 'user_message', content: 'hi' });
-		expect(sendLine).not.toHaveBeenCalled();
+		expect(dispatch('s-ju', { op: 'user_message', content: 'hi' })).toBe(true);
+		expect(sendLine).toHaveBeenCalledWith('s-ju', JSON.stringify({ op: 'user_message', content: 'hi' }));
+		dispatch('s-ju', { op: 'set_approval_mode', mode: 'full-auto' });
+		expect(JSON.parse(vi.mocked(sendLine).mock.calls[1][1]).mode).toBe('full-access');
+		expect(sendOp).not.toHaveBeenCalled();
 	});
 
 	it('sessions without a registered adapter fall back to send_op', () => {
@@ -67,10 +68,8 @@ describe('backend router dispatch', () => {
 		expect(dispatch('s-cx', { op: 'interrupt' })).toBe(true); // codex: idle no-op (0 frames)
 		expect(dispatch('s-cl', { op: 'interrupt' })).toBe(true); // claude: control_request
 
-		expect(sendOp).toHaveBeenCalledTimes(1);
-		expect(sendOp).toHaveBeenCalledWith('s-ju', { op: 'steer' });
-		expect(sendLine).toHaveBeenCalledTimes(1);
-		expect(vi.mocked(sendLine).mock.calls[0][0]).toBe('s-cl');
+		expect(sendOp).not.toHaveBeenCalled();
+		expect(vi.mocked(sendLine).mock.calls.map(([sid]) => sid)).toEqual(['s-ju', 's-cl']);
 	});
 
 	it('unregister removes the adapter (falls back to send_op)', () => {

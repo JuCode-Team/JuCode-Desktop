@@ -355,6 +355,33 @@ fn check_backend(backend: String, bin_override: Option<String>) -> Result<Backen
     })
 }
 
+/// Where the local `jucode daemon` listens (its default address) and the
+/// token it wrote to `~/.jucode/daemon/token` on first start.
+#[derive(Serialize)]
+struct DaemonEndpoint {
+    url: String,
+    token: String,
+}
+
+#[tauri::command]
+fn daemon_endpoint() -> Result<DaemonEndpoint, String> {
+    let path = jucode_dir().join("daemon").join("token");
+    let token = std::fs::read_to_string(&path)
+        .map(|token| token.trim().to_string())
+        .ok()
+        .filter(|token| !token.is_empty())
+        .ok_or_else(|| {
+            format!(
+                "jucode daemon has not been started (no token at {}); run `jucode daemon`",
+                path.display()
+            )
+        })?;
+    Ok(DaemonEndpoint {
+        url: "ws://127.0.0.1:7788".to_string(),
+        token,
+    })
+}
+
 fn jucode_dir() -> PathBuf {
     let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"));
     PathBuf::from(home.unwrap_or_default()).join(".jucode")
@@ -2925,6 +2952,7 @@ pub fn run() {
         .manage(capture::Recorder::default())
         .invoke_handler(tauri::generate_handler![
             create_session,
+            daemon_endpoint,
             send_op,
             send_line,
             check_backend,

@@ -1,9 +1,9 @@
 import { ChatState } from './chat.svelte';
-import { createSession, closeSession, projectRoot, writeConfig, git, claudeSessionTranscript, switchToolProfile } from './protocol';
+import { createSession, closeSession, hostSession, projectRoot, writeConfig, git, claudeSessionTranscript, switchToolProfile } from './protocol';
 import { canHandOffToTui, isValidResumeSessionId } from './tuiHandoff';
 import { createAdapter, normalizeBackendId, type BackendId } from './backends';
 import { dispatch, ioFor, registerAdapter, unregisterAdapter } from './backends/router';
-import { buildBackendOpts, defaultBackendFor } from './backends/settings';
+import { buildBackendOpts, defaultBackendFor, loadBackendSettings } from './backends/settings';
 import { needsClaudeYoloRespawn, toEngineMode } from './approval';
 import { toClaudeMode } from './backends/claude';
 import { t } from '$lib/i18n';
@@ -37,6 +37,8 @@ export interface SavedProject {
 		/** The conversation was handed to the native TUI (resume by `sid`).
 		 *  Omitted for the default GUI surface so old layouts stay clean. */
 		surface?: 'tui';
+		/** Hosted by the local `jucode daemon`; `sid` is its daemon session. */
+		hosted?: boolean;
 	} & SavedTabChrome)[];
 	/** 并行任务 worktree 项目的元数据（isWorktree/mainRepoPath/branch/baseBranch/slug）。 */
 	worktree?: WorktreeMeta;
@@ -44,6 +46,11 @@ export interface SavedProject {
 	lastBackend?: string;
 	/** lastBackend 为 'acp' 时：上次选择的 ACP agent。 */
 	lastAcpAgent?: { id: string; name: string };
+}
+
+/** New JuCode sessions run in the daemon when the setting is on. */
+function hostsNewSessions(backend: BackendId): boolean {
+	return backend === 'jucode' && loadBackendSettings().daemon;
 }
 
 const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
@@ -139,8 +146,11 @@ export class SessionStore {
 		const agentOpt = s.backendId === 'acp' && s.acpAgent ? { agent: s.acpAgent.id } : undefined;
 		const opts =
 			agentOpt || extraOpts ? { ...(base ?? {}), ...(agentOpt ?? {}), ...(extraOpts ?? {}) } : base;
-		const spawned =
-			s.backendId === 'jucode' && !opts
+		// A hosted session reopens its daemon session when it has one (restart,
+		// restore, provider switch) and creates one otherwise.
+		const spawned = s.hosted
+			? hostSession(s.id, cwd ?? '', resume ?? (s.chat.sessionId || undefined))
+			: s.backendId === 'jucode' && !opts
 				? createSession(s.id, cwd)
 				: createSession(s.id, cwd, s.backendId, opts ?? {});
 		return spawned.then(() => {
@@ -175,6 +185,7 @@ export class SessionStore {
 			agent = undefined;
 		}
 		const s = this.#newSession(backendId, agent);
+		s.hosted = hostsNewSessions(backendId);
 		project.sessions.push(s);
 		project.lastBackend = backendId;
 		if (backendId === 'acp' && agent) project.lastAcpAgent = agent;
@@ -235,6 +246,7 @@ export class SessionStore {
 		} catch {
 			/* old child may already be gone */
 		}
+		s.hosted = hostsNewSessions(backend);
 		// Same rationale as addSession: pin a resumable uuid for claude.
 		const extra = backend === 'claude' ? { session_id: newUuid() } : undefined;
 		if (extra) chat.sessionId = extra.session_id;
@@ -302,9 +314,11 @@ export class SessionStore {
 		chrome?: SavedTabChrome,
 		reuseId?: string,
 		acpAgent?: { id: string; name: string },
-		surface?: 'tui'
+		surface?: 'tui',
+		hosted = false
 	) {
 		const s = this.#newSession(backend, backend === 'acp' ? acpAgent : undefined, reuseId);
+		s.hosted = hosted && backend === 'jucode';
 		if (title) s.chat.title = title;
 		s.archived = archived;
 		if (chrome?.color) s.color = chrome.color;
@@ -329,7 +343,7 @@ export class SessionStore {
 				? this.#spawn(s, project.path, () => this.#replayClaudeTranscript(s, project.path, sid), {
 						resume: sid
 					})
-				: backend === 'codex'
+				: backend === 'codex' || s.hosted
 					? this.#spawn(s, project.path, undefined, undefined, sid)
 					: this.#spawn(s, project.path, () => dispatch(s.id, { op: 'command', input: `/resume ${sid}` }));
 		spawned.catch((e) => this.#engineFailed(s.chat, e));
@@ -434,7 +448,8 @@ export class SessionStore {
 			s,
 			this.projectPathOf(id),
 			() => {
-				if (sid && canResume && s.backendId === 'jucode')
+				// Hosted sessions resume by reopening the daemon session in #spawn.
+				if (sid && canResume && s.backendId === 'jucode' && !s.hosted)
 					dispatch(id, { op: 'command', input: `/resume ${sid}` });
 			},
 			Object.keys(extra).length ? extra : undefined,
@@ -508,7 +523,7 @@ export class SessionStore {
 		try {
 			await closeSession(id);
 			await this.#spawn(s, this.projectPathOf(id));
-			if (sid && canResume) dispatch(id, { op: 'command', input: `/resume ${sid}` });
+			if (sid && canResume && !s.hosted) dispatch(id, { op: 'command', input: `/resume ${sid}` });
 		} catch (e) {
 			s.chat.switching = false;
 			this.#engineFailed(s.chat, e);
@@ -715,7 +730,12 @@ export class SessionStore {
 			tabs: p.sessions
 				.map((s) => ({
 					id: s.id,
-					...(s.chat.sessionId && (s.chat.resumable || s.restored) ? { sid: s.chat.sessionId } : {}),
+					// A hosted session exists in the daemon from its first moment, so
+					// its id is always worth keeping.
+					...(s.chat.sessionId && (s.chat.resumable || s.restored || s.hosted)
+						? { sid: s.chat.sessionId }
+						: {}),
+					...(s.hosted ? { hosted: true } : {}),
 					title: s.chat.title,
 					...(s.backendId !== 'jucode' ? { backend: s.backendId } : {}),
 					...(s.backendId === 'acp' && s.acpAgent ? { acpAgent: s.acpAgent } : {}),
@@ -789,7 +809,18 @@ export class SessionStore {
 					// A tab handed to the TUI restores as a TUI surface (no engine).
 					const surface = t.surface === 'tui' && sid ? ('tui' as const) : undefined;
 					const id = sid
-						? this.restoreSession(proj, sid, t.title, backend, !!t.archived, chrome, t.id, acpAgent, surface)
+						? this.restoreSession(
+								proj,
+								sid,
+								t.title,
+								backend,
+								!!t.archived,
+								chrome,
+								t.id,
+								acpAgent,
+								surface,
+								t.hosted === true
+							)
 						: this.#spawnSaved(proj, t.id!, t.title, backend, !!t.archived, chrome, acpAgent);
 					if (!first && !t.archived) first = id;
 				}

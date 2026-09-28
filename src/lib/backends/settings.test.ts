@@ -36,13 +36,16 @@ describe('backend settings parsing', () => {
 			default: 'claude',
 			paths: { codex: '/usr/local/bin/codex' },
 			useShellEnv: true,
-			env: {}
+			env: {},
+			daemon: false
 		});
+		expect(parseBackendSettings(JSON.stringify({ daemon: true })).daemon).toBe(true);
+		expect(parseBackendSettings(JSON.stringify({ daemon: 'yes' })).daemon).toBe(false);
 	});
 });
 
 describe('default backend for new sessions', () => {
-	const settings: BackendSettings = { default: 'codex', paths: {}, useShellEnv: true, env: {} };
+	const settings: BackendSettings = { default: 'codex', paths: {}, useShellEnv: true, env: {}, daemon: false };
 
 	it("the project's last-used backend wins", () => {
 		expect(defaultBackendFor('claude', settings)).toBe('claude');
@@ -54,7 +57,7 @@ describe('default backend for new sessions', () => {
 		expect(defaultBackendFor(null, settings)).toBe('codex');
 		expect(defaultBackendFor('bogus', settings)).toBe('codex');
 		expect(
-			defaultBackendFor(undefined, { default: 'jucode', paths: {}, useShellEnv: true, env: {} })
+			defaultBackendFor(undefined, { default: 'jucode', paths: {}, useShellEnv: true, env: {}, daemon: false })
 		).toBe('jucode');
 	});
 });
@@ -64,6 +67,7 @@ const base = (over: Partial<BackendSettings> = {}): BackendSettings => ({
 	paths: {},
 	useShellEnv: true,
 	env: {},
+	daemon: false,
 	...over
 });
 

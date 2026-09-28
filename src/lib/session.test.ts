@@ -3,8 +3,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Stub the Tauri-backed protocol layer so the store's lifecycle is testable in node.
 vi.mock('./protocol', () => ({
 	createSession: vi.fn(() => Promise.resolve()),
+	hostSession: vi.fn(() => Promise.resolve()),
 	closeSession: vi.fn(() => Promise.resolve()),
 	sendOp: vi.fn(() => Promise.resolve()),
+	sendLine: vi.fn(() => Promise.resolve()),
 	projectRoot: vi.fn(() => Promise.resolve('/tmp/demo')),
 	writeConfig: vi.fn(() => Promise.resolve()),
 	git: vi.fn(() => Promise.resolve('')),
@@ -12,7 +14,7 @@ vi.mock('./protocol', () => ({
 }));
 
 import { SessionStore } from './session.svelte';
-import { createSession, closeSession, sendOp, git, writeConfig } from './protocol';
+import { createSession, hostSession, closeSession, sendOp, sendLine, git, writeConfig } from './protocol';
 import { setLocale } from './i18n';
 import type { Project, WorktreeMeta } from './types';
 
@@ -301,8 +303,8 @@ describe('SessionStore lifecycle', () => {
 		expect(store.activeId).toBe('live-a');
 		await Promise.resolve(); // let the spawn continuations run
 		// The resumable tab resumes; the empty one spawns fresh with no /resume.
-		expect(sendOp).toHaveBeenCalledWith('live-a', { op: 'command', input: '/resume s-a' });
-		expect(sendOp).not.toHaveBeenCalledWith('live-b', expect.anything());
+		expect(sendLine).toHaveBeenCalledWith('live-a', JSON.stringify({ op: 'command', input: '/resume s-a' }));
+		expect(sendLine).not.toHaveBeenCalledWith('live-b', expect.anything());
 		expect(store.projects[0].sessions[1].chat.title).toBe('B');
 	});
 
@@ -536,7 +538,7 @@ describe('SessionStore GUI ⇄ TUI handoff', () => {
 		await store.returnToGui(s.id);
 		await Promise.resolve(); // let the spawn continuation run
 		expect(createSession).toHaveBeenCalled();
-		expect(sendOp).toHaveBeenCalledWith(s.id, { op: 'command', input: `/resume ${SID}` });
+		expect(sendLine).toHaveBeenCalledWith(s.id, JSON.stringify({ op: 'command', input: `/resume ${SID}` }));
 	});
 
 	it('serialize writes surface only for tui tabs', async () => {
@@ -586,10 +588,7 @@ describe('SessionStore GUI ⇄ TUI handoff', () => {
 		const s = store.projects[0].sessions[0];
 		expect(s.surface).toBeUndefined();
 		expect(s.restored).toBeUndefined();
-		expect(sendOp).not.toHaveBeenCalledWith('live-a', {
-			op: 'command',
-			input: '/resume a b'
-		});
+		expect(sendLine).not.toHaveBeenCalledWith('live-a', expect.stringContaining('/resume'));
 		expect(createSession).toHaveBeenCalledWith('live-a', '/tmp/p1');
 	});
 });
@@ -612,7 +611,7 @@ describe('SessionStore parallel-task worktrees', () => {
 		// first message is sent once the engine is up (createSession resolves)
 		await Promise.resolve();
 		const id = p.sessions[0].id;
-		expect(sendOp).toHaveBeenCalledWith(id, { op: 'user_message', content: '修复登录问题' });
+		expect(sendLine).toHaveBeenCalledWith(id, JSON.stringify({ op: 'user_message', content: '修复登录问题' }));
 		expect(p.sessions[0].chat.messages.some((m) => m.kind === 'user' && m.text === '修复登录问题')).toBe(true);
 	});
 
@@ -653,5 +652,69 @@ describe('SessionStore parallel-task worktrees', () => {
 		expect(store.projects[1].sessions.length).toBeGreaterThan(0);
 		expect(store.activeId).toBe(store.projects[1].sessions[0].id);
 		expect(store.loaded).toBe(true);
+	});
+});
+
+describe('sessions hosted by jucode daemon', () => {
+	const withDaemonSetting = (on: boolean) =>
+		vi.stubGlobal('localStorage', {
+			getItem: () => JSON.stringify({ daemon: on }),
+			setItem: () => {}
+		});
+	const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+	it('new jucode sessions are hosted when the setting is on', async () => {
+		withDaemonSetting(true);
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p);
+		expect(p.sessions[0].hosted).toBe(true);
+		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined);
+		expect(createSession).not.toHaveBeenCalled();
+		// Other engines never go through the daemon.
+		store.addSession(p, undefined, 'codex');
+		expect(p.sessions[1].hosted).toBe(false);
+		vi.unstubAllGlobals();
+	});
+
+	it('a restart reopens the daemon session instead of sending /resume', async () => {
+		withDaemonSetting(true);
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p);
+		const s = p.sessions[0];
+		s.chat.sessionId = 'daemon-sess';
+		s.chat.messages.push({ kind: 'user', text: 'hi' });
+		await flush();
+		vi.mocked(hostSession).mockClear();
+		store.handleExit(id);
+		await flush();
+		expect(hostSession).toHaveBeenCalledWith(id, p.path, 'daemon-sess');
+		expect(sendLine).not.toHaveBeenCalledWith(id, expect.stringContaining('/resume'));
+		vi.unstubAllGlobals();
+	});
+
+	it('serialize keeps the daemon session and restore reopens it hosted', async () => {
+		withDaemonSetting(true);
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		store.addSession(p);
+		// The engine reported its id; no user turn yet.
+		p.sessions[0].chat.sessionId = 'daemon-sess';
+		const saved = store.serialize();
+		expect(saved[0].tabs?.[0]).toMatchObject({ sid: 'daemon-sess', hosted: true });
+
+		withDaemonSetting(false);
+		vi.mocked(hostSession).mockClear();
+		const restored = new SessionStore();
+		await restored.restore(saved);
+		const s = restored.projects[0].sessions[0];
+		expect(s.hosted).toBe(true);
+		expect(hostSession).toHaveBeenCalledWith(s.id, p.path, 'daemon-sess');
+		expect(sendLine).not.toHaveBeenCalledWith(s.id, expect.stringContaining('/resume'));
+		vi.unstubAllGlobals();
 	});
 });

@@ -42,7 +42,8 @@
 				Object.entries(settings.paths).filter(([, v]) => typeof v === 'string' && v.trim())
 			) as BackendSettings['paths'],
 			useShellEnv: settings.useShellEnv,
-			env: settings.env
+			env: settings.env,
+			daemon: settings.daemon
 		});
 	}
 
@@ -70,6 +71,7 @@
 	// Switch 通过 bind:checked 直接改 settings —— 变化即持久化（初始一次无害）。
 	$effect(() => {
 		void settings.useShellEnv;
+		void settings.daemon;
 		persist();
 	});
 
@@ -199,6 +201,17 @@
 			<span>{o.label}</span>
 		{/snippet}
 	</Select>
+</div>
+
+<div class="group">
+	<div class="glabel">{t('settings.backend.daemonLabel')}</div>
+	<div class="shellenv">
+		<div class="semain">
+			<span class="sename">{t('settings.backend.daemonToggle')}</span>
+		</div>
+		<Switch bind:checked={settings.daemon} label={t('settings.backend.daemonToggle')} />
+	</div>
+	<p class="hint">{t('settings.backend.daemonHint')}</p>
 </div>
 
 <style>

@@ -17,6 +17,7 @@
 		listProviders,
 		listDir,
 		gitCheckpointCapture,
+		daemon,
 		type EventPayload
 	} from '$lib/protocol';
 	import { dispatch } from '$lib/backends/router';
@@ -714,13 +715,15 @@
 			// localStorage layout on first run): it has no dependency on the
 			// event listeners below, and the sidebar switcher can show early.
 			const wsEntry = await workspaces.load(t('shell.workspace.default'));
-			const unlisten = await listen<EventPayload>('agent-event', (e) => {
-				const s = sessionMap.get(e.payload.session);
+			// One engine frame (a child's stdout line, or a frame from a session
+			// hosted by jucode daemon) into its session's adapter and ChatState.
+			const deliver = (sessionId: string, data: string) => {
+				const s = sessionMap.get(sessionId);
 				if (!s) return;
 				const wasBusy = s.chat.busy;
 				// Capture the raw frame for the diagnostics trace so a mis-parsed or
 				// dropped tool frame is inspectable after the fact.
-				s.chat.captureFrame(e.payload.data);
+				s.chat.captureFrame(data);
 				// Route the raw line through the session's backend adapter; jucode's is
 				// the identity, codex/claude translate to the jucode dialect. Parse,
 				// translate and each handle() are isolated so one bad frame or event
@@ -728,9 +731,9 @@
 				// completion riding in the same frame as something that threw).
 				let frame: unknown;
 				try {
-					frame = JSON.parse(e.payload.data);
+					frame = JSON.parse(data);
 				} catch (err) {
-					console.error('[agent-event] JSON parse failed', err, e.payload.data.slice(0, 300));
+					console.error('[agent-event] JSON parse failed', err, data.slice(0, 300));
 					return;
 				}
 				let translated: ReturnType<typeof s.adapter.translate>;
@@ -758,7 +761,10 @@
 				}
 				// This session's tile (if any) sticks to the bottom while streaming.
 				panes.get(s.id)?.scrollToEnd();
-			});
+			};
+			const unlisten = await listen<EventPayload>('agent-event', (e) => deliver(e.payload.session, e.payload.data));
+			daemon.onFrame = deliver;
+			daemon.onExit = (id) => store.handleExit(id);
 			const unexit = await listen<string>('agent-exit', (e) => store.handleExit(e.payload));
 			const undrop = await getCurrentWebview().onDragDropEvent((e) => {
 				if (e.payload.type === 'drop')

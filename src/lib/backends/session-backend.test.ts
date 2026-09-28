@@ -114,8 +114,8 @@ describe('SessionStore × backends', () => {
 		expect(store.projects[0].lastBackend).toBe('claude');
 		// jucode tabs resume via /resume; claude tabs resume via the allowlisted
 		// --resume spawn option instead of a command.
-		expect(sendOp).toHaveBeenCalledWith(sessions[0].id, { op: 'command', input: '/resume s-a' });
-		expect(sendOp).not.toHaveBeenCalledWith(sessions[1].id, expect.anything());
+		expect(sendLine).toHaveBeenCalledWith(sessions[0].id, JSON.stringify({ op: 'command', input: '/resume s-a' }));
+		expect(sendLine).not.toHaveBeenCalledWith(sessions[1].id, expect.stringContaining('/resume'));
 		expect(createSession).toHaveBeenCalledWith(sessions[1].id, '/tmp/p1', 'claude', { resume: 's-b' });
 		expect(sessions[1].chat.sessionId).toBe('s-b');
 		// The transcript is replayed from the session file (best-effort).

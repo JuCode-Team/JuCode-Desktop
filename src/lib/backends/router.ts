@@ -38,10 +38,10 @@ export function ioFor(sessionId: string): AdapterIO {
  * Returns false when the session's backend doesn't support the op (the caller
  * should tell the user); true when the op was handed to the child.
  *
- * The native backend (and any session without a registered adapter — e.g. one
- * created before this module loaded, which cannot happen in practice but keeps
- * the fallback honest) uses the structured send_op command directly: that is
- * byte-for-byte the pre-adapter behavior.
+ * Every adapter encodes its own frames, the native one included (it maps
+ * approval-mode names). A session without a registered adapter — one created
+ * before this module loaded, which cannot happen in practice but keeps the
+ * fallback honest — uses the structured send_op command directly.
  */
 export function dispatch(
 	sessionId: string,
@@ -49,7 +49,7 @@ export function dispatch(
 	onError: (e: unknown) => void = (e) => console.error('send op failed', e)
 ): boolean {
 	const adapter = adapters.get(sessionId);
-	if (!adapter || adapter.id === 'jucode') {
+	if (!adapter) {
 		void protocol.sendOp(sessionId, op)?.catch?.(onError);
 		return true;
 	}
