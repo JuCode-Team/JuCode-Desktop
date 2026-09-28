@@ -5,6 +5,24 @@ import type { Op } from '$lib/protocol';
 describe('jucode adapter (passthrough)', () => {
 	const adapter = createJucodeAdapter();
 
+	it('drops a matching hello and reports a protocol mismatch', () => {
+		expect(adapter.translate({ type: 'hello', protocol: 2, version: '0.3.0' })).toEqual([]);
+		const [ev] = adapter.translate({ type: 'hello', protocol: 3, version: '9.0.0' });
+		expect(ev.type).toBe('error');
+		expect(String(ev.message)).toContain('protocol 3');
+	});
+
+	it('maps approval-mode names between the desktop trio and the engine', () => {
+		const sent = (mode: string) =>
+			JSON.parse(adapter.encodeOp({ op: 'set_approval_mode', mode } as Op)![0]).mode;
+		expect(sent('read-only')).toBe('manual');
+		expect(sent('auto-edit')).toBe('auto-edit');
+		expect(sent('auto')).toBe('auto');
+		expect(sent('full-auto')).toBe('full-access');
+		expect(adapter.translate({ type: 'approval_mode', mode: 'manual' })[0].mode).toBe('read-only');
+		expect(adapter.translate({ type: 'approval_mode', mode: 'full-access' })[0].mode).toBe('full-auto');
+	});
+
 	it('declares every capability', () => {
 		expect(adapter.id).toBe('jucode');
 		// extendedApprovalModes is a claude-only quirk (its native plan/auto
@@ -70,9 +88,6 @@ describe('jucode adapter (passthrough)', () => {
 			{ op: 'approve', call_id: 'c1', decision: 'allow', hunks: ['h1', 'h2'] },
 			{ op: 'approve', call_id: 'c1', decision: 'deny' },
 			{ op: 'approve', call_id: 'c1', decision: 'allow', always: true },
-			{ op: 'set_approval_mode', mode: 'read-only' },
-			{ op: 'set_approval_mode', mode: 'auto-edit' },
-			{ op: 'set_approval_mode', mode: 'full-auto' },
 			{ op: 'mcp_list' },
 			{
 				op: 'mcp_set',
