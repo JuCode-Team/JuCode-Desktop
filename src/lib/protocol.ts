@@ -7,9 +7,15 @@ import { DaemonClient, type DaemonEndpoint } from './daemon';
  *  `onFrame` / `onExit` into the same path as child-process events. */
 export const daemon = new DaemonClient(() => invoke<DaemonEndpoint>('daemon_endpoint'));
 
-/** Starts (or, with `resume`, reopens) a session hosted by the daemon. */
-export function hostSession(session: string, cwd: string, resume?: string): Promise<void> {
-	return daemon.open(session, cwd, resume);
+/** Starts (or, with `resume`, reopens) a session hosted by the daemon;
+ *  `agent` starts it as that long-lived agent. */
+export function hostSession(
+	session: string,
+	cwd: string,
+	resume?: string,
+	agent?: string
+): Promise<void> {
+	return daemon.open(session, cwd, resume, agent);
 }
 
 // Commands the GUI sends to a session's `jucode serve` over stdin.

@@ -63,6 +63,9 @@
 	import Button from '$lib/ui/Button.svelte';
 	import CommandPalette from '$lib/CommandPalette.svelte';
 	import TaskDialog from '$lib/TaskDialog.svelte';
+	import AgentDialog from '$lib/AgentDialog.svelte';
+	import { agentDirectory } from '$lib/agents.svelte';
+	import { loadBackendSettings } from '$lib/backends/settings';
 	import type { Project, WorktreeMeta } from '$lib/types';
 	import PlanPanel from '$lib/PlanPanel.svelte';
 	import GoalPanel from '$lib/GoalPanel.svelte';
@@ -109,6 +112,7 @@
 	let showPalette = $state(false);
 	// 「新建并行任务」对话框：为哪个（主仓库）项目开任务。
 	let taskDialogFor = $state<Project | null>(null);
+	let showAgentDialog = $state(false);
 	let showQuickOpen = $state(false);
 
 	function refreshAuth() {
@@ -765,6 +769,9 @@
 			const unlisten = await listen<EventPayload>('agent-event', (e) => deliver(e.payload.session, e.payload.data));
 			daemon.onFrame = deliver;
 			daemon.onExit = (id) => store.handleExit(id);
+			daemon.onEvent = (frame) => agentDirectory.handle(frame);
+			daemon.onDisconnect = () => agentDirectory.disconnected();
+			if (loadBackendSettings().daemon) agentDirectory.start();
 			const unexit = await listen<string>('agent-exit', (e) => store.handleExit(e.payload));
 			const undrop = await getCurrentWebview().onDragDropEvent((e) => {
 				if (e.payload.type === 'drop')
@@ -869,6 +876,10 @@
 		onSessionMenu={openSessionMenu}
 		onHistory={(p) => store.openHistory(p)}
 		onSettings={() => (showSettings = true)}
+		agents={agentDirectory.agents}
+		agentsStatus={agentDirectory.status}
+		onOpenAgent={(a) => store.openAgentSession(a, agentDirectory.latestSession(a.id)?.session)}
+		onNewAgent={() => (showAgentDialog = true)}
 	/>
 	<div class="resizer side" class:hidden={!showSidebar} role="separator" aria-label="resize sidebar" onpointerdown={startSidebarResize}></div>
 
@@ -1009,6 +1020,17 @@
 
 	{#if taskDialogFor}
 		<TaskDialog project={taskDialogFor} onClose={() => (taskDialogFor = null)} onCreated={openTaskProject} />
+	{/if}
+
+	{#if showAgentDialog}
+		<AgentDialog
+			defaultDir={store.activeProject?.path ?? ''}
+			onClose={() => (showAgentDialog = false)}
+			onCreated={(agent) => {
+				showAgentDialog = false;
+				store.openAgentSession(agent);
+			}}
+		/>
 	{/if}
 
 	{#if sessionChromeFor && chromeSession}

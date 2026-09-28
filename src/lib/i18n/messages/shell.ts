@@ -161,6 +161,25 @@ const shell = {
 		// the coding agent is picked inside the session, not at creation.
 		agentSession: '创建 Agent 会话',
 		newTask: '新建并行任务',
+		agents: {
+			title: 'Agent',
+			add: '新建 Agent',
+			unreachable: '连不上 jucode daemon，正在重试',
+			empty: '还没有 Agent',
+			busy: '工作中',
+			open: '打开 {name} 最近的会话',
+			dialogTitle: '新建 Agent',
+			dialogHint: 'Agent 长期负责一个目录：它的会话在这个目录里运行，关掉桌面端也会继续工作。职责写得越具体，它越知道该做什么、不该做什么。',
+			idLabel: '标识',
+			idHint: '小写字母、数字或 -，创建后不能修改',
+			nameLabel: '名称',
+			dirLabel: '工作目录',
+			browse: '选择…',
+			roleLabel: '职责',
+			rolePlaceholder: '例如：维护 web 前端，保持构建和测试通过；改动接口前先问我。',
+			create: '创建',
+			creating: '创建中…'
+		},
 		task: {
 			dialogTitle: '新建并行任务',
 			dialogHint: '在独立的 git worktree 中并行开工，不影响当前工作区。',
@@ -419,6 +438,25 @@ const shell = {
 		// the coding agent is picked inside the session, not at creation.
 		agentSession: 'New agent session',
 		newTask: 'New parallel task',
+		agents: {
+			title: 'Agents',
+			add: 'New agent',
+			unreachable: 'Cannot reach jucode daemon; retrying',
+			empty: 'No agents yet',
+			busy: 'working',
+			open: "Open {name}'s latest session",
+			dialogTitle: 'New agent',
+			dialogHint: 'An agent looks after one directory for the long run: its sessions run there and keep working after the desktop closes. The more specific its role, the better it knows what to do and what to leave alone.',
+			idLabel: 'Id',
+			idHint: 'lowercase letters, digits or -; cannot change later',
+			nameLabel: 'Name',
+			dirLabel: 'Working directory',
+			browse: 'Browse…',
+			roleLabel: 'Role',
+			rolePlaceholder: 'e.g. Maintain the web front end and keep the build and tests green; ask me before changing an API.',
+			create: 'Create',
+			creating: 'Creating…'
+		},
 		task: {
 			dialogTitle: 'New parallel task',
 			dialogHint: 'Work in an isolated git worktree without touching the current working tree.',

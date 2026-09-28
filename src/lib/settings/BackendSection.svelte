@@ -26,6 +26,7 @@
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Switch from '$lib/ui/Switch.svelte';
 	import { t } from '$lib/i18n';
+	import { agentDirectory } from '$lib/agents.svelte';
 
 	let settings = $state<BackendSettings>(loadBackendSettings());
 	let status = $state<Partial<Record<BackendId, BackendStatus | 'checking'>>>({});
@@ -73,6 +74,12 @@
 		void settings.useShellEnv;
 		void settings.daemon;
 		persist();
+	});
+
+	// The sidebar's agent list follows the background-service switch.
+	$effect(() => {
+		if (settings.daemon) agentDirectory.start();
+		else agentDirectory.stop();
 	});
 
 	function check(id: BackendId) {

@@ -670,7 +670,7 @@ describe('sessions hosted by jucode daemon', () => {
 		store.projects.push(p);
 		const id = store.addSession(p);
 		expect(p.sessions[0].hosted).toBe(true);
-		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined);
+		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined, undefined);
 		expect(createSession).not.toHaveBeenCalled();
 		// Other engines never go through the daemon.
 		store.addSession(p, undefined, 'codex');
@@ -691,7 +691,7 @@ describe('sessions hosted by jucode daemon', () => {
 		vi.mocked(hostSession).mockClear();
 		store.handleExit(id);
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(id, p.path, 'daemon-sess');
+		expect(hostSession).toHaveBeenCalledWith(id, p.path, 'daemon-sess', undefined);
 		expect(sendLine).not.toHaveBeenCalledWith(id, expect.stringContaining('/resume'));
 		vi.unstubAllGlobals();
 	});
@@ -713,8 +713,36 @@ describe('sessions hosted by jucode daemon', () => {
 		await restored.restore(saved);
 		const s = restored.projects[0].sessions[0];
 		expect(s.hosted).toBe(true);
-		expect(hostSession).toHaveBeenCalledWith(s.id, p.path, 'daemon-sess');
+		expect(hostSession).toHaveBeenCalledWith(s.id, p.path, 'daemon-sess', undefined);
 		expect(sendLine).not.toHaveBeenCalledWith(s.id, expect.stringContaining('/resume'));
 		vi.unstubAllGlobals();
+	});
+});
+
+describe('agent sessions', () => {
+	it('opens a new session as the agent in a project for its directory', async () => {
+		const store = new SessionStore();
+		const id = store.openAgentSession({ id: 'ops', name: 'Ops', cwd: '/srv/ops' });
+		expect(store.projects.map((p) => p.path)).toEqual(['/srv/ops']);
+		const s = store.projects[0].sessions[0];
+		expect(s.id).toBe(id);
+		expect(s.hosted).toBe(true);
+		expect(s.chat.title).toBe('Ops');
+		expect(store.activeId).toBe(id);
+		expect(hostSession).toHaveBeenCalledWith(id, '/srv/ops', undefined, 'ops');
+	});
+
+	it("reuses the open tab of the agent's session, or reopens it by id", async () => {
+		const store = new SessionStore();
+		const p = proj();
+		p.path = '/srv/ops';
+		store.projects.push(p);
+		const first = store.openAgentSession({ id: 'ops', name: 'Ops', cwd: '/srv/ops' }, 'daemon-1');
+		expect(hostSession).toHaveBeenCalledWith(first, '/srv/ops', 'daemon-1', undefined);
+		// The existing project is reused, and the same session is not opened twice.
+		expect(store.projects).toHaveLength(1);
+		vi.mocked(hostSession).mockClear();
+		expect(store.openAgentSession({ id: 'ops', name: 'Ops', cwd: '/srv/ops' }, 'daemon-1')).toBe(first);
+		expect(hostSession).not.toHaveBeenCalled();
 	});
 });

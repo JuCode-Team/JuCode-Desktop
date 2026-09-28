@@ -6,6 +6,7 @@
 	import BackendIcon from '$lib/BackendIcon.svelte';
 	import TabGlyph from '$lib/workbench/TabGlyph.svelte';
 	import type { Project } from '$lib/types';
+	import type { AgentView } from '$lib/agents.svelte';
 
 	let {
 		projects,
@@ -26,7 +27,11 @@
 		onRenameSession,
 		onSessionMenu,
 		onHistory,
-		onSettings
+		onSettings,
+		agents = [],
+		agentsStatus = 'off',
+		onOpenAgent = () => {},
+		onNewAgent = () => {}
 	}: {
 		projects: Project[];
 		activeId: string;
@@ -50,6 +55,11 @@
 		onSessionMenu: (id: string, ev: MouseEvent) => void;
 		onHistory: (p: Project) => void;
 		onSettings: () => void;
+		/** Long-lived agents of the local jucode daemon (background service on). */
+		agents?: AgentView[];
+		agentsStatus?: 'off' | 'connecting' | 'on' | 'unreachable';
+		onOpenAgent?: (agent: AgentView) => void;
+		onNewAgent?: () => void;
 	} = $props();
 
 	// Which projects have their archived section expanded (collapsed by default).
@@ -199,6 +209,28 @@
 	{/snippet}
 
 	<div class="sess-list">
+		{#if agentsStatus !== 'off'}
+			<div class="group">
+				<span class="group-name">{t('shell.agents.title')}</span>
+				<span class="group-count">{agents.length}</span>
+				<button class="group-add no-auto" onclick={onNewAgent} aria-label="new agent" title={t('shell.agents.add')}><Plus size={13} /></button>
+			</div>
+			{#if agentsStatus === 'unreachable'}
+				<div class="agent-note">{t('shell.agents.unreachable')}</div>
+			{:else if agents.length === 0 && agentsStatus === 'on'}
+				<button class="sess-empty" onclick={onNewAgent}>{t('shell.agents.add')}</button>
+			{/if}
+			{#each agents as a (a.id)}
+				<button class="sess agent" onclick={() => onOpenAgent(a)} title={t('shell.agents.open', { name: a.name })}>
+					<span class="sess-dot" class:busy={a.busy}></span>
+					<span class="agent-text">
+						<span class="sess-title">{a.name}</span>
+						{#if a.summary}<span class="agent-summary">{a.summary}</span>{/if}
+					</span>
+					{#if a.busy}<span class="agent-busy">{t('shell.agents.busy')}</span>{/if}
+				</button>
+			{/each}
+		{/if}
 		{#each projects as p (p.id)}
 			{@const active = p.sessions.filter((s) => !s.archived && sessionMatches(p, s))}
 			{@const arch = p.sessions.filter((s) => s.archived && sessionMatches(p, s))}
@@ -578,6 +610,38 @@
 		background: var(--warn);
 		box-shadow: 0 0 0 3px color-mix(in oklab, var(--warn) 24%, transparent);
 		animation: none;
+	}
+	.sess.agent {
+		align-items: flex-start;
+	}
+	.sess.agent .sess-dot {
+		margin-top: 6px;
+	}
+	.agent-text {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+	}
+	.agent-summary {
+		font-size: 11.5px;
+		color: var(--dim);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.agent-busy {
+		font-size: 10.5px;
+		color: var(--accent-bright);
+		font-family: var(--font-mono);
+		flex-shrink: 0;
+		margin-top: 2px;
+	}
+	.agent-note {
+		padding: 4px 12px 8px;
+		font-size: 11.5px;
+		color: var(--dim2);
 	}
 	.sess-title {
 		flex: 1;

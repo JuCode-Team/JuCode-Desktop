@@ -138,7 +138,8 @@ export class SessionStore {
 		cwd: string | undefined,
 		after?: () => void,
 		extraOpts?: Record<string, unknown>,
-		resume?: string
+		resume?: string,
+		agent?: string
 	) {
 		const base = buildBackendOpts(s.backendId);
 		// ACP sessions always pass their registry agent id (initial spawn and
@@ -149,7 +150,7 @@ export class SessionStore {
 		// A hosted session reopens its daemon session when it has one (restart,
 		// restore, provider switch) and creates one otherwise.
 		const spawned = s.hosted
-			? hostSession(s.id, cwd ?? '', resume ?? (s.chat.sessionId || undefined))
+			? hostSession(s.id, cwd ?? '', resume ?? (s.chat.sessionId || undefined), agent)
 			: s.backendId === 'jucode' && !opts
 				? createSession(s.id, cwd)
 				: createSession(s.id, cwd, s.backendId, opts ?? {});
@@ -399,6 +400,38 @@ export class SessionStore {
 		this.projects.push(p);
 		this.addSession(p, firstMessage);
 		return p;
+	}
+
+	/** Show a long-lived agent's conversation: `sid` (a daemon session of
+	 *  that agent) in its open tab or a new one, or a new session of the
+	 *  agent when `sid` is omitted. The tab lands in the project for the
+	 *  agent's directory, which is added when missing. */
+	openAgentSession(agent: { id: string; name: string; cwd: string }, sid?: string) {
+		const open = sid && this.allSessions.find((s) => s.hosted && s.chat.sessionId === sid);
+		if (open) {
+			open.archived = false;
+			this.activeId = open.id;
+			return open.id;
+		}
+		let project = this.projects.find((p) => p.path === agent.cwd && !p.worktree);
+		if (!project) {
+			project = { id: this.uid(), name: base(agent.cwd), path: agent.cwd, sessions: [] };
+			this.projects.push(project);
+		}
+		const s = this.#newSession('jucode');
+		s.hosted = true;
+		s.chat.title = agent.name;
+		if (sid) {
+			// The daemon holds the conversation; the backend stays jucode.
+			s.restored = true;
+			s.chat.sessionId = sid;
+		}
+		project.sessions.push(s);
+		this.activeId = s.id;
+		this.#spawn(s, project.path, undefined, undefined, sid, sid ? undefined : agent.id).catch((e) =>
+			this.#engineFailed(s.chat, e)
+		);
+		return s.id;
 	}
 
 	/**
