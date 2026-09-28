@@ -2,6 +2,9 @@
 const chat = {
 	zh: {
 		reasoning: '推理',
+		actionDeferred: '没有人在看，{name}（{summary}）已记为待确认动作，可在工作台处理',
+		actionAllowed: '待确认动作 {id} 已批准',
+		actionDenied: '待确认动作 {id} 已拒绝',
 		rewindTitle: '回退到此轮并重写（会还原文件改动）',
 		rewindTitleN: '回退到此轮并重写（还原文件改动，丢弃后面 {n} 轮）',
 		quoteTitle: '引用到输入框',
@@ -63,6 +66,9 @@ const chat = {
 		phaseCompacting: '压缩上下文'
 	},
 	en: {
+		actionDeferred: 'Nobody was watching: {name} ({summary}) was recorded as a pending action; decide it on the desk',
+		actionAllowed: 'Pending action {id} allowed',
+		actionDenied: 'Pending action {id} denied',
 		reasoning: 'Reasoning',
 		rewindTitle: 'Rewind to this turn and rewrite (reverts file changes)',
 		quoteTitle: 'Quote into the composer',

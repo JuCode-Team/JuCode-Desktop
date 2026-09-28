@@ -1,0 +1,286 @@
+<script lang="ts">
+	// One long-lived agent: its settings, brief, memory and sessions.
+	import { onMount } from 'svelte';
+	import { X, Bot, Plus, LoaderCircle } from 'lucide-svelte';
+	import IconButton from '$lib/ui/IconButton.svelte';
+	import Button from '$lib/ui/Button.svelte';
+	import Select from '$lib/ui/Select.svelte';
+	import Switch from '$lib/ui/Switch.svelte';
+	import { focusTrap } from '$lib/focusTrap';
+	import { agentDirectory, type AgentDetail } from '$lib/agents.svelte';
+	import { t } from '$lib/i18n';
+
+	let {
+		agentId,
+		onClose,
+		onOpenSession,
+		onNewSession
+	}: {
+		agentId: string;
+		onClose: () => void;
+		onOpenSession: (session: string) => void;
+		onNewSession: () => void;
+	} = $props();
+
+	let detail = $state<AgentDetail | null>(null);
+	let error = $state('');
+
+	const MODES = ['manual', 'auto-edit', 'auto', 'full-access'];
+	const sessions = $derived(
+		[...(detail?.sessions ?? [])].sort((a, b) => b.created_at - a.created_at)
+	);
+
+	async function load() {
+		try {
+			detail = await agentDirectory.detail(agentId);
+			error = '';
+		} catch (e) {
+			error = e instanceof Error ? e.message : String(e);
+		}
+	}
+	onMount(load);
+
+	async function change(changes: { enabled?: boolean; approval_mode?: string }) {
+		if (!detail) return;
+		try {
+			detail.agent = await agentDirectory.update(agentId, changes);
+		} catch (e) {
+			error = e instanceof Error ? e.message : String(e);
+			await load();
+		}
+	}
+
+	function when(ms: number): string {
+		return new Date(ms).toLocaleString();
+	}
+</script>
+
+<svelte:window onkeydown={(e) => e.key === 'Escape' && onClose()} />
+<div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && onClose()}>
+	<div class="sheet" role="dialog" aria-modal="true" tabindex="-1" aria-label={agentId} use:focusTrap>
+		<div class="head">
+			<div>
+				<h2><Bot size={18} /> {detail?.agent.name ?? agentId}</h2>
+				<p><code>{agentId}</code>{#if detail} · <code>{detail.agent.cwd}</code>{/if}</p>
+			</div>
+			<IconButton onclick={onClose} label="close"><X size={18} /></IconButton>
+		</div>
+
+		<div class="body">
+			{#if error}<div class="err">{error}</div>{/if}
+			{#if !detail}
+				{#if !error}<div class="loading"><LoaderCircle size={18} class="spin" /></div>{/if}
+			{:else}
+				<section>
+					<h3>{t('shell.agentPage.settings')}</h3>
+					<div class="row">
+						<span>{t('shell.agentPage.enabled')}</span>
+						<Switch
+							checked={detail.agent.enabled}
+							label={t('shell.agentPage.enabled')}
+							onChange={(enabled) => change({ enabled })}
+						/>
+					</div>
+					<div class="row">
+						<span>{t('shell.agentPage.approvalMode')}</span>
+						<Select
+							value={detail.agent.approval_mode}
+							options={MODES.map((m) => ({ value: m, label: m }))}
+							onChange={(approval_mode) => change({ approval_mode })}
+						/>
+					</div>
+				</section>
+
+				<section>
+					<div class="section-head">
+						<h3>{t('shell.agentPage.sessions')}</h3>
+						<Button size="sm" onclick={onNewSession}><Plus size={13} /> {t('shell.agentPage.newSession')}</Button>
+					</div>
+					{#if sessions.length === 0}
+						<p class="empty">{t('shell.agentPage.noSessions')}</p>
+					{/if}
+					{#each sessions as s (s.session)}
+						<button class="session" onclick={() => onOpenSession(s.session)}>
+							<code>{s.session}</code>
+							<span class="when">{when(s.created_at)}</span>
+							{#if s.open}<span class="open">{t('shell.agentPage.open')}</span>{/if}
+						</button>
+					{/each}
+				</section>
+
+				<section>
+					<h3>{t('shell.agentPage.brief')}</h3>
+					{#each Object.entries(detail.brief) as [file, text] (file)}
+						<div class="file">
+							<div class="file-name">{file}</div>
+							<div class="file-text" class:none={!text.trim()}>
+								{text.trim() || t('shell.agentPage.empty')}
+							</div>
+						</div>
+					{/each}
+				</section>
+
+				<section>
+					<h3>{t('shell.agentPage.memory')}</h3>
+					{#if detail.memory.length === 0}
+						<p class="empty">{t('shell.agentPage.noMemory')}</p>
+					{:else}
+						<div class="memory">
+							{#each detail.memory as file (file)}<code>{file}</code>{/each}
+						</div>
+					{/if}
+				</section>
+			{/if}
+		</div>
+	</div>
+</div>
+
+<style>
+	.overlay {
+		position: fixed;
+		inset: 0;
+		background: rgba(0, 0, 0, 0.55);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 60;
+	}
+	.sheet {
+		width: min(720px, 94vw);
+		height: min(720px, 90vh);
+		display: flex;
+		flex-direction: column;
+		background: var(--panel);
+		border: 1px solid var(--border);
+		border-radius: var(--r-lg);
+		box-shadow: var(--shadow-modal);
+		overflow: hidden;
+	}
+	.head {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		padding: 18px 20px 14px;
+		border-bottom: 1px solid var(--hairline);
+	}
+	h2 {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin: 0;
+		font-family: var(--font-display);
+		font-size: 20px;
+		font-weight: 800;
+	}
+	.head p {
+		margin: 4px 0 0;
+		font-size: 12px;
+		color: var(--dim);
+	}
+	code {
+		font-family: var(--font-mono);
+		font-size: 11.5px;
+	}
+	.body {
+		flex: 1;
+		overflow-y: auto;
+		padding: 4px 20px 20px;
+	}
+	section {
+		margin-top: 16px;
+	}
+	.section-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+	}
+	h3 {
+		margin: 0 0 8px;
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--dim);
+		font-family: var(--font-mono);
+	}
+	.row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 6px 0;
+		font-size: 13px;
+	}
+	.empty {
+		margin: 0;
+		font-size: 12.5px;
+		color: var(--dim2);
+	}
+	.session {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		width: 100%;
+		padding: 7px 10px;
+		border: none;
+		border-radius: var(--r-md);
+		background: none;
+		color: var(--text);
+		cursor: pointer;
+		text-align: left;
+	}
+	.session:hover {
+		background: var(--surface);
+	}
+	.when {
+		flex: 1;
+		font-size: 12px;
+		color: var(--dim);
+	}
+	.open {
+		font-size: 10.5px;
+		font-family: var(--font-mono);
+		color: var(--accent-bright);
+	}
+	.file {
+		margin-bottom: 10px;
+	}
+	.file-name {
+		font-family: var(--font-mono);
+		font-size: 11px;
+		color: var(--dim2);
+		margin-bottom: 4px;
+	}
+	.file-text {
+		padding: 9px 11px;
+		border: 1px solid var(--hairline);
+		border-radius: var(--r-md);
+		background: var(--surface);
+		font-size: 12.5px;
+		line-height: 1.55;
+		white-space: pre-wrap;
+		color: var(--text);
+	}
+	.file-text.none {
+		color: var(--dim2);
+	}
+	.memory {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+	}
+	.memory code {
+		padding: 2px 8px;
+		border-radius: var(--r-sm);
+		background: var(--surface2);
+	}
+	.err {
+		margin-top: 12px;
+		font-family: var(--font-mono);
+		font-size: 11.5px;
+		color: var(--err);
+	}
+	.loading {
+		display: flex;
+		justify-content: center;
+		padding: 40px;
+		color: var(--dim);
+	}
+</style>

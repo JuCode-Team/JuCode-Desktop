@@ -12,6 +12,7 @@ import {
 	type Question
 } from './approval';
 import { recordUsage } from './usageStats';
+import { t } from './i18n';
 import { costUsd } from './pricing';
 import { parseMcpServersEvent, type McpServerView } from './mcp';
 
@@ -859,6 +860,22 @@ export class ChatState {
 				break;
 			case 'info':
 				this.messages.push({ kind: 'system', text: str(ev.message) });
+				break;
+			// Nobody was watching this hosted session, so a gated call was
+			// recorded for the desk instead of prompting here.
+			case 'action_deferred':
+				this.messages.push({
+					kind: 'system',
+					text: t('chat.actionDeferred', { name: str(ev.name), summary: str(ev.summary) })
+				});
+				break;
+			case 'action_decided':
+				this.messages.push({
+					kind: 'system',
+					text: t(ev.decision === 'allow' ? 'chat.actionAllowed' : 'chat.actionDenied', {
+						id: str(ev.id)
+					})
+				});
 				break;
 			case 'error':
 				this.pendingApproval = null;

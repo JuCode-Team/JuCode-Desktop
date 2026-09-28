@@ -34,7 +34,14 @@ export interface SocketLike {
 
 const OPEN = 1;
 /** Frames about the daemon as a whole rather than one session's engine. */
-const DAEMON_EVENTS = new Set(['agents', 'sessions', 'message_delivered']);
+const DAEMON_EVENTS = new Set([
+	'agents',
+	'sessions',
+	'message_delivered',
+	'questions',
+	'actions',
+	'report_posted'
+]);
 const CLOSE_TIMEOUT_MS = 10_000;
 
 export class DaemonClient {
@@ -42,7 +49,8 @@ export class DaemonClient {
 	onFrame: (desktopId: string, raw: string) => void = () => {};
 	/** Called when a hosted session stops or the connection is lost. */
 	onExit: (desktopId: string) => void = () => {};
-	/** Daemon-wide frames: `agents`, `sessions`, `message_delivered`. */
+	/** Daemon-wide frames: agents, sessions, deliveries, questions, pending
+	 *  actions and new reports. */
 	onEvent: (frame: Record<string, unknown>) => void = () => {};
 	/** Called when an established connection is lost. */
 	onDisconnect: () => void = () => {};
@@ -208,6 +216,13 @@ export class DaemonClient {
 		this.#toDaemon.clear();
 		this.#toDesktop.clear();
 		for (const desktopId of hosted) this.onExit(desktopId);
+	}
+
+	/** Sends an op that has no reply of its own (its effect arrives as
+	 *  broadcasts), connecting first if needed. */
+	async post(op: Frame): Promise<void> {
+		await this.connect();
+		this.#write(op);
 	}
 
 	/** Sends a daemon op and resolves with its reply (rejects on `error`). */

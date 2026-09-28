@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ChatState, countDiffLines } from './chat.svelte';
+import { setLocale } from './i18n';
 
 const userTexts = (c: ChatState) =>
 	c.messages.filter((m) => m.kind === 'user').map((m) => (m.kind === 'user' ? m.text : ''));
@@ -14,6 +15,16 @@ describe('countDiffLines', () => {
 });
 
 describe('ChatState.handle', () => {
+	it('notes deferred and decided actions of a hosted session in the chat', () => {
+		setLocale('en');
+		const c = new ChatState();
+		c.handle({ type: 'action_deferred', id: 'act-1', name: 'bash', summary: 'make deploy' });
+		c.handle({ type: 'action_decided', id: 'act-1', decision: 'deny' });
+		const texts = c.messages.map((m) => (m.kind === 'system' ? m.text : ''));
+		expect(texts[0]).toContain('bash (make deploy)');
+		expect(texts[1]).toBe('Pending action act-1 denied');
+	});
+
 	it('projects a user message and streamed assistant deltas', () => {
 		const c = new ChatState();
 		c.handle({ type: 'user_message', content: 'hello' });

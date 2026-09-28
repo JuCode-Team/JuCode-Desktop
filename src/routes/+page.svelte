@@ -64,6 +64,8 @@
 	import CommandPalette from '$lib/CommandPalette.svelte';
 	import TaskDialog from '$lib/TaskDialog.svelte';
 	import AgentDialog from '$lib/AgentDialog.svelte';
+	import Desk from '$lib/Desk.svelte';
+	import AgentPage from '$lib/AgentPage.svelte';
 	import { agentDirectory } from '$lib/agents.svelte';
 	import { loadBackendSettings } from '$lib/backends/settings';
 	import type { Project, WorktreeMeta } from '$lib/types';
@@ -113,6 +115,17 @@
 	// 「新建并行任务」对话框：为哪个（主仓库）项目开任务。
 	let taskDialogFor = $state<Project | null>(null);
 	let showAgentDialog = $state(false);
+	let showDesk = $state(false);
+	let agentPageFor = $state<string | null>(null);
+
+	/** Show a daemon session in a tab: an agent's, or a plain hosted one. */
+	function openDaemonSession(session: string) {
+		const agent = agentDirectory.agentOfSession(session);
+		const cwd = agentDirectory.sessions.find((s) => s.session === session)?.cwd ?? '';
+		store.openAgentSession(agent ?? { id: '', name: cwd.split('/').pop() || session, cwd }, session);
+		showDesk = false;
+		agentPageFor = null;
+	}
 	let showQuickOpen = $state(false);
 
 	function refreshAuth() {
@@ -880,6 +893,9 @@
 		agentsStatus={agentDirectory.status}
 		onOpenAgent={(a) => store.openAgentSession(a, agentDirectory.latestSession(a.id)?.session)}
 		onNewAgent={() => (showAgentDialog = true)}
+		onAgentPage={(a) => (agentPageFor = a.id)}
+		pendingCount={agentDirectory.pending}
+		onDesk={() => (showDesk = true)}
 	/>
 	<div class="resizer side" class:hidden={!showSidebar} role="separator" aria-label="resize sidebar" onpointerdown={startSidebarResize}></div>
 
@@ -1020,6 +1036,23 @@
 
 	{#if taskDialogFor}
 		<TaskDialog project={taskDialogFor} onClose={() => (taskDialogFor = null)} onCreated={openTaskProject} />
+	{/if}
+
+	{#if showDesk}
+		<Desk onClose={() => (showDesk = false)} onOpenSession={openDaemonSession} />
+	{/if}
+
+	{#if agentPageFor}
+		{@const pageAgent = agentDirectory.agents.find((a) => a.id === agentPageFor)}
+		<AgentPage
+			agentId={agentPageFor}
+			onClose={() => (agentPageFor = null)}
+			onOpenSession={openDaemonSession}
+			onNewSession={() => {
+				if (pageAgent) store.openAgentSession(pageAgent);
+				agentPageFor = null;
+			}}
+		/>
 	{/if}
 
 	{#if showAgentDialog}

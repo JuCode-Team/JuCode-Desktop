@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { Plus, History, X, LoaderCircle, GitBranch, GitBranchPlus, Archive, ArchiveRestore, ChevronRight, Search, Settings } from 'lucide-svelte';
+	import { Plus, History, X, LoaderCircle, GitBranch, GitBranchPlus, Archive, ArchiveRestore, ChevronRight, Search, Settings, Inbox, IdCard } from 'lucide-svelte';
 	import { t } from '$lib/i18n';
 	import { BACKEND_LABELS } from '$lib/backends';
 	import BackendIcon from '$lib/BackendIcon.svelte';
@@ -31,7 +31,10 @@
 		agents = [],
 		agentsStatus = 'off',
 		onOpenAgent = () => {},
-		onNewAgent = () => {}
+		onNewAgent = () => {},
+		onAgentPage = () => {},
+		pendingCount = 0,
+		onDesk = () => {}
 	}: {
 		projects: Project[];
 		activeId: string;
@@ -60,6 +63,10 @@
 		agentsStatus?: 'off' | 'connecting' | 'on' | 'unreachable';
 		onOpenAgent?: (agent: AgentView) => void;
 		onNewAgent?: () => void;
+		onAgentPage?: (agent: AgentView) => void;
+		/** Questions and pending actions waiting for the user. */
+		pendingCount?: number;
+		onDesk?: () => void;
 	} = $props();
 
 	// Which projects have their archived section expanded (collapsed by default).
@@ -215,6 +222,11 @@
 				<span class="group-count">{agents.length}</span>
 				<button class="group-add no-auto" onclick={onNewAgent} aria-label="new agent" title={t('shell.agents.add')}><Plus size={13} /></button>
 			</div>
+			<button class="sess desk" onclick={onDesk}>
+				<Inbox size={13} />
+				<span class="sess-title">{t('shell.desk.title')}</span>
+				{#if pendingCount > 0}<span class="pending">{pendingCount}</span>{/if}
+			</button>
 			{#if agentsStatus === 'unreachable'}
 				<div class="agent-note">{t('shell.agents.unreachable')}</div>
 			{:else if agents.length === 0 && agentsStatus === 'on'}
@@ -228,6 +240,18 @@
 						{#if a.summary}<span class="agent-summary">{a.summary}</span>{/if}
 					</span>
 					{#if a.busy}<span class="agent-busy">{t('shell.agents.busy')}</span>{/if}
+					<span
+						class="sess-act"
+						role="button"
+						tabindex="0"
+						onclick={(e) => {
+							e.stopPropagation();
+							onAgentPage(a);
+						}}
+						onkeydown={(e) => e.key === 'Enter' && (e.stopPropagation(), onAgentPage(a))}
+						aria-label={t('shell.agents.details')}
+						title={t('shell.agents.details')}><IdCard size={12} /></span
+					>
 				</button>
 			{/each}
 		{/if}
@@ -637,6 +661,19 @@
 		font-family: var(--font-mono);
 		flex-shrink: 0;
 		margin-top: 2px;
+	}
+	.sess.desk :global(svg) {
+		color: var(--dim);
+		flex-shrink: 0;
+	}
+	.pending {
+		font-size: 10.5px;
+		font-family: var(--font-mono);
+		padding: 0 6px;
+		border-radius: 999px;
+		background: color-mix(in oklab, var(--warn) 22%, transparent);
+		color: var(--warn);
+		flex-shrink: 0;
 	}
 	.agent-note {
 		padding: 4px 12px 8px;
