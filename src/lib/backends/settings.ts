@@ -18,6 +18,9 @@ export interface BackendSettings {
 	/** Run new JuCode sessions in the local `jucode daemon`, so they keep
 	 *  working after the desktop closes (default false). */
 	daemon: boolean;
+	/** The address a phone uses to reach the daemon (e.g. a `tailscale serve`
+	 *  HTTPS URL); goes into the pairing QR code. */
+	remoteAddress: string;
 }
 
 const KEY = 'jucode-backend-settings';
@@ -27,7 +30,8 @@ export const DEFAULT_BACKEND_SETTINGS: BackendSettings = {
 	paths: {},
 	useShellEnv: true,
 	env: {},
-	daemon: false
+	daemon: false,
+	remoteAddress: ''
 };
 
 function freshDefaults(): BackendSettings {
@@ -97,7 +101,8 @@ export function parseBackendSettings(raw: string | null): BackendSettings {
 			paths,
 			useShellEnv: v?.useShellEnv !== false,
 			env,
-			daemon: v?.daemon === true
+			daemon: v?.daemon === true,
+			remoteAddress: typeof v?.remoteAddress === 'string' ? v.remoteAddress.trim() : ''
 		};
 	} catch {
 		return freshDefaults();

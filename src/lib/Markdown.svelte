@@ -1,6 +1,6 @@
 <script lang="ts">
 	import DOMPurify from 'dompurify';
-	import { openUrl } from '@tauri-apps/plugin-opener';
+	import { openExternal } from '$lib/openExternal';
 	import { renderMarkdown } from '$lib/markdown';
 	import { t } from '$lib/i18n';
 
@@ -37,7 +37,7 @@
 			// in-page anchors are ignored; anything else is treated as a workspace
 			// file path and handed to the host to open (editor / built-in browser).
 			e.preventDefault();
-			if (isSafeExternalHref(href)) openUrl(href).catch(() => {});
+			if (isSafeExternalHref(href)) openExternal(href);
 			else if (!href.startsWith('#')) onFile?.(href);
 		}
 	}

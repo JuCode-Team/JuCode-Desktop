@@ -161,6 +161,23 @@ const shell = {
 		// the coding agent is picked inside the session, not at creation.
 		agentSession: '创建 Agent 会话',
 		newTask: '新建并行任务',
+		remote: {
+			pairTitle: '连接到你的 JuCode',
+			pairHint: '在桌面端的设置 → 后端 → 后台服务里点"添加设备"，扫描二维码，或输入显示的配对码。',
+			codeLabel: '配对码',
+			pair: '配对',
+			pairing: '配对中…',
+			repair: '重新配对',
+			refused: '连不上 daemon，或这台设备的授权已被吊销。可以稍后再试，或重新配对。',
+			agents: 'Agent',
+			back: '返回',
+			messagePlaceholder: '给 Agent 发消息…',
+			send: '发送',
+			stop: '停止',
+			disconnected: '连接中断',
+			reconnect: '重新连接',
+			newSession: '新会话'
+		},
 		desk: {
 			title: '工作台',
 			subtitle: '等你处理的事、Agent 的汇报和正在进行的工作',
@@ -474,6 +491,23 @@ const shell = {
 		// the coding agent is picked inside the session, not at creation.
 		agentSession: 'New agent session',
 		newTask: 'New parallel task',
+		remote: {
+			pairTitle: 'Connect to your JuCode',
+			pairHint: 'On the desktop, open Settings → Backends → Background service and choose "Add device". Scan the QR code or enter the code it shows.',
+			codeLabel: 'Pairing code',
+			pair: 'Pair',
+			pairing: 'Pairing…',
+			repair: 'Pair again',
+			refused: 'Cannot reach the daemon, or this device was revoked. Try again later, or pair again.',
+			agents: 'Agents',
+			back: 'Back',
+			messagePlaceholder: 'Message the agent…',
+			send: 'Send',
+			stop: 'Stop',
+			disconnected: 'Disconnected',
+			reconnect: 'Reconnect',
+			newSession: 'New session'
+		},
 		desk: {
 			title: 'Desk',
 			subtitle: 'What is waiting for you, what agents reported and what is in progress',

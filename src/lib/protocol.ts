@@ -2,10 +2,19 @@ import { invoke } from '@tauri-apps/api/core';
 import type { McpServerEntry } from './mcp';
 import { DaemonClient, type DaemonEndpoint } from './daemon';
 
+let daemonEndpoint = () => invoke<DaemonEndpoint>('daemon_endpoint');
+
+/** Where the daemon is and which token to present. The desktop asks the
+ *  Tauri side (the local daemon's token file); the remote page, served by
+ *  the daemon itself, sets its own origin and paired-device token. */
+export function setDaemonEndpoint(source: () => Promise<DaemonEndpoint>) {
+	daemonEndpoint = source;
+}
+
 /** The shared connection to the local `jucode daemon`. Sessions it hosts are
  *  routed here by `closeSession` / `sendOp` / `sendLine`; the page wires its
  *  `onFrame` / `onExit` into the same path as child-process events. */
-export const daemon = new DaemonClient(() => invoke<DaemonEndpoint>('daemon_endpoint'));
+export const daemon = new DaemonClient(() => daemonEndpoint());
 
 /** Starts (or, with `resume`, reopens) a session hosted by the daemon;
  *  `agent` starts it as that long-lived agent. */

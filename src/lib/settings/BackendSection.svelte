@@ -27,6 +27,7 @@
 	import Switch from '$lib/ui/Switch.svelte';
 	import { t } from '$lib/i18n';
 	import { agentDirectory } from '$lib/agents.svelte';
+	import DevicePairing from './DevicePairing.svelte';
 
 	let settings = $state<BackendSettings>(loadBackendSettings());
 	let status = $state<Partial<Record<BackendId, BackendStatus | 'checking'>>>({});
@@ -44,7 +45,8 @@
 			) as BackendSettings['paths'],
 			useShellEnv: settings.useShellEnv,
 			env: settings.env,
-			daemon: settings.daemon
+			daemon: settings.daemon,
+			remoteAddress: settings.remoteAddress.trim()
 		});
 	}
 
@@ -219,6 +221,9 @@
 		<Switch bind:checked={settings.daemon} label={t('settings.backend.daemonToggle')} />
 	</div>
 	<p class="hint">{t('settings.backend.daemonHint')}</p>
+	{#if settings.daemon}
+		<DevicePairing bind:address={settings.remoteAddress} onAddressChange={persist} />
+	{/if}
 </div>
 
 <style>

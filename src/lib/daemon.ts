@@ -93,6 +93,16 @@ export class DaemonClient {
 		this.#write({ op: 'watch', session });
 	}
 
+	/** Stops showing a session here without ending it: unwatch, and forget
+	 *  the desktop id. */
+	detach(desktopId: string) {
+		const session = this.#toDaemon.get(desktopId);
+		if (!session) return;
+		this.#toDaemon.delete(desktopId);
+		this.#toDesktop.delete(session);
+		if (this.#socket?.readyState === OPEN) this.#write({ op: 'unwatch', session });
+	}
+
 	/** Writes one op line (as composed by the jucode adapter) to the
 	 *  desktop session's daemon session. */
 	async send(desktopId: string, line: string): Promise<void> {
