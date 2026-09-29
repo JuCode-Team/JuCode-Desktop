@@ -16,6 +16,7 @@
 	// canvas actions (plus the drawn window controls on Windows/Linux).
 	let {
 		leftWidth,
+		resizing = false,
 		sidebarOpen,
 		onToggleSidebar,
 		title = '',
@@ -26,6 +27,8 @@
 	}: {
 		/** Width of the columns left of the canvas; the title starts past them. */
 		leftWidth: number;
+		/** The sidebar is being dragged: follow it without easing. */
+		resizing?: boolean;
 		sidebarOpen: boolean;
 		onToggleSidebar: () => void;
 		title?: string;
@@ -59,7 +62,7 @@
 </script>
 
 <header class="titlebar" data-tauri-drag-region>
-	<div class="lead" style:width="{leftWidth}px" data-tauri-drag-region>
+	<div class="lead" class:resizing style:width="{leftWidth}px" data-tauri-drag-region>
 		<button
 			class="tb-btn"
 			title={t('shell.toggleSidebar')}
@@ -127,6 +130,11 @@
 		flex-shrink: 0;
 		min-width: max-content;
 		padding-left: 14px;
+		/* Moves with the sidebar opening and closing (Sidebar.svelte). */
+		transition: width var(--t-med) var(--ease-out);
+	}
+	.lead.resizing {
+		transition: none;
 	}
 	:global(:root[data-os='macos']) .lead {
 		padding-left: 84px;

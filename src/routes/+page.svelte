@@ -893,6 +893,7 @@
 	     the title of what is in front aligned with the canvas, panel actions). -->
 	<TitleBar
 		leftWidth={RAIL_WIDTH + (showSettings || showSidebar ? sidebarWidth : 0)}
+		resizing={sbResizing}
 		sidebarOpen={showSidebar}
 		onToggleSidebar={toggleSidebar}
 		title={showSettings ? t('settings.title') : (active?.chat.title ?? '')}

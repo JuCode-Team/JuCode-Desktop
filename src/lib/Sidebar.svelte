@@ -141,9 +141,17 @@
 		if (p && !p.chats) onNewSession(p);
 		else onNewChat();
 	}
+	// Width the content lays out at; kept while the panel closes.
+	let openWidth = $state(292);
+	$effect(() => {
+		if (width > 0) openWidth = width;
+	});
 </script>
 
-<aside class="sidebar" class:resizing style:width="{width}px">
+<aside class="sidebar" class:resizing class:closed={width === 0} style:width="{width}px">
+<!-- The content keeps the open width while the panel animates, so it slides
+     out of view instead of re-wrapping at every intermediate width. -->
+<div class="sb-inner" style:width="{openWidth}px">
 	<!-- Header: the wordmark, or the session filter in its place while searching. -->
 	<div class="brand" data-tauri-drag-region>
 		{#if searchOpen}
@@ -355,17 +363,27 @@
 		</section>
 	</div>
 
+</div>
 </aside>
 
 <style>
 	.sidebar {
 		flex-shrink: 0;
 		display: flex;
-		flex-direction: column;
 		background: var(--sidebar);
 		min-width: 0;
 		overflow: hidden;
 		transition: width var(--t-med) var(--ease-out);
+	}
+	.sb-inner {
+		display: flex;
+		flex-direction: column;
+		flex-shrink: 0;
+		min-height: 0;
+		transition: opacity var(--t-med) var(--ease-out);
+	}
+	.sidebar.closed .sb-inner {
+		opacity: 0;
 	}
 	.sidebar.resizing {
 		transition: none;

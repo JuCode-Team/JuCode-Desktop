@@ -27,6 +27,19 @@
 	let cfg: Record<string, unknown> = {};
 
 	// Vendor families by model-name prefix; the order is the display order.
+	// Preselected when nothing was chosen yet; mirrors the engine's
+	// DEFAULT_JUCODE_MODELS (agent-core/src/core.rs).
+	const DEFAULT_MODELS = [
+		'gpt-6-sol',
+		'gpt-6-astra',
+		'gpt-6-luna',
+		'claude-fable-5-1',
+		'claude-opus-5-5',
+		'claude-sonnet-5-5',
+		'deepseek-v4.1-flash',
+		'glm-5.3-flash'
+	];
+
 	const FAMILIES: [string, RegExp][] = [
 		['OpenAI', /^(gpt|o\d|chatgpt|codex)/i],
 		['Anthropic', /^claude/i],
@@ -66,7 +79,7 @@
 			const names = (v: unknown) =>
 				Array.isArray(v) ? v.map((m) => (m as { name?: string }).name).filter((n): n is string => !!n) : [];
 			const prev = names(config.jucode_models);
-			const current = prev.length ? prev : config.provider === 'jucode' ? names(config.models) : [];
+			const current = prev.length ? prev : DEFAULT_MODELS;
 			picked = current.filter((n) => list.some((m) => m.id === n));
 		} catch (e) {
 			error = String(e);

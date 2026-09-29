@@ -22,7 +22,8 @@
 		scroller = null,
 		onEdit,
 		onRewind,
-		onFile
+		onFile,
+		onDismiss
 	}: {
 		messages: Msg[];
 		streamingMsg: Msg | null;
@@ -37,6 +38,8 @@
 		onRewind: (text: string, userIndex: number) => void;
 		/** Open a workspace file referenced by a chat link (editor / browser). */
 		onFile?: (href: string) => void;
+		/** Remove a message the user closed (error notices). */
+		onDismiss?: (m: Msg) => void;
 	} = $props();
 
 	// ── Virtual list (dynamic-height windowing) ─────────────────────────────
@@ -302,7 +305,7 @@
 		{:else if m.kind === 'tool'}
 			<ToolCard name={m.name} output={m.output} running={m.running} isError={m.isError} />
 		{:else if m.kind === 'error'}
-			<Notice mono>{m.text}</Notice>
+			<Notice mono onDismiss={onDismiss ? () => onDismiss(m) : undefined}>{m.text}</Notice>
 				{/if}
 			</div>
 		{/if}
