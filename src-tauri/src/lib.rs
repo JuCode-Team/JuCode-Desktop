@@ -204,17 +204,52 @@ fn create_session(
         .stdin
         .take()
         .ok_or_else(|| "failed to capture child stdin".to_string())?;
+    let stderr = child.stderr.take();
+
+    // Register before the readers start. The same desktop session id is reused
+    // across restarts and provider switches, so each reader forwards output
+    // only while its own child is the registered one: a replaced or closed
+    // engine's buffered lines and its exit must not land on the new engine
+    // (a late `agent-exit` read as a crash would restart the fresh child).
+    let entry = Arc::new(Session {
+        stdin: Mutex::new(stdin),
+        child: Mutex::new(child),
+    });
+    let replaced = engines
+        .sessions
+        .lock()
+        .map_err(|e| format!("lock poisoned: {e}"))?
+        .insert(session.clone(), entry.clone());
+    if let Some(old) = replaced {
+        if let Ok(mut child) = old.child.lock() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+    let mine = Arc::downgrade(&entry);
+    let is_current = move |handle: &AppHandle, id: &str| {
+        handle
+            .state::<Engines>()
+            .sessions
+            .lock()
+            .map(|map| map.get(id).is_some_and(|s| std::ptr::eq(Arc::as_ptr(s), mine.as_ptr())))
+            .unwrap_or(false)
+    };
 
     // Piped stderr (codex / claude): forward lines as {"__stderr": "<line>"}
     // agent-event payloads so adapters can surface diagnostics.
-    if let Some(stderr) = child.stderr.take() {
+    if let Some(stderr) = stderr {
         let id = session.clone();
         let handle = app.clone();
+        let is_current = is_current.clone();
         std::thread::spawn(move || {
             let reader = BufReader::new(stderr);
             for line in reader.lines() {
                 match line {
                     Ok(line) if !line.trim().is_empty() => {
+                        if !is_current(&handle, &id) {
+                            break;
+                        }
                         let data = serde_json::json!({ "__stderr": line }).to_string();
                         let _ = handle.emit(
                             "agent-event",
@@ -231,13 +266,16 @@ fn create_session(
         });
     }
 
-    let id = session.clone();
+    let id = session;
     let handle = app.clone();
     std::thread::spawn(move || {
         let reader = BufReader::new(stdout);
         for line in reader.lines() {
             match line {
                 Ok(line) if !line.trim().is_empty() => {
+                    if !is_current(&handle, &id) {
+                        return;
+                    }
                     let _ = handle.emit(
                         "agent-event",
                         EventPayload {
@@ -250,20 +288,13 @@ fn create_session(
                 Err(_) => break,
             }
         }
-        let _ = handle.emit("agent-exit", id.clone());
+        // Only an engine that is still registered exited on its own; a closed
+        // or replaced one ends silently.
+        if is_current(&handle, &id) {
+            let _ = handle.emit("agent-exit", id.clone());
+        }
     });
 
-    engines
-        .sessions
-        .lock()
-        .map_err(|e| format!("lock poisoned: {e}"))?
-        .insert(
-            session,
-            Arc::new(Session {
-                stdin: Mutex::new(stdin),
-                child: Mutex::new(child),
-            }),
-        );
     Ok(())
 }
 

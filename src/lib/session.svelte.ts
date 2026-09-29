@@ -261,7 +261,9 @@ export class SessionStore {
 		if (extra) chat.sessionId = extra.session_id;
 		try {
 			await this.#spawn(s, project?.path, undefined, extra);
+			chat.switching = false;
 		} catch (e) {
+			chat.switching = false;
 			this.#engineFailed(chat, e);
 		}
 	}
@@ -521,8 +523,9 @@ export class SessionStore {
 			s.chat.switching = false;
 			return;
 		}
-		// Intentional close for a provider switch — switchProvider re-creates the
-		// engine itself, so don't treat this exit as a crash.
+		// Intentional close (provider switch, respawn): the caller brings the
+		// engine back itself. Local engines no longer report such closes (the
+		// Rust side drops a replaced child's exit); hosted ones still do.
 		if (s.chat.switching) {
 			s.chat.switching = false;
 			return;
@@ -574,6 +577,7 @@ export class SessionStore {
 		try {
 			await closeSession(id);
 			await this.#spawn(s, this.projectPathOf(id));
+			s.chat.switching = false;
 			if (sid && canResume && !s.hosted) dispatch(id, { op: 'command', input: `/resume ${sid}` });
 		} catch (e) {
 			s.chat.switching = false;
@@ -615,6 +619,7 @@ export class SessionStore {
 				Object.keys(extra).length ? extra : undefined,
 				s.backendId === 'codex' && mayResume ? sid : undefined
 			);
+			s.chat.switching = false;
 		} catch (e) {
 			s.chat.switching = false;
 			this.#engineFailed(s.chat, e);
@@ -643,6 +648,7 @@ export class SessionStore {
 				permission_mode: 'bypassPermissions',
 				...(sid && canResume ? { resume: sid } : {})
 			});
+			s.chat.switching = false;
 		} catch (e) {
 			s.chat.switching = false;
 			this.#engineFailed(s.chat, e);
@@ -671,6 +677,7 @@ export class SessionStore {
 				...(sid && resumeAtUuid ? { resume: sid, resume_session_at: resumeAtUuid } : {}),
 				...(yolo ? { permission_mode: 'bypassPermissions' } : {})
 			});
+			s.chat.switching = false;
 		} catch (e) {
 			s.chat.switching = false;
 			this.#engineFailed(s.chat, e);
