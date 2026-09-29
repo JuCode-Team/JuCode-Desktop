@@ -764,7 +764,9 @@
 				</div>
 			</div>
 		{/if}
-		{#if chat.pendingApproval}
+		<!-- Agent questions render in the composer tray; the card keeps plain
+		     tool approvals (commands, edits, plans). -->
+		{#if chat.pendingApproval && !chat.pendingApproval.questions?.length}
 			<div class="approval-wrap">
 				{#key chat.pendingApproval.callId}
 					<ApprovalCard approval={chat.pendingApproval} onRespond={respondApproval} />
@@ -803,6 +805,7 @@
 			onEffort={setEffort}
 			effortDisabled={!!pendingModel || chat.switching}
 			onApproval={setApprovalMode}
+			onRespond={respondApproval}
 		/>
 	</div>
 </div>

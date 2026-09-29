@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Send, Square, Plus, Paperclip, Target, ListChecks, FastForward, ShieldCheck, CircleStop, Mic, LoaderCircle, GitBranch } from 'lucide-svelte';
+	import { Send, Square, Plus, Paperclip, Target, ListChecks, FastForward, ShieldCheck, CircleStop, Mic, LoaderCircle, GitBranch, SquareSlash } from 'lucide-svelte';
 	import { message } from '@tauri-apps/plugin-dialog';
 	import BackendIcon from '$lib/BackendIcon.svelte';
 	import Segmented from '$lib/ui/Segmented.svelte';
@@ -7,17 +7,17 @@
 	import { VoiceRecorder } from '$lib/audio';
 	import { buildEntries, mentionMatches, type AtEntry } from '$lib/mention';
 	import { t } from '$lib/i18n';
-	import SlashMenu from '$lib/composer/SlashMenu.svelte';
 	import MentionMenu from '$lib/composer/MentionMenu.svelte';
 	import AttachmentChips from '$lib/composer/AttachmentChips.svelte';
 	import ContextIndicator from '$lib/composer/ContextIndicator.svelte';
 	import AgentModelPopover from '$lib/composer/AgentModelPopover.svelte';
 	import EffortPopover from '$lib/composer/EffortPopover.svelte';
-	import AddMenu, { type AddMenuSection } from '$lib/composer/AddMenu.svelte';
+	import ComposerTray, { type TrayItem, type TraySection } from '$lib/composer/ComposerTray.svelte';
+	import { answerStep, startFlow, togglePick, type QuestionFlow } from '$lib/composer/tray';
 	import { effortLabel } from '$lib/composer/effort';
 	import type { ModelRow } from '$lib/composer/modelRows';
 	import type { ChatState } from '$lib/chat.svelte';
-	import type { ApprovalMode } from '$lib/approval';
+	import { buildApproveOp, type ApprovalMode, type ApproveOp } from '$lib/approval';
 	import { caps, BACKEND_LABELS, type BackendId } from '$lib/backends';
 
 	let {
@@ -43,7 +43,8 @@
 		onModelClose,
 		onEffort,
 		effortDisabled = false,
-		onApproval
+		onApproval,
+		onRespond
 	}: {
 		chat: ChatState;
 		input: string;
@@ -71,18 +72,19 @@
 		onEffort: (effort: string) => void;
 		effortDisabled?: boolean;
 		onApproval: (mode: ApprovalMode) => void;
+		/** Answers a pending agent question (AskUserQuestion) shown in the tray. */
+		onRespond?: (op: ApproveOp) => void;
 	} = $props();
 
-	let slashIdx = $state(0);
 	let showEffort = $state(false);
 	let showApproval = $state(false);
 	let showAdd = $state(false);
 	let effortButton = $state<HTMLButtonElement>();
 	let modelButton = $state<HTMLButtonElement>();
-	let addButton = $state<HTMLButtonElement>();
 
 	function toggleEffort() {
 		if (modelPopoverVisible) closeModelPopover();
+		showAdd = false;
 		showEffort = !showEffort;
 	}
 	// The effort popover's model name hands over to the model picker, anchored
@@ -104,6 +106,7 @@
 			return;
 		}
 		showEffort = false;
+		showAdd = false;
 		modelOpen = true;
 		if (bcaps.modelPicker) onModel();
 	}
@@ -119,7 +122,6 @@
 			e.preventDefault();
 			e.stopPropagation();
 			if (modelPopoverVisible) closeModelPopover();
-			if (showAdd) addButton?.focus();
 			showEffort = false;
 			showAdd = false;
 		}
@@ -210,6 +212,8 @@
 		if (s === '' && el.childNodes.length) el.textContent = '';
 		lastSync = s;
 		input = s;
+		// Typing dismisses the "+" tray so Enter sends instead of picking a row.
+		showAdd = false;
 	}
 	function insertNodesAtCaret(nodes: Node[]) {
 		if (!el || !nodes.length) return;
@@ -277,7 +281,7 @@
 	// page's picker (images / videos are detected from the picked paths); goal
 	// seeds the engine's /goal command; plan toggles claude's plan approval mode.
 	const addSections = $derived.by(() => {
-		const add: AddMenuSection = {
+		const add: TraySection = {
 			label: t('chat.addSection'),
 			items: [{ id: 'files', icon: Paperclip, title: t('chat.addFiles'), desc: t('chat.addFilesDesc'), onSelect: onPick }]
 		};
@@ -309,7 +313,17 @@
 				]
 			});
 		}
-		return sections;
+		// Picking any row closes the tray first.
+		return sections.map((sec) => ({
+			...sec,
+			items: sec.items.map((it) => ({
+				...it,
+				onSelect: () => {
+					showAdd = false;
+					it.onSelect();
+				}
+			}))
+		}));
 	});
 	// Persisting + pushing the mode to the engine lives with the page (it owns
 	// the session id); the picker only reports the choice.
@@ -325,10 +339,133 @@
 		if (!t.startsWith('/') || t.includes(' ')) return [];
 		return chat.commands.filter((c) => c.command.startsWith(t) && c.command !== t).slice(0, 8);
 	});
+
+	// --- composer tray -------------------------------------------------------
+	// One in-box list (ComposerTray) serves three modes: a pending agent
+	// question, "/" command completion and the "+" menu. A question owns the
+	// tray while it's pending; otherwise slash completion wins over "+".
+	let tray = $state<ReturnType<typeof ComposerTray>>();
+	let trayIdx = $state(0);
+	// Escape hides slash completion until the typed command changes.
+	let slashDismissed = $state(false);
 	$effect(() => {
 		slashMatches;
-		slashIdx = 0;
+		slashDismissed = false;
 	});
+
+	const question = $derived(onRespond && chat.pendingApproval?.questions?.length ? chat.pendingApproval : null);
+	let flow = $state<QuestionFlow>(startFlow());
+	let picks = $state<string[]>([]);
+	let seenQuestionId: string | null = null;
+	$effect.pre(() => {
+		const id = question?.callId ?? null;
+		if (id === seenQuestionId) return;
+		seenQuestionId = id;
+		flow = startFlow();
+		picks = [];
+	});
+	const currentQ = $derived(question?.questions?.[flow.step] ?? null);
+
+	// Record an answer (picked option(s) or free-form text) for the current
+	// question; the last one sends the whole map, same shape as before.
+	function answerQuestion(value: string) {
+		if (!question?.questions) return;
+		const r = answerStep(question.questions, flow, value);
+		picks = [];
+		trayIdx = 0;
+		if (r.done) onRespond?.({ op: 'approve', call_id: question.callId, decision: 'allow', answers: r.flow.answers });
+		else flow = r.flow;
+	}
+	function cancelQuestion() {
+		if (question) onRespond?.(buildApproveOp(question.callId, 'deny'));
+	}
+
+	const trayMode = $derived<'question' | 'slash' | 'add' | null>(
+		currentQ ? 'question' : slashMatches.length && !slashDismissed ? 'slash' : showAdd ? 'add' : null
+	);
+	$effect(() => {
+		trayMode;
+		slashMatches;
+		trayIdx = 0;
+	});
+
+	const traySections = $derived.by((): TraySection[] => {
+		if (trayMode === 'question' && currentQ) {
+			const multi = currentQ.multiSelect;
+			const options: TrayItem[] = currentQ.options.map((o, i) => ({
+				id: `opt-${i}`,
+				title: o.label,
+				desc: o.description,
+				box: multi,
+				checked: multi ? picks.includes(o.label) : undefined,
+				onSelect: () => (multi ? (picks = togglePick(picks, o.label)) : answerQuestion(o.label))
+			}));
+			const actions: TrayItem[] = [];
+			if (multi)
+				actions.push({
+					id: 'submit',
+					title: t('chat.questionSubmit'),
+					desc: picks.length ? picks.join(', ') : t('chat.questionSubmitHint'),
+					disabled: !picks.length,
+					onSelect: () => answerQuestion(picks.join(', '))
+				});
+			actions.push({ id: 'cancel', title: t('chat.questionCancel'), desc: t('chat.questionCancelDesc'), onSelect: cancelQuestion });
+			return [{ items: options }, { items: actions }];
+		}
+		if (trayMode === 'slash')
+			return [
+				{
+					items: slashMatches.map((c) => ({
+						id: c.command,
+						icon: SquareSlash,
+						title: c.command,
+						mono: true,
+						hint: c.args,
+						desc: c.description,
+						marker: c.marker,
+						onSelect: () => (input = c.command + ' ')
+					}))
+				}
+			];
+		if (trayMode === 'add') return addSections;
+		return [];
+	});
+	const trayLabel = $derived(
+		trayMode === 'question' ? t('chat.questionLabel') : trayMode === 'slash' ? t('chat.slashMenuLabel') : t('chat.addTitle')
+	);
+	const trayMeta = $derived.by(() => {
+		if (trayMode !== 'question' || !question?.questions) return '';
+		const n = question.questions.length;
+		return [
+			currentQ?.header,
+			n > 1 ? t('chat.questionProgress', { n: flow.step + 1, m: n }) : '',
+			question.subagentId ? t('chat.subagentChip', { id: question.subagentId }) : ''
+		]
+			.filter(Boolean)
+			.join(' · ');
+	});
+	function closeTray() {
+		if (trayMode === 'question') cancelQuestion();
+		else if (trayMode === 'slash') slashDismissed = true;
+		else showAdd = false;
+	}
+	function toggleAdd() {
+		showAdd = !showAdd;
+		if (showAdd) el?.focus();
+	}
+	// Outside clicks close the "+" tray (rows and the "+" button keep focus in
+	// the editor via mousedown preventDefault, so they don't count).
+	function onComposerFocusOut(e: FocusEvent) {
+		if (showAdd && !(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null)) showAdd = false;
+	}
+	// A pending question turns a typed message into its free-form answer.
+	function submit() {
+		if (!currentQ) return onSubmit();
+		const text = input.trim();
+		if (!text) return;
+		answerQuestion(text);
+		input = '';
+	}
 
 	// @-mention completion (files + folders). Lazily loads the project file list
 	// (cached per cwd) the first time an @-token is typed. Matching logic lives in
@@ -392,9 +529,9 @@
 
 	// Active option id for the combobox (aria-activedescendant).
 	const activeOptionId = $derived(
-		slashMatches.length ? `cmp-opt-${slashIdx}` : atMatches.length ? `cmp-opt-${atIdx}` : undefined
+		atMatches.length ? `cmp-opt-${atIdx}` : trayMode ? `cmp-tray-opt-${trayIdx}` : undefined
 	);
-	const menuOpen = $derived(slashMatches.length > 0 || atMatches.length > 0 || atQuery !== null);
+	const menuOpen = $derived(!!trayMode || atMatches.length > 0 || atQuery !== null);
 
 	// Gauge against the auto-compaction limit, so a full ring means "about to
 	// compact" (falls back to the window if the engine didn't send a limit).
@@ -411,23 +548,6 @@
 		// While an IME is composing (e.g. selecting a Chinese candidate with Enter),
 		// don't treat keys as commands — Enter here confirms the candidate, not send.
 		if (e.isComposing || e.keyCode === 229) return;
-		if (slashMatches.length) {
-			if (e.key === 'ArrowDown') {
-				e.preventDefault();
-				slashIdx = (slashIdx + 1) % slashMatches.length;
-				return;
-			}
-			if (e.key === 'ArrowUp') {
-				e.preventDefault();
-				slashIdx = (slashIdx - 1 + slashMatches.length) % slashMatches.length;
-				return;
-			}
-			if (e.key === 'Tab' || e.key === 'Enter') {
-				e.preventDefault();
-				input = slashMatches[slashIdx].command + ' ';
-				return;
-			}
-		}
 		if (atMatches.length) {
 			if (e.key === 'ArrowDown') {
 				e.preventDefault();
@@ -450,12 +570,18 @@
 				return;
 			}
 		}
+		// The tray owns navigation keys; for a question only while the editor is
+		// empty, so a typed answer keeps normal caret keys and Enter sends it.
+		if (trayMode && (trayMode !== 'question' || input.trim() === '') && tray?.handleKey(e)) {
+			e.stopPropagation();
+			return;
+		}
 		if (e.key === 'Enter') {
 			// contenteditable would otherwise insert a <div>/<br>; we control both:
 			// plain Enter submits, Shift+Enter inserts a newline (rendered via pre-wrap).
 			e.preventDefault();
 			if (e.shiftKey) insertTextAtCaret('\n');
-			else onSubmit();
+			else submit();
 		}
 	}
 
@@ -543,9 +669,7 @@
 <svelte:window onkeydowncapture={onWindowKeyCapture} />
 
 <div class="composer-wrap">
-	{#if slashMatches.length}
-		<SlashMenu matches={slashMatches} selected={slashIdx} onSelect={(c) => (input = c.command + ' ')} onHover={(i) => (slashIdx = i)} />
-	{:else if atQuery !== null}
+	{#if atQuery !== null}
 		<MentionMenu matches={atMatches} query={atQuery} selected={atIdx} onSelect={applyAt} onHover={(i) => (atIdx = i)} />
 	{/if}
 	{#if attachments.length || videos.length}
@@ -567,7 +691,19 @@
 			{/if}
 		</div>
 	{/if}
-	<div class="composer">
+	<div class="composer" onfocusout={onComposerFocusOut}>
+		{#if trayMode}
+			<ComposerTray
+				bind:this={tray}
+				bind:selected={trayIdx}
+				label={trayLabel}
+				heading={trayMode === 'question' ? (currentQ?.question ?? '') : ''}
+				meta={trayMeta}
+				sections={traySections}
+				tab={trayMode === 'slash' ? 'pick' : trayMode === 'add' ? 'close' : 'none'}
+				onClose={closeTray}
+			/>
+		{/if}
 		<div
 			class="rich"
 			class:empty={input === ''}
@@ -575,7 +711,7 @@
 			contenteditable="true"
 			role="combobox"
 			tabindex="0"
-			data-placeholder={t(chat.isChatMode ? 'chat.chatPlaceholder' : 'chat.composerPlaceholder')}
+			data-placeholder={t(currentQ ? 'chat.questionPlaceholder' : chat.isChatMode ? 'chat.chatPlaceholder' : 'chat.composerPlaceholder')}
 			oninput={syncFromDom}
 			onkeydown={onKey}
 			onpaste={onPaste}
@@ -585,7 +721,7 @@
 				syncFromDom();
 			}}
 			aria-expanded={menuOpen}
-			aria-controls="composer-menu"
+			aria-controls={atQuery !== null ? 'composer-menu' : 'cmp-tray'}
 			aria-autocomplete="list"
 			aria-activedescendant={activeOptionId}
 		></div>
@@ -593,18 +729,15 @@
 			<button
 				class="addbtn"
 				class:on={showAdd}
-				bind:this={addButton}
-				onclick={() => (showAdd = !showAdd)}
+				disabled={!!currentQ}
+				onmousedown={(e) => e.preventDefault()}
+				onclick={toggleAdd}
 				aria-label={t('chat.addTitle')}
 				title={t('chat.addTitle')}
-				aria-haspopup="menu"
 				aria-expanded={showAdd}
 			>
 				<Plus size={16} strokeWidth={1.5} />
 			</button>
-			{#if showAdd}
-				<AddMenu anchor={addButton} label={t('chat.addTitle')} sections={addSections} onClose={() => (showAdd = false)} />
-			{/if}
 			{#if chat.efforts.length}
 				<!-- Combined model · effort trigger: opens the effort popover, whose
 				     model name leads on to the model picker. -->
@@ -668,10 +801,10 @@
 			>
 				{#if voice === 'busy'}<span class="vspin"><LoaderCircle size={15} /></span>{:else if voice === 'rec'}<CircleStop size={15} />{:else}<Mic size={15} />{/if}
 			</button>
-			{#if chat.busy}
+			{#if chat.busy && !currentQ}
 				<button class="cact stop" onclick={onStop} aria-label="stop" title={t('chat.stopTitle')}><Square size={15} /></button>
 			{:else}
-				<button class="cact send" onclick={onSubmit} disabled={!input.trim() && !attachments.length && !videos.length} aria-label="send" title={t('chat.sendTitle')}><Send size={15} /></button>
+				<button class="cact send" onclick={submit} disabled={!input.trim() && !attachments.length && !videos.length} aria-label="send" title={t('chat.sendTitle')}><Send size={15} /></button>
 			{/if}
 		</div>
 	</div>
@@ -840,8 +973,12 @@
 		background: var(--surface2);
 		color: var(--text);
 	}
-	.addbtn:active {
+	.addbtn:active:not(:disabled) {
 		transform: scale(0.94);
+	}
+	.addbtn:disabled {
+		opacity: 0.4;
+		cursor: default;
 	}
 	/* read-only model label for backends without an in-chat model picker */
 	.flatbtn.static {

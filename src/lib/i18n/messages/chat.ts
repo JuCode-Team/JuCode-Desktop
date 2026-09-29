@@ -69,6 +69,14 @@ const chat = {
 		partialApply: '部分应用 {n}/{m} 块',
 		// ApprovalCard
 		subagentChip: '子代理 {id}',
+		// Agent question (composer tray)
+		questionLabel: '智能体提问',
+		questionPlaceholder: '选择上方选项，或直接输入你的回答…',
+		questionProgress: '第 {n}/{m} 题',
+		questionSubmit: '提交所选',
+		questionSubmitHint: '至少选择一项',
+		questionCancel: '取消',
+		questionCancelDesc: '不回答，拒绝这次提问',
 		// Indicator
 		phaseConnecting: '连接中',
 		phaseWaiting: '等待响应',
@@ -144,6 +152,14 @@ const chat = {
 		partialApply: 'Partially applied {n}/{m} hunks',
 		// ApprovalCard
 		subagentChip: 'Subagent {id}',
+		// Agent question (composer tray)
+		questionLabel: 'Agent question',
+		questionPlaceholder: 'Pick an option above, or type your own answer…',
+		questionProgress: '{n} of {m}',
+		questionSubmit: 'Submit selection',
+		questionSubmitHint: 'Select at least one',
+		questionCancel: 'Cancel',
+		questionCancelDesc: 'Skip the question and deny it',
 		// Indicator
 		phaseConnecting: 'Connecting',
 		phaseWaiting: 'Awaiting response',
