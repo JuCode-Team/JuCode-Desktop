@@ -883,6 +883,13 @@
 				onRename={(id, name) => workspaces.rename(id, name)}
 				onChrome={(id, chrome) => workspaces.setChrome(id, chrome)}
 				onDelete={deleteWorkspace}
+				accountLabel={loggedIn ? chat?.provider || 'JuCode' : t('shell.notLoggedIn')}
+				updateAvailable={updater.available}
+				onAccount={() => {
+					settingsInitial = 'account';
+					showSettings = true;
+				}}
+				onSettings={() => (showSettings = true)}
 			/>
 			<!-- LEFT: the navigator — workspace / projects / sessions. Clicking a session
 			     opens or focuses its chat tile on the canvas. -->
@@ -891,9 +898,6 @@
 				{activeId}
 				width={showSidebar ? sidebarWidth : 0}
 				resizing={sbResizing}
-				{loggedIn}
-				providerName={chat?.provider ?? ''}
-				updateAvailable={updater.available}
 				onSelect={(id) => (store.activeId = id)}
 				onNewProject={addProject}
 				onNewTask={newTask}
@@ -906,7 +910,6 @@
 				onRenameSession={(id, title) => store.renameSession(id, title)}
 				onSessionMenu={openSessionMenu}
 				onHistory={(p) => store.openHistory(p)}
-				onSettings={() => (showSettings = true)}
 				agents={agentDirectory.agents}
 				agentsStatus={agentDirectory.status}
 				onOpenAgent={(a) => store.openAgentSession(a, agentDirectory.latestSession(a.id)?.session)}
@@ -1146,6 +1149,14 @@
 		height: 100vh;
 		overflow: hidden;
 		background: var(--rail);
+	}
+	/* Round the frame to the macOS window corners (the transparent window does
+	   not clip them); frosted chrome when vibrancy is on. */
+	:global(:root[data-os='macos']) .app {
+		border-radius: 12px;
+	}
+	:global(:root[data-vibrancy='on']) .app {
+		background: var(--vibrancy-chrome);
 	}
 	.chrome {
 		display: flex;

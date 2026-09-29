@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { Plus, History, X, LoaderCircle, GitBranch, GitBranchPlus, Archive, ArchiveRestore, ChevronRight, Search, Settings, Inbox, IdCard, SquarePen, Bot, CircleUserRound, Folder, FolderOpen, MessagesSquare, CircleAlert } from 'lucide-svelte';
+	import { Plus, History, X, LoaderCircle, GitBranch, GitBranchPlus, Archive, ArchiveRestore, ChevronRight, Search, Inbox, IdCard, SquarePen, Bot, Folder, FolderOpen, MessagesSquare, CircleAlert } from 'lucide-svelte';
 	import { t } from '$lib/i18n';
 	import { BACKEND_LABELS } from '$lib/backends';
 	import BackendIcon from '$lib/BackendIcon.svelte';
@@ -13,9 +13,6 @@
 		activeId,
 		width,
 		resizing = false,
-		loggedIn,
-		providerName,
-		updateAvailable = false,
 		onSelect,
 		onNewProject,
 		onNewSession,
@@ -28,7 +25,6 @@
 		onRenameSession,
 		onSessionMenu,
 		onHistory,
-		onSettings,
 		agents = [],
 		agentsStatus = 'off',
 		onOpenAgent = () => {},
@@ -42,9 +38,6 @@
 		width: number;
 		/** True while the user drags the resizer — disables the width transition. */
 		resizing?: boolean;
-		loggedIn: boolean;
-		providerName: string;
-		updateAvailable?: boolean;
 		onSelect: (id: string) => void;
 		onNewProject: () => void;
 		onNewSession: (p: Project) => void;
@@ -59,7 +52,6 @@
 		/** Right-click on a session row: the page opens the chrome popover. */
 		onSessionMenu: (id: string, ev: MouseEvent) => void;
 		onHistory: (p: Project) => void;
-		onSettings: () => void;
 		/** Long-lived agents of the local jucode daemon (background service on). */
 		agents?: AgentView[];
 		agentsStatus?: 'off' | 'connecting' | 'on' | 'unreachable';
@@ -345,14 +337,6 @@
 		</section>
 	</div>
 
-	<div class="foot">
-		<button class="row account" onclick={onSettings} title={t('shell.accountSettings')}>
-			<CircleUserRound size={18} strokeWidth={1.5} />
-			<span class="acc-name">{loggedIn ? providerName : t('shell.notLoggedIn')}</span>
-			{#if updateAvailable}<span class="tag">{t('shell.updateShort')}</span>{/if}
-			<Settings size={18} strokeWidth={1.5} />
-		</button>
-	</div>
 </aside>
 
 <style>
@@ -636,15 +620,4 @@
 		transform: rotate(90deg);
 	}
 
-	.foot {
-		padding: 6px 10px 10px;
-		border-top: 1px solid var(--hairline);
-	}
-	.acc-name {
-		flex: 1;
-		text-align: left;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
 </style>

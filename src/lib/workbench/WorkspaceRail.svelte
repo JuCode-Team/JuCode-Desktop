@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Layers, Plus } from 'lucide-svelte';
+	import { Layers, Plus, CircleUserRound, Settings, CircleArrowDown } from 'lucide-svelte';
 	import { t } from '$lib/i18n';
 	import type { TabIcon } from './tabChrome';
 	import type { WorkspaceEntry } from './workspaces';
@@ -18,7 +18,11 @@
 		onNew,
 		onRename,
 		onChrome,
-		onDelete
+		onDelete,
+		accountLabel,
+		updateAvailable = false,
+		onAccount,
+		onSettings
 	}: {
 		workspaces: WorkspaceEntry[];
 		activeId: string;
@@ -29,6 +33,11 @@
 		onRename: (id: string, name: string) => void;
 		onChrome: (id: string, chrome: { color?: string | null; icon?: TabIcon | null }) => void;
 		onDelete: (id: string) => void;
+		/** Signed-in account (or the not-signed-in text), shown on hover. */
+		accountLabel: string;
+		updateAvailable?: boolean;
+		onAccount: () => void;
+		onSettings: () => void;
 	} = $props();
 
 	let menuFor = $state<{ id: string; x: number; y: number } | null>(null);
@@ -65,6 +74,20 @@
 			<span class="tile"><Plus size={20} strokeWidth={1.5} /></span>
 		</button>
 	</div>
+	<!-- Bottom: the person and the app, as in Codex — out of the session list. -->
+	<div class="foot">
+		{#if updateAvailable}
+			<button class="ws" title={t('shell.updateAvailable')} aria-label={t('shell.updateAvailable')} onclick={onSettings}>
+				<span class="tile"><CircleArrowDown size={20} strokeWidth={1.5} /></span>
+			</button>
+		{/if}
+		<button class="ws" title={accountLabel} aria-label={accountLabel} onclick={onAccount}>
+			<span class="tile"><CircleUserRound size={20} strokeWidth={1.5} /></span>
+		</button>
+		<button class="ws" title={t('shell.settings')} aria-label={t('shell.settings')} onclick={onSettings}>
+			<span class="tile"><Settings size={20} strokeWidth={1.5} /></span>
+		</button>
+	</div>
 </nav>
 
 {#if menuFor && menuWs}
@@ -97,7 +120,15 @@
 		flex-direction: column;
 		align-items: center;
 				padding: 4px 0 12px;
-		background: var(--rail);
+		background: transparent;
+	}
+	.foot {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 6px;
+		margin-top: auto;
+		padding-top: 8px;
 	}
 	.items {
 		display: flex;

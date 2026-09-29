@@ -204,19 +204,25 @@ body {
 	-moz-osx-font-smoothing: grayscale;
 }
 
-/* macOS vibrancy: a native NSVisualEffectView (frosted) sits behind a transparent
- * webview. The body goes transparent so the effect can show; the sidebar is made
- * translucent (see Sidebar.svelte) so the frost reads only there, while the main
- * content and right dock stay opaque and cover the effect. --vibrancy-tint is the
- * translucent sidebar fill, tuned per theme. */
+/* macOS: the window is transparent (tauri.macos.conf.json), so the system does
+ * not clip the content to the window's rounded corners — the page itself stays
+ * transparent and the app frame rounds its own corners (+page.svelte .app).
+ *
+ * macOS vibrancy: a native NSVisualEffectView (frosted) sits behind the webview.
+ * The window chrome and the sidebar panel become translucent so the frost reads
+ * there, while the main column stays opaque. --vibrancy-tint (sidebar) and
+ * --vibrancy-chrome (rail and top-left strip) are those fills, tuned per theme. */
+:root[data-os='macos'],
+:root[data-os='macos'] body {
+	background: transparent;
+}
 :root[data-vibrancy='on'] {
 	--vibrancy-tint: color-mix(in oklab, var(--sidebar) 65%, transparent);
-}
-:root[data-vibrancy='on'] body {
-	background: transparent;
+	--vibrancy-chrome: color-mix(in oklab, var(--rail) 60%, transparent);
 }
 [data-theme='light']:root[data-vibrancy='on'] {
 	--vibrancy-tint: color-mix(in oklab, var(--sidebar) 75%, transparent);
+	--vibrancy-chrome: color-mix(in oklab, var(--rail) 70%, transparent);
 }
 
 ::-webkit-scrollbar {
