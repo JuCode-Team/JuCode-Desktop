@@ -543,6 +543,10 @@
 	const ctxPct = $derived(
 		ctxLimit > 0 ? Math.min(100, Math.round((chat.contextTokens / ctxLimit) * 100)) : 0
 	);
+	// Context use is not shown all the time: only once it gets close to the
+	// limit, when it becomes something to act on.
+	const CTX_SHOW_PCT = 70;
+	const showCtx = $derived(bcaps.contextUsage && ctxLimit > 0 && ctxPct >= CTX_SHOW_PCT);
 
 	function onKey(e: KeyboardEvent) {
 		// While an IME is composing (e.g. selecting a Chinese candidate with Enter),
@@ -766,7 +770,7 @@
 				>
 					<BackendIcon backend={chat.backendId} size={15} />
 					<span class="m">{chat.modelLabel || chat.model || backendLabel}</span>
-					<span class="e">{effortLabel(chat.effort) || t('chat.effortTitle')}</span>
+					{#key chat.effort}<span class="e">{effortLabel(chat.effort) || t('chat.effortTitle')}</span>{/key}
 				</button>
 				{#if showEffort}
 					<button class="pop-backdrop" aria-label="close" tabindex="-1" onclick={() => (showEffort = false)}></button>
@@ -827,7 +831,7 @@
 			<span class="foot-branch" title={t('chat.gitBranch')}><GitBranch size={12} /><span class="branch-name">{gitBranch}</span></span>
 		{/if}
 		<div class="fspace"></div>
-		{#if bcaps.contextUsage && ctxLimit > 0}
+		{#if showCtx}
 			<div class="foot-ctx">
 				<ContextIndicator pct={ctxPct} atThreshold={ctxAtThreshold} contextTokens={chat.contextTokens} contextLimit={ctxLimit} totalIn={chat.totalIn} totalOut={chat.totalOut} cost={chat.cost} />
 				<span class="ctx-text">{fmtTokens(chat.contextTokens)} / {fmtTokens(ctxLimit)}</span>
@@ -845,7 +849,7 @@
 	}
 	.composer {
 		background: var(--panel);
-		border-radius: var(--r-xl);
+		border-radius: var(--r-2xl);
 		padding: 14px 16px 12px;
 		box-shadow: var(--shadow-float);
 		transition: box-shadow var(--t-med) var(--ease-out);
@@ -946,6 +950,7 @@
 		text-overflow: ellipsis;
 	}
 	.flatbtn.effort .e {
+		animation: rise var(--t-fast) var(--ease-out);
 		font-size: var(--fs-sm);
 		color: var(--dim);
 		flex-shrink: 0;
@@ -1053,8 +1058,8 @@
 	/* Flat send: white (text color) when ready, quiet gray when there's nothing
 	   to send. No gradients, no borders, no glow. */
 	.cact.send {
-		background: var(--text);
-		color: var(--panel);
+		background: var(--accent);
+		color: var(--on-accent);
 	}
 	.cact.send:hover:not(:disabled) {
 		opacity: 0.85;
@@ -1063,8 +1068,8 @@
 		transform: scale(0.9);
 	}
 	.cact.send:disabled {
-		background: var(--surface2);
-		color: var(--dim2);
+		background: color-mix(in oklab, var(--text) 32%, var(--panel));
+		color: var(--on-accent);
 		cursor: default;
 	}
 	.cact.stop {

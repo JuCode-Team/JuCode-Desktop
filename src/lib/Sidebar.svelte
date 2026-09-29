@@ -360,8 +360,8 @@
 		flex-shrink: 0;
 		display: flex;
 		flex-direction: column;
-		background: var(--bg);
-		border-right: 1px solid var(--hairline);
+		background: var(--sidebar);
+		border-top-left-radius: var(--r-lg);
 		min-width: 0;
 		overflow: hidden;
 		transition: width var(--t-med) var(--ease-out);
@@ -379,7 +379,7 @@
 		align-items: center;
 		gap: 8px;
 		height: 40px;
-		margin: 12px 12px 10px;
+		margin: 14px 12px 10px;
 		padding: 0 4px 0 10px;
 		flex-shrink: 0;
 	}
@@ -517,8 +517,7 @@
 	}
 
 	.sess.on {
-		background: var(--bg);
-		box-shadow: var(--shadow-sm);
+		background: var(--surface2);
 	}
 	.sess.nested {
 		padding-left: 42px;

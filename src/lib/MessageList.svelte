@@ -376,7 +376,7 @@
 	}
 	.bubble {
 		background: var(--surface2);
-		border-radius: var(--r-lg) var(--r-lg) 6px var(--r-lg);
+		border-radius: var(--r-xl);
 		padding: 11px 14px;
 		line-height: 1.6;
 		white-space: pre-wrap;

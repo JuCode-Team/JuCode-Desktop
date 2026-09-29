@@ -184,7 +184,7 @@
 		justify-content: center;
 		padding-top: 14vh;
 		z-index: 70;
-		animation: fade var(--t-fast) var(--ease-out);
+		animation: scrim-in var(--t-fast) var(--ease-out);
 	}
 	@keyframes fade {
 		from {
@@ -201,13 +201,7 @@
 		border-radius: var(--r-lg);
 		box-shadow: var(--shadow-modal);
 		overflow: hidden;
-		animation: pop var(--t-med) var(--ease-spring);
-	}
-	@keyframes pop {
-		from {
-			opacity: 0;
-			transform: translateY(-6px) scale(0.99);
-		}
+		animation: sheet-in var(--t-med) var(--ease-spring);
 	}
 	.search {
 		display: flex;

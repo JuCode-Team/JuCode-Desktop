@@ -2,7 +2,7 @@
 	import { onMount, untrack } from 'svelte';
 	import { listen } from '@tauri-apps/api/event';
 	import { getCurrentWebview } from '@tauri-apps/api/webview';
-	import { SquareTerminal } from 'lucide-svelte';
+	import { PanelLeft, SquareTerminal } from 'lucide-svelte';
 	import { open, ask, message } from '@tauri-apps/plugin-dialog';
 	import { cycleTheme } from '$lib/theme.svelte';
 	import {
@@ -864,168 +864,178 @@
 <svelte:window onkeydown={onWindowKey} />
 
 <div class="app">
-	<!-- TOP: the window's own layer (traffic lights, sidebar toggle, title, canvas
-	     actions). With the rail it frames the content: session list + canvas
-	     share one layer below it. -->
-	<TitleBar
-		sidebarOpen={showSidebar}
-		onToggleSidebar={toggleSidebar}
-		title={active?.chat.title ?? ''}
-		subtitle={activeProject?.name ?? ''}
-		{addOptions}
-		onAdd={(key) => mosaicAdd(focusedLeaf, key)}
-	>
-		{#snippet actions()}
-			{#if active && active.surface !== 'tui' && canHandOffToTui(active.backendId)}
-				<button
-					class="tile-action"
-					disabled={!tuiReady(active.id)}
-					title={tuiReady(active.id) ? t('chat.tuiContinueTitle') : t('chat.tuiContinueUnavailable')}
-					aria-label={t('chat.tuiContinue')}
-					onclick={() => active && store.openInTui(active.id)}
-				>
-					<SquareTerminal size={16} strokeWidth={1.5} />
-				</button>
+	<!-- LEFT: the window chrome (traffic lights + sidebar toggle strip, the
+	     workspace rail) holding the session-list panel. -->
+	<div class="chrome">
+		<div class="lstrip" data-tauri-drag-region>
+			{#if showSidebar}
+				<button class="lstrip-btn" onclick={toggleSidebar} aria-label={t('shell.toggleSidebar')} title={t('shell.toggleSidebar')}><PanelLeft size={18} strokeWidth={1.5} /></button>
 			{/if}
-		{/snippet}
-	</TitleBar>
-	<div class="body">
-	<!-- FAR LEFT: the workspace rail (top-level context). -->
-	<WorkspaceRail
-		workspaces={workspaces.workspaces}
-		activeId={workspaces.activeId}
-		busy={wsBusy}
-		onSwitch={switchWorkspace}
-		onNew={newWorkspace}
-		onRename={(id, name) => workspaces.rename(id, name)}
-		onChrome={(id, chrome) => workspaces.setChrome(id, chrome)}
-		onDelete={deleteWorkspace}
-	/>
-	<!-- LEFT: the navigator — workspace / projects / sessions. Clicking a session
-	     opens or focuses its chat tile on the canvas. -->
-	<Sidebar
-		{projects}
-		{activeId}
-		width={showSidebar ? sidebarWidth : 0}
-		resizing={sbResizing}
-		{loggedIn}
-		providerName={chat?.provider ?? ''}
-		updateAvailable={updater.available}
-		onSelect={(id) => (store.activeId = id)}
-		onNewProject={addProject}
-		onNewTask={newTask}
-		onNewSession={(p) => store.addSession(p)}
-		onNewChat={() => store.newChat()}
-		onCloseSession={(id) => store.removeSession(id)}
-		onCloseProject={removeProject}
-		onArchiveSession={(id) => store.archiveSession(id)}
-		onUnarchiveSession={(id) => store.unarchiveSession(id)}
-		onRenameSession={(id, title) => store.renameSession(id, title)}
-		onSessionMenu={openSessionMenu}
-		onHistory={(p) => store.openHistory(p)}
-		onSettings={() => (showSettings = true)}
-		agents={agentDirectory.agents}
-		agentsStatus={agentDirectory.status}
-		onOpenAgent={(a) => store.openAgentSession(a, agentDirectory.latestSession(a.id)?.session)}
-		onNewAgent={() => (showAgentDialog = true)}
-		onAgentPage={(a) => (agentPageFor = a.id)}
-		pendingCount={agentDirectory.pending}
-		onDesk={() => (showDesk = true)}
-	/>
+		</div>
+		<div class="lbody">
+			<!-- FAR LEFT: the workspace rail (top-level context). -->
+			<WorkspaceRail
+				workspaces={workspaces.workspaces}
+				activeId={workspaces.activeId}
+				busy={wsBusy}
+				onSwitch={switchWorkspace}
+				onNew={newWorkspace}
+				onRename={(id, name) => workspaces.rename(id, name)}
+				onChrome={(id, chrome) => workspaces.setChrome(id, chrome)}
+				onDelete={deleteWorkspace}
+			/>
+			<!-- LEFT: the navigator — workspace / projects / sessions. Clicking a session
+			     opens or focuses its chat tile on the canvas. -->
+			<Sidebar
+				{projects}
+				{activeId}
+				width={showSidebar ? sidebarWidth : 0}
+				resizing={sbResizing}
+				{loggedIn}
+				providerName={chat?.provider ?? ''}
+				updateAvailable={updater.available}
+				onSelect={(id) => (store.activeId = id)}
+				onNewProject={addProject}
+				onNewTask={newTask}
+				onNewSession={(p) => store.addSession(p)}
+				onNewChat={() => store.newChat()}
+				onCloseSession={(id) => store.removeSession(id)}
+				onCloseProject={removeProject}
+				onArchiveSession={(id) => store.archiveSession(id)}
+				onUnarchiveSession={(id) => store.unarchiveSession(id)}
+				onRenameSession={(id, title) => store.renameSession(id, title)}
+				onSessionMenu={openSessionMenu}
+				onHistory={(p) => store.openHistory(p)}
+				onSettings={() => (showSettings = true)}
+				agents={agentDirectory.agents}
+				agentsStatus={agentDirectory.status}
+				onOpenAgent={(a) => store.openAgentSession(a, agentDirectory.latestSession(a.id)?.session)}
+				onNewAgent={() => (showAgentDialog = true)}
+				onAgentPage={(a) => (agentPageFor = a.id)}
+				pendingCount={agentDirectory.pending}
+				onDesk={() => (showDesk = true)}
+			/>
+		</div>
+	</div>
 	<div class="resizer side" class:hidden={!showSidebar} role="separator" aria-label="resize sidebar" onpointerdown={startSidebarResize}></div>
 
 	<!-- THE CANVAS: workspace tabs on top, one mosaic for chats, tool panels,
 	     TUI and audit tiles below. -->
-	<div class="canvas">
+	<!-- MAIN: the title of what is in front, then the canvas — one column from
+	     the top of the window to the bottom. -->
+	<div class="main">
+		<TitleBar
+			sidebarOpen={showSidebar}
+			onToggleSidebar={toggleSidebar}
+			title={active?.chat.title ?? ''}
+			subtitle={activeProject?.name ?? ''}
+			{addOptions}
+			onAdd={(key) => mosaicAdd(focusedLeaf, key)}
+		>
+			{#snippet actions()}
+				{#if active && active.surface !== 'tui' && canHandOffToTui(active.backendId)}
+					<button
+						class="tile-action"
+						disabled={!tuiReady(active.id)}
+						title={tuiReady(active.id) ? t('chat.tuiContinueTitle') : t('chat.tuiContinueUnavailable')}
+						aria-label={t('chat.tuiContinue')}
+						onclick={() => active && store.openInTui(active.id)}
+					>
+						<SquareTerminal size={16} strokeWidth={1.5} />
+					</button>
+				{/if}
+			{/snippet}
+		</TitleBar>
+		<div class="canvas">
 
-		<div class="stage">
-			{#if store.loaded && projects.length === 0}
-				<div class="nochat" data-tauri-drag-region>
-					<span class="welcome-mark">JuCode</span>
-					<p class="welcome-tip">{t('shell.noChat')}</p>
-					<div class="welcome-actions">
-						<Button variant="primary" size="sm" onclick={addProject}>{t('shell.startFromProject')}</Button>
-						<Button size="sm" onclick={() => store.newChat()}>{t('shell.startChat')}</Button>
+			<div class="stage">
+				{#if store.loaded && projects.length === 0}
+					<div class="nochat" data-tauri-drag-region>
+						<span class="welcome-mark">JuCode</span>
+						<p class="welcome-tip">{t('shell.noChat')}</p>
+						<div class="welcome-actions">
+							<Button variant="primary" size="sm" onclick={addProject}>{t('shell.startFromProject')}</Button>
+							<Button size="sm" onclick={() => store.newChat()}>{t('shell.startChat')}</Button>
+						</div>
 					</div>
-				</div>
-			{:else}
-				<Mosaic
-					hideSoloBar
-					layout={tiles}
-					onchange={onMosaicChange}
-					label={tileLabel}
-					{addOptions}
-					onAdd={mosaicAdd}
-					emptyText={t('dock.dock.empty')}
-					focused={focusedLeaf}
-					onFocus={onLeafFocus}
-					decorate={tileChrome}
-					onTabContext={openTileChrome}
-					onTabRename={openTileChrome}
-				>
-						{#snippet actions(tab)}
+				{:else}
+					<Mosaic
+						hideSoloBar
+						layout={tiles}
+						onchange={onMosaicChange}
+						label={tileLabel}
+						{addOptions}
+						onAdd={mosaicAdd}
+						emptyText={t('dock.dock.empty')}
+						focused={focusedLeaf}
+						onFocus={onLeafFocus}
+						decorate={tileChrome}
+						onTabContext={openTileChrome}
+						onTabRename={openTileChrome}
+					>
+							{#snippet actions(tab)}
+								{@const sid = chatSessionOf(tab.panel)}
+								{@const session = sid ? sessionMap.get(sid) : undefined}
+								{#if sid && session && session.surface !== 'tui' && canHandOffToTui(session.backendId)}
+									<button
+										class="tile-action"
+										disabled={!tuiReady(sid)}
+										title={tuiReady(sid) ? t('chat.tuiContinueTitle') : t('chat.tuiContinueUnavailable')}
+										aria-label={t('chat.tuiContinue')}
+										onclick={() => store.openInTui(sid)}
+									>
+										<SquareTerminal size={13} />
+									</button>
+								{/if}
+							{/snippet}
+							{#snippet panel(tab)}
 							{@const sid = chatSessionOf(tab.panel)}
-							{@const session = sid ? sessionMap.get(sid) : undefined}
-							{#if sid && session && session.surface !== 'tui' && canHandOffToTui(session.backendId)}
-								<button
-									class="tile-action"
-									disabled={!tuiReady(sid)}
-									title={tuiReady(sid) ? t('chat.tuiContinueTitle') : t('chat.tuiContinueUnavailable')}
-									aria-label={t('chat.tuiContinue')}
-									onclick={() => store.openInTui(sid)}
-								>
-									<SquareTerminal size={13} />
-								</button>
+							{@const tui = tuiBackendOf(tab.panel)}
+							{#if sid}
+								{@const sess = sessionMap.get(sid)}
+								{#if sess}
+									{#if sess.surface === 'tui'}
+										<!-- Session handoff: the same chat tile renders the native TUI
+										     resuming this conversation by id (never a standalone tui:* tab). -->
+										<TuiPanel
+											backend={sess.backendId}
+											cwd={store.projectPathOf(sid) ?? ''}
+											args={tuiResumeArgs(sess.backendId, sess.chat.sessionId)}
+											resumeCommand={tuiResumeCommand(sess.backendId, sess.chat.sessionId)}
+											onBackToGui={() => store.returnToGui(sid)}
+											onOpenSettings={() => { settingsInitial = 'behavior'; showSettings = true; }}
+										/>
+									{:else}
+										<ChatPane
+											session={sess}
+											{store}
+											{providers}
+											{providersList}
+											isActive={sid === activeId}
+											onRegister={registerPane}
+											onUnregister={unregisterPane}
+										/>
+									{/if}
+								{:else}
+									<div class="gone">{t('shell.chatGone')}</div>
+								{/if}
+							{:else if tab.panel === 'plan'}<PlanPanel plan={chat?.plan ?? []} />
+							{:else if tab.panel === 'goal'}<GoalPanel goal={chat?.goal ?? null} />
+							{:else if tab.panel === 'changes'}<ChangesPanel cwd={activeProject?.path ?? ''} files={chat?.changedFiles ?? []} onRevert={(p) => chat && (chat.changedFiles = chat.changedFiles.filter((x) => x !== p))} />
+							{:else if tab.panel === 'turns'}<TurnsPanel turns={chat?.turnTimeline ?? []} onOpenFile={openActiveFile} />
+							{:else if tab.panel === 'files'}<FilesPanel rootDir={activeProject?.path ?? ''} />
+							{:else if tab.panel === 'git'}<GitPanel cwd={activeProject?.path ?? ''} worktree={activeProject?.worktree ?? null} llm={llmTarget} onOpenTask={(path, meta) => openTaskProject(path, meta)} onTaskRemoved={closeTaskProject} />
+							{:else if tab.panel === 'term'}<TerminalPanel cwd={activeProject?.path ?? ''} />
+							{:else if tab.panel === 'browser'}<BrowserPanel />
+							{:else if tab.panel === 'diag'}<DiagnosticsPanel chat={chat ?? null} />
+							{:else if tab.panel === 'audit'}<EditorPane onAiSend={sendAiEdit} />
+							{:else if tui}<TuiPanel backend={tui} cwd={activeProject?.path ?? ''} onOpenSettings={() => { settingsInitial = 'behavior'; showSettings = true; }} />
 							{/if}
 						{/snippet}
-						{#snippet panel(tab)}
-						{@const sid = chatSessionOf(tab.panel)}
-						{@const tui = tuiBackendOf(tab.panel)}
-						{#if sid}
-							{@const sess = sessionMap.get(sid)}
-							{#if sess}
-								{#if sess.surface === 'tui'}
-									<!-- Session handoff: the same chat tile renders the native TUI
-									     resuming this conversation by id (never a standalone tui:* tab). -->
-									<TuiPanel
-										backend={sess.backendId}
-										cwd={store.projectPathOf(sid) ?? ''}
-										args={tuiResumeArgs(sess.backendId, sess.chat.sessionId)}
-										resumeCommand={tuiResumeCommand(sess.backendId, sess.chat.sessionId)}
-										onBackToGui={() => store.returnToGui(sid)}
-										onOpenSettings={() => { settingsInitial = 'behavior'; showSettings = true; }}
-									/>
-								{:else}
-									<ChatPane
-										session={sess}
-										{store}
-										{providers}
-										{providersList}
-										isActive={sid === activeId}
-										onRegister={registerPane}
-										onUnregister={unregisterPane}
-									/>
-								{/if}
-							{:else}
-								<div class="gone">{t('shell.chatGone')}</div>
-							{/if}
-						{:else if tab.panel === 'plan'}<PlanPanel plan={chat?.plan ?? []} />
-						{:else if tab.panel === 'goal'}<GoalPanel goal={chat?.goal ?? null} />
-						{:else if tab.panel === 'changes'}<ChangesPanel cwd={activeProject?.path ?? ''} files={chat?.changedFiles ?? []} onRevert={(p) => chat && (chat.changedFiles = chat.changedFiles.filter((x) => x !== p))} />
-						{:else if tab.panel === 'turns'}<TurnsPanel turns={chat?.turnTimeline ?? []} onOpenFile={openActiveFile} />
-						{:else if tab.panel === 'files'}<FilesPanel rootDir={activeProject?.path ?? ''} />
-						{:else if tab.panel === 'git'}<GitPanel cwd={activeProject?.path ?? ''} worktree={activeProject?.worktree ?? null} llm={llmTarget} onOpenTask={(path, meta) => openTaskProject(path, meta)} onTaskRemoved={closeTaskProject} />
-						{:else if tab.panel === 'term'}<TerminalPanel cwd={activeProject?.path ?? ''} />
-						{:else if tab.panel === 'browser'}<BrowserPanel />
-						{:else if tab.panel === 'diag'}<DiagnosticsPanel chat={chat ?? null} />
-						{:else if tab.panel === 'audit'}<EditorPane onAiSend={sendAiEdit} />
-						{:else if tui}<TuiPanel backend={tui} cwd={activeProject?.path ?? ''} onOpenSettings={() => { settingsInitial = 'behavior'; showSettings = true; }} />
-						{/if}
-					{/snippet}
-				</Mosaic>
-			{/if}
+					</Mosaic>
+				{/if}
+			</div>
 		</div>
-	</div>
 	</div>
 
 	{#if showSettings}
@@ -1133,15 +1143,55 @@
 <style>
 	.app {
 		display: flex;
-		flex-direction: column;
 		height: 100vh;
 		overflow: hidden;
-		background: var(--bg);
+		background: var(--rail);
 	}
-	.body {
+	.chrome {
+		display: flex;
+		flex-direction: column;
+		flex-shrink: 0;
+		min-height: 0;
+	}
+	/* Level with the macOS traffic lights; the toggle sits just right of them. */
+	.lstrip {
+		display: flex;
+		align-items: center;
+		height: 48px;
+		flex-shrink: 0;
+		padding-left: 84px;
+	}
+	:global(:root[data-os='windows']) .lstrip,
+	:global(:root[data-os='linux']) .lstrip {
+		padding-left: 14px;
+	}
+	.lstrip-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 34px;
+		height: 34px;
+		border: none;
+		border-radius: var(--r-sm);
+		background: none;
+		color: var(--dim);
+		cursor: pointer;
+	}
+	.lstrip-btn:hover {
+		background: var(--surface2);
+		color: var(--text);
+	}
+	.lbody {
 		flex: 1;
 		display: flex;
 		min-height: 0;
+	}
+	.main {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		background: var(--bg);
 	}
 
 	/* ---------- the canvas ---------- */

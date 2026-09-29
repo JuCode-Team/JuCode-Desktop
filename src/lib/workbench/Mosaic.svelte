@@ -543,6 +543,7 @@
 		border: 1px solid var(--border);
 		border-radius: var(--r-md);
 		box-shadow: var(--shadow-pop);
+		animation: drop-in var(--t-med) var(--ease-spring);
 	}
 	.lmenu-item {
 		text-align: left;
@@ -565,6 +566,7 @@
 	.lpane {
 		position: absolute;
 		inset: 0;
+		animation: pane-in var(--t-med) var(--ease-out);
 	}
 	.lpane.hidden {
 		display: none;

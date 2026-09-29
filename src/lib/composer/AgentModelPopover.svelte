@@ -214,6 +214,7 @@
 		border-radius: var(--r-md);
 		box-shadow: var(--shadow-pop);
 		overflow: hidden;
+		animation: pop-in var(--t-med) var(--ease-spring);
 	}
 	/* Locked sessions drop the agent rail and need less room. */
 	.pop.norail {

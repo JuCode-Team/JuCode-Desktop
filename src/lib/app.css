@@ -8,8 +8,9 @@
    Color: black, white and cool grays carry the UI. --accent is the *neutral*
    emphasis (primary buttons, selected state: near-white on dark, near-black on
    light); the brand purple (--brand) is kept for links and the focus ring only.
-   Layers, back to front: --rail (window chrome: title bar + workspace rail) →
-   --bg (content: session list and canvas share it) → --panel with
+   Layers, back to front: --rail (window chrome: top-left strip + workspace
+   rail) → --sidebar (the session-list panel) → --bg (the main column: title
+   and canvas) → --panel with
    --shadow-float (composer, cards) → --panel with --shadow-pop (menus, modals).
    Depth comes from these fills and shadows; strokes stay faint (--hairline).
 
@@ -19,25 +20,25 @@
 	--brand: #8b5cf6;
 	--brand-bright: #a78bfa;
 
-	--accent: #ededef;
+	--accent: #ececec;
 	--accent-bright: #ffffff;
-	--accent-deep: #a1a1aa;
+	--accent-deep: #a3a3a3;
 	--accent-soft: rgba(255, 255, 255, 0.08);
-	--on-accent: #0c0c0e;
+	--on-accent: #171717;
 
-	--bg: #141417;
-	--sidebar: #0e0e11;
-	--rail: #08080a;
-	--panel: #1b1b1f;
-	--surface: rgba(255, 255, 255, 0.028);
-	--surface2: rgba(255, 255, 255, 0.055);
-	--hairline: rgba(255, 255, 255, 0.045);
-	--border: #202024;
-	--border-strong: #2c2c32;
+	--bg: #1a1a1a;
+	--sidebar: #202020;
+	--rail: #141414;
+	--panel: #262626;
+	--surface: rgba(255, 255, 255, 0.03);
+	--surface2: rgba(255, 255, 255, 0.06);
+	--hairline: rgba(255, 255, 255, 0.06);
+	--border: #2e2e2e;
+	--border-strong: #3a3a3a;
 
-	--text: #ededef;
-	--dim: #a1a1aa;
-	--dim2: #71717a;
+	--text: #ececec;
+	--dim: #a3a3a3;
+	--dim2: #737373;
 
 	--ok: #4fd1b5;
 	--info: #7cc4fa;
@@ -57,11 +58,12 @@
 	--fs-xl: 24px; /* page titles (serif) */
 	--fs-2xl: 36px; /* welcome wordmark (serif) */
 
-	--r-xs: 4px;
-	--r-sm: 6px;
+	--r-xs: 5px;
+	--r-sm: 8px;
 	--r-md: 10px;
 	--r-lg: 14px;
-	--r-xl: 18px;
+	--r-xl: 20px;
+	--r-2xl: 26px;
 	--r-full: 999px;
 
 	/* Motion: one deceleration curve for everything that moves, a gentle
@@ -98,25 +100,25 @@
 	--brand: #7c3aed;
 	--brand-bright: #6d28d9;
 
-	--accent: #18181b;
-	--accent-bright: #09090b;
-	--accent-deep: #52525b;
-	--accent-soft: rgba(24, 24, 27, 0.06);
-	--on-accent: #fafafa;
+	--accent: #1f1f1f;
+	--accent-bright: #0d0d0d;
+	--accent-deep: #525252;
+	--accent-soft: rgba(0, 0, 0, 0.05);
+	--on-accent: #ffffff;
 
 	--bg: #ffffff;
-	--sidebar: #f3f3f5;
-	--rail: #e9e9ec;
+	--sidebar: #f7f7f7;
+	--rail: #ececec;
 	--panel: #ffffff;
-	--surface: rgba(24, 24, 27, 0.025);
-	--surface2: rgba(24, 24, 27, 0.05);
-	--hairline: rgba(24, 24, 27, 0.05);
-	--border: #ececef;
-	--border-strong: #dcdce0;
+	--surface: rgba(0, 0, 0, 0.025);
+	--surface2: rgba(0, 0, 0, 0.055);
+	--hairline: rgba(0, 0, 0, 0.06);
+	--border: #e8e8e8;
+	--border-strong: #d6d6d6;
 
-	--text: #18181b;
-	--dim: #52525b;
-	--dim2: #8e8e97;
+	--text: #1f1f1f;
+	--dim: #5c5c5c;
+	--dim2: #9a9a9a;
 
 	--ok: #0f8f7a;
 	--info: #2563eb;
@@ -172,6 +174,25 @@ html,
 body {
 	margin: 0;
 	height: 100%;
+}
+/* The UI is not a document: chrome, buttons and lists don't select on drag.
+   Content the user reads or copies stays selectable. */
+body {
+	-webkit-user-select: none;
+	user-select: none;
+}
+input,
+textarea,
+[contenteditable='true'],
+.selectable,
+.md,
+.bubble,
+pre,
+code,
+.cm-editor,
+.xterm {
+	-webkit-user-select: text;
+	user-select: text;
 }
 body {
 	background: var(--bg);
@@ -242,6 +263,39 @@ body {
 	}
 	to {
 		opacity: 1;
+	}
+}
+/* ---------- Motion system ----------
+   One set of entrances for the whole app, all on the --t-* durations and the
+   --ease-* curves above:
+     scrim-in   backdrops behind modals                 --t-fast  --ease-out
+     sheet-in   modals and sheets (settings, desk, …)   --t-med   --ease-spring
+     pop-in     popovers that open upward from an anchor (composer)  --t-med --ease-spring
+     drop-in    menus that open downward from an anchor (title bar)  --t-med --ease-spring
+     pane-in    a session or panel coming into view      --t-med   --ease-out
+     rise/fade  small in-flow reveals (tray, labels)     --t-fast/med --ease-out
+   Reduced motion collapses all of them (see the media query at the end). */
+@keyframes scrim-in {
+	from {
+		opacity: 0;
+	}
+}
+@keyframes sheet-in {
+	from {
+		opacity: 0;
+		transform: translateY(10px) scale(0.985);
+	}
+}
+@keyframes drop-in {
+	from {
+		opacity: 0;
+		transform: translateY(-6px) scale(0.97);
+	}
+}
+@keyframes pane-in {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
 	}
 }
 /* Anchored popovers (menus, effort/approval pops): grow up from their anchor. */

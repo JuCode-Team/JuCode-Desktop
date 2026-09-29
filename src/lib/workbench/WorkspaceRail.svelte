@@ -96,7 +96,7 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-				padding: 10px 0 12px;
+				padding: 4px 0 12px;
 		background: var(--rail);
 	}
 	.items {

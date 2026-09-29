@@ -155,6 +155,7 @@
 		align-items: center;
 		justify-content: center;
 		z-index: 60;
+		animation: scrim-in var(--t-fast) var(--ease-out);
 	}
 	.sheet {
 		width: min(820px, 94vw);
@@ -166,6 +167,7 @@
 		border-radius: var(--r-lg);
 		box-shadow: var(--shadow-modal);
 		overflow: hidden;
+		animation: sheet-in var(--t-med) var(--ease-spring);
 	}
 	.head {
 		display: flex;

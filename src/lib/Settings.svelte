@@ -632,7 +632,7 @@
 		align-items: center;
 		justify-content: center;
 		z-index: 60;
-		animation: fade var(--t-fast) var(--ease-out);
+		animation: scrim-in var(--t-fast) var(--ease-out);
 	}
 	@keyframes fade {
 		from {
@@ -648,13 +648,7 @@
 		border-radius: var(--r-lg);
 		box-shadow: var(--shadow-modal);
 		overflow: hidden;
-		animation: pop var(--t-med) var(--ease-spring);
-	}
-	@keyframes pop {
-		from {
-			opacity: 0;
-			transform: translateY(8px) scale(0.985);
-		}
+		animation: sheet-in var(--t-med) var(--ease-spring);
 	}
 	.nav {
 		width: 220px;

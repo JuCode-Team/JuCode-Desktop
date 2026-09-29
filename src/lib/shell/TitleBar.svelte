@@ -4,9 +4,10 @@
 	import { getCurrentWindow } from '@tauri-apps/api/window';
 	import { t } from '$lib/i18n';
 
-	// The window's own layer: traffic lights (macOS), the sidebar toggle, the
-	// title of what is in front and the canvas actions. With the workspace rail
-	// it forms the window chrome around the content (session list + canvas).
+	// Head of the main column: the title of what is in front and the canvas
+	// actions (plus the drawn window controls on Windows/Linux). The sidebar
+	// toggle lives in the chrome strip beside the traffic lights and moves here
+	// while the sidebar is hidden.
 	let {
 		sidebarOpen,
 		onToggleSidebar,
@@ -49,14 +50,15 @@
 </script>
 
 <header class="titlebar" data-tauri-drag-region>
+	{#if !sidebarOpen}
 	<button
 		class="tb-btn toggle"
-		class:on={sidebarOpen}
 		title={t('shell.toggleSidebar')}
 		aria-label={t('shell.toggleSidebar')}
 		aria-pressed={sidebarOpen}
 		onclick={onToggleSidebar}><PanelLeft size={18} strokeWidth={1.5} /></button
 	>
+	{/if}
 	<div class="title" data-tauri-drag-region>
 		{#if title}<span class="t">{title}</span>{/if}
 		{#if subtitle}<span class="s">{subtitle}</span>{/if}
@@ -108,15 +110,13 @@
 		gap: 12px;
 		height: 48px;
 		flex-shrink: 0;
-		/* macOS: clear the traffic lights at the left edge. */
-		padding: 0 10px 0 84px;
-		background: var(--rail);
-		border-bottom: 1px solid var(--hairline);
+		padding: 0 12px 0 24px;
+		background: var(--bg);
 		user-select: none;
 	}
 	:global(:root[data-os='windows']) .titlebar,
 	:global(:root[data-os='linux']) .titlebar {
-		padding: 0 0 0 12px;
+		padding-right: 0;
 	}
 	.winctl {
 		display: flex;
@@ -200,10 +200,12 @@
 		right: 0;
 		z-index: 41;
 		min-width: 180px;
+		transform-origin: top right;
 		padding: 6px;
 		border-radius: var(--r-md);
 		background: var(--panel);
 		box-shadow: var(--shadow-pop);
+		animation: drop-in var(--t-med) var(--ease-spring);
 	}
 	.item {
 		display: flex;

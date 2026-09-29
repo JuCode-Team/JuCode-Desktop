@@ -101,7 +101,7 @@
 <div class="effort-pop" role="dialog" aria-label={t('chat.effortTitle')} bind:this={popEl} style:left="{popLeft}px" style:top="{popTop}px">
 	<div class="head">
 		<div class="titles">
-			<span class="title">{effortLabel(current) || t('chat.effortTitle')}</span>
+			{#key current}<span class="title">{effortLabel(current) || t('chat.effortTitle')}</span>{/key}
 			{#if onModel}
 				<button class="model" onclick={onModel} title={t('chat.switchModel')}>{model}</button>
 			{:else}
@@ -181,6 +181,7 @@
 		min-width: 0;
 	}
 	.title {
+		animation: rise var(--t-fast) var(--ease-out);
 		font-size: var(--fs-md);
 		font-weight: 600;
 		color: var(--text);
