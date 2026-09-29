@@ -74,7 +74,7 @@ const shell = {
 			svgInvalid: 'SVG 无效或包含不允许的内容',
 			delete: '删除'
 		},
-		searchSessions: '搜索会话（标题 / 项目名）',
+		searchSessions: '搜索',
 
 		// find bar
 		findPlaceholder: '在对话中查找…',
@@ -92,6 +92,12 @@ const shell = {
 		startFromProject: '选择项目，开始对话',
 		startChat: '开始对话',
 		chats: '对话',
+		projects: '项目',
+		showMore: '显示更多',
+		showLess: '收起',
+		awaitShort: '待确认',
+		unread: '有新回复',
+		updateShort: '可更新',
 		newChat: '新对话',
 
 		// engine
@@ -426,7 +432,7 @@ const shell = {
 			svgInvalid: 'Invalid SVG or disallowed content',
 			delete: 'Delete'
 		},
-		searchSessions: 'Search sessions (title / project name)',
+		searchSessions: 'Search',
 
 		// find bar
 		findPlaceholder: 'Find in conversation…',
@@ -444,6 +450,12 @@ const shell = {
 		startFromProject: 'Pick a project to start',
 		startChat: 'Start a chat',
 		chats: 'Chats',
+		projects: 'Projects',
+		showMore: 'Show more',
+		showLess: 'Show less',
+		awaitShort: 'Needs you',
+		unread: 'New reply',
+		updateShort: 'Update',
 		newChat: 'New chat',
 
 		// engine

@@ -2,22 +2,30 @@
 @import '@fontsource/instrument-serif';
 @import '@fontsource-variable/geist-mono';
 
-/* JuCode design system — follows brand-docs/DESIGN-SPEC.md (cool neutral grays,
-   purple only for interactive and current state, serif titles, mono for technical
-   labels), tightened to desktop-app density. Dark is the default theme.
+/* JuCode design system — follows brand-docs/DESIGN-SPEC.md, tuned for a desktop
+   app. Dark is the default theme.
+
+   Color: black, white and cool grays carry the UI. --accent is the *neutral*
+   emphasis (primary buttons, selected state: near-white on dark, near-black on
+   light); the brand purple (--brand) is kept for links and the focus ring only.
+   Layers, back to front: --sidebar (window chrome: rail + sidebar) → --bg (the
+   raised canvas, with --shadow-canvas) → --panel (cards, popovers, modals).
 
    Type scale: every font-size uses a --fs-* step. Radius: every corner uses a
    --r-* step. Colors come only from the tokens below. */
 :root {
-	--accent: #8b5cf6;
-	--accent-bright: #a78bfa;
-	--accent-deep: #6d28d9;
-	--accent-soft: color-mix(in oklab, var(--accent) 14%, transparent);
-	--on-accent: #ffffff;
+	--brand: #8b5cf6;
+	--brand-bright: #a78bfa;
 
-	--bg: #0c0c0e;
-	--sidebar: #09090b;
-	--panel: #141417;
+	--accent: #ededef;
+	--accent-bright: #ffffff;
+	--accent-deep: #a1a1aa;
+	--accent-soft: rgba(255, 255, 255, 0.08);
+	--on-accent: #0c0c0e;
+
+	--bg: #131316;
+	--sidebar: #0a0a0c;
+	--panel: #1b1b1f;
 	--surface: rgba(255, 255, 255, 0.028);
 	--surface2: rgba(255, 255, 255, 0.055);
 	--hairline: rgba(255, 255, 255, 0.065);
@@ -38,13 +46,13 @@
 	--font-sans: 'Inter Variable', Inter, -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif;
 	--font-mono: 'Geist Mono Variable', 'Geist Mono', 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 
-	--fs-2xs: 11px; /* mono labels, badges */
-	--fs-xs: 12px; /* meta, secondary rows */
-	--fs-sm: 13px; /* UI controls, lists */
-	--fs-md: 14px; /* chat body, inputs */
-	--fs-lg: 16px; /* section titles */
-	--fs-xl: 20px; /* page titles (serif) */
-	--fs-2xl: 30px; /* welcome wordmark (serif) */
+	--fs-2xs: 11.5px; /* mono labels, badges */
+	--fs-xs: 12.5px; /* meta, secondary rows */
+	--fs-sm: 14px; /* UI controls, lists */
+	--fs-md: 15px; /* chat body, inputs */
+	--fs-lg: 17px; /* section titles */
+	--fs-xl: 22px; /* page titles (serif) */
+	--fs-2xl: 34px; /* welcome wordmark (serif) */
 
 	--r-xs: 4px;
 	--r-sm: 6px;
@@ -62,8 +70,10 @@
 	--t-med: 0.22s;
 	--t-slow: 0.32s;
 
-	--shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--hairline);
-	--shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--hairline);
+	--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+	--shadow-canvas: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 8px 28px rgba(0, 0, 0, 0.45);
+	--shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.07);
+	--shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.07);
 	--scrim: rgba(0, 0, 0, 0.55);
 
 	/* Code editor syntax palette (CodeMirror highlight style reads these). */
@@ -79,14 +89,17 @@
 }
 
 [data-theme='light'] {
-	--accent: #7c3aed;
-	--accent-bright: #6d28d9;
-	--accent-deep: #5b21b6;
-	--accent-soft: color-mix(in oklab, var(--accent) 10%, transparent);
-	--on-accent: #ffffff;
+	--brand: #7c3aed;
+	--brand-bright: #6d28d9;
 
-	--bg: #fafafa;
-	--sidebar: #f4f4f5;
+	--accent: #18181b;
+	--accent-bright: #09090b;
+	--accent-deep: #52525b;
+	--accent-soft: rgba(24, 24, 27, 0.06);
+	--on-accent: #fafafa;
+
+	--bg: #ffffff;
+	--sidebar: #f1f1f3;
 	--panel: #ffffff;
 	--surface: rgba(24, 24, 27, 0.025);
 	--surface2: rgba(24, 24, 27, 0.05);
@@ -103,8 +116,10 @@
 	--err: #d33a2c;
 	--warn: #a75f06;
 
-	--shadow-pop: 0 10px 28px rgba(24, 24, 27, 0.1), 0 0 0 1px var(--hairline);
-	--shadow-modal: 0 20px 56px rgba(24, 24, 27, 0.16), 0 0 0 1px var(--hairline);
+	--shadow-sm: 0 1px 2px rgba(24, 24, 27, 0.08);
+	--shadow-canvas: 0 0 0 1px rgba(24, 24, 27, 0.06), 0 6px 24px rgba(24, 24, 27, 0.07);
+	--shadow-pop: 0 10px 28px rgba(24, 24, 27, 0.12), 0 0 0 1px rgba(24, 24, 27, 0.07);
+	--shadow-modal: 0 20px 56px rgba(24, 24, 27, 0.18), 0 0 0 1px rgba(24, 24, 27, 0.07);
 	--scrim: rgba(24, 24, 27, 0.32);
 
 	--cm-keyword: #7c3aed;
@@ -136,7 +151,7 @@
 /* Keyboard focus ring (mouse clicks don't trigger :focus-visible). Inputs keep
    their own border-based focus indication to avoid a doubled outline. */
 :focus-visible {
-	outline: 2px solid var(--accent-bright);
+	outline: 2px solid var(--brand-bright);
 	outline-offset: 2px;
 	border-radius: var(--r-xs);
 }

@@ -142,7 +142,7 @@
 	{:else}
 		<div class="working">
 			{#each working as agent (agent.id)}
-				<span class="chip"><span class="dot"></span>{agent.name}</span>
+				<span class="chip"><LoaderCircle size={14} strokeWidth={1.5} class="spin" />{agent.name}</span>
 			{/each}
 		</div>
 	{/if}
@@ -316,13 +316,6 @@
 		border-radius: var(--r-full);
 		background: var(--surface2);
 		font-size: var(--fs-xs);
-	}
-	.dot {
-		width: 7px;
-		height: 7px;
-		border-radius: 50%;
-		background: var(--accent-bright);
-		animation: pulse 1.2s ease-in-out infinite;
 	}
 	.report {
 		border-bottom: 1px solid var(--hairline);

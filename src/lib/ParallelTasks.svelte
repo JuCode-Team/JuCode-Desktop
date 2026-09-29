@@ -2,7 +2,7 @@
 	// 并行任务（git worktree）区块，嵌在 Git 面板里，两种形态：
 	//  · 当前项目是任务 worktree：展示分支/基于/领先落后 + 合并回主仓库 / 完成并清理 / 放弃任务；
 	//  · 当前项目是主仓库：列出容器目录下的所有任务 worktree（脏标记、打开、快捷合并/清理）。
-	import { GitMerge, GitBranch, Trash2, RefreshCw, LoaderCircle, FolderOpen, CheckCircle2 } from 'lucide-svelte';
+	import { GitMerge, GitBranch, Trash2, RefreshCw, LoaderCircle, FolderOpen, CheckCircle2, FilePen } from 'lucide-svelte';
 	import { ask } from '@tauri-apps/plugin-dialog';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -297,9 +297,9 @@
 				<Button size="sm" onclick={prune} disabled={busy}>{t('dock.tasks.prune')}</Button>
 			{:else}
 				{#if r.dirty}
-					<span class="dot warn" title={t('dock.tasks.dirty')}></span>
+					<span class="state" title={t('dock.tasks.dirty')}><FilePen size={14} strokeWidth={1.5} /></span>
 				{:else if r.dirty === false}
-					<span class="dot okc" title={t('dock.tasks.clean')}></span>
+					<span class="state" title={t('dock.tasks.clean')}><CheckCircle2 size={14} strokeWidth={1.5} /></span>
 				{/if}
 				<div class="racts">
 					<IconButton size="sm" onclick={() => openRow(r)} disabled={busy || !r.branch} label="open task" title={t('dock.tasks.open')}><FolderOpen size={13} /></IconButton>
@@ -466,17 +466,10 @@
 		color: var(--warn);
 		background: color-mix(in oklab, var(--warn) 14%, transparent);
 	}
-	.dot {
-		width: 7px;
-		height: 7px;
-		border-radius: 50%;
+	.state {
+		display: inline-flex;
+		color: var(--dim);
 		flex-shrink: 0;
-	}
-	.dot.warn {
-		background: var(--warn);
-	}
-	.dot.okc {
-		background: var(--ok);
 	}
 	.racts {
 		display: flex;

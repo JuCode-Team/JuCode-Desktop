@@ -53,7 +53,7 @@
 	import type { WorkspaceEntry } from '$lib/workbench/workspaces';
 	import type { TabIcon } from '$lib/workbench/tabChrome';
 	import Mosaic from '$lib/workbench/Mosaic.svelte';
-	import WorkspaceTabs from '$lib/workbench/WorkspaceTabs.svelte';
+	import WorkspaceRail from '$lib/workbench/WorkspaceRail.svelte';
 	import TabChromePopover from '$lib/workbench/TabChromePopover.svelte';
 	import ChatPane, { type ChatPaneApi, type ProviderOption } from '$lib/ChatPane.svelte';
 	import Settings from '$lib/Settings.svelte';
@@ -867,6 +867,17 @@
 	<button class="sb-toggle" class:on={showSidebar} onclick={toggleSidebar} aria-label="toggle sidebar" title={t('shell.toggleSidebar')}>
 		<PanelLeft size={16} />
 	</button>
+	<!-- FAR LEFT: the workspace rail (top-level context). -->
+	<WorkspaceRail
+		workspaces={workspaces.workspaces}
+		activeId={workspaces.activeId}
+		busy={wsBusy}
+		onSwitch={switchWorkspace}
+		onNew={newWorkspace}
+		onRename={(id, name) => workspaces.rename(id, name)}
+		onChrome={(id, chrome) => workspaces.setChrome(id, chrome)}
+		onDelete={deleteWorkspace}
+	/>
 	<!-- LEFT: the navigator — workspace / projects / sessions. Clicking a session
 	     opens or focuses its chat tile on the canvas. -->
 	<Sidebar
@@ -903,17 +914,6 @@
 	<!-- THE CANVAS: workspace tabs on top, one mosaic for chats, tool panels,
 	     TUI and audit tiles below. -->
 	<div class="canvas">
-		<WorkspaceTabs
-			workspaces={workspaces.workspaces}
-			activeId={workspaces.activeId}
-			shifted={!showSidebar}
-			busy={wsBusy}
-			onSwitch={switchWorkspace}
-			onNew={newWorkspace}
-			onRename={(id, name) => workspaces.rename(id, name)}
-			onChrome={(id, chrome) => workspaces.setChrome(id, chrome)}
-			onDelete={deleteWorkspace}
-		/>
 
 		<div class="stage">
 			{#if store.loaded && projects.length === 0}
@@ -1110,6 +1110,7 @@
 		display: flex;
 		height: 100vh;
 		overflow: hidden;
+		background: var(--sidebar);
 	}
 	/* Session-list toggle, pinned right of the macOS traffic lights. Centered on
 	 * their measured macOS 26 metrics: 13.5pt circles with centerline at
@@ -1118,7 +1119,7 @@
 	.sb-toggle {
 		position: fixed;
 		top: 2.75px;
-		left: 78px;
+		left: 82px;
 		z-index: 30;
 		display: inline-flex;
 		align-items: center;
@@ -1152,12 +1153,18 @@
 	}
 
 	/* ---------- the canvas ---------- */
+	/* The canvas is raised above the window chrome (rail + sidebar): the work
+	   surface reads as the front layer through light and shadow, not color. */
 	.canvas {
 		flex: 1;
 		display: flex;
 		flex-direction: column;
 		min-width: 0;
+		margin: 8px 8px 8px 0;
+		border-radius: var(--r-lg);
 		background: var(--bg);
+		box-shadow: var(--shadow-canvas);
+		overflow: hidden;
 		position: relative;
 	}
 	.stage {

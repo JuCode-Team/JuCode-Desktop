@@ -89,7 +89,7 @@
 		margin: 3px 0;
 	}
 	.md :global(a) {
-		color: var(--accent-bright);
+		color: var(--brand-bright);
 		text-decoration: none;
 	}
 	.md :global(a:hover) {

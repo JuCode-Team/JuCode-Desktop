@@ -4,7 +4,7 @@
 	// global, so any live engine is authoritative); with no live session the
 	// config.json entries render read-only.
 	import { onMount } from 'svelte';
-	import { Plus, Pencil, Trash2, RotateCw, ChevronDown, Server, Blocks } from 'lucide-svelte';
+	import { Plus, Pencil, Trash2, RotateCw, ChevronDown, Server, Blocks, CircleCheck, CircleX, CircleDashed } from 'lucide-svelte';
 	import { readConfig, type Op } from '$lib/protocol';
 	import { dispatch } from '$lib/backends/router';
 	import type { ChatState } from '$lib/chat.svelte';
@@ -144,9 +144,9 @@
 							aria-expanded={expanded === row.name}
 						>
 							<span
-								class="dot {stateOf(row)}"
+								class="state {stateOf(row)}"
 								title={row.view?.error ?? t(`settings.mcp.state.${stateOf(row)}`)}
-							></span>
+							>{#if stateOf(row) === 'connected'}<CircleCheck size={14} strokeWidth={1.5} />{:else if stateOf(row) === 'failed'}<CircleX size={14} strokeWidth={1.5} />{:else}<CircleDashed size={14} strokeWidth={1.5} />{/if}</span>
 							<span class="sname">{row.name}</span>
 							<span class="tchip">{row.transport}</span>
 							<span class="scount">
@@ -384,30 +384,13 @@
 		cursor: pointer;
 		text-align: left;
 	}
-	.dot {
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
+	.state {
+		display: inline-flex;
+		color: var(--dim);
 		flex-shrink: 0;
 	}
-	.dot.connected {
-		background: var(--ok);
-	}
-	.dot.failed {
-		background: var(--err);
-	}
-	.dot.disabled,
-	.dot.unknown {
-		background: var(--dim2);
-	}
-	.dot.connecting {
-		background: var(--warn);
-		animation: mcp-pulse 1.2s ease-in-out infinite;
-	}
-	@keyframes mcp-pulse {
-		50% {
-			opacity: 0.35;
-		}
+	.state.failed {
+		color: var(--err);
 	}
 	.sname {
 		font-family: var(--font-mono);

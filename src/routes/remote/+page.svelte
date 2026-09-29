@@ -123,7 +123,7 @@
 				{/if}
 				{#each agentDirectory.agents as agent (agent.id)}
 					<button class="agent" onclick={() => openAgent(agent)}>
-						<span class="dot" class:busy={agent.busy}></span>
+						{#if agent.busy}<LoaderCircle size={14} strokeWidth={1.5} class="spin" />{:else}<Bot size={14} strokeWidth={1.5} />{/if}
 						<span class="text">
 							<span class="name">{agent.name}</span>
 							{#if agent.summary}<span class="summary">{agent.summary}</span>{/if}
@@ -240,18 +240,6 @@
 		background: none;
 		color: var(--text);
 		text-align: left;
-	}
-	.dot {
-		width: 9px;
-		height: 9px;
-		margin-top: 6px;
-		border-radius: 50%;
-		background: var(--dim2);
-		flex-shrink: 0;
-	}
-	.dot.busy {
-		background: var(--accent-bright);
-		animation: pulse 1.2s ease-in-out infinite;
 	}
 	.text {
 		display: flex;

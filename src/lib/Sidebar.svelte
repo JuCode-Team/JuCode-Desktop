@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { Plus, History, X, LoaderCircle, GitBranch, GitBranchPlus, Archive, ArchiveRestore, ChevronRight, Search, Settings, Inbox, IdCard, MessageSquarePlus } from 'lucide-svelte';
+	import { Plus, History, X, LoaderCircle, GitBranch, GitBranchPlus, Archive, ArchiveRestore, ChevronRight, Search, Settings, Inbox, IdCard, SquarePen, SquareTerminal, Bot, Folder, FolderOpen, MessagesSquare, CircleAlert } from 'lucide-svelte';
 	import { t } from '$lib/i18n';
 	import { BACKEND_LABELS } from '$lib/backends';
 	import BackendIcon from '$lib/BackendIcon.svelte';
@@ -73,6 +73,13 @@
 
 	// Which projects have their archived section expanded (collapsed by default).
 	let showArchived = $state<Record<string, boolean>>({});
+	// Collapsed project folders, and folders showing all of their sessions
+	// instead of the first SHOW_LIMIT.
+	let collapsed = $state<Record<string, boolean>>({});
+	let showAll = $state<Record<string, boolean>>({});
+	const SHOW_LIMIT = 6;
+	const chats = $derived(projects.find((p) => p.chats));
+	const codeProjects = $derived(projects.filter((p) => !p.chats));
 
 	// Session filter: case-insensitive substring over session title + project
 	// name; empty project groups are hidden while a query is set.
@@ -132,42 +139,36 @@
 		<span class="word">JuCode</span>
 	</div>
 
-	<div class="nav">
-		<button class="navcard" onclick={newSessionHere}><Plus size={14} /><span>{t('shell.agentSession')}</span></button>
-		<button class="navcard" onclick={onNewChat}><MessageSquarePlus size={14} /><span>{t('shell.newChat')}</span></button>
-	</div>
-
-	<div class="sess-head">
-		<span>{t('shell.sessionsByProject')}</span>
-		<div class="sess-actions">
-			<button class:on={searchOpen} onclick={toggleSearch} aria-label={t('shell.searchSessions')} title={t('shell.searchSessions')}><Search size={14} /></button>
-			<button onclick={onNewProject} aria-label="new project" title={t('shell.newProjectTitle')}><Plus size={15} /></button>
-		</div>
-	</div>
+	<nav class="primary">
+		<button class="row" onclick={onNewChat}><SquarePen size={16} strokeWidth={1.5} /><span>{t('shell.newChat')}</span></button>
+		<button class="row" onclick={newSessionHere}><SquareTerminal size={16} strokeWidth={1.5} /><span>{t('shell.agentSession')}</span></button>
+		<button class="row" class:on={searchOpen} onclick={toggleSearch}><Search size={16} strokeWidth={1.5} /><span>{t('shell.searchSessions')}</span></button>
+		{#if agentsStatus !== 'off'}
+			<button class="row" onclick={onDesk}>
+				<Inbox size={16} strokeWidth={1.5} /><span>{t('shell.desk.title')}</span>
+				{#if pendingCount > 0}<span class="count">{pendingCount}</span>{/if}
+			</button>
+		{/if}
+	</nav>
 
 	{#if searchOpen}
-		<div class="sess-search">
-			<input
-				bind:this={searchEl}
-				bind:value={searchQuery}
-				placeholder={t('shell.searchSessions')}
-				onkeydown={searchKey}
-			/>
+		<div class="search">
+			<input bind:this={searchEl} bind:value={searchQuery} placeholder={t('shell.searchSessions')} onkeydown={searchKey} />
 		</div>
 	{/if}
 
-	{#snippet sessRow(s: Project['sessions'][number])}
+	{#snippet sessRow(s: Project['sessions'][number], nested = false)}
 		<button
 			class="sess"
+			class:nested
 			class:on={s.id === activeId}
 			class:arch={s.archived}
 			style:box-shadow={s.color ? `inset 2px 0 0 ${s.color}` : undefined}
 			onclick={() => onSelect(s.id)}
 			oncontextmenu={(e) => onSessionMenu(s.id, e)}
 		>
-			<span class="sess-dot" class:busy={s.chat.busy} class:err={s.chat.engineState === 'exited'} class:unseen={s.chat.unseen && !s.chat.busy} class:attn={!!(s.chat.pendingApproval || s.chat.trustPrompt)} title={s.chat.pendingApproval || s.chat.trustPrompt ? t('shell.awaitConfirm') : ''}></span>
 			{#if s.icon}
-				<TabGlyph icon={s.icon} color={s.color} size={12} />
+				<TabGlyph icon={s.icon} color={s.color} size={14} />
 			{/if}
 			{#if renaming === s.id}
 				<!-- svelte-ignore a11y_no_static_element_interactions (keep row clicks out of the editor) -->
@@ -184,14 +185,20 @@
 				<span class="sess-title" ondblclick={(e) => { e.stopPropagation(); startRename(s); }} role="presentation">{s.chat.title}</span>
 			{/if}
 			{#if s.backendId && s.backendId !== 'jucode'}
-				<!-- engine-backend badge (only when not the native engine) -->
-				<span class="backend-chip" title={BACKEND_LABELS[s.backendId]}>
-					<BackendIcon backend={s.backendId} size={11} />{BACKEND_LABELS[s.backendId].split(' ')[0]}
-				</span>
+				<span class="backend-chip" title={BACKEND_LABELS[s.backendId]}><BackendIcon backend={s.backendId} size={12} /></span>
 			{/if}
-			{#if s.chat.busy}<LoaderCircle size={12} class="spin" />{/if}
+			{#if s.chat.pendingApproval || s.chat.trustPrompt}
+				<span class="tag" title={t('shell.awaitConfirm')}>{t('shell.awaitShort')}</span>
+			{:else if s.chat.busy}
+				<LoaderCircle size={14} strokeWidth={1.5} class="spin state" />
+			{:else if s.chat.engineState === 'exited'}
+				<span class="state err"><CircleAlert size={14} strokeWidth={1.5} /></span>
+			{:else if s.chat.unseen}
+				<!-- A reply arrived while this session was not in view: the one place a dot is used. -->
+				<span class="unread" aria-label={t('shell.unread')}></span>
+			{/if}
 			<span
-				class="sess-act"
+				class="act"
 				role="button"
 				tabindex="0"
 				onclick={(e) => {
@@ -202,10 +209,10 @@
 				aria-label={s.archived ? 'unarchive' : 'archive'}
 				title={s.archived ? t('shell.unarchive') : t('shell.archive')}
 			>
-				{#if s.archived}<ArchiveRestore size={12} />{:else}<Archive size={12} />{/if}
+				{#if s.archived}<ArchiveRestore size={14} strokeWidth={1.5} />{:else}<Archive size={14} strokeWidth={1.5} />{/if}
 			</span>
 			<span
-				class="sess-x"
+				class="act"
 				role="button"
 				tabindex="0"
 				onclick={(e) => {
@@ -213,38 +220,45 @@
 					onCloseSession(s.id);
 				}}
 				onkeydown={(e) => e.key === 'Enter' && (e.stopPropagation(), onCloseSession(s.id))}
-				aria-label="close"><X size={12} /></span
+				aria-label="close"><X size={14} strokeWidth={1.5} /></span
 			>
 		</button>
 	{/snippet}
 
-	<div class="sess-list">
-		{#if agentsStatus !== 'off'}
-			<div class="group">
-				<span class="group-name">{t('shell.agents.title')}</span>
-				<span class="group-count">{agents.length}</span>
-				<button class="group-add no-auto" onclick={onNewAgent} aria-label="new agent" title={t('shell.agents.add')}><Plus size={13} /></button>
-			</div>
-			<button class="sess desk" onclick={onDesk}>
-				<Inbox size={13} />
-				<span class="sess-title">{t('shell.desk.title')}</span>
-				{#if pendingCount > 0}<span class="pending">{pendingCount}</span>{/if}
+	{#snippet archived(p: Project, arch: Project['sessions'], nested: boolean)}
+		{#if arch.length}
+			<button class="more" class:nested onclick={() => (showArchived[p.id] = !showArchived[p.id])}>
+				<span class="chev" class:open={showArchived[p.id]}><ChevronRight size={14} strokeWidth={1.5} /></span>
+				<span>{t('shell.archived')} · {arch.length}</span>
 			</button>
+			{#if showArchived[p.id] || query}
+				{#each arch as s (s.id)}{@render sessRow(s, nested)}{/each}
+			{/if}
+		{/if}
+	{/snippet}
+
+	<div class="list">
+		<!-- Agents: long-lived workers of the local daemon. -->
+		<section>
+			<div class="head">
+				<span>{t('shell.agents.title')}</span>
+				<button class="head-act" onclick={onNewAgent} aria-label={t('shell.agents.add')} title={t('shell.agents.add')}><Plus size={14} strokeWidth={1.5} /></button>
+			</div>
 			{#if agentsStatus === 'unreachable'}
-				<div class="agent-note">{t('shell.agents.unreachable')}</div>
-			{:else if agents.length === 0 && agentsStatus === 'on'}
-				<button class="sess-empty" onclick={onNewAgent}>{t('shell.agents.add')}</button>
+				<div class="note">{t('shell.agents.unreachable')}</div>
+			{:else if agentsStatus === 'off' || agents.length === 0}
+				<button class="sess ghost" onclick={onNewAgent}><Plus size={14} strokeWidth={1.5} /><span class="sess-title">{t('shell.agents.add')}</span></button>
 			{/if}
 			{#each agents as a (a.id)}
 				<button class="sess agent" onclick={() => onOpenAgent(a)} title={t('shell.agents.open', { name: a.name })}>
-					<span class="sess-dot" class:busy={a.busy}></span>
+					<Bot size={16} strokeWidth={1.5} />
 					<span class="agent-text">
 						<span class="sess-title">{a.name}</span>
 						{#if a.summary}<span class="agent-summary">{a.summary}</span>{/if}
 					</span>
-					{#if a.busy}<span class="agent-busy">{t('shell.agents.busy')}</span>{/if}
+					{#if a.busy}<LoaderCircle size={14} strokeWidth={1.5} class="spin state" />{/if}
 					<span
-						class="sess-act"
+						class="act"
 						role="button"
 						tabindex="0"
 						onclick={(e) => {
@@ -253,65 +267,80 @@
 						}}
 						onkeydown={(e) => e.key === 'Enter' && (e.stopPropagation(), onAgentPage(a))}
 						aria-label={t('shell.agents.details')}
-						title={t('shell.agents.details')}><IdCard size={12} /></span
+						title={t('shell.agents.details')}><IdCard size={14} strokeWidth={1.5} /></span
 					>
 				</button>
 			{/each}
-		{/if}
-		{#each projects as p (p.id)}
-			{@const active = p.sessions.filter((s) => !s.archived && sessionMatches(p, s))}
-			{@const arch = p.sessions.filter((s) => s.archived && sessionMatches(p, s))}
+		</section>
+
+		<!-- Chats: conversations without a project. -->
+		{#if chats}
+			{@const active = chats.sessions.filter((s) => !s.archived && sessionMatches(chats, s))}
+			{@const arch = chats.sessions.filter((s) => s.archived && sessionMatches(chats, s))}
 			{#if !query || active.length || arch.length}
-			<div class="group">
-				{#if p.worktree}
-					<!-- 并行任务 worktree 项目：分支角标 + 「task/<slug> ← base」提示 -->
-					<span class="wt-mark" class:stale={p.stale} title={t('shell.task.worktreeTip', { branch: p.worktree.branch, base: p.worktree.baseBranch || '?' })}>
-						<GitBranch size={11} />
-					</span>
-				{/if}
-				<span class="group-name" title={p.worktree ? t('shell.task.worktreeTip', { branch: p.worktree.branch, base: p.worktree.baseBranch || '?' }) : p.path}>{p.name}</span>
-				{#if p.stale}
-					<span class="stale-badge" title={p.path}>{t('shell.task.stale')}</span>
-				{:else}
-					<span class="group-count">{p.sessions.length}</span>
-					<button class="group-add" onclick={() => onHistory(p)} aria-label="history" title={t('shell.history')}><History size={13} /></button>
-					{#if !p.worktree && !p.chats}
-						<button class="group-add no-auto" onclick={() => onNewTask(p)} aria-label="new parallel task" title={t('shell.newTask')}><GitBranchPlus size={13} /></button>
+				<section>
+					<div class="head">
+						<span>{chats.name}</span>
+						<button class="head-act" onclick={() => onHistory(chats)} aria-label="history" title={t('shell.history')}><History size={14} strokeWidth={1.5} /></button>
+						<button class="head-act" onclick={onNewChat} aria-label={t('shell.newChat')} title={t('shell.newChat')}><Plus size={14} strokeWidth={1.5} /></button>
+					</div>
+					{#each showAll[chats.id] || query ? active : active.slice(0, SHOW_LIMIT) as s (s.id)}{@render sessRow(s)}{/each}
+					{#if active.length > SHOW_LIMIT && !query}
+						<button class="more" onclick={() => (showAll[chats.id] = !showAll[chats.id])}>{showAll[chats.id] ? t('shell.showLess') : t('shell.showMore')}</button>
 					{/if}
-					<button class="group-add no-auto" onclick={() => onNewSession(p)} aria-label="new session" title={p.chats ? t('shell.newChat') : t('shell.newSessionInProject')}><Plus size={13} /></button>
-				{/if}
-				{#if projects.length > 1 || p.stale}
-					<button class="group-x" class:always={p.stale} onclick={() => onCloseProject(p)} aria-label="close project" title={p.stale ? t('shell.task.staleRemove') : t('shell.closeProject')}><X size={12} /></button>
-				{/if}
+					{@render archived(chats, arch, false)}
+				</section>
+			{/if}
+		{/if}
+
+		<!-- Projects: folders with their coding sessions nested. -->
+		<section>
+			<div class="head">
+				<span>{t('shell.projects')}</span>
+				<button class="head-act" onclick={onNewProject} aria-label="new project" title={t('shell.newProjectTitle')}><Plus size={14} strokeWidth={1.5} /></button>
 			</div>
-			{#each active as s (s.id)}
-				{@render sessRow(s)}
-			{/each}
-			{#if active.length === 0 && arch.length === 0 && !p.stale && !query}
-				<button class="sess-empty" onclick={() => onNewSession(p)}>{t('shell.agentSession')}</button>
-			{/if}
-			{#if arch.length}
-				<button class="arch-head" onclick={() => (showArchived[p.id] = !showArchived[p.id])}>
-					<span class="arch-chev" class:open={showArchived[p.id]}><ChevronRight size={12} /></span>
-					<Archive size={11} />
-					<span>{t('shell.archived')} · {arch.length}</span>
-				</button>
-				{#if showArchived[p.id] || query}
-					{#each arch as s (s.id)}
-						{@render sessRow(s)}
-					{/each}
+			{#each codeProjects as p (p.id)}
+				{@const active = p.sessions.filter((s) => !s.archived && sessionMatches(p, s))}
+				{@const arch = p.sessions.filter((s) => s.archived && sessionMatches(p, s))}
+				{@const open = !collapsed[p.id] || !!query}
+				{#if !query || active.length || arch.length}
+					<div class="folder" class:stale={p.stale}>
+						<button class="folder-row" onclick={() => (collapsed[p.id] = !collapsed[p.id])} title={p.worktree ? t('shell.task.worktreeTip', { branch: p.worktree.branch, base: p.worktree.baseBranch || '?' }) : p.path}>
+							{#if p.worktree}<GitBranch size={16} strokeWidth={1.5} />{:else if open}<FolderOpen size={16} strokeWidth={1.5} />{:else}<Folder size={16} strokeWidth={1.5} />{/if}
+							<span class="folder-name">{p.name}</span>
+						</button>
+						{#if p.stale}
+							<span class="tag" title={p.path}>{t('shell.task.stale')}</span>
+						{:else}
+							<button class="act" onclick={() => onHistory(p)} aria-label="history" title={t('shell.history')}><History size={14} strokeWidth={1.5} /></button>
+							{#if !p.worktree}
+								<button class="act" onclick={() => onNewTask(p)} aria-label="new parallel task" title={t('shell.newTask')}><GitBranchPlus size={14} strokeWidth={1.5} /></button>
+							{/if}
+							<button class="act" onclick={() => onNewSession(p)} aria-label="new session" title={t('shell.newSessionInProject')}><Plus size={14} strokeWidth={1.5} /></button>
+						{/if}
+						{#if codeProjects.length > 1 || p.stale}
+							<button class="act" class:always={p.stale} onclick={() => onCloseProject(p)} aria-label="close project" title={p.stale ? t('shell.task.staleRemove') : t('shell.closeProject')}><X size={14} strokeWidth={1.5} /></button>
+						{/if}
+					</div>
+					{#if open}
+						{#each showAll[p.id] || query ? active : active.slice(0, SHOW_LIMIT) as s (s.id)}{@render sessRow(s, true)}{/each}
+						{#if active.length > SHOW_LIMIT && !query}
+							<button class="more nested" onclick={() => (showAll[p.id] = !showAll[p.id])}>{showAll[p.id] ? t('shell.showLess') : t('shell.showMore')}</button>
+						{/if}
+						{#if active.length === 0 && arch.length === 0 && !p.stale && !query}
+							<button class="sess ghost nested" onclick={() => onNewSession(p)}><span class="sess-title">{t('shell.agentSession')}</span></button>
+						{/if}
+						{@render archived(p, arch, true)}
+					{/if}
 				{/if}
-			{/if}
-			{/if}
-		{/each}
+			{/each}
+		</section>
 	</div>
 
 	<button class="account" onclick={onSettings} title={t('shell.accountSettings')}>
-		<Settings size={14} class="acc-gear" />
-		<span class="acc-dot" class:on={loggedIn}></span>
 		<span class="acc-name">{loggedIn ? providerName : t('shell.notLoggedIn')}</span>
-		<span class="acc-go">{t('shell.settings')}</span>
-		{#if updateAvailable}<span class="upd-dot" title={t('shell.updateAvailable')}></span>{/if}
+		{#if updateAvailable}<span class="tag">{t('shell.updateShort')}</span>{/if}
+		<Settings size={16} strokeWidth={1.5} />
 	</button>
 </aside>
 
@@ -321,7 +350,6 @@
 		display: flex;
 		flex-direction: column;
 		background: var(--sidebar);
-		border-right: 1px solid var(--hairline);
 		min-width: 0;
 		overflow: hidden;
 		transition: width var(--t-med) var(--ease-out);
@@ -334,421 +362,296 @@
 	:global(:root[data-vibrancy='on']) .sidebar {
 		background: var(--vibrancy-tint);
 	}
-	/* Bottom-left settings entry. */
-	.account {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		margin: 8px 10px 10px;
-		padding: 9px 11px;
-		border: none;
-		border-radius: var(--r-md);
-		background: var(--surface);
-		color: var(--text);
-		cursor: pointer;
-		font-size: var(--fs-xs);
-		transition: background var(--t-fast) var(--ease-out);
-	}
-	.account:hover {
-		background: var(--surface2);
-	}
-	.account :global(.acc-gear) {
-		color: var(--dim);
-		flex-shrink: 0;
-	}
-	.acc-dot {
-		width: 7px;
-		height: 7px;
-		border-radius: 50%;
-		background: var(--dim2);
-		flex-shrink: 0;
-	}
-	.acc-dot.on {
-		background: var(--ok);
-	}
-	.acc-name {
-		flex: 1;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		text-align: left;
-	}
-	.acc-go {
-		color: var(--dim2);
-		font-size: var(--fs-2xs);
-	}
-	/* 有新版本时设置入口右侧的小圆点 */
-	.upd-dot {
-		width: 7px;
-		height: 7px;
-		border-radius: 50%;
-		background: var(--accent-bright);
-		box-shadow: 0 0 0 3px var(--accent-soft);
-		flex-shrink: 0;
-	}
 	.brand {
 		display: flex;
-		align-items: center;
-		gap: 9px;
-		/* extra top inset clears the macOS traffic lights + sidebar-toggle row */
-		padding: 48px 18px 12px;
+		align-items: flex-end;
+		height: 56px;
+		padding: 0 20px 10px;
+		flex-shrink: 0;
 	}
 	.word {
 		font-family: var(--font-serif);
-		font-weight: 500;
 		font-size: var(--fs-lg);
+		font-weight: 500;
 		letter-spacing: -0.005em;
+		color: var(--text);
 	}
-	.nav {
+	.primary {
 		display: flex;
 		flex-direction: column;
-		gap: 2px;
-		padding: 0 10px 12px;
+		gap: 1px;
+		padding: 0 10px 8px;
 	}
-	.navcard {
+	.row,
+	.sess,
+	.more,
+	.folder-row {
 		display: flex;
 		align-items: center;
 		gap: 10px;
-		padding: 7px 10px;
-		border-radius: var(--r-sm);
+		width: 100%;
+		min-height: 34px;
+		padding: 0 10px;
 		border: none;
-		background: transparent;
+		border-radius: var(--r-sm);
+		background: none;
 		color: var(--text);
+		font: inherit;
 		font-size: var(--fs-sm);
 		text-align: left;
 		cursor: pointer;
 		transition:
-			background var(--t-fast) var(--ease-out),
-			color var(--t-fast) var(--ease-out),
-			border-color var(--t-fast) var(--ease-out),
-			transform var(--t-fast) var(--ease-spring);
-	}
-	.navcard :global(svg) {
-		color: var(--dim);
-		flex-shrink: 0;
-	}
-	.navcard:hover {
-		background: var(--surface2);
-		color: var(--text);
-	}
-	.navcard:active {
-		transform: scale(0.97);
-	}
-	.sess-head {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 6px 16px 8px;
-		font-size: var(--fs-2xs);
-		color: var(--dim2);
-		font-family: var(--font-mono);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		white-space: nowrap;
-	}
-	.sess-actions {
-		display: flex;
-		gap: 4px;
-	}
-	.sess-actions button {
-		display: inline-flex;
-		padding: 4px;
-		border: none;
-		background: none;
-		color: var(--dim);
-		border-radius: var(--r-sm);
-		cursor: pointer;
-		transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
-	}
-	.sess-actions button:hover:not(:disabled) {
-		background: var(--surface2);
-		color: var(--text);
-	}
-	.sess-actions button.on {
-		color: var(--accent-bright);
-		background: var(--accent-soft);
-	}
-	/* Compact session filter, revealed by the search icon. */
-	.sess-search {
-		padding: 0 14px 8px;
-	}
-	.sess-search input {
-		width: 100%;
-		padding: 6px 9px;
-		border: 1px solid var(--hairline);
-		border-radius: var(--r-md);
-		background: var(--surface);
-		color: var(--text);
-		font-size: var(--fs-xs);
-		font-family: var(--font-sans);
-		outline: none;
-	}
-	.sess-search input:focus {
-		border-color: color-mix(in oklab, var(--accent) 40%, var(--hairline));
-	}
-	.sess-list {
-		flex: 1;
-		overflow-y: auto;
-		padding: 0 8px;
-	}
-	.group {
-		display: flex;
-		align-items: center;
-		gap: 7px;
-		padding: 12px 8px 6px;
-	}
-	.group-name {
-		font-size: var(--fs-xs);
-		font-weight: 600;
-		color: var(--dim);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	/* 并行任务 worktree 项目的分支角标 */
-	.wt-mark {
-		display: inline-flex;
-		color: var(--accent-bright);
-		flex-shrink: 0;
-	}
-	.wt-mark.stale {
-		color: var(--dim2);
-	}
-	.stale-badge {
-		font-size: var(--fs-2xs);
-		color: var(--warn);
-		background: color-mix(in oklab, var(--warn) 14%, transparent);
-		border-radius: var(--r-full);
-		padding: 1px 7px;
-		flex-shrink: 0;
-	}
-	.group-x.always {
-		opacity: 1;
-		margin-left: auto;
-	}
-	.group-count {
-		font-size: var(--fs-2xs);
-		color: var(--dim2);
-		background: var(--surface2);
-		border-radius: var(--r-full);
-		padding: 1px 7px;
-		flex-shrink: 0;
-	}
-	.group-add,
-	.group-x {
-		display: inline-flex;
-		padding: 3px;
-		border: none;
-		background: none;
-		color: var(--dim2);
-		border-radius: var(--r-xs);
-		cursor: pointer;
-		flex-shrink: 0;
-		opacity: 0;
-		transition:
-			opacity var(--t-fast) var(--ease-out),
 			background var(--t-fast) var(--ease-out),
 			color var(--t-fast) var(--ease-out);
 	}
-	.group-add {
-		margin-left: auto;
+	.row :global(svg),
+	.sess > :global(svg),
+	.folder-row :global(svg) {
+		color: var(--dim);
+		flex-shrink: 0;
 	}
-	.group-add.no-auto {
-		margin-left: 0;
+	.row:hover,
+	.sess:hover,
+	.more:hover,
+	.folder-row:hover {
+		background: var(--surface2);
 	}
-	.group:hover .group-add,
-	.group:hover .group-x {
-		opacity: 1;
+	.row.on {
+		background: var(--surface2);
 	}
-	.group-add:hover,
-	.group-x:hover {
+	.row span:first-of-type {
+		flex: 1;
+	}
+	.count {
+		flex: none !important;
+		min-width: 20px;
+		padding: 1px 7px;
+		border-radius: var(--r-full);
+		background: var(--accent);
+		color: var(--on-accent);
+		font-size: var(--fs-2xs);
+		font-weight: 600;
+		text-align: center;
+	}
+	.search {
+		padding: 0 12px 8px;
+	}
+	.search input {
+		width: 100%;
+		height: 32px;
+		padding: 0 10px;
+		border: 1px solid var(--border);
+		border-radius: var(--r-sm);
+		background: var(--bg);
+		color: var(--text);
+		font: inherit;
+		font-size: var(--fs-sm);
+		outline: none;
+	}
+	.search input:focus {
+		border-color: var(--border-strong);
+	}
+
+	.list {
+		flex: 1;
+		min-height: 0;
+		overflow-y: auto;
+		padding: 4px 10px 12px;
+	}
+	section + section {
+		margin-top: 18px;
+	}
+	.head {
+		display: flex;
+		align-items: center;
+		gap: 2px;
+		height: 28px;
+		padding: 0 4px 0 10px;
+		color: var(--dim2);
+		font-size: var(--fs-xs);
+		font-weight: 500;
+	}
+	.head span {
+		flex: 1;
+	}
+	.head-act,
+	.act {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 26px;
+		height: 26px;
+		flex-shrink: 0;
+		border: none;
+		border-radius: var(--r-xs);
+		background: none;
+		color: var(--dim2);
+		cursor: pointer;
+	}
+	.head-act:hover,
+	.act:hover {
 		background: var(--surface2);
 		color: var(--text);
 	}
-	.sess-empty {
-		display: block;
-		width: 100%;
-		text-align: left;
-		padding: 7px 12px;
-		margin-left: 2px;
-		border: none;
-		background: none;
+	/* Row actions appear on hover / keyboard focus only. */
+	.sess .act,
+	.folder .act {
+		display: none;
+	}
+	.sess:hover .act,
+	.sess:focus-within .act,
+	.folder:hover .act,
+	.folder .act.always {
+		display: inline-flex;
+	}
+
+	.sess.on {
+		background: var(--bg);
+		box-shadow: var(--shadow-sm);
+	}
+	.sess.nested {
+		padding-left: 36px;
+	}
+	.sess.arch .sess-title {
 		color: var(--dim2);
-		font-size: var(--fs-xs);
-		cursor: pointer;
-		border-radius: var(--r-md);
-		transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
 	}
-	.sess-empty:hover {
-		background: var(--surface);
-		color: var(--text);
+	.sess.ghost {
+		color: var(--dim2);
 	}
-	.sess {
-		display: flex;
-		align-items: center;
-		gap: 9px;
-		width: 100%;
-		text-align: left;
-		padding: 8px 10px;
-		border: none;
-		border-radius: var(--r-md);
-		background: none;
-		color: var(--text);
-		cursor: pointer;
-		font-size: var(--fs-sm);
-		/* dblclick renames — never select the title text instead */
-		user-select: none;
-		-webkit-user-select: none;
-		transition: background var(--t-fast) var(--ease-out);
+	.sess-title {
+		flex: 1;
+		min-width: 0;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 	.sess-edit {
 		flex: 1;
 		min-width: 0;
-		padding: 2px 6px;
-		border: 1px solid color-mix(in oklab, var(--accent) 45%, var(--hairline));
-		border-radius: var(--r-sm);
-		background: var(--surface);
+		height: 24px;
+		padding: 0 6px;
+		border: 1px solid var(--border-strong);
+		border-radius: var(--r-xs);
+		background: var(--bg);
 		color: var(--text);
-		font-size: var(--fs-sm);
-		font-family: var(--font-sans);
-		outline: none;
+		font: inherit;
 	}
-	.sess:hover {
-		background: var(--surface);
-	}
-	.sess.on {
-		background: var(--surface2);
-	}
-	.sess-dot {
-		width: 7px;
-		height: 7px;
-		border-radius: 50%;
-		background: var(--dim2);
+	.sess :global(.state) {
+		color: var(--dim);
 		flex-shrink: 0;
 	}
-	.sess-dot.busy {
-		background: var(--accent-bright);
-		animation: pulse 1.2s ease-in-out infinite;
+	.state.err {
+		display: inline-flex;
+		color: var(--err);
 	}
-	.sess-dot.err {
-		background: var(--err);
+	.unread {
+		width: 7px;
+		height: 7px;
+		margin: 0 4px;
+		border-radius: 50%;
+		background: var(--text);
+		flex-shrink: 0;
 	}
-	.sess-dot.unseen {
-		background: var(--accent-bright);
-		box-shadow: 0 0 0 3px var(--accent-soft);
+	.tag {
+		flex-shrink: 0;
+		padding: 1px 7px;
+		border: 1px solid var(--border);
+		border-radius: var(--r-full);
+		color: var(--dim);
+		font-size: var(--fs-2xs);
 	}
-	/* Defined last so a pending approval/trust wins over busy/unseen. */
-	.sess-dot.attn {
-		background: var(--warn);
-		box-shadow: 0 0 0 3px color-mix(in oklab, var(--warn) 24%, transparent);
-		animation: none;
+	.backend-chip {
+		display: inline-flex;
+		color: var(--dim);
+		flex-shrink: 0;
 	}
-	.sess.agent {
-		align-items: flex-start;
-	}
-	.sess.agent .sess-dot {
-		margin-top: 6px;
-	}
+
 	.agent-text {
 		flex: 1;
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 1px;
 	}
 	.agent-summary {
+		color: var(--dim2);
 		font-size: var(--fs-xs);
-		color: var(--dim);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
-	.agent-busy {
-		font-size: var(--fs-2xs);
-		color: var(--accent-bright);
-		font-family: var(--font-mono);
-		flex-shrink: 0;
-		margin-top: 2px;
-	}
-	.sess.desk :global(svg) {
-		color: var(--dim);
-		flex-shrink: 0;
-	}
-	.pending {
-		font-size: var(--fs-2xs);
-		font-family: var(--font-mono);
-		padding: 0 6px;
-		border-radius: var(--r-full);
-		background: color-mix(in oklab, var(--warn) 22%, transparent);
-		color: var(--warn);
-		flex-shrink: 0;
-	}
-	.agent-note {
-		padding: 4px 12px 8px;
+	.note {
+		padding: 6px 10px;
+		color: var(--dim2);
 		font-size: var(--fs-xs);
-		color: var(--dim2);
 	}
-	.sess-title {
-		flex: 1;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	/* 非 jucode 引擎的小角标 */
-	.backend-chip {
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		font-size: var(--fs-2xs);
-		font-family: var(--font-mono);
-		color: var(--dim);
-		background: var(--surface2);
-		border: 1px solid var(--hairline);
-		border-radius: var(--r-full);
-		padding: 1px 7px 1px 5px;
-		flex-shrink: 0;
-	}
-	.sess-x,
-	.sess-act {
-		display: inline-flex;
-		color: var(--dim2);
-		opacity: 0;
-		border-radius: var(--r-xs);
-		transition: opacity var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
-	}
-	.sess:hover .sess-x,
-	.sess:hover .sess-act {
-		opacity: 1;
-	}
-	.sess-x:hover,
-	.sess-act:hover {
-		color: var(--text);
-	}
-	.sess.arch .sess-title {
-		color: var(--dim);
-	}
-	/* Collapsible "Archived · n" header per project. */
-	.arch-head {
+
+	.folder {
 		display: flex;
 		align-items: center;
-		gap: 5px;
-		width: 100%;
-		padding: 4px 10px 4px 14px;
-		border: none;
+		gap: 2px;
+		padding-right: 4px;
+		border-radius: var(--r-sm);
+	}
+	.folder:hover {
+		background: var(--surface);
+	}
+	.folder-row {
+		flex: 1;
+		min-width: 0;
+	}
+	.folder-row:hover {
 		background: none;
+	}
+	.folder.stale .folder-name {
 		color: var(--dim2);
+	}
+	.folder-name {
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.more {
+		min-height: 30px;
+		color: var(--dim);
 		font-size: var(--fs-xs);
-		cursor: pointer;
-		transition: color var(--t-fast) var(--ease-out);
 	}
-	.arch-head:hover {
-		color: var(--text);
+	.more.nested {
+		padding-left: 36px;
 	}
-	.arch-chev {
+	.chev {
 		display: inline-flex;
-		transition: transform var(--t-med) var(--ease-spring);
+		transition: transform var(--t-fast) var(--ease-out);
 	}
-	.arch-chev.open {
+	.chev.open {
 		transform: rotate(90deg);
 	}
-	</style>
+
+	.account {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		margin: 6px 10px 10px;
+		min-height: 38px;
+		padding: 0 12px;
+		border: none;
+		border-radius: var(--r-md);
+		background: none;
+		color: var(--text);
+		font: inherit;
+		font-size: var(--fs-sm);
+		cursor: pointer;
+	}
+	.account:hover {
+		background: var(--surface2);
+	}
+	.account :global(svg) {
+		color: var(--dim);
+	}
+	.acc-name {
+		flex: 1;
+		text-align: left;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+</style>

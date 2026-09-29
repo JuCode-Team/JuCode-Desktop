@@ -308,7 +308,7 @@
 			return p.items.map((it) => ({ id: it.id, label: it.label, detail: it.detail, active: it.active, command: `/rewind ${it.id}`, depth: nil }));
 		// Model picker rows (pure packing in $lib/composer/modelRows): the active
 		// provider's models from the engine's model_view plus, for jucode
-		// sessions, every other configured provider's catalog.
+		// sessions, the catalog of every other provider with credentials.
 		return buildModelRows({
 			models: p.models,
 			backendId: chat.backendId,
@@ -322,7 +322,6 @@
 				byok: t('shell.modelGroup.byok'),
 				system: t('shell.modelGroup.system')
 			},
-			notConfigured: t('shell.notConfigured'),
 			toolMode,
 			systemLabel: t('shell.toolSwitch.system')
 		});
@@ -712,7 +711,7 @@
 	{#if Object.keys(chat.subagents).length}
 		<div class="agents">
 			{#each Object.entries(chat.subagents) as [path, info] (path)}
-				<span class="agent"><span class="agent-dot"></span>{path} · {agentStatus(info.status)}</span>
+				<span class="agent">{path} · {agentStatus(info.status)}</span>
 			{/each}
 		</div>
 	{/if}
@@ -946,13 +945,6 @@
 		font-family: var(--font-mono);
 		font-size: var(--fs-2xs);
 		color: var(--dim);
-	}
-	.agent-dot {
-		width: 6px;
-		height: 6px;
-		border-radius: 50%;
-		background: var(--accent-bright);
-		animation: pulse 1.2s ease-in-out infinite;
 	}
 
 	main {

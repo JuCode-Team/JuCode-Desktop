@@ -231,7 +231,7 @@
 		data-leaf={leaf.id}
 		onpointerdowncapture={() => onFocus?.(leaf.id)}
 	>
-		<div class="lbar" ondblclick={(e) => barDblClick(e, leaf)} role="tablist" tabindex="-1">
+		<div class="lbar" data-tauri-drag-region ondblclick={(e) => barDblClick(e, leaf)} role="tablist" tabindex="-1">
 			<div class="ltabs">
 				{#each leaf.tabs as tab (tab.id)}
 					{@const chrome = decorate?.(tab) ?? null}
@@ -249,8 +249,6 @@
 					>
 						{#if chrome && (chrome.icon || chrome.color)}
 							<TabGlyph icon={chrome.icon} color={chrome.color} active={leaf.active === tab.id} size={12} />
-						{:else}
-							<span class="ldot" class:on={leaf.active === tab.id}></span>
 						{/if}
 						<span class="llabel" style:color={chrome?.color && leaf.active === tab.id ? chrome.color : undefined}>{label(tab)}</span>
 						<button
@@ -456,13 +454,6 @@
 	}
 	.ltab.lifted {
 		opacity: 0.45;
-	}
-	.ldot {
-		width: 5px;
-		height: 5px;
-		border-radius: 50%;
-		background: var(--dim2);
-		flex-shrink: 0;
 	}
 	.ldot.on {
 		background: var(--accent-bright);

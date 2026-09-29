@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
-	import { X, LogIn, LogOut, KeyRound, SlidersHorizontal, Plus, Trash2, Zap, CircleCheck, ChevronDown, Wallet, LayoutDashboard, Mic, Puzzle, Store } from 'lucide-svelte';
+	import { X, LogIn, LogOut, KeyRound, SlidersHorizontal, Plus, Trash2, Zap, CircleCheck, CircleX, CircleDashed, ChevronDown, Wallet, LayoutDashboard, Mic, Puzzle, Store } from 'lucide-svelte';
 	import { readConfig, writeConfig, readAuthProviders, setAuthKey, removeAuthKey, listProviders, fetchAccountInfo, fetchDeepseekBalance, type AccountInfo, type DeepseekBalance } from '$lib/protocol';
 	import { dispatch } from '$lib/backends/router';
 	import { caps } from '$lib/backends';
@@ -492,7 +492,7 @@
 							<div class="mcp-ro">
 								{#each chat.mcpServers as s (s.name)}
 									<div class="mcp-ro-row">
-										<span class="mcp-ro-dot" class:ok={s.state === 'connected'} class:bad={s.state === 'failed'}></span>
+										<span class="mcp-ro-dot" class:bad={s.state === 'failed'}>{#if s.state === 'connected'}<CircleCheck size={14} strokeWidth={1.5} />{:else if s.state === 'failed'}<CircleX size={14} strokeWidth={1.5} />{:else}<CircleDashed size={14} strokeWidth={1.5} />{/if}</span>
 										<span class="mcp-ro-name">{s.name}</span>
 										<span class="mcp-ro-state">{s.state}</span>
 									</div>
@@ -798,17 +798,12 @@
 		background: var(--sidebar);
 	}
 	.mcp-ro-dot {
-		width: 7px;
-		height: 7px;
-		border-radius: var(--r-full);
-		background: var(--dim2);
+		display: inline-flex;
+		color: var(--dim);
 		flex-shrink: 0;
 	}
-	.mcp-ro-dot.ok {
-		background: var(--ok);
-	}
 	.mcp-ro-dot.bad {
-		background: var(--err);
+		color: var(--err);
 	}
 	.mcp-ro-name {
 		flex: 1;

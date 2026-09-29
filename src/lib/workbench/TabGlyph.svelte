@@ -52,8 +52,6 @@
 	{:else if icon?.kind === 'svg'}
 		<!-- eslint-disable-next-line svelte/no-at-html-tags — markup is stored pre-sanitized -->
 		<span class="svgbox">{@html icon.markup}</span>
-	{:else}
-		<span class="dot" class:on={active} style:background={color ?? undefined}></span>
 	{/if}
 </span>
 
@@ -85,13 +83,4 @@
 		height: 100%;
 	}
 	/* Fallback: the mosaic's ldot look. */
-	.dot {
-		width: 5px;
-		height: 5px;
-		border-radius: 50%;
-		background: var(--dim2);
-	}
-	.dot.on {
-		background: var(--accent-bright);
-	}
 </style>
