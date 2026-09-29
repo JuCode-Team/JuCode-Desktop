@@ -161,7 +161,6 @@
 		max-width: calc(100vw - 24px);
 		padding: 12px 14px 12px;
 		background: var(--panel);
-		border: 1px solid var(--border);
 		border-radius: var(--r-lg);
 		box-shadow: var(--shadow-pop);
 		transform-origin: bottom left;

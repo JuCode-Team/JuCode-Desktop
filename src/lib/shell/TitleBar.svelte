@@ -3,12 +3,14 @@
 	import { PanelLeft, Plus, Minus, Square, Copy, X } from 'lucide-svelte';
 	import { getCurrentWindow } from '@tauri-apps/api/window';
 	import { t } from '$lib/i18n';
+	import PopMenu from '$lib/ui/PopMenu.svelte';
 
-	// Head of the main column: the title of what is in front and the canvas
-	// actions (plus the drawn window controls on Windows/Linux). The sidebar
-	// toggle lives in the chrome strip beside the traffic lights and moves here
-	// while the sidebar is hidden.
+	// The window's title bar, across the full width in the chrome colour: the
+	// traffic lights (macOS) and the sidebar toggle over the rail and session
+	// list, then the title of what is in front, aligned with the canvas, and the
+	// canvas actions (plus the drawn window controls on Windows/Linux).
 	let {
+		leftWidth,
 		sidebarOpen,
 		onToggleSidebar,
 		title = '',
@@ -17,6 +19,8 @@
 		onAdd,
 		actions
 	}: {
+		/** Width of the columns left of the canvas; the title starts past them. */
+		leftWidth: number;
 		sidebarOpen: boolean;
 		onToggleSidebar: () => void;
 		title?: string;
@@ -50,15 +54,15 @@
 </script>
 
 <header class="titlebar" data-tauri-drag-region>
-	{#if !sidebarOpen}
-	<button
-		class="tb-btn toggle"
-		title={t('shell.toggleSidebar')}
-		aria-label={t('shell.toggleSidebar')}
-		aria-pressed={sidebarOpen}
-		onclick={onToggleSidebar}><PanelLeft size={18} strokeWidth={1.5} /></button
-	>
-	{/if}
+	<div class="lead" style:width="{leftWidth}px" data-tauri-drag-region>
+		<button
+			class="tb-btn"
+			title={t('shell.toggleSidebar')}
+			aria-label={t('shell.toggleSidebar')}
+			aria-pressed={sidebarOpen}
+			onclick={onToggleSidebar}><PanelLeft size={18} strokeWidth={1.5} /></button
+		>
+	</div>
 	<div class="title" data-tauri-drag-region>
 		{#if title}<span class="t">{title}</span>{/if}
 		{#if subtitle}<span class="s">{subtitle}</span>{/if}
@@ -70,19 +74,14 @@
 				><Plus size={18} strokeWidth={1.5} /></button
 			>
 			{#if menuOpen}
-				<button class="backdrop" aria-label="close menu" tabindex="-1" onclick={() => (menuOpen = false)}></button>
-				<div class="menu" role="menu">
-					{#each addOptions as o (o.key)}
-						<button
-							class="item"
-							role="menuitem"
-							onclick={() => {
-								menuOpen = false;
-								onAdd?.(o.key);
-							}}>{o.label}</button
-						>
-					{/each}
-				</div>
+				<PopMenu
+					items={addOptions.map((o) => ({ key: o.key, label: o.label }))}
+					onSelect={(key) => {
+						menuOpen = false;
+						onAdd?.(key);
+					}}
+					onClose={() => (menuOpen = false)}
+				/>
 			{/if}
 		{/if}
 	</div>
@@ -110,9 +109,22 @@
 		gap: 12px;
 		height: 48px;
 		flex-shrink: 0;
-		padding: 0 12px 0 24px;
-		background: var(--bg);
+		padding-right: 12px;
+		background: transparent;
 		user-select: none;
+	}
+	/* Over the rail and session list. On macOS the traffic lights sit at its
+	   start (trafficLightPosition in tauri.macos.conf.json centres them in the
+	   bar); the toggle follows them. */
+	.lead {
+		display: flex;
+		align-items: center;
+		flex-shrink: 0;
+		min-width: max-content;
+		padding-left: 14px;
+	}
+	:global(:root[data-os='macos']) .lead {
+		padding-left: 84px;
 	}
 	:global(:root[data-os='windows']) .titlebar,
 	:global(:root[data-os='linux']) .titlebar {
@@ -161,6 +173,7 @@
 	}
 	.title {
 		flex: 1;
+		padding-left: 12px;
 		min-width: 0;
 		display: flex;
 		align-items: baseline;
@@ -186,43 +199,5 @@
 		display: flex;
 		align-items: center;
 		gap: 2px;
-	}
-	.backdrop {
-		position: fixed;
-		inset: 0;
-		z-index: 40;
-		border: none;
-		background: none;
-	}
-	.menu {
-		position: absolute;
-		top: 36px;
-		right: 0;
-		z-index: 41;
-		min-width: 180px;
-		transform-origin: top right;
-		padding: 6px;
-		border-radius: var(--r-md);
-		background: var(--panel);
-		box-shadow: var(--shadow-pop);
-		animation: drop-in var(--t-med) var(--ease-spring);
-	}
-	.item {
-		display: flex;
-		align-items: center;
-		width: 100%;
-		min-height: 32px;
-		padding: 0 10px;
-		border: none;
-		border-radius: var(--r-sm);
-		background: none;
-		color: var(--text);
-		font: inherit;
-		font-size: var(--fs-sm);
-		text-align: left;
-		cursor: pointer;
-	}
-	.item:hover {
-		background: var(--surface2);
 	}
 </style>

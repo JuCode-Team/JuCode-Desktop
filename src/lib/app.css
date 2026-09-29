@@ -9,8 +9,8 @@
    emphasis (primary buttons, selected state: near-white on dark, near-black on
    light); the brand purple (--brand) is kept for links and the focus ring only.
    Layers, back to front: --rail (window chrome: top-left strip + workspace
-   rail) → --sidebar (the session-list panel) → --bg (the main column: title
-   and canvas) → --panel with
+   rail and the title bar across the window) → --sidebar (the session-list
+   panel) → --bg (the canvas) → --panel with
    --shadow-float (composer, cards) → --panel with --shadow-pop (menus, modals).
    Depth comes from these fills and shadows; strokes stay faint (--hairline).
 
@@ -304,6 +304,78 @@ body {
 		transform: translateY(6px);
 	}
 }
+/* Popover surface shared by every menu and floating picker (ui/PopMenu.svelte
+   and the pickers built on it): one fill, radius, shadow and row style. */
+.pop {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 6px;
+	border-radius: var(--r-lg);
+	background: var(--panel);
+	box-shadow: var(--shadow-pop);
+	user-select: none;
+}
+.pop-head {
+	padding: 8px 12px 6px;
+	color: var(--dim2);
+	font-size: var(--fs-sm);
+}
+.pop-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	min-height: 38px;
+	padding: 6px 12px;
+	border: none;
+	border-radius: var(--r-md);
+	background: none;
+	color: var(--text);
+	font: inherit;
+	font-size: var(--fs-sm);
+	text-align: left;
+	cursor: pointer;
+	transition: background var(--t-fast) var(--ease-out);
+}
+.pop-row.two {
+	padding: 8px 12px;
+}
+.pop-row:hover,
+.pop-row.sel {
+	background: var(--surface2);
+}
+.pop-ico {
+	display: inline-flex;
+	width: 18px;
+	flex-shrink: 0;
+	color: var(--dim);
+}
+.pop-txt {
+	display: flex;
+	flex: 1;
+	min-width: 0;
+	flex-direction: column;
+	gap: 2px;
+}
+.pop-label {
+	color: var(--text);
+}
+.pop-desc {
+	color: var(--dim2);
+	font-size: var(--fs-xs);
+}
+.pop-check {
+	display: inline-flex;
+	flex-shrink: 0;
+	color: var(--text);
+}
+.pop-row.warn .pop-ico,
+.pop-row.warn .pop-label,
+.pop-row.warn .pop-check {
+	color: var(--warn);
+}
+
 /* Anchored popovers (menus, effort/approval pops): grow up from their anchor. */
 @keyframes pop-in {
 	from {

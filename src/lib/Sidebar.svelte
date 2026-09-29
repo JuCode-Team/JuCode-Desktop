@@ -345,7 +345,6 @@
 		display: flex;
 		flex-direction: column;
 		background: var(--sidebar);
-		border-top-left-radius: var(--r-lg);
 		min-width: 0;
 		overflow: hidden;
 		transition: width var(--t-med) var(--ease-out);

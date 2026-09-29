@@ -116,8 +116,7 @@
 		overflow-y: auto;
 		padding: 5px;
 		background: var(--panel);
-		border: 1px solid var(--border);
-		border-radius: var(--r-md);
+		border-radius: var(--r-lg);
 		box-shadow: var(--shadow-pop);
 		transform-origin: bottom left;
 		animation: pop-in var(--t-med) var(--ease-spring);

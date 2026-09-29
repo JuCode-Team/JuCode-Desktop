@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { ArrowUp, Square, Plus, Paperclip, Target, ListChecks, FastForward, ShieldCheck, CircleStop, Mic, LoaderCircle, GitBranch, SquareSlash } from 'lucide-svelte';
+	import { ArrowUp, Square, Plus, Paperclip, Target, ListChecks, FastForward, ShieldCheck, ShieldAlert, Hand, ClipboardList, FilePen, CircleStop, Mic, LoaderCircle, GitBranch, SquareSlash } from 'lucide-svelte';
 	import { message } from '@tauri-apps/plugin-dialog';
 	import BackendIcon from '$lib/BackendIcon.svelte';
-	import Segmented from '$lib/ui/Segmented.svelte';
+	import PopMenu, { type PopMenuItem } from '$lib/ui/PopMenu.svelte';
 	import { listFiles, saveTempImage, transcribeAudio } from '$lib/protocol';
 	import { VoiceRecorder } from '$lib/audio';
 	import { buildEntries, mentionMatches, type AtEntry } from '$lib/mention';
@@ -260,22 +260,20 @@
 
 	// Claude exposes two extra native modes (plan / auto) between ask and edits;
 	// other backends keep the shared three (gated by extendedApprovalModes).
+	const APPROVAL_MODES: Record<string, PopMenuItem> = {
+		ask: { key: 'ask', label: t('chat.approvalAsk'), desc: t('chat.approvalAskDesc'), icon: Hand },
+		plan: { key: 'plan', label: t('chat.approvalPlan'), desc: t('chat.approvalPlanDesc'), icon: ClipboardList },
+		auto: { key: 'auto', label: t('chat.approvalAuto'), desc: t('chat.approvalAutoDesc'), icon: ShieldCheck },
+		edits: { key: 'edits', label: t('chat.approvalEdits'), desc: t('chat.approvalEditsDesc'), icon: FilePen },
+		all: { key: 'all', label: t('chat.approvalAll'), desc: t('chat.approvalAllDesc'), icon: ShieldAlert, tone: 'warn' }
+	};
 	const APPROVAL = $derived(
-		bcaps.extendedApprovalModes
-			? [
-					{ value: 'ask', label: t('chat.approvalAsk') },
-					{ value: 'plan', label: t('chat.approvalPlan') },
-					{ value: 'auto', label: t('chat.approvalAuto') },
-					{ value: 'edits', label: t('chat.approvalEdits') },
-					{ value: 'all', label: t('chat.approvalAll') }
-				]
-			: [
-					{ value: 'ask', label: t('chat.approvalAsk') },
-					{ value: 'edits', label: t('chat.approvalEdits') },
-					{ value: 'all', label: t('chat.approvalAll') }
-				]
+		(bcaps.extendedApprovalModes ? ['ask', 'plan', 'auto', 'edits', 'all'] : ['ask', 'edits', 'all']).map((k) => ({
+			...APPROVAL_MODES[k],
+			checked: chat.approvalMode === k
+		}))
 	);
-	const approvalLabel = $derived(APPROVAL.find((a) => a.value === chat.approvalMode)?.label ?? t('chat.approvalAsk'));
+	const approvalCurrent = $derived(APPROVAL.find((a) => a.checked) ?? APPROVAL_MODES.ask);
 
 	// "+" menu: only capabilities the session already has. Files go through the
 	// page's picker (images / videos are detected from the picked paths); goal
@@ -744,14 +742,17 @@
 			</button>
 			{#if bcaps.approvalModes}
 				<div class="footsel">
-					<button class="foot-chip" class:auto={chat.approvalMode !== 'ask'} onclick={() => (showApproval = !showApproval)} title={t('chat.approvalModeTitle')}>
-						<ShieldCheck size={17} strokeWidth={1.5} /><span>{approvalLabel}</span>
+					<button class="foot-chip" class:auto={chat.approvalMode !== 'ask'} class:warn={approvalCurrent.tone === 'warn'} onclick={() => (showApproval = !showApproval)} title={t('chat.approvalModeTitle')}>
+						{#if approvalCurrent.icon}<approvalCurrent.icon size={17} strokeWidth={1.5} />{/if}<span>{approvalCurrent.label}</span>
 					</button>
 					{#if showApproval}
-						<button class="pop-backdrop" aria-label="close" onclick={() => (showApproval = false)}></button>
-						<div class="effort-pop">
-							<Segmented value={chat.approvalMode} options={APPROVAL} onChange={setApproval} />
-						</div>
+						<PopMenu
+							title={t('chat.approvalQuestion')}
+							items={APPROVAL}
+							placement="up-left"
+							onSelect={setApproval}
+							onClose={() => (showApproval = false)}
+						/>
 					{/if}
 				</div>
 			{/if}
@@ -999,12 +1000,6 @@
 		position: relative;
 		display: inline-flex;
 	}
-	/* The approval-mode picker opens upward from its chip in the toolbar. */
-	.footsel .effort-pop {
-		position: absolute;
-		left: 0;
-		bottom: calc(100% + 8px);
-	}
 	.flatbtn.model {
 		min-width: 0;
 	}
@@ -1015,22 +1010,6 @@
 		border: none;
 		z-index: 20;
 		cursor: default;
-	}
-	.effort-pop {
-		position: fixed;
-		max-width: calc(100vw - 36px);
-		z-index: 21;
-		padding: 6px;
-		background: var(--panel);
-		border: 1px solid var(--border);
-		border-radius: var(--r-md);
-		box-shadow: var(--shadow-pop);
-		transform-origin: bottom left;
-		animation: pop-in var(--t-med) var(--ease-spring);
-	}
-	.effort-pop :global(.seg) {
-		max-width: 100%;
-		overflow-x: auto;
 	}
 	.cspace {
 		flex: 1;
@@ -1149,6 +1128,9 @@
 		color: var(--text);
 	}
 	.foot-chip.auto {
+		color: var(--text);
+	}
+	.foot-chip.warn {
 		color: var(--warn);
 	}
 	.fspace {

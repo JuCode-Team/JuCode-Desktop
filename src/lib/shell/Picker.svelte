@@ -135,7 +135,7 @@
 		z-index: 21;
 		width: min(380px, 82vw);
 		max-height: min(60vh, 420px);
-		border-radius: var(--r-md);
+		border-radius: var(--r-lg);
 		box-shadow: var(--shadow-pop);
 		transform-origin: bottom left;
 		animation: pop-in var(--t-med) var(--ease-spring);

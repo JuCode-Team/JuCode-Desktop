@@ -49,8 +49,7 @@
 		width: 200px;
 		padding: 11px 12px;
 		background: var(--panel);
-		border: 1px solid var(--border);
-		border-radius: var(--r-md);
+		border-radius: var(--r-lg);
 		box-shadow: var(--shadow-pop);
 		opacity: 0;
 		transform: translateY(4px) scale(0.97);

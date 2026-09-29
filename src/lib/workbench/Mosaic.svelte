@@ -182,6 +182,7 @@
 		if (el.closest('button') || el.closest('.ltab')) return;
 		onchange(toggleMaximize(layout, leaf.id));
 	}
+	import PopMenu from '$lib/ui/PopMenu.svelte';
 </script>
 
 <svelte:window onkeydown={windowKeydown} />
@@ -297,18 +298,14 @@
 				</button>
 			</div>
 			{#if addMenuFor === leaf.id}
-				<button class="lmenu-backdrop" aria-label="close menu" onclick={() => (addMenuFor = null)}></button>
-				<div class="lmenu">
-					{#each addOptions as o (o.key)}
-						<button
-							class="lmenu-item"
-							onclick={() => {
-								addMenuFor = null;
-								onAdd?.(leaf.id, o.key);
-							}}>{o.label}</button
-						>
-					{/each}
-				</div>
+				<PopMenu
+					items={addOptions.map((o) => ({ key: o.key, label: o.label }))}
+					onSelect={(key) => {
+						addMenuFor = null;
+						onAdd?.(leaf.id, key);
+					}}
+					onClose={() => (addMenuFor = null)}
+				/>
 			{/if}
 		</div>
 		{/if}
@@ -520,43 +517,6 @@
 	.lbtn:hover {
 		background: var(--surface2);
 		color: var(--text);
-	}
-	.lmenu-backdrop {
-		position: fixed;
-		inset: 0;
-		z-index: 80;
-		border: none;
-		background: none;
-		cursor: default;
-	}
-	.lmenu {
-		position: absolute;
-		top: calc(100% + 4px);
-		right: 6px;
-		z-index: 81;
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		padding: 5px;
-		min-width: 120px;
-		background: var(--panel);
-		border: 1px solid var(--border);
-		border-radius: var(--r-md);
-		box-shadow: var(--shadow-pop);
-		animation: drop-in var(--t-med) var(--ease-spring);
-	}
-	.lmenu-item {
-		text-align: left;
-		padding: 6px 10px;
-		border: none;
-		background: none;
-		border-radius: var(--r-sm);
-		color: var(--text);
-		font-size: var(--fs-sm);
-		cursor: pointer;
-	}
-	.lmenu-item:hover {
-		background: var(--surface2);
 	}
 	.lbody {
 		position: relative;

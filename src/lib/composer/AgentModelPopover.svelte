@@ -210,8 +210,7 @@
 		display: flex;
 		flex-direction: column;
 		background: var(--panel);
-		border: 1px solid var(--border);
-		border-radius: var(--r-md);
+		border-radius: var(--r-lg);
 		box-shadow: var(--shadow-pop);
 		overflow: hidden;
 		animation: pop-in var(--t-med) var(--ease-spring);

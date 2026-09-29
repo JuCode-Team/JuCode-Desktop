@@ -99,8 +99,7 @@
 	}
 	.panel {
 		margin-bottom: 6px;
-		border: 1px solid var(--border);
-		border-radius: var(--r-md);
+		border-radius: var(--r-lg);
 		background: var(--panel);
 		box-shadow: var(--shadow-pop);
 		overflow: hidden;
