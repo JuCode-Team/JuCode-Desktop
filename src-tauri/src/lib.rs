@@ -580,6 +580,14 @@ fn read_auth_providers() -> Vec<String> {
         .and_then(|v| v.as_object())
         .map(|m| m.keys().cloned().collect())
         .unwrap_or_default();
+    // Providers signed in through the engine's OAuth flows (e.g. from the TUI).
+    if let Some(oauth) = auth.get("oauth").and_then(|v| v.as_object()) {
+        for id in oauth.keys() {
+            if !providers.contains(id) {
+                providers.push(id.clone());
+            }
+        }
+    }
     let logged_in = auth
         .get("jucode")
         .and_then(|j| j.get("refresh_token"))

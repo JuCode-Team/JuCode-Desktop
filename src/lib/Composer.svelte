@@ -1,8 +1,6 @@
 <script lang="ts">
-	import { tick } from 'svelte';
-	import { Send, Square, Paperclip, FastForward, ShieldCheck, CircleStop, Mic, LoaderCircle, GitBranch, Brain } from 'lucide-svelte';
+	import { Send, Square, Plus, Paperclip, Target, ListChecks, FastForward, ShieldCheck, CircleStop, Mic, LoaderCircle, GitBranch } from 'lucide-svelte';
 	import { message } from '@tauri-apps/plugin-dialog';
-	import IconButton from '$lib/ui/IconButton.svelte';
 	import BackendIcon from '$lib/BackendIcon.svelte';
 	import Segmented from '$lib/ui/Segmented.svelte';
 	import { listFiles, saveTempImage, transcribeAudio } from '$lib/protocol';
@@ -14,6 +12,9 @@
 	import AttachmentChips from '$lib/composer/AttachmentChips.svelte';
 	import ContextIndicator from '$lib/composer/ContextIndicator.svelte';
 	import AgentModelPopover from '$lib/composer/AgentModelPopover.svelte';
+	import EffortPopover from '$lib/composer/EffortPopover.svelte';
+	import AddMenu, { type AddMenuSection } from '$lib/composer/AddMenu.svelte';
+	import { effortLabel } from '$lib/composer/effort';
 	import type { ModelRow } from '$lib/composer/modelRows';
 	import type { ChatState } from '$lib/chat.svelte';
 	import type { ApprovalMode } from '$lib/approval';
@@ -75,30 +76,20 @@
 	let slashIdx = $state(0);
 	let showEffort = $state(false);
 	let showApproval = $state(false);
+	let showAdd = $state(false);
 	let effortButton = $state<HTMLButtonElement>();
-	let effortPopover = $state<HTMLDivElement>();
 	let modelButton = $state<HTMLButtonElement>();
-	let effortLeft = $state(0);
-	let effortTop = $state(0);
+	let addButton = $state<HTMLButtonElement>();
 
-	async function toggleEffort() {
+	function toggleEffort() {
 		if (modelPopoverVisible) closeModelPopover();
 		showEffort = !showEffort;
-		if (!showEffort) return;
-		await tick();
-		positionEffort();
 	}
-	function positionEffort() {
-		if (!showEffort || !effortButton || !effortPopover) return;
-		const trigger = effortButton.getBoundingClientRect();
-		const margin = 12;
-		const popHeight = effortPopover.offsetHeight;
-		effortLeft = Math.min(
-			Math.max(trigger.left, margin),
-			window.innerWidth - effortPopover.offsetWidth - margin
-		);
-		effortTop = trigger.top - popHeight - 8;
-		if (effortTop < margin) effortTop = Math.min(trigger.bottom + 8, window.innerHeight - popHeight - margin);
+	// The effort popover's model name hands over to the model picker, anchored
+	// on the same combined trigger.
+	function effortToModel() {
+		showEffort = false;
+		toggleModelPopover();
 	}
 
 	// The model popover holds its own open flag so it can outlive an agent
@@ -124,11 +115,13 @@
 	// (ACP agents — `modelOpen` is ours, not chat.picker). Capture phase so the
 	// key never reaches the pane's window handler or the editor.
 	function onWindowKeyCapture(e: KeyboardEvent) {
-		if (e.key === 'Escape' && (modelPopoverVisible || showEffort)) {
+		if (e.key === 'Escape' && (modelPopoverVisible || showEffort || showAdd)) {
 			e.preventDefault();
 			e.stopPropagation();
 			if (modelPopoverVisible) closeModelPopover();
+			if (showAdd) addButton?.focus();
 			showEffort = false;
+			showAdd = false;
 		}
 	}
 	function selectFromPopover(command: string) {
@@ -138,7 +131,6 @@
 	function setEffort(effort: string) {
 		if (effortDisabled) return;
 		onEffort(effort);
-		showEffort = false;
 	}
 
 	// The fallback label on the model button before the engine reports a model:
@@ -280,7 +272,45 @@
 				]
 	);
 	const approvalLabel = $derived(APPROVAL.find((a) => a.value === chat.approvalMode)?.label ?? t('chat.approvalAsk'));
-	const effortOptions = $derived(chat.efforts.map((effort) => ({ value: effort })));
+
+	// "+" menu: only capabilities the session already has. Files go through the
+	// page's picker (images / videos are detected from the picked paths); goal
+	// seeds the engine's /goal command; plan toggles claude's plan approval mode.
+	const addSections = $derived.by(() => {
+		const add: AddMenuSection = {
+			label: t('chat.addSection'),
+			items: [{ id: 'files', icon: Paperclip, title: t('chat.addFiles'), desc: t('chat.addFilesDesc'), onSelect: onPick }]
+		};
+		if (chat.commands.some((c) => c.command === '/goal')) {
+			add.items.push({
+				id: 'goal',
+				icon: Target,
+				title: t('chat.addGoal'),
+				desc: t('chat.addGoalDesc'),
+				onSelect: () => {
+					el?.focus();
+					if (!input.startsWith('/goal ')) input = `/goal ${input.trimStart()}`;
+				}
+			});
+		}
+		const sections = [add];
+		if (bcaps.approvalModes && bcaps.extendedApprovalModes) {
+			sections.push({
+				label: t('chat.modeSection'),
+				items: [
+					{
+						id: 'plan',
+						icon: ListChecks,
+						title: t('chat.addPlan'),
+						desc: t('chat.addPlanDesc'),
+						checked: chat.approvalMode === 'plan',
+						onSelect: () => onApproval(chat.approvalMode === 'plan' ? 'ask' : 'plan')
+					}
+				]
+			});
+		}
+		return sections;
+	});
 	// Persisting + pushing the mode to the engine lives with the page (it owns
 	// the session id); the picker only reports the choice.
 	function setApproval(m: string) {
@@ -510,7 +540,7 @@
 
 </script>
 
-<svelte:window onkeydowncapture={onWindowKeyCapture} onresize={positionEffort} />
+<svelte:window onkeydowncapture={onWindowKeyCapture} />
 
 <div class="composer-wrap">
 	{#if slashMatches.length}
@@ -560,58 +590,72 @@
 			aria-activedescendant={activeOptionId}
 		></div>
 		<div class="composer-bar">
-			<IconButton onclick={onPick} label="attach" title={t('chat.attachTitle')}><Paperclip size={16} /></IconButton>
-			{#if bcaps.modelPicker || !backendLocked}
-				<div class="modelsel">
-					<button class="flatbtn model" bind:this={modelButton} onclick={toggleModelPopover} title={t('chat.switchModel')}>
-						<BackendIcon backend={chat.backendId} size={15} />
-						<span>{chat.modelLabel || chat.model || backendLabel}</span>
-					</button>
-					{#if modelPopoverVisible}
-						<AgentModelPopover
-							{chat}
-							title={modelTitle || t('shell.picker.model')}
-							rows={modelRows}
-							showSearch={modelSearch}
-							{backendLocked}
-							anchor={modelButton}
-							bind:query={pickerQuery}
-							bind:selIdx={pickerSelIdx}
-							onClose={closeModelPopover}
-							onSelect={selectFromPopover}
-							{onBackend}
-							onRefreshModels={() => onModel()}
-						/>
-					{/if}
-				</div>
+			<button
+				class="addbtn"
+				class:on={showAdd}
+				bind:this={addButton}
+				onclick={() => (showAdd = !showAdd)}
+				aria-label={t('chat.addTitle')}
+				title={t('chat.addTitle')}
+				aria-haspopup="menu"
+				aria-expanded={showAdd}
+			>
+				<Plus size={16} strokeWidth={1.5} />
+			</button>
+			{#if showAdd}
+				<AddMenu anchor={addButton} label={t('chat.addTitle')} sections={addSections} onClose={() => (showAdd = false)} />
+			{/if}
+			{#if chat.efforts.length}
+				<!-- Combined model · effort trigger: opens the effort popover, whose
+				     model name leads on to the model picker. -->
+				<button
+					class="flatbtn effort"
+					class:pending={effortDisabled}
+					bind:this={effortButton}
+					onclick={toggleEffort}
+					title={t('chat.effortTitle')}
+					aria-haspopup="dialog"
+					aria-expanded={showEffort}
+				>
+					<BackendIcon backend={chat.backendId} size={15} />
+					<span class="m">{chat.modelLabel || chat.model || backendLabel}</span>
+					<span class="e">{effortLabel(chat.effort) || t('chat.effortTitle')}</span>
+				</button>
+				{#if showEffort}
+					<button class="pop-backdrop" aria-label="close" tabindex="-1" onclick={() => (showEffort = false)}></button>
+					<EffortPopover
+						anchor={effortButton}
+						efforts={chat.efforts}
+						effort={chat.effort}
+						model={chat.modelLabel || chat.model || backendLabel}
+						disabled={effortDisabled}
+						onEffort={setEffort}
+						onModel={bcaps.modelPicker || !backendLocked ? effortToModel : undefined}
+					/>
+				{/if}
+			{:else if bcaps.modelPicker || !backendLocked}
+				<button class="flatbtn model" bind:this={modelButton} onclick={toggleModelPopover} title={t('chat.switchModel')}>
+					<BackendIcon backend={chat.backendId} size={15} />
+					<span>{chat.modelLabel || chat.model || backendLabel}</span>
+				</button>
 			{:else if chat.model}
 				<span class="flatbtn model static"><BackendIcon backend={chat.backendId} size={15} /><span>{chat.modelLabel || chat.model}</span></span>
 			{/if}
-			{#if chat.efforts.length}
-				<div class="effortsel">
-					<button
-						class="flatbtn effort"
-						bind:this={effortButton}
-						disabled={effortDisabled}
-						class:pending={effortDisabled}
-						onclick={toggleEffort}
-						title={t('chat.effortTitle')}
-						aria-label={t('chat.effortTitle')}
-					>
-						<Brain size={15} /><span>{chat.effort || t('chat.effortTitle')}</span>
-					</button>
-					{#if showEffort}
-						<button class="pop-backdrop" aria-label="close" onclick={() => (showEffort = false)}></button>
-					<div
-							class="effort-pop"
-							bind:this={effortPopover}
-							style:left="{effortLeft}px"
-							style:top="{effortTop}px"
-						>
-							<Segmented value={chat.effort} options={effortOptions} onChange={setEffort} />
-						</div>
-					{/if}
-				</div>
+			{#if modelPopoverVisible}
+				<AgentModelPopover
+					{chat}
+					title={modelTitle || t('shell.picker.model')}
+					rows={modelRows}
+					showSearch={modelSearch}
+					{backendLocked}
+					anchor={modelButton ?? effortButton}
+					bind:query={pickerQuery}
+					bind:selIdx={pickerSelIdx}
+					onClose={closeModelPopover}
+					onSelect={selectFromPopover}
+					{onBackend}
+					onRefreshModels={() => onModel()}
+				/>
 			{/if}
 			<div class="cspace"></div>
 			<button
@@ -755,9 +799,49 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
-	.flatbtn.effort span {
+	/* Combined model · effort trigger: model in mono, effort dimmer beside it. */
+	.flatbtn.effort {
+		min-width: 0;
+	}
+	.flatbtn.effort .m {
 		font-family: var(--font-mono);
 		font-size: var(--fs-xs);
+		min-width: 0;
+		max-width: 200px;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.flatbtn.effort .e {
+		font-size: var(--fs-xs);
+		color: var(--dim);
+		flex-shrink: 0;
+	}
+	.flatbtn.effort.pending {
+		opacity: 0.6;
+	}
+	/* Circular "+" opening the add menu. */
+	.addbtn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 28px;
+		height: 28px;
+		flex-shrink: 0;
+		border: 1px solid var(--hairline);
+		border-radius: var(--r-full);
+		background: none;
+		color: var(--dim);
+		cursor: pointer;
+		transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
+	}
+	.addbtn:hover,
+	.addbtn.on {
+		background: var(--surface2);
+		color: var(--text);
+	}
+	.addbtn:active {
+		transform: scale(0.94);
 	}
 	/* read-only model label for backends without an in-chat model picker */
 	.flatbtn.static {
@@ -769,19 +853,12 @@
 	.flatbtn.static:active {
 		transform: none;
 	}
-	/* position:relative anchors for the compact composer popovers */
-	.modelsel,
-	.effortsel,
 	.footsel {
 		position: relative;
 		display: inline-flex;
 	}
-	.modelsel,
 	.flatbtn.model {
 		min-width: 0;
-	}
-	.effortsel {
-		flex-shrink: 0;
 	}
 	.pop-backdrop {
 		position: fixed;

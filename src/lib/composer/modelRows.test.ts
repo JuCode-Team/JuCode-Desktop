@@ -7,8 +7,7 @@ const base = {
 	provider: 'jucode',
 	providersList: [],
 	configured: ['jucode'],
-	groups,
-	notConfigured: 'not configured'
+	groups
 };
 
 describe('buildModelRows', () => {
@@ -38,14 +37,14 @@ describe('buildModelRows', () => {
 			...base,
 			backendId: 'jucode',
 			provider: 'byo2',
-			configured: ['byo2'],
+			configured: ['byo2', 'byo', 'jucode'],
 			models: [{ model: 'active-model', active: true }],
 			providersList
 		});
 		const byo = rows.find((r) => r.id === 'byo::my-model');
 		expect(byo).toMatchObject({
 			command: '@switch byo my-model',
-			detail: 'byo · not configured · 0'
+			detail: 'byo · 0'
 		});
 		expect(rows.find((r) => r.id === 'jucode::gpt-5.5')?.command).toBe('@switch jucode gpt-5.5');
 
@@ -66,7 +65,7 @@ describe('buildModelRows', () => {
 			...base,
 			backendId: 'jucode',
 			provider: 'byo',
-			configured: [],
+			configured: ['jucode'],
 			models: [],
 			providersList: [
 				{
@@ -78,12 +77,43 @@ describe('buildModelRows', () => {
 		expect(rows.map((r) => r.label)).toEqual(['gpt-5.5', 'claude-sonnet']);
 	});
 
+	it('lists only providers with credentials', () => {
+		const rows = buildModelRows({
+			...base,
+			backendId: 'jucode',
+			provider: 'deepseek',
+			// deepseek is the running provider (possibly env-keyed): its engine
+			// rows stay even though it has no stored key.
+			configured: ['openrouter'],
+			models: [{ model: 'deepseek-chat', active: true }],
+			providersList: [
+				{ id: 'jucode', models: [{ name: 'gpt-5.5' }] },
+				{ id: 'openrouter', models: [{ name: 'or-model' }] },
+				{ id: 'anthropic', models: [{ name: 'claude-opus' }] },
+				{ id: 'deepseek', models: [{ name: 'deepseek-chat' }] }
+			]
+		});
+		expect(rows.map((r) => r.id)).toEqual(['deepseek::deepseek-chat', 'openrouter::or-model']);
+	});
+
+	it('drops jucode catalog rows when not logged in', () => {
+		const rows = buildModelRows({
+			...base,
+			backendId: 'jucode',
+			provider: 'byo',
+			configured: ['byo'],
+			models: [{ model: 'm', active: true }],
+			providersList: [{ id: 'jucode', models: [{ name: 'gpt-5.5' }] }]
+		});
+		expect(rows.every((r) => !r.command.startsWith('@switch jucode'))).toBe(true);
+	});
+
 	it('sorts rows into the fixed group order', () => {
 		const rows = buildModelRows({
 			...base,
 			backendId: 'jucode',
 			provider: 'custom',
-			configured: ['custom'],
+			configured: ['custom', 'jucode'],
 			models: [{ model: 'byok-model', active: true }],
 			providersList: [{ id: 'jucode', models: [{ name: 'gpt-5.5' }] }]
 		});

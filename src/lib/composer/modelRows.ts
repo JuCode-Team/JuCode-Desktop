@@ -1,6 +1,6 @@
 // Pure packing of the in-chat model picker rows: the current engine's
-// model_view catalog plus (for jucode sessions) every other configured
-// provider's models, grouped for display. Framework-free so the row shape
+// model_view catalog plus (for jucode sessions) the models of every other
+// provider that has credentials, grouped for display. Framework-free so the row shape
 // stays unit-testable.
 
 export interface ModelRow {
@@ -44,8 +44,10 @@ const jucodeOk = (n: string) =>
 
 /**
  * The active provider's rows come from the engine's model_view (already
- * filtered and flagged with the active model); other providers come from the
- * client-side catalog so a jucode session can switch to any of them.
+ * filtered and flagged with the active model — the running engine resolved
+ * its credentials, possibly from an env var); other providers come from the
+ * client-side catalog, limited to the ones with credentials, so a jucode
+ * session can switch to any of them.
  * Same-provider picks use /model (instant); cross-provider picks switch via
  * @switch (config rewrite + engine restart).
  */
@@ -54,10 +56,11 @@ export function buildModelRows(input: {
 	backendId: string;
 	provider: string;
 	providersList: CatalogProvider[];
-	/** Provider ids with configured auth (others get a "not configured" hint). */
+	/** Provider ids with credentials (read_auth_providers: a stored API key
+	 *  under auth.json `providers`, or `jucode` when logged in). Cross-provider
+	 *  rows for any other provider are dropped — the engine can't run them. */
 	configured: string[];
 	groups: ModelGroupLabels;
-	notConfigured: string;
 	/** Claude/Codex live overlay. Ignored for the jucode backend. */
 	toolMode?: 'system' | 'jucode';
 	/** Shown as a switch-back row when the overlay is on. */
@@ -70,7 +73,6 @@ export function buildModelRows(input: {
 		providersList,
 		configured,
 		groups,
-		notConfigured,
 		toolMode,
 		systemLabel
 	} = input;
@@ -96,7 +98,7 @@ export function buildModelRows(input: {
 		group: activeGroup
 	}));
 	const otherRows: ModelRow[] = (backendId !== 'jucode' ? [] : providersList)
-		.filter((pv) => pv.id !== cur)
+		.filter((pv) => pv.id !== cur && configured.includes(pv.id))
 		.flatMap((pv) =>
 			pv.models
 				.filter((m) => pv.id !== 'jucode' || jucodeOk(m.name))
@@ -104,7 +106,7 @@ export function buildModelRows(input: {
 					id: `${pv.id}::${m.name}`,
 					label: m.name,
 					vendor: m.name,
-					detail: `${pv.id}${configured.includes(pv.id) ? '' : ` · ${notConfigured}`} · ${fmtTokens(m.context_window ?? 0)}`,
+					detail: `${pv.id} · ${fmtTokens(m.context_window ?? 0)}`,
 					active: false,
 					command: `@switch ${pv.id} ${m.name}`,
 					depth: undefined,
