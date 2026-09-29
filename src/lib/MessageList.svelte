@@ -344,7 +344,7 @@
 		border: none;
 		background: none;
 		color: var(--dim2);
-		border-radius: 6px;
+		border-radius: var(--r-sm);
 		cursor: pointer;
 		flex-shrink: 0;
 		transition:
@@ -370,7 +370,7 @@
 		align-items: center;
 	}
 	.rwn {
-		font-size: 9.5px;
+		font-size: var(--fs-2xs);
 		font-variant-numeric: tabular-nums;
 		line-height: 1;
 	}
@@ -398,7 +398,7 @@
 		align-items: center;
 		gap: 12px;
 		margin-top: 8px;
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim2);
 	}
 	.mono {
@@ -413,8 +413,8 @@
 		color: var(--dim2);
 		cursor: pointer;
 		padding: 2px 6px;
-		border-radius: 6px;
-		font-size: 11px;
+		border-radius: var(--r-sm);
+		font-size: var(--fs-2xs);
 		transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
 	}
 	.copy:hover {
@@ -436,7 +436,7 @@
 		border: none;
 		background: none;
 		color: var(--dim);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		font-weight: 600;
 		cursor: pointer;
 	}
@@ -458,7 +458,7 @@
 		margin-top: 4px;
 		color: var(--dim);
 		font-style: italic;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		line-height: 1.6;
 		word-break: break-word;
 	}
@@ -478,7 +478,7 @@
 	}
 	.error {
 		font-family: var(--font-mono);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		color: var(--err);
 		background: color-mix(in oklab, var(--err) 12%, transparent);
 		border: 1px solid color-mix(in oklab, var(--err) 32%, transparent);

@@ -42,11 +42,11 @@
 		transform: scale(0.97);
 	}
 	.md {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		padding: 9px 14px;
 	}
 	.sm {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		padding: 6px 10px;
 	}
 	.icon {
@@ -70,7 +70,7 @@
 		font-weight: 600;
 	}
 	.primary:hover:not(:disabled) {
-		background: color-mix(in oklab, var(--accent) 88%, #fff);
+		background: var(--accent-bright);
 		border-color: transparent;
 		box-shadow: 0 3px 12px var(--accent-soft);
 	}

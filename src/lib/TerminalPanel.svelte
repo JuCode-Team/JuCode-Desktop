@@ -5,7 +5,7 @@
 	import { FitAddon } from '@xterm/addon-fit';
 	import '@xterm/xterm/css/xterm.css';
 	import { ptyOpen, ptyWrite, ptyResize, ptyClose } from '$lib/protocol';
-	import { themeState } from '$lib/theme.svelte';
+	import { themeState, terminalPalette } from '$lib/theme.svelte';
 
 	let { cwd = '' }: { cwd?: string } = $props();
 	let host = $state<HTMLDivElement | null>(null);
@@ -15,9 +15,7 @@
 	let cleanups: Array<() => void> = [];
 
 	function palette() {
-		return themeState.value === 'light'
-			? { background: '#ffffff', foreground: '#1b1a1f', cursor: '#6d3bd7', selectionBackground: 'rgba(109,59,215,0.18)' }
-			: { background: '#1c1c1e', foreground: '#e5e2e3', cursor: '#b6a0ef', selectionBackground: 'rgba(182,160,239,0.22)' };
+		return terminalPalette();
 	}
 
 	onMount(() => {

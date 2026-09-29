@@ -77,12 +77,12 @@
 		gap: 12px;
 	}
 	.catalog-title {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		font-weight: 600;
 	}
 	.catalog-hint {
 		margin: 3px 0 0;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
 	.search {
@@ -142,7 +142,7 @@
 		display: flex;
 		align-items: center;
 		gap: 7px;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		font-weight: 600;
 	}
 	.featured-tag {
@@ -150,26 +150,26 @@
 		align-items: center;
 		gap: 3px;
 		padding: 1px 6px;
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		background: var(--accent-soft);
 		color: var(--accent-bright);
-		font-size: 10px;
+		font-size: var(--fs-2xs);
 		font-weight: 600;
 	}
 	.catalog-description {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
 	.catalog-meta {
 		font-family: var(--font-mono);
-		font-size: 10.5px;
+		font-size: var(--fs-2xs);
 		color: var(--dim2);
 	}
 	.empty {
 		padding: 22px 10px;
 		color: var(--dim);
 		text-align: center;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 	}
 	.catalog-foot {
 		display: flex;

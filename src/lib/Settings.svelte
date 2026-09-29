@@ -626,7 +626,7 @@
 	.overlay {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.5);
+		background: var(--scrim);
 		backdrop-filter: blur(6px);
 		display: flex;
 		align-items: center;
@@ -666,10 +666,10 @@
 		flex-direction: column;
 	}
 	.brand {
-		font-family: var(--font-display);
-		font-weight: 800;
-		font-size: 17px;
-		letter-spacing: -0.01em;
+		font-family: var(--font-serif);
+		font-weight: 500;
+		font-size: var(--fs-lg);
+		letter-spacing: -0.005em;
 		padding: 2px 10px 20px;
 	}
 	.nav-list {
@@ -721,11 +721,11 @@
 		min-width: 0;
 	}
 	.nav-label {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		font-weight: 500;
 	}
 	.nav-sub {
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim2);
 		white-space: nowrap;
 		overflow: hidden;
@@ -746,14 +746,14 @@
 	}
 	.head h2 {
 		margin: 0;
-		font-family: var(--font-display);
-		font-size: 19px;
-		font-weight: 700;
-		letter-spacing: -0.01em;
+		font-family: var(--font-serif);
+		font-size: var(--fs-xl);
+		font-weight: 500;
+		letter-spacing: -0.005em;
 	}
 	.head-sub {
 		margin: 3px 0 0;
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		color: var(--dim);
 	}
 	.scroll {
@@ -768,7 +768,7 @@
 		display: flex;
 		align-items: center;
 		gap: 6px;
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		font-weight: 600;
 		letter-spacing: 0.05em;
 		text-transform: uppercase;
@@ -777,7 +777,7 @@
 	}
 	.hint {
 		margin: 0 0 10px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
 	.hint.mt {
@@ -800,7 +800,7 @@
 	.mcp-ro-dot {
 		width: 7px;
 		height: 7px;
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		background: var(--dim2);
 		flex-shrink: 0;
 	}
@@ -813,11 +813,11 @@
 	.mcp-ro-name {
 		flex: 1;
 		font-family: var(--font-mono);
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		color: var(--text);
 	}
 	.mcp-ro-state {
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim);
 	}
 	.tile {
@@ -834,11 +834,11 @@
 	.tile.sm {
 		width: 22px;
 		height: 22px;
-		border-radius: 6px;
+		border-radius: var(--r-sm);
 	}
 	.mono {
 		font-family: var(--font-mono);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.ell {
 		white-space: nowrap;
@@ -847,25 +847,25 @@
 	}
 	.pill {
 		font-family: var(--font-mono);
-		font-size: 10.5px;
+		font-size: var(--fs-2xs);
 		color: var(--accent-bright);
 		background: var(--accent-soft);
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		padding: 2px 8px;
 		flex-shrink: 0;
 		margin-left: auto;
 	}
 
 	.optprov {
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim2);
 		flex-shrink: 0;
 	}
 	.optlock {
-		font-size: 10px;
+		font-size: var(--fs-2xs);
 		color: var(--warn);
 		border: 1px solid color-mix(in oklab, var(--warn) 35%, transparent);
-		border-radius: 4px;
+		border-radius: var(--r-xs);
 		padding: 0 5px;
 		flex-shrink: 0;
 	}
@@ -906,7 +906,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 5px;
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
 	.voicefield:first-child {
@@ -931,7 +931,7 @@
 		border-radius: var(--r-md);
 		background: none;
 		color: var(--dim);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		cursor: pointer;
 	}
 	.addprov:hover {
@@ -966,10 +966,10 @@
 		min-width: 0;
 	}
 	.set-title {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.set-sub {
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
 	.numw {
@@ -987,7 +987,7 @@
 	}
 	.pctsign {
 		font-family: var(--font-mono);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		color: var(--dim);
 	}
 	.foot {
@@ -998,7 +998,7 @@
 		border-top: 1px solid var(--hairline);
 	}
 	.foot-hint {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim2);
 	}
 </style>

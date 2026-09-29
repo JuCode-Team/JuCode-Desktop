@@ -69,7 +69,7 @@
 		border: 1px solid var(--border);
 		border-radius: var(--r-sm);
 		color: var(--text);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		cursor: pointer;
 		text-align: left;
 		transition: border-color var(--t-fast) var(--ease-out);
@@ -131,7 +131,7 @@
 		border: none;
 		background: none;
 		color: var(--text);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		border-radius: var(--r-sm);
 		cursor: pointer;
 		text-align: left;
@@ -139,7 +139,7 @@
 	.opt-group {
 		padding: 8px 9px 4px;
 		color: var(--dim2);
-		font-size: 10px;
+		font-size: var(--fs-2xs);
 		font-weight: 600;
 		letter-spacing: 0.05em;
 		text-transform: uppercase;
@@ -168,7 +168,7 @@
 	}
 	.opt-empty {
 		padding: 10px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim2);
 		text-align: center;
 	}

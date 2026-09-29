@@ -291,7 +291,7 @@
 		background: var(--sidebar);
 		border: 1px solid var(--hairline);
 		border-radius: var(--r-sm);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		max-height: 340px;
 		overflow-y: auto;
 	}
@@ -303,7 +303,7 @@
 		align-items: center;
 		gap: 5px;
 		padding: 4px 8px;
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 		background: none;
 		border: 1px solid var(--hairline);
@@ -318,7 +318,7 @@
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		color: var(--warn);
 	}
 	.questions {
@@ -328,7 +328,7 @@
 		margin-top: 10px;
 	}
 	.q-text {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		font-weight: 600;
 		color: var(--text);
 		margin-bottom: 7px;
@@ -374,11 +374,11 @@
 		flex-shrink: 0;
 		margin-top: 1px;
 		border: 1.5px solid var(--border);
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		color: var(--on-accent);
 	}
 	.q-mark.multi {
-		border-radius: 4px;
+		border-radius: var(--r-xs);
 	}
 	.q-opt.on .q-mark {
 		background: var(--accent);
@@ -391,11 +391,11 @@
 		min-width: 0;
 	}
 	.q-label {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		font-weight: 500;
 	}
 	.q-desc {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 		line-height: 1.4;
 	}
@@ -404,7 +404,7 @@
 		color: var(--text);
 	}
 	.hunk-count {
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim);
 	}
 	.subagent-chip {
@@ -413,12 +413,12 @@
 		gap: 4px;
 		margin-left: auto;
 		padding: 1px 7px;
-		font-size: 10.5px;
+		font-size: var(--fs-2xs);
 		font-family: var(--font-mono);
 		color: var(--dim);
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		max-width: 200px;
 		white-space: nowrap;
 		overflow: hidden;
@@ -431,7 +431,7 @@
 		border: 1px solid var(--hairline);
 		border-radius: var(--r-sm);
 		font-family: var(--font-mono);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		white-space: pre-wrap;
 		word-break: break-word;
 		max-height: 120px;
@@ -477,7 +477,7 @@
 		flex: 1;
 		min-width: 0;
 		cursor: pointer;
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 	}
 	.hunk-pick input {
 		accent-color: var(--accent);
@@ -493,7 +493,7 @@
 	}
 	.hunk-header {
 		font-family: var(--font-mono);
-		font-size: 10.5px;
+		font-size: var(--fs-2xs);
 		color: var(--accent);
 		white-space: nowrap;
 		flex-shrink: 0;
@@ -516,7 +516,7 @@
 	}
 	.none-hint {
 		margin-top: 8px;
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--err);
 	}
 	/* Diff rendering, matching ToolCard's diff styles. */
@@ -525,7 +525,7 @@
 		padding: 6px 10px;
 		border-top: 1px solid var(--hairline);
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		line-height: 1.45;
 		color: var(--text);
 		max-height: 160px;

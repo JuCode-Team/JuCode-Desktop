@@ -445,7 +445,7 @@
 		gap: 7px;
 		padding: 4px 5px 4px 10px;
 		border-radius: var(--r-sm);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 		cursor: pointer;
 		user-select: none;
@@ -484,7 +484,7 @@
 	}
 	.ename {
 		font-family: var(--font-mono);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 	}
 	.eactions {
 		display: flex;
@@ -509,11 +509,11 @@
 		min-width: 0;
 	}
 	.conflict-text b {
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		color: var(--warn);
 	}
 	.conflict-text span {
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
 	.conflict-actions {
@@ -524,7 +524,7 @@
 	.eerr {
 		padding: 6px 12px;
 		font-family: var(--font-mono);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--err);
 		background: color-mix(in oklab, var(--err) 10%, transparent);
 		border-bottom: 1px solid color-mix(in oklab, var(--err) 28%, transparent);
@@ -565,28 +565,28 @@
 		border: none;
 		background: none;
 		color: var(--text);
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		outline: none;
 	}
 	.ai-range {
 		font-family: var(--font-mono);
-		font-size: 10.5px;
+		font-size: var(--fs-2xs);
 		color: var(--dim2);
 		flex-shrink: 0;
 	}
 	.ai-send {
 		flex-shrink: 0;
 		border: none;
-		border-radius: 6px;
+		border-radius: var(--r-sm);
 		padding: 4px 10px;
 		background: var(--accent);
 		color: var(--on-accent);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		font-weight: 600;
 		cursor: pointer;
 	}
 	.ai-err {
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--err);
 		flex-shrink: 0;
 	}
@@ -596,7 +596,7 @@
 		gap: 12px;
 		padding: 5px 12px;
 		border-top: 1px solid var(--hairline);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim2);
 		flex-shrink: 0;
 	}
@@ -622,7 +622,7 @@
 		border: none;
 		background: none;
 		color: var(--warn);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		cursor: pointer;
 		padding: 0;
 		flex-shrink: 0;
@@ -642,10 +642,10 @@
 	}
 	.eempty p {
 		margin: 0;
-		font-size: 13.5px;
+		font-size: var(--fs-sm);
 		color: var(--dim);
 	}
 	.eempty span {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 	}
 </style>

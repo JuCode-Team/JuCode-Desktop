@@ -323,7 +323,7 @@
 		align-items: center;
 		gap: 7px;
 		padding: 12px 8px 6px;
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
 		color: var(--dim2);
@@ -332,9 +332,9 @@
 	.count {
 		color: var(--dim2);
 		background: var(--surface2);
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		padding: 0 7px;
-		font-size: 10px;
+		font-size: var(--fs-2xs);
 	}
 	.grow {
 		flex: 1;
@@ -353,7 +353,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 3px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 	}
 	.mline {
 		display: inline-flex;
@@ -372,13 +372,13 @@
 	}
 	.mono {
 		font-family: var(--font-mono);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
 	.hint {
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 		line-height: 1.5;
 	}
@@ -391,7 +391,7 @@
 		margin: 4px 6px 0;
 		padding: 7px 10px;
 		font-family: var(--font-mono);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--err);
 		background: color-mix(in oklab, var(--err) 12%, transparent);
 		border: 1px solid color-mix(in oklab, var(--err) 30%, transparent);
@@ -444,7 +444,7 @@
 		color: var(--accent-bright);
 	}
 	.tslug {
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		font-weight: 600;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -452,14 +452,14 @@
 	}
 	.tbranch {
 		color: var(--dim2);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		flex-shrink: 1;
 	}
 	.badge {
 		font-family: var(--font-mono);
-		font-size: 10px;
+		font-size: var(--fs-2xs);
 		padding: 1px 7px;
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		flex-shrink: 0;
 	}
 	.badge.warn {
@@ -490,7 +490,7 @@
 	}
 	.tempty {
 		padding: 6px 9px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim2);
 	}
 </style>

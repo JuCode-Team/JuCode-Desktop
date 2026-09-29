@@ -19,7 +19,7 @@
 	.sw {
 		width: 42px;
 		height: 24px;
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		border: none;
 		background: var(--surface2);
 		box-shadow: inset 0 0 0 1px var(--border);
@@ -40,7 +40,7 @@
 		width: 18px;
 		height: 18px;
 		border-radius: 50%;
-		background: #fff;
+		background: var(--on-accent);
 		transition: transform var(--t-med) var(--ease-spring);
 	}
 	.sw.on .knob {

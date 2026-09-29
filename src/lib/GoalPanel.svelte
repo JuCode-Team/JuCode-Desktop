@@ -86,10 +86,10 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		font-weight: 600;
 		padding: 4px 11px;
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		border: 1px solid transparent;
 	}
 	.badge.active {
@@ -114,14 +114,14 @@
 	}
 	.obj {
 		margin-top: 12px;
-		font-family: var(--font-display);
-		font-size: 16px;
-		font-weight: 700;
+		font-family: var(--font-sans);
+		font-size: var(--fs-lg);
+		font-weight: 600;
 		line-height: 1.35;
 	}
 	.hint {
 		margin-top: 6px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		line-height: 1.5;
 		color: var(--dim);
 	}
@@ -146,11 +146,11 @@
 	}
 	.stat-val {
 		font-family: var(--font-mono);
-		font-size: 14px;
+		font-size: var(--fs-md);
 		font-weight: 600;
 	}
 	.stat-lab {
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim2);
 		margin-top: 1px;
 	}
@@ -160,7 +160,7 @@
 	.prog-top {
 		display: flex;
 		justify-content: space-between;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 		margin-bottom: 6px;
 	}
@@ -170,14 +170,14 @@
 	}
 	.bar {
 		height: 6px;
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		background: var(--surface2);
 		overflow: hidden;
 	}
 	.fill {
 		display: block;
 		height: 100%;
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		background: linear-gradient(90deg, var(--accent), var(--accent-bright));
 	}
 	.fill.over {
@@ -196,11 +196,11 @@
 	}
 	.empty p {
 		margin: 4px 0 0;
-		font-size: 14px;
+		font-size: var(--fs-md);
 		color: var(--dim);
 	}
 	.empty span {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 	}
 	.empty code {
 		font-family: var(--font-mono);

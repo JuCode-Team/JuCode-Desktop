@@ -169,9 +169,9 @@
 	}
 	h1 {
 		margin: 4px 0 8px;
-		font-family: var(--font-display);
-		font-size: 22px;
-		font-weight: 800;
+		font-family: var(--font-serif);
+		font-size: var(--fs-xl);
+		font-weight: 500;
 	}
 	.pair {
 		max-width: 420px;
@@ -179,7 +179,7 @@
 		padding: calc(env(safe-area-inset-top) + 48px) 20px 24px;
 	}
 	.pair p {
-		font-size: 14px;
+		font-size: var(--fs-md);
 		color: var(--dim);
 		line-height: 1.55;
 	}
@@ -193,7 +193,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		color: var(--dim);
 	}
 	input {
@@ -203,14 +203,14 @@
 		background: var(--surface2);
 		color: var(--text);
 		font-family: var(--font-mono);
-		font-size: 18px;
+		font-size: var(--fs-xl);
 		letter-spacing: 0.12em;
 		text-transform: uppercase;
 		outline: none;
 	}
 	.err {
 		margin-top: 12px;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		color: var(--err);
 	}
 	.notice {
@@ -221,13 +221,13 @@
 		margin-bottom: 12px;
 		padding: 10px 12px;
 		border-radius: var(--r-md);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		color: var(--warn);
 		background: color-mix(in oklab, var(--warn) 10%, transparent);
 	}
 	.empty {
 		color: var(--dim2);
-		font-size: 14px;
+		font-size: var(--fs-md);
 	}
 	.agent {
 		display: flex;
@@ -260,11 +260,11 @@
 		min-width: 0;
 	}
 	.name {
-		font-size: 15px;
+		font-size: var(--fs-lg);
 		font-weight: 600;
 	}
 	.summary {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		color: var(--dim);
 	}
 	nav {
@@ -288,7 +288,7 @@
 		border: none;
 		background: none;
 		color: var(--dim);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 	}
 	nav button.on {
 		color: var(--accent-bright);
@@ -299,10 +299,10 @@
 		left: calc(50% + 8px);
 		min-width: 16px;
 		padding: 0 4px;
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		background: var(--warn);
 		color: #000;
-		font-size: 10px;
+		font-size: var(--fs-2xs);
 		line-height: 16px;
 	}
 </style>

@@ -41,3 +41,16 @@ export function cycleTheme() {
 	const order: ThemePref[] = ['system', 'light', 'dark'];
 	setTheme(order[(order.indexOf(themeState.pref) + 1) % order.length]);
 }
+
+/** xterm palette from the theme tokens (xterm needs concrete colors, so it
+ *  reads the resolved custom properties). Call again after a theme change. */
+export function terminalPalette() {
+	const css = getComputedStyle(document.documentElement);
+	const token = (name: string) => css.getPropertyValue(name).trim();
+	return {
+		background: token('--panel'),
+		foreground: token('--text'),
+		cursor: token('--accent-bright'),
+		selectionBackground: `${token('--accent')}40`
+	};
+}

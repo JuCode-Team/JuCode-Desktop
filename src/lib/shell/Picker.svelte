@@ -101,7 +101,7 @@
 	.overlay {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.5);
+		background: var(--scrim);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -152,7 +152,7 @@
 		justify-content: space-between;
 		padding: 13px 16px;
 		font-weight: 600;
-		font-size: 14px;
+		font-size: var(--fs-md);
 		border-bottom: 1px solid var(--hairline);
 	}
 	.efforts {
@@ -161,7 +161,7 @@
 		gap: 6px;
 		padding: 10px 16px;
 		border-bottom: 1px solid var(--hairline);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 	}
 	.psearch {
 		display: flex;
@@ -179,7 +179,7 @@
 		background: none;
 		color: var(--text);
 		font-family: var(--font-sans);
-		font-size: 13.5px;
+		font-size: var(--fs-sm);
 	}
 	.psearch input::placeholder {
 		color: var(--dim2);
@@ -189,9 +189,9 @@
 	}
 	.eff {
 		font-family: var(--font-mono);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		padding: 3px 10px;
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		border: 1px solid var(--border);
 		background: var(--surface2);
 		color: var(--dim);
@@ -209,7 +209,7 @@
 	.row-group {
 		padding: 8px 11px 4px;
 		color: var(--dim2);
-		font-size: 10px;
+		font-size: var(--fs-2xs);
 		font-weight: 600;
 		letter-spacing: 0.05em;
 		text-transform: uppercase;
@@ -230,7 +230,7 @@
 		background: none;
 		color: var(--text);
 		cursor: pointer;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.prow.sel {
 		background: var(--surface2);
@@ -250,7 +250,7 @@
 	}
 	.prow-detail {
 		color: var(--dim);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		font-family: var(--font-mono);
 		flex-shrink: 0;
 	}
@@ -262,12 +262,12 @@
 		padding: 18px;
 		text-align: center;
 		color: var(--dim);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.modal-foot {
 		padding: 9px 16px;
 		border-top: 1px solid var(--hairline);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		font-family: var(--font-mono);
 		text-align: center;
 	}

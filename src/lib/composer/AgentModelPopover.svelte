@@ -225,7 +225,7 @@
 		justify-content: space-between;
 		padding: 10px 12px 10px 16px;
 		font-weight: 600;
-		font-size: 13.5px;
+		font-size: var(--fs-sm);
 		border-bottom: 1px solid var(--hairline);
 		flex-shrink: 0;
 	}
@@ -301,7 +301,7 @@
 		background: none;
 		color: var(--text);
 		font-family: var(--font-sans);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.psearch input::placeholder {
 		color: var(--dim2);
@@ -314,7 +314,7 @@
 	.row-group {
 		padding: 8px 11px 4px;
 		color: var(--dim2);
-		font-size: 10px;
+		font-size: var(--fs-2xs);
 		font-weight: 600;
 		letter-spacing: 0.05em;
 		text-transform: uppercase;
@@ -335,7 +335,7 @@
 		background: none;
 		color: var(--text);
 		cursor: pointer;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.prow.sel {
 		background: var(--surface2);
@@ -349,7 +349,7 @@
 	}
 	.prow-detail {
 		color: var(--dim);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		font-family: var(--font-mono);
 		flex-shrink: 0;
 	}
@@ -361,12 +361,12 @@
 		padding: 18px;
 		text-align: center;
 		color: var(--dim);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.pop-foot {
 		padding: 8px 14px;
 		border-top: 1px solid var(--hairline);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		font-family: var(--font-mono);
 		color: var(--dim2);
 		text-align: center;

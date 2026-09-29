@@ -1193,7 +1193,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		color: var(--dim2);
 	}
 	.nochat {
@@ -1205,16 +1205,16 @@
 		gap: 12px;
 	}
 	.welcome-mark {
-		font-family: var(--font-display);
-		font-weight: 800;
-		font-size: 30px;
-		letter-spacing: -0.02em;
+		font-family: var(--font-serif);
+		font-weight: 500;
+		font-size: var(--fs-2xl);
+		letter-spacing: -0.005em;
 		color: var(--text);
 		opacity: 0.16;
 	}
 	.welcome-tip {
 		margin: 0;
-		font-size: 14px;
+		font-size: var(--fs-md);
 		color: var(--dim);
 	}
 	.welcome-actions {

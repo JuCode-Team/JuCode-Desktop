@@ -435,7 +435,7 @@
 		gap: 6px;
 		padding: 4px 5px 4px 9px;
 		border-radius: var(--r-sm);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 		cursor: pointer;
 		user-select: none;
@@ -476,7 +476,7 @@
 		border: none;
 		background: none;
 		color: var(--dim2);
-		border-radius: 4px;
+		border-radius: var(--r-xs);
 		cursor: pointer;
 		opacity: 0;
 		transition: opacity var(--t-fast) var(--ease-out);
@@ -498,7 +498,7 @@
 	.lmax-hint {
 		padding: 2px 8px;
 		margin-right: 4px;
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		font-weight: 600;
 		white-space: nowrap;
 		color: var(--accent-bright);
@@ -551,7 +551,7 @@
 		background: none;
 		border-radius: var(--r-sm);
 		color: var(--text);
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		cursor: pointer;
 	}
 	.lmenu-item:hover {
@@ -585,7 +585,7 @@
 	}
 	.dropzone-label {
 		padding: 3px 9px;
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		font-weight: 600;
 		white-space: nowrap;
 		color: var(--text);
@@ -614,7 +614,7 @@
 		z-index: 90;
 		pointer-events: none;
 		padding: 4px 10px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		font-weight: 600;
 		color: var(--text);
 		background: var(--panel);
@@ -635,7 +635,7 @@
 	}
 	.mo-empty p {
 		margin: 0;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		color: var(--dim);
 	}
 	.mo-empty-opts {
@@ -647,7 +647,7 @@
 	}
 	.mo-empty-btn {
 		padding: 5px 11px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		border: 1px solid var(--border);
 		border-radius: var(--r-sm);
 		background: var(--surface);

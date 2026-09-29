@@ -178,7 +178,7 @@
 	.overlay {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.5);
+		background: var(--scrim);
 		display: flex;
 		align-items: flex-start;
 		justify-content: center;
@@ -224,7 +224,7 @@
 		background: none;
 		color: var(--text);
 		font-family: var(--font-sans);
-		font-size: 15px;
+		font-size: var(--fs-lg);
 	}
 	.search input::placeholder {
 		color: var(--dim2);
@@ -245,7 +245,7 @@
 		background: none;
 		color: var(--text);
 		cursor: pointer;
-		font-size: 13.5px;
+		font-size: var(--fs-sm);
 	}
 	.row.sel {
 		background: var(--surface2);
@@ -268,7 +268,7 @@
 	.hint {
 		flex: 1;
 		color: var(--dim2);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -276,7 +276,7 @@
 	.keys {
 		margin-left: auto;
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim2);
 		flex-shrink: 0;
 	}
@@ -284,12 +284,12 @@
 		padding: 22px;
 		text-align: center;
 		color: var(--dim);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.foot {
 		padding: 9px 16px;
 		border-top: 1px solid var(--hairline);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		font-family: var(--font-mono);
 		color: var(--dim2);
 		text-align: center;

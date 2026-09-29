@@ -66,7 +66,7 @@
 	.empty {
 		padding: 24px 18px;
 		text-align: center;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim2);
 		font-family: var(--font-mono);
 	}
@@ -100,14 +100,14 @@
 	}
 	.tnum {
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--accent-bright);
 		flex-shrink: 0;
 	}
 	.tprompt {
 		flex: 1;
 		min-width: 0;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 		white-space: nowrap;
 		overflow: hidden;
@@ -118,7 +118,7 @@
 		display: inline-flex;
 		gap: 5px;
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		flex-shrink: 0;
 	}
 	.add {
@@ -150,7 +150,7 @@
 		flex: 1;
 		min-width: 0;
 		font-family: var(--font-mono);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -161,7 +161,7 @@
 		gap: 6px;
 		padding: 6px 10px;
 		border-top: 1px solid var(--hairline);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim2);
 		font-family: var(--font-mono);
 		flex-shrink: 0;

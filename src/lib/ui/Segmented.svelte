@@ -32,9 +32,9 @@
 		border: none;
 		background: none;
 		color: var(--dim);
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		font-family: var(--font-sans);
-		border-radius: 9px;
+		border-radius: var(--r-md);
 		cursor: pointer;
 		white-space: nowrap;
 		transition:

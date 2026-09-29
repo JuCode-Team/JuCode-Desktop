@@ -48,7 +48,7 @@
 	}
 	.xs {
 		padding: 2px;
-		border-radius: 5px;
+		border-radius: var(--r-xs);
 	}
 	.ib:hover:not(:disabled) {
 		background: var(--surface2);

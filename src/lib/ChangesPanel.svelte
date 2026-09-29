@@ -153,15 +153,15 @@
 	}
 	.title {
 		flex: 1;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		font-weight: 600;
 	}
 	.count {
 		font-family: var(--font-mono);
-		font-size: 10px;
+		font-size: var(--fs-2xs);
 		color: var(--dim2);
 		background: var(--surface2);
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		padding: 1px 7px;
 	}
 	.list {
@@ -193,7 +193,7 @@
 	}
 	.rname {
 		font-family: var(--font-mono);
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -203,7 +203,7 @@
 	}
 	.rdir {
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim2);
 		white-space: nowrap;
 		overflow: hidden;
@@ -211,7 +211,7 @@
 	}
 	.stat {
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		flex-shrink: 0;
 	}
 	.stat .add {
@@ -233,17 +233,17 @@
 	}
 	.empty p {
 		margin: 4px 0 0;
-		font-size: 14px;
+		font-size: var(--fs-md);
 		color: var(--dim);
 	}
 	.empty span {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 	}
 	.oerr {
 		margin: 8px 12px 0;
 		padding: 7px 10px;
 		font-family: var(--font-mono);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--err);
 		background: color-mix(in oklab, var(--err) 12%, transparent);
 		border: 1px solid color-mix(in oklab, var(--err) 30%, transparent);
@@ -255,7 +255,7 @@
 	.overlay {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.5);
+		background: var(--scrim);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -281,14 +281,14 @@
 	}
 	.sheet-name {
 		font-family: var(--font-mono);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.diff {
 		margin: 0;
 		padding: 12px 14px;
 		overflow: auto;
 		font-family: var(--font-mono);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		line-height: 1.5;
 		color: var(--text);
 	}

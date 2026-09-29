@@ -927,7 +927,7 @@
 		border-radius: var(--r-md);
 	}
 	.ed-text {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		color: var(--err);
 		font-weight: 500;
 	}
@@ -944,7 +944,7 @@
 		align-items: center;
 		gap: 6px;
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim);
 	}
 	.agent-dot {
@@ -988,7 +988,7 @@
 	}
 	.welcome-tip {
 		margin: 0;
-		font-size: 14px;
+		font-size: var(--fs-md);
 		color: var(--dim);
 	}
 	.welcome-hints {
@@ -997,7 +997,7 @@
 		justify-content: center;
 		gap: 8px 16px;
 		margin-top: 6px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim2);
 	}
 	.welcome-hints span {
@@ -1007,11 +1007,11 @@
 	}
 	.welcome-hints kbd {
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim);
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
-		border-radius: 5px;
+		border-radius: var(--r-xs);
 		padding: 1px 6px;
 	}
 
@@ -1019,7 +1019,7 @@
 	.overlay {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.5);
+		background: var(--scrim);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -1044,7 +1044,7 @@
 		justify-content: space-between;
 		padding: 13px 16px;
 		font-weight: 600;
-		font-size: 14px;
+		font-size: var(--fs-md);
 		border-bottom: 1px solid var(--hairline);
 	}
 	.modal.trust {
@@ -1052,7 +1052,7 @@
 	}
 	.trust-body {
 		padding: 16px;
-		font-size: 14px;
+		font-size: var(--fs-md);
 		line-height: 1.55;
 	}
 	.trust-body p {
@@ -1061,7 +1061,7 @@
 	.trust-path {
 		display: block;
 		font-family: var(--font-mono);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 		background: var(--surface2);
 		border: 1px solid var(--border);
@@ -1076,7 +1076,7 @@
 		padding: 12px 16px 16px;
 	}
 	.btn {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		padding: 8px 14px;
 		border-radius: var(--r-sm);
 		border: 1px solid var(--border);

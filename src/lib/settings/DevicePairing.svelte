@@ -126,7 +126,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
 	.field input {
@@ -135,7 +135,7 @@
 		background: var(--surface2);
 		color: var(--text);
 		font-family: var(--font-mono);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		padding: 7px 10px;
 		outline: none;
 	}
@@ -144,7 +144,7 @@
 	}
 	.hint {
 		margin: 0;
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--dim2);
 		line-height: 1.5;
 	}
@@ -175,7 +175,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		color: var(--dim);
 	}
 	.code-text strong {
@@ -187,10 +187,10 @@
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 	}
 	.label {
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim2);
 		font-family: var(--font-mono);
 	}
@@ -207,11 +207,11 @@
 	}
 	.when {
 		color: var(--dim2);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 	}
 	.err {
 		font-family: var(--font-mono);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--err);
 	}
 </style>

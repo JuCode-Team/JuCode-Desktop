@@ -222,7 +222,7 @@
 		display: flex;
 		align-items: center;
 		gap: 6px;
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		font-weight: 600;
 		letter-spacing: 0.05em;
 		text-transform: uppercase;
@@ -231,7 +231,7 @@
 	}
 	.hint {
 		margin: 0 0 10px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
 	.alist {
@@ -278,14 +278,14 @@
 		min-width: 0;
 	}
 	.aname {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		font-weight: 500;
 	}
 	.astate {
 		display: inline-flex;
 		align-items: center;
 		gap: 4px;
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		font-family: var(--font-mono);
 	}
 	.astate.ok {
@@ -298,7 +298,7 @@
 		color: var(--dim2);
 	}
 	.acmd {
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		font-family: var(--font-mono);
 		color: var(--dim2);
 		white-space: nowrap;
@@ -313,7 +313,7 @@
 		background: none;
 		border: none;
 		padding: 2px 0;
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim);
 		cursor: pointer;
 	}
@@ -347,7 +347,7 @@
 		gap: 3px;
 	}
 	.fl > span {
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim);
 	}
 	.tf {
@@ -358,7 +358,7 @@
 		border-radius: var(--r-sm);
 		color: var(--text);
 		padding: 8px 10px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		font-family: var(--font-mono);
 		outline: none;
 		transition: border-color var(--t-fast) var(--ease-out);
@@ -376,13 +376,13 @@
 		line-height: 1.5;
 	}
 	.err {
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--warn);
 	}
 	.empty {
 		margin: 0;
 		padding: 12px 14px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim2);
 	}
 	.draftbtns {

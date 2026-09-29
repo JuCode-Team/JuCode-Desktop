@@ -62,7 +62,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 5px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		font-family: var(--font-mono);
 		background: var(--surface2);
 		border: 1px solid var(--border);
@@ -87,7 +87,7 @@
 	.chip-thumb {
 		width: 26px;
 		height: 26px;
-		border-radius: 4px;
+		border-radius: var(--r-xs);
 		object-fit: cover;
 		flex-shrink: 0;
 	}
@@ -98,7 +98,7 @@
 	}
 	.chip-meta {
 		color: var(--dim2);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		white-space: nowrap;
 		flex-shrink: 0;
 	}

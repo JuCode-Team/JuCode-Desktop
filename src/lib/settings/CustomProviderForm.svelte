@@ -84,7 +84,7 @@
 		gap: 11px;
 	}
 	.np-title {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		font-weight: 600;
 	}
 	.np-grid {
@@ -100,7 +100,7 @@
 		min-width: 0;
 	}
 	.np-f > span {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
 	.np-models {
@@ -110,7 +110,7 @@
 		gap: 7px;
 	}
 	.np-mlabel {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 		width: 100%;
 	}
@@ -119,7 +119,7 @@
 		align-items: center;
 		gap: 5px;
 		font-family: var(--font-mono);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		padding: 3px 5px 3px 9px;
 		border-radius: var(--r-sm);
 		background: var(--surface2);

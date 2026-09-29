@@ -53,14 +53,14 @@
 		background: none;
 		color: var(--text);
 		font-family: var(--font-sans);
-		font-size: 13.5px;
+		font-size: var(--fs-sm);
 	}
 	.findbar input::placeholder {
 		color: var(--dim2);
 	}
 	.findcount {
 		font-family: var(--font-mono);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--dim2);
 		flex-shrink: 0;
 		min-width: 36px;

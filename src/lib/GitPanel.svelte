@@ -619,7 +619,7 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 		font-family: var(--font-mono);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		font-weight: 500;
 	}
 	.ab {
@@ -627,7 +627,7 @@
 		align-items: center;
 		gap: 5px;
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		flex-shrink: 0;
 	}
 	.ab .up,
@@ -674,7 +674,7 @@
 		color: var(--text);
 		cursor: pointer;
 		font-family: var(--font-mono);
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		padding: 6px 8px;
 		border-radius: var(--r-sm);
 		text-align: left;
@@ -710,7 +710,7 @@
 		background: var(--surface2);
 		color: var(--text);
 		font-family: var(--font-mono);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		padding: 5px 8px;
 		outline: none;
 	}
@@ -736,7 +736,7 @@
 	}
 	.ghrow {
 		padding: 6px 9px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 		line-height: 1.7;
 	}
@@ -749,7 +749,7 @@
 		background: var(--surface2);
 		color: var(--accent-bright);
 		font-family: var(--font-mono);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		padding: 1px 7px;
 		border-radius: var(--r-sm);
 		cursor: pointer;
@@ -766,10 +766,10 @@
 	}
 	.prstate {
 		font-family: var(--font-mono);
-		font-size: 10px;
+		font-size: var(--fs-2xs);
 		letter-spacing: 0.05em;
 		padding: 1px 7px;
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		flex-shrink: 0;
 		color: var(--dim);
 		background: var(--surface2);
@@ -796,7 +796,7 @@
 		background: none;
 		color: var(--text);
 		cursor: pointer;
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		padding: 2px 0;
 		text-align: left;
 	}
@@ -823,7 +823,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
 	.pfield input,
@@ -834,7 +834,7 @@
 		background: var(--surface2);
 		color: var(--text);
 		font-family: var(--font-sans);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		padding: 7px 10px;
 		outline: none;
 		resize: vertical;
@@ -856,7 +856,7 @@
 		display: flex;
 		align-items: center;
 		gap: 6px;
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		color: var(--dim);
 		padding-bottom: 8px;
 		cursor: pointer;
@@ -878,7 +878,7 @@
 		align-items: center;
 		gap: 7px;
 		padding: 12px 8px 6px;
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
 		color: var(--dim2);
@@ -887,19 +887,19 @@
 	.count {
 		color: var(--dim2);
 		background: var(--surface2);
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		padding: 0 7px;
-		font-size: 10px;
+		font-size: var(--fs-2xs);
 	}
 	.seclink {
 		margin-left: auto;
 		border: none;
 		background: none;
 		color: var(--accent-bright);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		cursor: pointer;
 		padding: 2px 4px;
-		border-radius: 5px;
+		border-radius: var(--r-xs);
 	}
 	.seclink:hover {
 		background: var(--surface2);
@@ -938,7 +938,7 @@
 		padding: 2px 9px 6px;
 	}
 	.rvlabel {
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim2);
 		font-family: var(--font-mono);
 	}
@@ -950,7 +950,7 @@
 		background: var(--surface2);
 		color: var(--text);
 		font-family: var(--font-mono);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		padding: 3px 6px;
 		outline: none;
 	}
@@ -959,7 +959,7 @@
 	}
 	.rvhead {
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim2);
 		flex-shrink: 0;
 	}
@@ -969,7 +969,7 @@
 		width: 64px;
 		flex-shrink: 0;
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		justify-content: flex-end;
 	}
 	.rvadd {
@@ -993,7 +993,7 @@
 	}
 	.code {
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		width: 20px;
 		color: var(--warn);
 		flex-shrink: 0;
@@ -1011,7 +1011,7 @@
 		color: var(--text);
 		cursor: pointer;
 		font-family: var(--font-mono);
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -1032,7 +1032,7 @@
 	}
 	.clean {
 		padding: 8px 9px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim2);
 		font-family: var(--font-mono);
 	}
@@ -1040,11 +1040,11 @@
 		display: flex;
 		gap: 9px;
 		padding: 6px 9px;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.hash {
 		font-family: var(--font-mono);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--accent-bright);
 		flex-shrink: 0;
 	}
@@ -1086,7 +1086,7 @@
 	.ai-btn.wide {
 		width: 100%;
 		padding: 7px 10px;
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		margin-bottom: 2px;
 	}
 	.commitbar input {
@@ -1097,7 +1097,7 @@
 		background: var(--surface2);
 		color: var(--text);
 		font-family: var(--font-sans);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		padding: 7px 10px;
 		outline: none;
 	}
@@ -1111,14 +1111,14 @@
 		padding: 18px;
 		text-align: center;
 		font-family: var(--font-mono);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
 	.oerr {
 		margin: 8px 12px 0;
 		padding: 7px 10px;
 		font-family: var(--font-mono);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--err);
 		background: color-mix(in oklab, var(--err) 12%, transparent);
 		border: 1px solid color-mix(in oklab, var(--err) 30%, transparent);
@@ -1130,7 +1130,7 @@
 	.overlay {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.5);
+		background: var(--scrim);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -1156,14 +1156,14 @@
 	}
 	.sheet-name {
 		font-family: var(--font-mono);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.diff {
 		margin: 0;
 		padding: 12px 14px;
 		overflow: auto;
 		font-family: var(--font-mono);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		line-height: 1.5;
 		color: var(--text);
 	}

@@ -207,7 +207,7 @@
 		gap: 4px;
 	}
 	.lbl {
-		font-size: 10.5px;
+		font-size: var(--fs-2xs);
 		font-weight: 600;
 		letter-spacing: 0.04em;
 		text-transform: uppercase;
@@ -220,7 +220,7 @@
 		border-radius: var(--r-sm);
 		background: var(--surface);
 		color: var(--text);
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		font-family: var(--font-sans);
 		outline: none;
 		resize: vertical;
@@ -230,10 +230,10 @@
 	}
 	.txt.mono {
 		font-family: var(--font-mono);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 	}
 	.err {
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--err);
 	}
 	.swatches {
@@ -298,7 +298,7 @@
 		border-radius: var(--r-sm);
 		background: none;
 		color: var(--err);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		cursor: pointer;
 		transition: background var(--t-fast) var(--ease-out);
 	}

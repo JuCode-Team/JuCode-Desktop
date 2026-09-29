@@ -72,7 +72,7 @@
 		background: none;
 		color: var(--text);
 		cursor: pointer;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		transition: background var(--t-fast) var(--ease-out);
 	}
 	.slash-item.sel {
@@ -93,7 +93,7 @@
 	.at-path {
 		flex: 1;
 		color: var(--dim2);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -101,7 +101,7 @@
 	}
 	.slash-empty {
 		padding: 10px 12px;
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		color: var(--dim2);
 	}
 </style>

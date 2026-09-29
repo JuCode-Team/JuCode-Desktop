@@ -36,7 +36,7 @@
 	.num {
 		position: absolute;
 		font-family: var(--font-mono);
-		font-size: 10px;
+		font-size: var(--fs-2xs);
 		font-weight: 600;
 		color: var(--text);
 	}

@@ -545,7 +545,7 @@
 			contenteditable="true"
 			role="combobox"
 			tabindex="0"
-			data-placeholder={t('chat.composerPlaceholder')}
+			data-placeholder={t(chat.isChatMode ? 'chat.chatPlaceholder' : 'chat.composerPlaceholder')}
 			oninput={syncFromDom}
 			onkeydown={onKey}
 			onpaste={onPaste}
@@ -686,7 +686,7 @@
 		background: transparent;
 		color: var(--text);
 		font-family: var(--font-sans);
-		font-size: 14px;
+		font-size: var(--fs-md);
 		line-height: 1.55;
 		padding: 2px 0 8px;
 		white-space: pre-wrap;
@@ -707,11 +707,11 @@
 		white-space: normal;
 		color: var(--accent-bright);
 		background: var(--accent-soft);
-		border-radius: 5px;
+		border-radius: var(--r-xs);
 		padding: 1px 6px 1px 5px;
 		margin: 0 1px;
 		box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 35%, transparent);
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		-webkit-user-select: none;
 		user-select: none;
 		cursor: default;
@@ -719,7 +719,7 @@
 	.rich :global(.refchip)::before {
 		content: '🌐';
 		margin-right: 3px;
-		font-size: 10px;
+		font-size: var(--fs-2xs);
 	}
 	.composer-bar {
 		display: flex;
@@ -735,7 +735,7 @@
 		border-radius: var(--r-sm);
 		background: none;
 		color: var(--text);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		font-family: var(--font-sans);
 		cursor: pointer;
 		transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
@@ -748,7 +748,7 @@
 	}
 	.flatbtn.model span {
 		font-family: var(--font-mono);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		min-width: 0;
 		max-width: 220px;
 		white-space: nowrap;
@@ -757,7 +757,7 @@
 	}
 	.flatbtn.effort span {
 		font-family: var(--font-mono);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 	}
 	/* read-only model label for backends without an in-chat model picker */
 	.flatbtn.static {
@@ -895,7 +895,7 @@
 		align-items: center;
 		gap: 5px;
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim);
 		min-width: 0;
 	}
@@ -911,10 +911,10 @@
 		gap: 5px;
 		padding: 2px 9px;
 		border: 1px solid var(--hairline);
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		background: none;
 		color: var(--dim);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		font-family: var(--font-sans);
 		cursor: pointer;
 		transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
@@ -937,7 +937,7 @@
 	}
 	.ctx-text {
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim);
 	}
 
@@ -949,16 +949,16 @@
 		margin-bottom: 8px;
 	}
 	.queued-label {
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		font-family: var(--font-mono);
 		color: var(--accent-bright);
 		background: var(--accent-soft);
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		padding: 2px 9px;
 		flex-shrink: 0;
 	}
 	.qchip {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		max-width: 260px;
 		white-space: nowrap;
 		overflow: hidden;
@@ -975,7 +975,7 @@
 		align-items: center;
 		gap: 4px;
 		margin-left: auto;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--accent-bright);
 		background: none;
 		border: 1px solid color-mix(in oklab, var(--accent) 40%, transparent);

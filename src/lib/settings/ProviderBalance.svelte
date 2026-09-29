@@ -30,18 +30,18 @@
 	.dsrow {
 		display: flex;
 		justify-content: space-between;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.dsrow b {
 		font-variant-numeric: tabular-nums;
 	}
 	.dsrow.sub {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
 	.hint {
 		margin: 0 0 10px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
 </style>

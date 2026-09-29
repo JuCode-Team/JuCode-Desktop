@@ -170,7 +170,7 @@
 
 <style>
 	.heatmap {
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim);
 	}
 	.months {
@@ -217,7 +217,7 @@
 	.cell {
 		width: var(--cell);
 		height: var(--cell);
-		border-radius: 3px;
+		border-radius: var(--r-xs);
 		background: var(--surface2);
 		box-shadow: inset 0 0 0 1px var(--border);
 	}

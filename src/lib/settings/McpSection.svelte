@@ -312,7 +312,7 @@
 		display: flex;
 		align-items: center;
 		gap: 6px;
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		font-weight: 600;
 		letter-spacing: 0.05em;
 		text-transform: uppercase;
@@ -321,13 +321,13 @@
 	}
 	.hint {
 		margin: 0 0 10px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
 	.notice {
 		margin: 0 0 10px;
 		padding: 9px 12px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
@@ -350,7 +350,7 @@
 	}
 	.mcp-empty p {
 		margin: 0;
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		color: var(--dim);
 	}
 
@@ -411,23 +411,23 @@
 	}
 	.sname {
 		font-family: var(--font-mono);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
 	.tchip {
 		font-family: var(--font-mono);
-		font-size: 10.5px;
+		font-size: var(--fs-2xs);
 		color: var(--dim);
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		padding: 1px 8px;
 		flex-shrink: 0;
 	}
 	.scount {
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--dim2);
 		white-space: nowrap;
 		margin-left: auto;
@@ -461,7 +461,7 @@
 		justify-content: flex-end;
 		gap: 8px;
 		padding: 8px 12px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 		background: color-mix(in oklab, var(--err) 7%, transparent);
 		border-top: 1px solid var(--hairline);
@@ -476,7 +476,7 @@
 	.serr {
 		margin: 8px 0 4px;
 		font-family: var(--font-mono);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--err);
 		word-break: break-all;
 	}
@@ -496,11 +496,11 @@
 	}
 	.tname {
 		font-family: var(--font-mono);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		flex-shrink: 0;
 	}
 	.tdesc {
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 		white-space: nowrap;
 		overflow: hidden;
@@ -519,7 +519,7 @@
 		border-radius: var(--r-md);
 		background: none;
 		color: var(--dim);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		cursor: pointer;
 	}
 	.addsrv:hover:not(:disabled) {
@@ -544,7 +544,7 @@
 		gap: 11px;
 	}
 	.ns-title {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		font-weight: 600;
 	}
 	.ns-grid {
@@ -560,7 +560,7 @@
 		min-width: 0;
 	}
 	.ns-f > span:first-child {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
 	.ns-sw {
@@ -576,7 +576,7 @@
 		border-radius: var(--r-sm);
 		color: var(--text);
 		padding: 9px 11px;
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		font-family: var(--font-mono);
 		outline: none;
 		transition: border-color var(--t-fast) var(--ease-out);
@@ -589,11 +589,11 @@
 		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
 	}
 	.ferr {
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--err);
 	}
 	.fhint {
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim2);
 	}
 	.ns-foot {
@@ -622,12 +622,12 @@
 		border-top: 1px solid var(--hairline);
 	}
 	.ename {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		flex-shrink: 0;
 	}
 	.ecmd {
 		font-family: var(--font-mono);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 		white-space: nowrap;
 		overflow: hidden;

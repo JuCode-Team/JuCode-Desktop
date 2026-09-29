@@ -51,16 +51,16 @@
 		padding: 16px 18px 10px;
 	}
 	.title {
-		font-family: var(--font-display);
-		font-weight: 700;
-		font-size: 14px;
+		font-family: var(--font-sans);
+		font-weight: 600;
+		font-size: var(--fs-md);
 	}
 	.count {
 		font-family: var(--font-mono);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 		background: var(--surface2);
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		padding: 2px 9px;
 	}
 	.steps {
@@ -75,7 +75,7 @@
 		gap: 9px;
 		padding: 7px 8px;
 		border-radius: var(--r-sm);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		line-height: 1.4;
 	}
 	.ico {
@@ -114,10 +114,10 @@
 	}
 	.empty p {
 		margin: 4px 0 0;
-		font-size: 14px;
+		font-size: var(--fs-md);
 		color: var(--dim);
 	}
 	.empty span {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 	}
 </style>

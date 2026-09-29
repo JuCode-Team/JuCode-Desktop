@@ -67,7 +67,7 @@
 		align-items: baseline;
 		justify-content: space-between;
 		gap: 10px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
 	.ctx-row.mt {
@@ -79,7 +79,7 @@
 	}
 	.ctx-bar {
 		height: 5px;
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		background: var(--surface2);
 		overflow: hidden;
 		margin: 7px 0 4px;
@@ -87,7 +87,7 @@
 	.ctx-fill {
 		display: block;
 		height: 100%;
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		background: var(--accent);
 		transition: width var(--t-slow) var(--ease-out), background var(--t-med) var(--ease-out);
 	}
@@ -95,7 +95,7 @@
 		background: var(--warn);
 	}
 	.ctx-sub {
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim2);
 	}
 </style>

@@ -33,7 +33,7 @@
 		border-radius: var(--r-sm);
 		color: var(--text);
 		padding: 9px 11px;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		font-family: var(--font-sans);
 		outline: none;
 		transition: border-color var(--t-fast) var(--ease-out);

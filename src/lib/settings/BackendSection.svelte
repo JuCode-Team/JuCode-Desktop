@@ -234,7 +234,7 @@
 		display: flex;
 		align-items: center;
 		gap: 6px;
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		font-weight: 600;
 		letter-spacing: 0.05em;
 		text-transform: uppercase;
@@ -243,7 +243,7 @@
 	}
 	.hint {
 		margin: 0 0 10px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
 	.blist {
@@ -289,14 +289,14 @@
 		min-width: 0;
 	}
 	.bname {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		font-weight: 500;
 	}
 	.bstate {
 		display: inline-flex;
 		align-items: center;
 		gap: 4px;
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		font-family: var(--font-mono);
 	}
 	.bstate.ok {
@@ -309,7 +309,7 @@
 		color: var(--dim2);
 	}
 	.bpath {
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		font-family: var(--font-mono);
 		color: var(--dim2);
 		white-space: nowrap;
@@ -327,7 +327,7 @@
 		border-radius: var(--r-sm);
 		color: var(--text);
 		padding: 8px 10px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		font-family: var(--font-mono);
 		outline: none;
 		transition: border-color var(--t-fast) var(--ease-out);
@@ -357,11 +357,11 @@
 		gap: 2px;
 	}
 	.sename {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		font-weight: 500;
 	}
 	.sestate {
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		font-family: var(--font-mono);
 		color: var(--dim);
 	}
@@ -376,7 +376,7 @@
 		background: none;
 		border: none;
 		padding: 2px 0;
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim);
 		cursor: pointer;
 	}
@@ -392,9 +392,9 @@
 	}
 	.envcount {
 		font-family: var(--font-mono);
-		font-size: 10px;
+		font-size: var(--fs-2xs);
 		padding: 0 5px;
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
 	}
@@ -410,7 +410,7 @@
 		line-height: 1.5;
 	}
 	.envwarn {
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--warn);
 	}
 	:global(.spin) {
@@ -427,7 +427,7 @@
 		height: 22px;
 		align-items: center;
 		justify-content: center;
-		border-radius: 6px;
+		border-radius: var(--r-sm);
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
 		flex-shrink: 0;

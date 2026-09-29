@@ -151,7 +151,7 @@ const shell = {
 			dark: '主题：深色'
 		},
 		market: '市场',
-		sessionsByProject: '对话 · 按项目',
+		sessionsByProject: '会话',
 		newProjectTitle: '新建项目（选择目录）',
 		history: '历史对话',
 		newSessionInProject: '在此项目下新建对话',
@@ -503,7 +503,7 @@ const shell = {
 			dark: 'Theme: dark'
 		},
 		market: 'Market',
-		sessionsByProject: 'Conversations · by project',
+		sessionsByProject: 'Sessions',
 		newProjectTitle: 'New project (pick a directory)',
 		history: 'History',
 		newSessionInProject: 'New conversation in this project',

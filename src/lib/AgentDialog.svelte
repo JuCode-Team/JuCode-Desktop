@@ -146,7 +146,7 @@
 	.overlay {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.5);
+		background: var(--scrim);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -175,7 +175,7 @@
 		align-items: center;
 		gap: 8px;
 		font-weight: 600;
-		font-size: 14px;
+		font-size: var(--fs-md);
 	}
 	.body {
 		display: flex;
@@ -186,7 +186,7 @@
 	}
 	.hint {
 		margin: 0;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 		line-height: 1.5;
 	}
@@ -194,11 +194,11 @@
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
 	.field small {
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim2);
 	}
 	.field input,
@@ -208,7 +208,7 @@
 		background: var(--surface2);
 		color: var(--text);
 		font-family: var(--font-sans);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		padding: 7px 10px;
 		outline: none;
 		resize: vertical;
@@ -216,7 +216,7 @@
 	}
 	.field .mono {
 		font-family: var(--font-mono);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 	}
 	.field input.bad {
 		border-color: color-mix(in oklab, var(--warn) 60%, var(--border));
@@ -236,7 +236,7 @@
 	.err {
 		padding: 7px 10px;
 		font-family: var(--font-mono);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--err);
 		background: color-mix(in oklab, var(--err) 12%, transparent);
 		border: 1px solid color-mix(in oklab, var(--err) 30%, transparent);

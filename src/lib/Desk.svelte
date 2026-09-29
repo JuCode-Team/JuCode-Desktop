@@ -36,7 +36,7 @@
 	.overlay {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.55);
+		background: var(--scrim);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -62,13 +62,13 @@
 	}
 	h2 {
 		margin: 0;
-		font-family: var(--font-display);
-		font-size: 20px;
-		font-weight: 800;
+		font-family: var(--font-serif);
+		font-size: var(--fs-xl);
+		font-weight: 500;
 	}
 	.head p {
 		margin: 4px 0 0;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		color: var(--dim);
 	}
 	.body {

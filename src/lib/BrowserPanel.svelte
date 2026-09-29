@@ -106,7 +106,7 @@
 		flex: 1;
 		min-width: 0;
 		font-family: var(--font-mono);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--text);
 		background: var(--surface);
 		border: 1px solid var(--border);
@@ -153,7 +153,7 @@
 		}
 	}
 	.pickhint {
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--accent-bright);
 		background: var(--accent-soft);
 		padding: 5px 10px;
@@ -178,10 +178,10 @@
 	}
 	.empty p {
 		margin: 0;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		color: var(--dim);
 	}
 	.empty span {
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 	}
 </style>

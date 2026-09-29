@@ -346,7 +346,7 @@
 		background: var(--surface);
 		color: var(--text);
 		cursor: pointer;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		transition: background var(--t-fast) var(--ease-out);
 	}
 	.account:hover {
@@ -368,7 +368,6 @@
 	}
 	.acc-name {
 		flex: 1;
-		font-family: var(--font-mono);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -376,7 +375,7 @@
 	}
 	.acc-go {
 		color: var(--dim2);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 	}
 	/* 有新版本时设置入口右侧的小圆点 */
 	.upd-dot {
@@ -395,34 +394,38 @@
 		padding: 48px 18px 12px;
 	}
 	.word {
-		font-family: var(--font-display);
-		font-weight: 800;
-		font-size: 17px;
-		letter-spacing: -0.01em;
+		font-family: var(--font-serif);
+		font-weight: 500;
+		font-size: var(--fs-lg);
+		letter-spacing: -0.005em;
 	}
 	.nav {
 		display: flex;
-		gap: 6px;
-		padding: 0 14px 10px;
+		flex-direction: column;
+		gap: 2px;
+		padding: 0 10px 12px;
 	}
 	.navcard {
-		flex: 1;
 		display: flex;
 		align-items: center;
-		justify-content: center;
-		gap: 6px;
-		padding: 7px 0;
-		border-radius: var(--r-md);
+		gap: 10px;
+		padding: 7px 10px;
+		border-radius: var(--r-sm);
 		border: none;
-		background: var(--surface);
-		color: var(--dim);
-		font-size: 12px;
+		background: transparent;
+		color: var(--text);
+		font-size: var(--fs-sm);
+		text-align: left;
 		cursor: pointer;
 		transition:
 			background var(--t-fast) var(--ease-out),
 			color var(--t-fast) var(--ease-out),
 			border-color var(--t-fast) var(--ease-out),
 			transform var(--t-fast) var(--ease-spring);
+	}
+	.navcard :global(svg) {
+		color: var(--dim);
+		flex-shrink: 0;
 	}
 	.navcard:hover {
 		background: var(--surface2);
@@ -436,9 +439,12 @@
 		align-items: center;
 		justify-content: space-between;
 		padding: 6px 16px 8px;
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim2);
 		font-family: var(--font-mono);
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		white-space: nowrap;
 	}
 	.sess-actions {
 		display: flex;
@@ -450,7 +456,7 @@
 		border: none;
 		background: none;
 		color: var(--dim);
-		border-radius: 6px;
+		border-radius: var(--r-sm);
 		cursor: pointer;
 		transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
 	}
@@ -473,7 +479,7 @@
 		border-radius: var(--r-md);
 		background: var(--surface);
 		color: var(--text);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		font-family: var(--font-sans);
 		outline: none;
 	}
@@ -492,10 +498,9 @@
 		padding: 12px 8px 6px;
 	}
 	.group-name {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		font-weight: 600;
 		color: var(--dim);
-		font-family: var(--font-mono);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -510,10 +515,10 @@
 		color: var(--dim2);
 	}
 	.stale-badge {
-		font-size: 10px;
+		font-size: var(--fs-2xs);
 		color: var(--warn);
 		background: color-mix(in oklab, var(--warn) 14%, transparent);
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		padding: 1px 7px;
 		flex-shrink: 0;
 	}
@@ -522,10 +527,10 @@
 		margin-left: auto;
 	}
 	.group-count {
-		font-size: 10px;
+		font-size: var(--fs-2xs);
 		color: var(--dim2);
 		background: var(--surface2);
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		padding: 1px 7px;
 		flex-shrink: 0;
 	}
@@ -536,7 +541,7 @@
 		border: none;
 		background: none;
 		color: var(--dim2);
-		border-radius: 5px;
+		border-radius: var(--r-xs);
 		cursor: pointer;
 		flex-shrink: 0;
 		opacity: 0;
@@ -569,7 +574,7 @@
 		border: none;
 		background: none;
 		color: var(--dim2);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		cursor: pointer;
 		border-radius: var(--r-md);
 		transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
@@ -590,7 +595,7 @@
 		background: none;
 		color: var(--text);
 		cursor: pointer;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		/* dblclick renames — never select the title text instead */
 		user-select: none;
 		-webkit-user-select: none;
@@ -604,7 +609,7 @@
 		border-radius: var(--r-sm);
 		background: var(--surface);
 		color: var(--text);
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		font-family: var(--font-sans);
 		outline: none;
 	}
@@ -652,14 +657,14 @@
 		gap: 1px;
 	}
 	.agent-summary {
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
 	.agent-busy {
-		font-size: 10.5px;
+		font-size: var(--fs-2xs);
 		color: var(--accent-bright);
 		font-family: var(--font-mono);
 		flex-shrink: 0;
@@ -670,17 +675,17 @@
 		flex-shrink: 0;
 	}
 	.pending {
-		font-size: 10.5px;
+		font-size: var(--fs-2xs);
 		font-family: var(--font-mono);
 		padding: 0 6px;
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		background: color-mix(in oklab, var(--warn) 22%, transparent);
 		color: var(--warn);
 		flex-shrink: 0;
 	}
 	.agent-note {
 		padding: 4px 12px 8px;
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--dim2);
 	}
 	.sess-title {
@@ -694,12 +699,12 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 4px;
-		font-size: 10px;
+		font-size: var(--fs-2xs);
 		font-family: var(--font-mono);
 		color: var(--dim);
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		padding: 1px 7px 1px 5px;
 		flex-shrink: 0;
 	}
@@ -708,7 +713,7 @@
 		display: inline-flex;
 		color: var(--dim2);
 		opacity: 0;
-		border-radius: 4px;
+		border-radius: var(--r-xs);
 		transition: opacity var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
 	}
 	.sess:hover .sess-x,
@@ -732,7 +737,7 @@
 		border: none;
 		background: none;
 		color: var(--dim2);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		cursor: pointer;
 		transition: color var(--t-fast) var(--ease-out);
 	}

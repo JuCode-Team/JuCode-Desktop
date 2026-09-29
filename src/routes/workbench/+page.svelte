@@ -103,12 +103,12 @@
 	}
 	h1 {
 		margin: 0 0 4px;
-		font-family: var(--font-display);
-		font-size: 17px;
+		font-family: var(--font-serif);
+		font-size: var(--fs-lg);
 	}
 	header p {
 		margin: 0;
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		color: var(--dim);
 		max-width: 560px;
 	}
@@ -119,7 +119,7 @@
 	}
 	.actions button {
 		padding: 6px 12px;
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		border: 1px solid var(--border);
 		border-radius: var(--r-sm);
 		background: var(--surface);
@@ -144,14 +144,14 @@
 	}
 	.demo-pane p {
 		margin: 0;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		line-height: 1.55;
 		color: var(--dim);
 		max-width: 420px;
 	}
 	.demo-pane code {
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim2);
 	}
 </style>

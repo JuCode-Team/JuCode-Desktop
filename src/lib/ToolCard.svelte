@@ -207,7 +207,7 @@
 		max-width: 100%;
 		text-align: left;
 		padding: 2px 0;
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		background: none;
 		border: none;
 		color: var(--dim);
@@ -235,21 +235,21 @@
 	}
 	.target {
 		font-family: var(--font-mono);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
 	.exit {
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		flex-shrink: 0;
 	}
 	.exit.bad {
 		color: var(--err);
 	}
 	.fail {
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--err);
 		flex-shrink: 0;
 	}
@@ -262,11 +262,11 @@
 		padding-left: 12px;
 	}
 	.partial {
-		font-size: 10.5px;
+		font-size: var(--fs-2xs);
 		color: var(--warn);
 		background: color-mix(in oklab, var(--warn) 12%, transparent);
 		border: 1px solid color-mix(in oklab, var(--warn) 30%, transparent);
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		padding: 0 7px;
 		flex-shrink: 0;
 	}
@@ -274,7 +274,7 @@
 		margin: 0;
 		padding: 4px 0;
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		line-height: 1.45;
 		color: var(--dim);
 		max-height: 200px;
@@ -285,7 +285,7 @@
 	.cmd {
 		padding: 4px 0 0;
 		font-family: var(--font-mono);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--text);
 		white-space: pre-wrap;
 		word-break: break-word;
@@ -299,14 +299,14 @@
 	.err-text {
 		padding: 4px 0;
 		font-family: var(--font-mono);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--err);
 		white-space: pre-wrap;
 	}
 	.meta {
 		padding: 4px 0;
 		font-family: var(--font-mono);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
 	.img {

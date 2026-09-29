@@ -227,7 +227,7 @@
 	.overlay {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.55);
+		background: var(--scrim);
 		backdrop-filter: blur(6px);
 		display: flex;
 		align-items: center;
@@ -277,10 +277,10 @@
 		color: var(--text);
 	}
 	.brand {
-		font-family: var(--font-display);
-		font-weight: 800;
-		font-size: 18px;
-		letter-spacing: -0.01em;
+		font-family: var(--font-serif);
+		font-weight: 500;
+		font-size: var(--fs-xl);
+		letter-spacing: -0.005em;
 		padding: 22px 24px 0;
 	}
 	.steps {
@@ -304,7 +304,7 @@
 		height: 22px;
 		border-radius: 50%;
 		border: 1px solid var(--border);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		font-family: var(--font-mono);
 		flex-shrink: 0;
 	}
@@ -322,7 +322,7 @@
 		color: var(--ok);
 	}
 	.slabel {
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		font-weight: 500;
 	}
 	.bar {
@@ -340,13 +340,13 @@
 	}
 	h2 {
 		margin: 0;
-		font-family: var(--font-display);
-		font-size: 18px;
-		font-weight: 700;
+		font-family: var(--font-serif);
+		font-size: var(--fs-xl);
+		font-weight: 500;
 	}
 	.sub {
 		margin: 6px 0 16px;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		line-height: 1.55;
 		color: var(--dim);
 	}
@@ -379,12 +379,12 @@
 		min-width: 0;
 	}
 	.dep-name {
-		font-size: 13.5px;
+		font-size: var(--fs-sm);
 		font-weight: 600;
 	}
 	.dep-detail {
 		font-family: var(--font-mono);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--dim2);
 		white-space: nowrap;
 		overflow: hidden;
@@ -413,13 +413,13 @@
 		background: color-mix(in oklab, var(--warn) 10%, transparent);
 	}
 	.fix-head {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		font-weight: 600;
 		margin-bottom: 6px;
 	}
 	.fix-tip {
 		margin: 0 0 10px;
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		line-height: 1.55;
 		color: var(--dim);
 	}
@@ -427,7 +427,7 @@
 		font-family: var(--font-mono);
 		font-size: 0.9em;
 		background: var(--surface2);
-		border-radius: 4px;
+		border-radius: var(--r-xs);
 		padding: 1px 5px;
 	}
 	.fix-row {
@@ -437,7 +437,7 @@
 	}
 	.fix-msg {
 		margin: 4px 0 10px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		line-height: 1.5;
 		color: var(--ok);
 	}
@@ -454,7 +454,7 @@
 	.cmd code {
 		flex: 1;
 		font-family: var(--font-mono);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--text);
 		white-space: nowrap;
 		overflow-x: auto;
@@ -470,7 +470,7 @@
 		align-items: center;
 		gap: 12px;
 		color: var(--dim2);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		margin: 2px 0;
 	}
 	.or::before,
@@ -481,7 +481,7 @@
 		background: var(--hairline);
 	}
 	.hint {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 		line-height: 1.55;
 	}
@@ -490,11 +490,11 @@
 	}
 	.hint :global(kbd) {
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim);
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
-		border-radius: 5px;
+		border-radius: var(--r-xs);
 		padding: 1px 5px;
 	}
 	.loginok {
@@ -506,7 +506,7 @@
 		background: color-mix(in oklab, var(--ok) 12%, transparent);
 		border-radius: var(--r-md);
 		color: var(--text);
-		font-size: 13.5px;
+		font-size: var(--fs-sm);
 	}
 	.loginok-ico {
 		display: inline-flex;
@@ -527,11 +527,11 @@
 	}
 	.done :global(kbd) {
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim);
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
-		border-radius: 5px;
+		border-radius: var(--r-xs);
 		padding: 1px 5px;
 	}
 	.foot {

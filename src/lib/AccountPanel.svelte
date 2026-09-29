@@ -132,7 +132,7 @@
 		justify-content: center;
 		width: 26px;
 		height: 26px;
-		border-radius: 6px;
+		border-radius: var(--r-sm);
 		border: 1px solid var(--border);
 		background: var(--surface);
 		color: var(--dim);
@@ -150,7 +150,7 @@
 		}
 	}
 	.hint.err {
-		color: var(--danger, #e5534b);
+		color: var(--err);
 	}
 	.cards {
 		display: grid;
@@ -175,11 +175,11 @@
 		display: inline-flex;
 	}
 	.cl {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
 	.cv {
-		font-size: 15px;
+		font-size: var(--fs-lg);
 		font-weight: 600;
 		color: var(--text);
 	}
@@ -192,7 +192,7 @@
 	.bar-h {
 		display: flex;
 		justify-content: space-between;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 		margin-bottom: 4px;
 	}
@@ -201,7 +201,7 @@
 	}
 	.bar-track {
 		height: 6px;
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		background: var(--surface);
 		border: 1px solid var(--border);
 		overflow: hidden;
@@ -209,7 +209,7 @@
 	.bar-fill {
 		height: 100%;
 		background: var(--accent);
-		border-radius: 999px;
+		border-radius: var(--r-full);
 	}
 	.logs {
 		margin-top: 14px;
@@ -218,7 +218,7 @@
 		display: flex;
 		align-items: center;
 		gap: 6px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 		margin-bottom: 6px;
 	}
@@ -235,7 +235,7 @@
 		order: 0;
 		color: var(--text);
 		font-weight: 500;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
@@ -249,13 +249,13 @@
 	.lt {
 		order: 2;
 		color: var(--dim);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		font-variant-numeric: tabular-nums;
 	}
 	.ld {
 		order: 3;
 		color: var(--dim2);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		text-align: right;
 	}
 </style>

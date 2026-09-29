@@ -39,12 +39,12 @@
 		height: 1em;
 	}
 	.mark.ju {
-		font-family: var(--font-display);
-		font-weight: 800;
+		font-family: var(--font-sans);
+		font-weight: 600;
 		font-size: 0.62em !important;
 		line-height: 1;
 		letter-spacing: -0.02em;
-		border-radius: 4px;
+		border-radius: var(--r-xs);
 		background: var(--accent-soft);
 		color: var(--accent-bright);
 	}

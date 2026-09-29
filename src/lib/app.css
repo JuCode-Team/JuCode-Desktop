@@ -1,96 +1,121 @@
-/* JuCode design system — extracted tokens (dark default + light). */
+@import '@fontsource-variable/inter';
+@import '@fontsource/instrument-serif';
+@import '@fontsource-variable/geist-mono';
+
+/* JuCode design system — follows brand-docs/DESIGN-SPEC.md (cool neutral grays,
+   purple only for interactive and current state, serif titles, mono for technical
+   labels), tightened to desktop-app density. Dark is the default theme.
+
+   Type scale: every font-size uses a --fs-* step. Radius: every corner uses a
+   --r-* step. Colors come only from the tokens below. */
 :root {
-	--accent: #6d3bd7;
-	--accent-bright: color-mix(in oklab, var(--accent) 48%, #ffffff);
-	--accent-soft: color-mix(in oklab, var(--accent) 16%, transparent);
+	--accent: #8b5cf6;
+	--accent-bright: #a78bfa;
+	--accent-deep: #6d28d9;
+	--accent-soft: color-mix(in oklab, var(--accent) 14%, transparent);
 	--on-accent: #ffffff;
 
-	--bg: #131314;
-	--sidebar: #0e0e0f;
-	--panel: #1c1c1e;
-	--surface: rgba(255, 255, 255, 0.025);
-	--surface2: rgba(255, 255, 255, 0.05);
-	--hairline: rgba(255, 255, 255, 0.07);
-	--border: rgba(255, 255, 255, 0.1);
+	--bg: #0c0c0e;
+	--sidebar: #09090b;
+	--panel: #141417;
+	--surface: rgba(255, 255, 255, 0.028);
+	--surface2: rgba(255, 255, 255, 0.055);
+	--hairline: rgba(255, 255, 255, 0.065);
+	--border: #26262b;
+	--border-strong: #34343b;
 
-	--text: #e5e2e3;
-	--dim: #a3a0a8;
-	--dim2: #6f6c74;
+	--text: #ededef;
+	--dim: #a1a1aa;
+	--dim2: #71717a;
 
-	--ok: #4fdbc8;
-	--info: #89ceff;
-	--err: #ffb4ab;
-	--warn: #e8c15a;
+	--ok: #4fd1b5;
+	--info: #7cc4fa;
+	--err: #f7a39a;
+	--warn: #e5bd5c;
 
-	--font-display: 'Hanken Grotesk', system-ui, sans-serif;
-	--font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-	--font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+	--font-serif: 'Instrument Serif', 'Songti SC', 'Noto Serif SC', serif;
+	--font-display: var(--font-serif);
+	--font-sans: 'Inter Variable', Inter, -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif;
+	--font-mono: 'Geist Mono Variable', 'Geist Mono', 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 
-	--r-sm: 8px;
-	--r-md: 12px;
-	--r-lg: 16px;
-	--r-xl: 20px;
+	--fs-2xs: 11px; /* mono labels, badges */
+	--fs-xs: 12px; /* meta, secondary rows */
+	--fs-sm: 13px; /* UI controls, lists */
+	--fs-md: 14px; /* chat body, inputs */
+	--fs-lg: 16px; /* section titles */
+	--fs-xl: 20px; /* page titles (serif) */
+	--fs-2xl: 30px; /* welcome wordmark (serif) */
+
+	--r-xs: 4px;
+	--r-sm: 6px;
+	--r-md: 10px;
+	--r-lg: 14px;
+	--r-xl: 18px;
 	--r-full: 999px;
 
-	/* Motion system — one deceleration curve for everything that moves,
-	   a gentle spring for things that pop in, three durations. */
-	--ease-out: cubic-bezier(0.25, 1, 0.5, 1);
+	/* Motion: one deceleration curve for everything that moves, a gentle
+	   spring for things that pop in, three durations. */
+	--ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 	--ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
 	--ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1);
 	--t-fast: 0.14s;
 	--t-med: 0.22s;
 	--t-slow: 0.32s;
 
-	--shadow-pop: 0 12px 30px rgba(0, 0, 0, 0.32);
-	--shadow-modal: 0 24px 60px rgba(0, 0, 0, 0.5);
+	--shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--hairline);
+	--shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--hairline);
+	--scrim: rgba(0, 0, 0, 0.55);
 
 	/* Code editor syntax palette (CodeMirror highlight style reads these). */
-	--cm-keyword: #c792ea;
-	--cm-string: #a5d6a7;
-	--cm-number: #f2b36b;
-	--cm-comment: #6f6c74;
-	--cm-function: #82aaff;
-	--cm-type: #ffcb6b;
-	--cm-property: #89ceff;
-	--cm-tag: #f07178;
-	--cm-punct: #9d9aa3;
+	--cm-keyword: #c4a7ff;
+	--cm-string: #9fd8b0;
+	--cm-number: #f0b27a;
+	--cm-comment: #71717a;
+	--cm-function: #8fb6ff;
+	--cm-type: #f2cf7a;
+	--cm-property: #7cc4fa;
+	--cm-tag: #f38a95;
+	--cm-punct: #9d9da6;
 }
 
 [data-theme='light'] {
-	--accent: #6d3bd7;
-	--accent-bright: color-mix(in oklab, var(--accent) 32%, #000000);
-	--accent-soft: color-mix(in oklab, var(--accent) 12%, transparent);
+	--accent: #7c3aed;
+	--accent-bright: #6d28d9;
+	--accent-deep: #5b21b6;
+	--accent-soft: color-mix(in oklab, var(--accent) 10%, transparent);
 	--on-accent: #ffffff;
 
-	--bg: #f5f5f7;
-	--sidebar: #eceaf0;
+	--bg: #fafafa;
+	--sidebar: #f4f4f5;
 	--panel: #ffffff;
-	--surface: rgba(0, 0, 0, 0.02);
-	--surface2: rgba(0, 0, 0, 0.045);
-	--hairline: rgba(0, 0, 0, 0.07);
-	--border: rgba(0, 0, 0, 0.11);
+	--surface: rgba(24, 24, 27, 0.025);
+	--surface2: rgba(24, 24, 27, 0.05);
+	--hairline: rgba(24, 24, 27, 0.07);
+	--border: #e4e4e7;
+	--border-strong: #d4d4d8;
 
-	--text: #1b1a1f;
-	--dim: #6b6870;
-	--dim2: #9b98a1;
+	--text: #18181b;
+	--dim: #52525b;
+	--dim2: #8e8e97;
 
-	--ok: #0d9488;
+	--ok: #0f8f7a;
 	--info: #2563eb;
-	--err: #dc2626;
-	--warn: #b45309;
+	--err: #d33a2c;
+	--warn: #a75f06;
 
-	--shadow-pop: 0 10px 26px rgba(20, 16, 32, 0.12);
-	--shadow-modal: 0 20px 52px rgba(20, 16, 32, 0.18);
+	--shadow-pop: 0 10px 28px rgba(24, 24, 27, 0.1), 0 0 0 1px var(--hairline);
+	--shadow-modal: 0 20px 56px rgba(24, 24, 27, 0.16), 0 0 0 1px var(--hairline);
+	--scrim: rgba(24, 24, 27, 0.32);
 
 	--cm-keyword: #7c3aed;
 	--cm-string: #15803d;
 	--cm-number: #b45309;
-	--cm-comment: #9b98a1;
+	--cm-comment: #8e8e97;
 	--cm-function: #1d4ed8;
 	--cm-type: #a16207;
 	--cm-property: #2563eb;
 	--cm-tag: #be123c;
-	--cm-punct: #6b6870;
+	--cm-punct: #52525b;
 }
 
 /* ⌘K AI-edit pending pulse (CodeMirror line decoration, outside svelte scope). */
@@ -113,7 +138,7 @@
 :focus-visible {
 	outline: 2px solid var(--accent-bright);
 	outline-offset: 2px;
-	border-radius: 4px;
+	border-radius: var(--r-xs);
 }
 input:focus-visible,
 textarea:focus-visible {
@@ -128,7 +153,8 @@ body {
 	background: var(--bg);
 	color: var(--text);
 	font-family: var(--font-sans);
-	font-size: 14px;
+	font-size: var(--fs-md);
+	font-feature-settings: 'cv11', 'ss01';
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 }
@@ -154,7 +180,7 @@ body {
 }
 ::-webkit-scrollbar-thumb {
 	background: var(--border);
-	border-radius: 999px;
+	border-radius: var(--r-full);
 	border: 3px solid transparent;
 	background-clip: content-box;
 }

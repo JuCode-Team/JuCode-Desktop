@@ -127,6 +127,10 @@ export class ChatState {
 	 *  "Opus 4.8 (1M)"); falls back to `model` in the UI when empty. */
 	modelLabel = $state('');
 	cwd = $state('');
+	/** The engine runs this session as a chat (its directory is ~/.jucode/chats). */
+	get isChatMode() {
+		return /[\\/]\.jucode[\\/]chats([\\/]|$)/.test(this.cwd);
+	}
 	sessionId = $state('');
 	effort = $state('');
 	efforts = $state<string[]>([]);

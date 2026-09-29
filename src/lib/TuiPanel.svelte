@@ -14,7 +14,7 @@
 	import { ptyOpen, ptyWrite, ptyResize, ptyClose } from '$lib/protocol';
 	import type { BackendId } from '$lib/backends/types';
 	import { loadBackendSettings } from '$lib/backends/settings';
-	import { themeState } from '$lib/theme.svelte';
+	import { themeState, terminalPalette } from '$lib/theme.svelte';
 	import { t } from '$lib/i18n';
 
 	let {
@@ -57,9 +57,7 @@
 	}
 
 	function palette() {
-		return themeState.value === 'light'
-			? { background: '#ffffff', foreground: '#1b1a1f', cursor: '#6d3bd7', selectionBackground: 'rgba(109,59,215,0.18)' }
-			: { background: '#1c1c1e', foreground: '#e5e2e3', cursor: '#b6a0ef', selectionBackground: 'rgba(182,160,239,0.22)' };
+		return terminalPalette();
 	}
 
 	async function launch() {
@@ -239,7 +237,7 @@
 		justify-content: space-between;
 		gap: 10px;
 		padding: 4px 10px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 		background: var(--surface);
 		border-bottom: 1px solid var(--hairline);
@@ -277,14 +275,14 @@
 	}
 	.notice .title {
 		margin: 0;
-		font-size: 13.5px;
+		font-size: var(--fs-sm);
 		font-weight: 600;
 		color: var(--text);
 	}
 	.notice .hint {
 		margin: 0;
 		max-width: 340px;
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		line-height: 1.5;
 		color: var(--dim);
 	}
@@ -308,14 +306,14 @@
 		justify-content: center;
 		gap: 10px;
 		padding: 7px 12px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 		background: var(--surface);
 		border-top: 1px solid var(--hairline);
 	}
 	.btn {
 		padding: 5px 12px;
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		border: 1px solid var(--border);
 		border-radius: var(--r-sm);
 		background: var(--surface);
@@ -331,6 +329,6 @@
 	}
 	.btn.sm {
 		padding: 3px 10px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 	}
 </style>

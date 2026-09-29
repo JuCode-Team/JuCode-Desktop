@@ -179,28 +179,28 @@
 		align-items: center;
 		gap: 8px;
 		margin: 0 0 8px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		font-weight: 600;
 		color: var(--dim);
 		font-family: var(--font-mono);
 	}
 	.count {
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		padding: 0 6px;
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		background: var(--surface2);
 		color: var(--text);
 	}
 	.empty {
 		margin: 0;
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		color: var(--dim2);
 	}
 	.notice {
 		margin-top: 10px;
 		padding: 9px 11px;
 		border-radius: var(--r-md);
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		color: var(--warn);
 		background: color-mix(in oklab, var(--warn) 10%, transparent);
 	}
@@ -221,7 +221,7 @@
 		display: flex;
 		align-items: center;
 		gap: 7px;
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
 	.kind {
@@ -240,24 +240,24 @@
 		font-family: var(--font-mono);
 	}
 	.title {
-		font-size: 13.5px;
+		font-size: var(--fs-sm);
 		font-weight: 600;
 		color: var(--text);
 	}
 	.title code {
 		font-family: var(--font-mono);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		font-weight: 500;
 		color: var(--accent-bright);
 	}
 	.text {
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		color: var(--text);
 		line-height: 1.55;
 		white-space: pre-wrap;
 	}
 	.meta {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
 	.meta span {
@@ -270,7 +270,7 @@
 		background: var(--surface2);
 		color: var(--text);
 		font-family: var(--font-sans);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		padding: 7px 10px;
 		outline: none;
 		resize: vertical;
@@ -279,7 +279,7 @@
 		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
 	}
 	details {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
 	pre {
@@ -288,7 +288,7 @@
 		border-radius: var(--r-sm);
 		background: var(--surface2);
 		font-family: var(--font-mono);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		white-space: pre-wrap;
 		word-break: break-all;
 		color: var(--text);
@@ -300,7 +300,7 @@
 	}
 	.err {
 		font-family: var(--font-mono);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--err);
 	}
 	.working {
@@ -313,9 +313,9 @@
 		align-items: center;
 		gap: 6px;
 		padding: 3px 10px;
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		background: var(--surface2);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 	}
 	.dot {
 		width: 7px;

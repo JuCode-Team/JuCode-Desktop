@@ -87,7 +87,7 @@
 	.overlay {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.4);
+		background: var(--scrim);
 		display: flex;
 		align-items: flex-start;
 		justify-content: center;
@@ -122,7 +122,7 @@
 		border: none;
 		background: none;
 		color: var(--text);
-		font-size: 14px;
+		font-size: var(--fs-md);
 		outline: none;
 	}
 	.qlist {
@@ -142,7 +142,7 @@
 		background: none;
 		color: var(--dim);
 		cursor: pointer;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.qrow.sel {
 		background: var(--surface2);
@@ -151,12 +151,12 @@
 	.qname {
 		color: var(--text);
 		font-family: var(--font-mono);
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		flex-shrink: 0;
 	}
 	.qdir {
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim2);
 		white-space: nowrap;
 		overflow: hidden;
@@ -165,7 +165,7 @@
 	.qempty {
 		padding: 18px;
 		text-align: center;
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		color: var(--dim2);
 	}
 </style>

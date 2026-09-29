@@ -55,10 +55,10 @@
 		max-width: 100%;
 		padding: 4px 8px 4px 9px;
 		border: 1px solid var(--border);
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		background: var(--surface2);
 		color: var(--dim);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		font-family: var(--font-sans);
 		cursor: pointer;
 		transition:
@@ -77,15 +77,15 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		font-family: var(--font-mono);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 	}
 	.pcount {
 		flex-shrink: 0;
 		padding: 0 6px;
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		background: color-mix(in oklab, var(--dim) 22%, transparent);
 		color: var(--text);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		font-variant-numeric: tabular-nums;
 	}
 	.pchev {
@@ -113,7 +113,7 @@
 		border-bottom: 1px solid var(--hairline);
 	}
 	.ptitle {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		font-weight: 600;
 		color: var(--text);
 	}
@@ -138,7 +138,7 @@
 	.pitem {
 		padding: 5px 12px;
 		font-family: var(--font-mono);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		line-height: 1.5;
 		color: var(--dim);
 		white-space: pre-wrap;

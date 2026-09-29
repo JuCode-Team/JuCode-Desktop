@@ -97,7 +97,7 @@
 	.crumb {
 		flex: 1;
 		font-family: var(--font-mono);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 		white-space: nowrap;
 		overflow: hidden;
@@ -122,7 +122,7 @@
 		background: none;
 		color: var(--text);
 		cursor: pointer;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.ent:hover {
 		background: var(--surface2);
@@ -138,7 +138,7 @@
 	.empty,
 	.err {
 		padding: 16px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim2);
 		text-align: center;
 	}
@@ -149,7 +149,7 @@
 	.overlay {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.5);
+		background: var(--scrim);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -175,14 +175,14 @@
 	}
 	.sheet-name {
 		font-family: var(--font-mono);
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.code {
 		margin: 0;
 		padding: 14px;
 		overflow: auto;
 		font-family: var(--font-mono);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		line-height: 1.55;
 		white-space: pre;
 		color: var(--text);

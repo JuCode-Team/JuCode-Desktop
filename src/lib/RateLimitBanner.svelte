@@ -47,7 +47,7 @@
 		gap: 8px;
 		margin: 0 0 8px;
 		padding: 7px 10px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--warn);
 		background: color-mix(in oklab, var(--warn) 10%, var(--panel));
 		border: 1px solid color-mix(in oklab, var(--warn) 38%, transparent);

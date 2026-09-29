@@ -198,7 +198,7 @@
 		padding: 0 9px;
 		margin: 4px 0 0;
 		border-bottom: 2px solid transparent;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		font-weight: 600;
 		color: var(--dim);
 		cursor: pointer;
@@ -230,7 +230,7 @@
 		border-radius: var(--r-sm);
 		background: var(--surface);
 		color: var(--text);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		font-family: var(--font-sans);
 		outline: none;
 	}
@@ -238,7 +238,7 @@
 		display: inline-flex;
 		padding: 2px;
 		border: none;
-		border-radius: 4px;
+		border-radius: var(--r-xs);
 		background: none;
 		color: var(--dim2);
 		cursor: pointer;

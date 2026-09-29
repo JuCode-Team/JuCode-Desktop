@@ -119,7 +119,7 @@
 		display: flex;
 		align-items: center;
 		gap: 6px;
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		font-weight: 600;
 		letter-spacing: 0.05em;
 		text-transform: uppercase;
@@ -128,7 +128,7 @@
 	}
 	.hint {
 		margin: 0 0 10px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
 	.detail {
@@ -148,11 +148,11 @@
 		margin-bottom: 14px;
 		padding: 10px 12px;
 		border: 1px solid var(--border);
-		border-radius: 8px;
+		border-radius: var(--r-md);
 		background: var(--surface);
 	}
 	.wtitle {
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		font-weight: 600;
 		color: var(--dim2);
 		margin-bottom: 8px;
@@ -165,7 +165,7 @@
 		padding: 3px 0;
 	}
 	.wname {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--text);
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -173,7 +173,7 @@
 	}
 	.wbar {
 		height: 6px;
-		border-radius: 3px;
+		border-radius: var(--r-xs);
 		background: var(--surface2);
 		box-shadow: inset 0 0 0 1px var(--border);
 		overflow: hidden;
@@ -181,11 +181,11 @@
 	.wfill {
 		display: block;
 		height: 100%;
-		border-radius: 3px;
+		border-radius: var(--r-xs);
 		background: var(--accent);
 	}
 	.wval {
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim);
 		white-space: nowrap;
 	}
@@ -200,11 +200,11 @@
 	.dd {
 		color: var(--text);
 		font-weight: 500;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.dt {
 		color: var(--dim);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		text-align: right;
 	}
 	.dp {
@@ -218,10 +218,10 @@
 		align-items: center;
 		gap: 5px;
 		padding: 2px 8px;
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		border: 1px solid var(--border);
 		background: var(--surface);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim);
 	}
 	.chip b {

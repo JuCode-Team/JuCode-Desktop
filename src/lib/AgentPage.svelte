@@ -257,7 +257,7 @@
 	.overlay {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.55);
+		background: var(--scrim);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -286,18 +286,18 @@
 		align-items: center;
 		gap: 8px;
 		margin: 0;
-		font-family: var(--font-display);
-		font-size: 20px;
-		font-weight: 800;
+		font-family: var(--font-serif);
+		font-size: var(--fs-xl);
+		font-weight: 500;
 	}
 	.head p {
 		margin: 4px 0 0;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
 	code {
 		font-family: var(--font-mono);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 	}
 	.body {
 		flex: 1;
@@ -314,20 +314,20 @@
 	}
 	h3 {
 		margin: 0 0 8px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		font-weight: 600;
 		color: var(--dim);
 		font-family: var(--font-mono);
 	}
 	.hint {
 		margin: 0 0 8px;
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--dim2);
 		line-height: 1.5;
 	}
 	.section-head.sub {
 		margin-top: 12px;
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 	}
 	.item {
 		display: flex;
@@ -348,7 +348,7 @@
 		background: var(--surface2);
 		color: var(--text);
 		font-family: var(--font-mono);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		padding: 6px 9px;
 		outline: none;
 	}
@@ -357,11 +357,11 @@
 		align-items: center;
 		justify-content: space-between;
 		padding: 6px 0;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.empty {
 		margin: 0;
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		color: var(--dim2);
 	}
 	.session {
@@ -382,11 +382,11 @@
 	}
 	.when {
 		flex: 1;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
 	.open {
-		font-size: 10.5px;
+		font-size: var(--fs-2xs);
 		font-family: var(--font-mono);
 		color: var(--accent-bright);
 	}
@@ -395,7 +395,7 @@
 	}
 	.file-name {
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim2);
 		margin-bottom: 4px;
 	}
@@ -404,7 +404,7 @@
 		border: 1px solid var(--hairline);
 		border-radius: var(--r-md);
 		background: var(--surface);
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		line-height: 1.55;
 		white-space: pre-wrap;
 		color: var(--text);
@@ -425,7 +425,7 @@
 	.err {
 		margin-top: 12px;
 		font-family: var(--font-mono);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--err);
 	}
 	.loading {

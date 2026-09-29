@@ -57,7 +57,7 @@
 		background: none;
 		color: var(--text);
 		cursor: pointer;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		transition: background var(--t-fast) var(--ease-out);
 	}
 	.slash-item.sel {
@@ -69,24 +69,24 @@
 	}
 	.slash-args {
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim2);
 		flex-shrink: 0;
 	}
 	.slash-desc {
 		flex: 1;
 		color: var(--dim);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
 	.slash-marker {
 		flex-shrink: 0;
-		font-size: 10px;
+		font-size: var(--fs-2xs);
 		color: var(--accent-bright);
 		border: 1px solid color-mix(in oklab, var(--accent) 40%, transparent);
-		border-radius: 4px;
+		border-radius: var(--r-xs);
 		padding: 1px 5px;
 	}
 </style>

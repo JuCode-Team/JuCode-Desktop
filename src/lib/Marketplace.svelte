@@ -150,7 +150,7 @@
 	.overlay {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.55);
+		background: var(--scrim);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -176,13 +176,13 @@
 	}
 	h2 {
 		margin: 0;
-		font-family: var(--font-display);
-		font-size: 20px;
-		font-weight: 800;
+		font-family: var(--font-serif);
+		font-size: var(--fs-xl);
+		font-weight: 500;
 	}
 	.head p {
 		margin: 4px 0 0;
-		font-size: 13px;
+		font-size: var(--fs-sm);
 		color: var(--dim);
 	}
 	.toolbar {
@@ -208,7 +208,7 @@
 		background: none;
 		color: var(--text);
 		font-family: var(--font-sans);
-		font-size: 14px;
+		font-size: var(--fs-md);
 		padding: 9px 0;
 	}
 	.search input::placeholder {
@@ -233,14 +233,14 @@
 		border-radius: var(--r-md);
 		background: var(--surface2);
 		color: var(--dim);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		line-height: 1.45;
 	}
 	.notice {
 		margin: 0 0 8px;
 		padding: 8px 10px;
 		border-radius: var(--r-md);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 	}
 	.notice.warn {
 		color: var(--warn);
@@ -275,7 +275,7 @@
 	}
 	.name {
 		font-weight: 600;
-		font-size: 14px;
+		font-size: var(--fs-md);
 		flex: 1;
 		min-width: 0;
 		white-space: nowrap;
@@ -283,19 +283,19 @@
 		text-overflow: ellipsis;
 	}
 	.badge {
-		font-size: 10px;
+		font-size: var(--fs-2xs);
 		color: var(--accent-bright);
 		border: 1px solid color-mix(in oklab, var(--accent) 40%, transparent);
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		padding: 1px 8px;
 	}
 	.source {
-		font-size: 10px;
+		font-size: var(--fs-2xs);
 		color: var(--dim2);
 	}
 	.desc {
 		margin: 8px 0 10px;
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		line-height: 1.5;
 		color: var(--dim);
 		flex: 1;
@@ -308,7 +308,7 @@
 	.restricted {
 		margin: -2px 0 10px;
 		color: var(--warn);
-		font-size: 10.5px;
+		font-size: var(--fs-2xs);
 		line-height: 1.35;
 	}
 	.card-foot {
@@ -324,11 +324,11 @@
 		overflow: hidden;
 	}
 	.t {
-		font-size: 10px;
+		font-size: var(--fs-2xs);
 		font-family: var(--font-mono);
 		color: var(--dim2);
 		background: var(--surface2);
-		border-radius: 4px;
+		border-radius: var(--r-xs);
 		padding: 1px 6px;
 	}
 	.state {
@@ -338,7 +338,7 @@
 		gap: 8px;
 		padding: 50px 20px;
 		color: var(--dim);
-		font-size: 14px;
+		font-size: var(--fs-md);
 		text-align: center;
 	}
 	.install-dir {
@@ -347,7 +347,7 @@
 		border-top: 1px solid var(--hairline);
 		color: var(--dim2);
 		font-family: var(--font-mono);
-		font-size: 10.5px;
+		font-size: var(--fs-2xs);
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;

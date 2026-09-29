@@ -125,7 +125,7 @@
 		display: flex;
 		align-items: center;
 		gap: 6px;
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
 		color: var(--dim2);
@@ -135,16 +135,16 @@
 	.badge {
 		color: var(--dim2);
 		background: var(--surface2);
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		padding: 0 6px;
-		font-size: 10px;
+		font-size: var(--fs-2xs);
 	}
 	.row {
 		display: flex;
 		align-items: baseline;
 		gap: 10px;
 		padding: 3px 4px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 	}
 	.k {
 		color: var(--dim);
@@ -154,7 +154,7 @@
 	.v {
 		color: var(--text);
 		font-family: var(--font-mono);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -163,14 +163,14 @@
 		text-align: right;
 	}
 	.empty {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim2);
 		font-family: var(--font-mono);
 		padding: 4px;
 	}
 	.tline {
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim);
 		padding: 2px 4px;
 		border-left: 2px solid var(--hairline);
@@ -180,7 +180,7 @@
 	}
 	.fline {
 		font-family: var(--font-mono);
-		font-size: 10.5px;
+		font-size: var(--fs-2xs);
 		color: var(--dim2);
 		padding: 1px 4px;
 		white-space: pre-wrap;
@@ -206,7 +206,7 @@
 		align-items: center;
 		gap: 5px;
 		padding: 4px 9px;
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 		background: none;
 		border: 1px solid var(--hairline);

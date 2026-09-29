@@ -61,16 +61,21 @@
 	.md :global(h2),
 	.md :global(h3),
 	.md :global(h4) {
-		font-family: var(--font-display);
-		font-weight: 700;
+		font-weight: 600;
 		line-height: 1.3;
 		margin: 18px 0 8px;
 	}
+	.md :global(h1),
+	.md :global(h2) {
+		font-family: var(--font-serif);
+		font-weight: 500;
+		letter-spacing: -0.005em;
+	}
 	.md :global(h1) {
-		font-size: 1.4em;
+		font-size: 1.55em;
 	}
 	.md :global(h2) {
-		font-size: 1.25em;
+		font-size: 1.35em;
 	}
 	.md :global(h3) {
 		font-size: 1.1em;
@@ -109,7 +114,7 @@
 		font-size: 0.88em;
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
-		border-radius: 5px;
+		border-radius: var(--r-xs);
 		padding: 1px 5px;
 	}
 	.md :global(pre) {
@@ -124,7 +129,7 @@
 		background: none;
 		border: none;
 		padding: 0;
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		line-height: 1.55;
 	}
 	.md :global(.codeblock) {
@@ -150,17 +155,17 @@
 	}
 	.md :global(.cb-lang) {
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--dim2);
 	}
 	.md :global(.cb-copy) {
 		border: none;
 		background: none;
 		color: var(--dim);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		cursor: pointer;
 		padding: 2px 7px;
-		border-radius: 6px;
+		border-radius: var(--r-sm);
 		transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
 	}
 	.md :global(.cb-copy:hover) {

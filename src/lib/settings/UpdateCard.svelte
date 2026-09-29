@@ -56,7 +56,7 @@
 		display: flex;
 		align-items: center;
 		gap: 6px;
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		font-weight: 600;
 		letter-spacing: 0.05em;
 		text-transform: uppercase;
@@ -82,10 +82,10 @@
 		min-width: 0;
 	}
 	.title {
-		font-size: 13px;
+		font-size: var(--fs-sm);
 	}
 	.ver {
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
 	.mono {
@@ -96,7 +96,7 @@
 		align-items: center;
 		gap: 5px;
 		margin: 10px 0 0;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
 	.status.ok {
@@ -112,13 +112,13 @@
 	.bar {
 		margin-top: 10px;
 		height: 5px;
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		background: var(--surface2);
 		overflow: hidden;
 	}
 	.fill {
 		height: 100%;
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		background: var(--accent-bright);
 		transition: width var(--t-med) var(--ease-out);
 	}

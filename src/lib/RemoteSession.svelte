@@ -191,7 +191,7 @@
 	.title {
 		flex: 1;
 		font-weight: 600;
-		font-size: 15px;
+		font-size: var(--fs-lg);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -220,7 +220,7 @@
 		justify-content: space-between;
 		gap: 8px;
 		padding: 8px 12px;
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		color: var(--warn);
 		background: color-mix(in oklab, var(--warn) 10%, transparent);
 	}
@@ -242,7 +242,7 @@
 		background: var(--surface2);
 		color: var(--text);
 		/* 16px keeps iOS from zooming into the field. */
-		font-size: 16px;
+		font-size: var(--fs-lg);
 		font-family: var(--font-sans);
 		resize: none;
 		outline: none;

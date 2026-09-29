@@ -208,13 +208,13 @@
 	}
 	h3 {
 		margin: 0;
-		font-family: var(--font-display);
-		font-size: 15px;
-		font-weight: 700;
+		font-family: var(--font-sans);
+		font-size: var(--fs-lg);
+		font-weight: 600;
 	}
 	.sub {
 		margin: 4px 0 0;
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 		line-height: 1.5;
 		color: var(--dim);
 	}
@@ -251,12 +251,12 @@
 		min-width: 0;
 	}
 	.dep-name {
-		font-size: 13.5px;
+		font-size: var(--fs-sm);
 		font-weight: 600;
 	}
 	.dep-detail {
 		font-family: var(--font-mono);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 		color: var(--dim2);
 		white-space: nowrap;
 		overflow: hidden;
@@ -269,7 +269,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 5px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--dim2);
 	}
 	.badge.ok {
@@ -277,7 +277,7 @@
 	}
 	.badge.warn {
 		color: var(--warn);
-		font-size: 11.5px;
+		font-size: var(--fs-xs);
 	}
 	.cmdrow {
 		margin: -2px 0 2px;
@@ -285,7 +285,7 @@
 	}
 	.hint {
 		margin: 0 0 6px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		line-height: 1.5;
 		color: var(--dim);
 	}
@@ -301,7 +301,7 @@
 	.cmd code {
 		flex: 1;
 		font-family: var(--font-mono);
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		color: var(--text);
 		white-space: nowrap;
 		overflow-x: auto;
@@ -314,7 +314,7 @@
 	}
 	.log-head {
 		padding: 6px 10px;
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		font-weight: 600;
 		color: var(--dim);
 		border-bottom: 1px solid var(--hairline);
@@ -325,7 +325,7 @@
 		max-height: 180px;
 		overflow: auto;
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		line-height: 1.5;
 		color: var(--dim);
 		white-space: pre-wrap;
@@ -333,7 +333,7 @@
 	}
 	.donemsg {
 		margin: 2px 2px 4px;
-		font-size: 12px;
+		font-size: var(--fs-xs);
 		line-height: 1.5;
 	}
 	.donemsg.ok {

@@ -38,7 +38,7 @@
 		gap: 9px;
 		padding: 4px 2px;
 		color: var(--dim);
-		font-size: 12.5px;
+		font-size: var(--fs-sm);
 	}
 	.glyph {
 		display: inline-flex;
@@ -53,10 +53,10 @@
 	}
 	.ctok {
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: var(--fs-2xs);
 		color: var(--accent-bright);
 		background: var(--accent-soft);
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		padding: 1px 8px;
 	}
 
@@ -140,7 +140,7 @@
 	.scan {
 		width: 18px;
 		height: 4px;
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		background: var(--surface2);
 		overflow: hidden;
 		position: relative;
@@ -152,7 +152,7 @@
 		left: -40%;
 		width: 40%;
 		height: 100%;
-		border-radius: 999px;
+		border-radius: var(--r-full);
 		background: var(--accent-bright);
 		animation: scan 1.1s ease-in-out infinite;
 	}
@@ -172,7 +172,7 @@
 	.compress i {
 		width: 5px;
 		height: 11px;
-		border-radius: 2px;
+		border-radius: var(--r-xs);
 		background: var(--accent-bright);
 	}
 	.compress i:first-child {
