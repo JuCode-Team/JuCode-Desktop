@@ -1,5 +1,5 @@
 import { ChatState } from './chat.svelte';
-import { createSession, closeSession, hostSession, projectRoot, writeConfig, git, claudeSessionTranscript, switchToolProfile } from './protocol';
+import { createSession, closeSession, hostSession, projectRoot, chatsDir, writeConfig, git, claudeSessionTranscript, switchToolProfile } from './protocol';
 import { canHandOffToTui, isValidResumeSessionId } from './tuiHandoff';
 import { createAdapter, normalizeBackendId, type BackendId } from './backends';
 import { dispatch, ioFor, registerAdapter, unregisterAdapter } from './backends/router';
@@ -46,6 +46,8 @@ export interface SavedProject {
 	lastBackend?: string;
 	/** lastBackend 为 'acp' 时：上次选择的 ACP agent。 */
 	lastAcpAgent?: { id: string; name: string };
+	/** 对话分组（见 Project.chats）。 */
+	chats?: boolean;
 }
 
 /** New JuCode sessions run in the daemon when the setting is on. */
@@ -145,12 +147,17 @@ export class SessionStore {
 		// ACP sessions always pass their registry agent id (initial spawn and
 		// every crash auto-restart alike) — the Rust side looks the command up.
 		const agentOpt = s.backendId === 'acp' && s.acpAgent ? { agent: s.acpAgent.id } : undefined;
+		// Sessions of the chats group run as chats (engine-side chat prompt).
+		const chat = this.projects.some((p) => p.chats && p.sessions.some((x) => x.id === s.id));
+		const chatOpt = chat ? { chat: true } : undefined;
 		const opts =
-			agentOpt || extraOpts ? { ...(base ?? {}), ...(agentOpt ?? {}), ...(extraOpts ?? {}) } : base;
+			agentOpt || extraOpts || chatOpt
+				? { ...(base ?? {}), ...(agentOpt ?? {}), ...(chatOpt ?? {}), ...(extraOpts ?? {}) }
+				: base;
 		// A hosted session reopens its daemon session when it has one (restart,
 		// restore, provider switch) and creates one otherwise.
 		const spawned = s.hosted
-			? hostSession(s.id, cwd ?? '', resume ?? (s.chat.sessionId || undefined), agent)
+			? hostSession(s.id, cwd ?? '', resume ?? (s.chat.sessionId || undefined), agent, chat)
 			: s.backendId === 'jucode' && !opts
 				? createSession(s.id, cwd)
 				: createSession(s.id, cwd, s.backendId, opts ?? {});
@@ -179,7 +186,8 @@ export class SessionStore {
 		backend?: BackendId,
 		acpAgent?: { id: string; name: string }
 	) {
-		let backendId = backend ?? defaultBackendFor(project.lastBackend);
+		// Only the jucode engine has a chat mode.
+		let backendId = project.chats ? 'jucode' : (backend ?? defaultBackendFor(project.lastBackend));
 		let agent = backendId === 'acp' ? (acpAgent ?? project.lastAcpAgent) : undefined;
 		if (backendId === 'acp' && !agent) {
 			backendId = 'jucode'; // no agent to launch — never spawn a bare 'acp'
@@ -389,6 +397,16 @@ export class SessionStore {
 				s.chat.handle({ type: 'transcript', items: rows });
 			})
 			.catch(() => {});
+	}
+
+	/** Start a chat (conversation and research, no project) in the chats
+	 *  group, which is created first in the list on first use. */
+	async newChat() {
+		if (!this.projects.some((p) => p.chats)) {
+			const path = await chatsDir();
+			this.projects.unshift({ id: this.uid(), name: t('shell.chats'), path, sessions: [], chats: true });
+		}
+		return this.addSession(this.projects.find((p) => p.chats)!);
 	}
 
 	/** Create a project from a directory path and seed its first session.
@@ -758,6 +776,7 @@ export class SessionStore {
 			name: p.name,
 			path: p.path,
 			...(p.worktree ? { worktree: p.worktree } : {}),
+			...(p.chats ? { chats: true } : {}),
 			...(p.lastBackend && p.lastBackend !== 'jucode' ? { lastBackend: p.lastBackend } : {}),
 			...(p.lastBackend === 'acp' && p.lastAcpAgent ? { lastAcpAgent: p.lastAcpAgent } : {}),
 			tabs: p.sessions
@@ -791,6 +810,7 @@ export class SessionStore {
 		if (saved.length) {
 			for (const p of saved) {
 				const proj: Project = { id: p.id, name: p.name, path: p.path, sessions: [] };
+				if (p.chats === true) proj.chats = true;
 				if (p.lastBackend) proj.lastBackend = normalizeBackendId(p.lastBackend);
 				if (
 					proj.lastBackend === 'acp' &&

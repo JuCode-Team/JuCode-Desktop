@@ -17,14 +17,15 @@ export function setDaemonEndpoint(source: () => Promise<DaemonEndpoint>) {
 export const daemon = new DaemonClient(() => daemonEndpoint());
 
 /** Starts (or, with `resume`, reopens) a session hosted by the daemon;
- *  `agent` starts it as that long-lived agent. */
+ *  `agent` starts it as that long-lived agent, `chat` as a chat. */
 export function hostSession(
 	session: string,
 	cwd: string,
 	resume?: string,
-	agent?: string
+	agent?: string,
+	chat = false
 ): Promise<void> {
-	return daemon.open(session, cwd, resume, agent);
+	return daemon.open(session, cwd, resume, agent, chat);
 }
 
 // Commands the GUI sends to a session's `jucode serve` over stdin.
@@ -256,6 +257,11 @@ export async function fetchUsageLogs(): Promise<UsageLogRow[]> {
 // IDE features (Tauri layer, operating on the project working directory).
 export function projectRoot(): Promise<string> {
 	return invoke('project_root');
+}
+
+/** `~/.jucode/chats`, where chat sessions run (created when missing). */
+export function chatsDir(): Promise<string> {
+	return invoke('chats_dir');
 }
 export interface FsEntry {
 	name: string;

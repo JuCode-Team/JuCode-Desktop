@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { Plus, History, X, LoaderCircle, GitBranch, GitBranchPlus, Archive, ArchiveRestore, ChevronRight, Search, Settings, Inbox, IdCard } from 'lucide-svelte';
+	import { Plus, History, X, LoaderCircle, GitBranch, GitBranchPlus, Archive, ArchiveRestore, ChevronRight, Search, Settings, Inbox, IdCard, MessageSquarePlus } from 'lucide-svelte';
 	import { t } from '$lib/i18n';
 	import { BACKEND_LABELS } from '$lib/backends';
 	import BackendIcon from '$lib/BackendIcon.svelte';
@@ -19,6 +19,7 @@
 		onSelect,
 		onNewProject,
 		onNewSession,
+		onNewChat,
 		onNewTask,
 		onCloseSession,
 		onCloseProject,
@@ -47,6 +48,7 @@
 		onSelect: (id: string) => void;
 		onNewProject: () => void;
 		onNewSession: (p: Project) => void;
+		onNewChat: () => void;
 		onNewTask: (p: Project) => void;
 		onCloseSession: (id: string) => void;
 		onCloseProject: (p: Project) => void;
@@ -132,6 +134,7 @@
 
 	<div class="nav">
 		<button class="navcard" onclick={newSessionHere}><Plus size={14} /><span>{t('shell.agentSession')}</span></button>
+		<button class="navcard" onclick={onNewChat}><MessageSquarePlus size={14} /><span>{t('shell.newChat')}</span></button>
 	</div>
 
 	<div class="sess-head">
@@ -272,10 +275,10 @@
 				{:else}
 					<span class="group-count">{p.sessions.length}</span>
 					<button class="group-add" onclick={() => onHistory(p)} aria-label="history" title={t('shell.history')}><History size={13} /></button>
-					{#if !p.worktree}
+					{#if !p.worktree && !p.chats}
 						<button class="group-add no-auto" onclick={() => onNewTask(p)} aria-label="new parallel task" title={t('shell.newTask')}><GitBranchPlus size={13} /></button>
 					{/if}
-					<button class="group-add no-auto" onclick={() => onNewSession(p)} aria-label="new session" title={t('shell.newSessionInProject')}><Plus size={13} /></button>
+					<button class="group-add no-auto" onclick={() => onNewSession(p)} aria-label="new session" title={p.chats ? t('shell.newChat') : t('shell.newSessionInProject')}><Plus size={13} /></button>
 				{/if}
 				{#if projects.length > 1 || p.stale}
 					<button class="group-x" class:always={p.stale} onclick={() => onCloseProject(p)} aria-label="close project" title={p.stale ? t('shell.task.staleRemove') : t('shell.closeProject')}><X size={12} /></button>

@@ -90,6 +90,9 @@ const shell = {
 		hintImage: '拖入 / 粘贴图片',
 		noChat: '没有打开的对话',
 		startFromProject: '选择项目，开始对话',
+		startChat: '开始对话',
+		chats: '对话',
+		newChat: '新对话',
 
 		// engine
 		engineDown: '引擎已停止运行',
@@ -439,6 +442,9 @@ const shell = {
 		hintImage: 'Drop / paste images',
 		noChat: 'No open conversation',
 		startFromProject: 'Pick a project to start',
+		startChat: 'Start a chat',
+		chats: 'Chats',
+		newChat: 'New chat',
 
 		// engine
 		engineDown: 'Engine has stopped',

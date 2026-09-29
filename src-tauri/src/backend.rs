@@ -60,7 +60,7 @@ impl BackendKind {
     /// `backend_opts` keys accepted for this backend. Anything else is rejected.
     fn allowed_opts(self) -> &'static [&'static str] {
         match self {
-            Self::Jucode => &["bin_override", "use_shell_env", "env"],
+            Self::Jucode => &["bin_override", "use_shell_env", "env", "chat"],
             // Codex app-server takes per-conversation config over JSON-RPC,
             // not argv — only the binary path is configurable at spawn time.
             Self::Codex => &["bin_override", "use_shell_env", "env"],
@@ -100,6 +100,8 @@ pub struct BackendOpts {
     pub model: Option<String>,
     /// acp: registry entry id of the agent to launch (`acp_registry.rs`).
     pub agent: Option<String>,
+    /// jucode: `serve --chat`, a chat session in `~/.jucode/chats`.
+    pub chat: bool,
     /// Build the child env from the login-shell snapshot (default true; see
     /// `shell_env`). Off = inherit the GUI environment as before.
     pub use_shell_env: bool,
@@ -117,6 +119,7 @@ impl Default for BackendOpts {
             session_id: None,
             model: None,
             agent: None,
+            chat: false,
             use_shell_env: true,
             env: Vec::new(),
         }
@@ -215,6 +218,12 @@ pub fn validate_opts(
                     .ok_or_else(|| "use_shell_env must be a boolean".to_string())?;
                 continue;
             }
+            "chat" => {
+                opts.chat = value
+                    .as_bool()
+                    .ok_or_else(|| "chat must be a boolean".to_string())?;
+                continue;
+            }
             "env" => {
                 let obj = value
                     .as_object()
@@ -303,6 +312,7 @@ pub fn validate_opts(
 /// each value is one argv entry, exactly as validated.
 pub fn build_args(kind: BackendKind, opts: &BackendOpts) -> Vec<String> {
     match kind {
+        BackendKind::Jucode if opts.chat => vec!["serve".to_string(), "--chat".to_string()],
         BackendKind::Jucode => vec!["serve".to_string()],
         BackendKind::Codex => vec!["app-server".to_string()],
         // ACP argv comes from the registry entry, not from options —
@@ -646,6 +656,29 @@ mod tests {
             build_args(BackendKind::Codex, &BackendOpts::default()),
             vec!["app-server"]
         );
+    }
+
+    #[test]
+    fn jucode_chat_option_starts_a_chat_session() {
+        let opts = validate_opts(
+            BackendKind::Jucode,
+            Some(&serde_json::json!({ "chat": true })),
+        )
+        .unwrap();
+        assert_eq!(
+            build_args(BackendKind::Jucode, &opts),
+            vec!["serve", "--chat"]
+        );
+        assert!(validate_opts(
+            BackendKind::Jucode,
+            Some(&serde_json::json!({ "chat": "yes" }))
+        )
+        .is_err());
+        assert!(validate_opts(
+            BackendKind::Codex,
+            Some(&serde_json::json!({ "chat": true }))
+        )
+        .is_err());
     }
 
     #[test]

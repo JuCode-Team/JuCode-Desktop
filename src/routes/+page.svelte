@@ -881,6 +881,7 @@
 		onNewProject={addProject}
 		onNewTask={newTask}
 		onNewSession={(p) => store.addSession(p)}
+		onNewChat={() => store.newChat()}
 		onCloseSession={(id) => store.removeSession(id)}
 		onCloseProject={removeProject}
 		onArchiveSession={(id) => store.archiveSession(id)}
@@ -919,7 +920,10 @@
 				<div class="nochat" data-tauri-drag-region>
 					<span class="welcome-mark">JuCode</span>
 					<p class="welcome-tip">{t('shell.noChat')}</p>
-					<Button variant="primary" size="sm" onclick={addProject}>{t('shell.startFromProject')}</Button>
+					<div class="welcome-actions">
+						<Button variant="primary" size="sm" onclick={addProject}>{t('shell.startFromProject')}</Button>
+						<Button size="sm" onclick={() => store.newChat()}>{t('shell.startChat')}</Button>
+					</div>
 				</div>
 			{:else}
 				<Mosaic
@@ -1212,6 +1216,10 @@
 		margin: 0;
 		font-size: 14px;
 		color: var(--dim);
+	}
+	.welcome-actions {
+		display: flex;
+		gap: 8px;
 	}
 
 	/* ---------- sidebar resizer ---------- */

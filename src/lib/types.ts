@@ -58,4 +58,6 @@ export interface Project {
 	lastBackend?: BackendId;
 	/** lastBackend 为 'acp' 时：上次选择的 ACP agent（注册表 id + 名称）。 */
 	lastAcpAgent?: { id: string; name: string };
+	/** 对话分组：path 为 ~/.jucode/chats，会话以对话模式（非编程）运行，只用 jucode 引擎。 */
+	chats?: boolean;
 }

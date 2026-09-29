@@ -8,6 +8,7 @@ vi.mock('./protocol', () => ({
 	sendOp: vi.fn(() => Promise.resolve()),
 	sendLine: vi.fn(() => Promise.resolve()),
 	projectRoot: vi.fn(() => Promise.resolve('/tmp/demo')),
+	chatsDir: vi.fn(() => Promise.resolve('/home/u/.jucode/chats')),
 	writeConfig: vi.fn(() => Promise.resolve()),
 	git: vi.fn(() => Promise.resolve('')),
 	claudeSessionTranscript: vi.fn(() => Promise.resolve([]))
@@ -376,6 +377,35 @@ describe('SessionStore lifecycle', () => {
 	});
 });
 
+describe('SessionStore chats', () => {
+	it('newChat creates the chats group first and spawns a chat session', async () => {
+		const store = new SessionStore();
+		store.projects.push(proj());
+		const id = await store.newChat();
+		const chats = store.projects[0];
+		expect(chats.chats).toBe(true);
+		expect(chats.path).toBe('/home/u/.jucode/chats');
+		expect(chats.sessions.map((s) => s.id)).toEqual([id]);
+		expect(createSession).toHaveBeenCalledWith(id, chats.path, 'jucode', expect.objectContaining({ chat: true }));
+		// A second chat joins the same group.
+		await store.newChat();
+		expect(store.projects.filter((p) => p.chats)).toHaveLength(1);
+		expect(store.projects[0].sessions).toHaveLength(2);
+	});
+
+	it('chat sessions use the jucode engine and survive serialize/restore as chats', async () => {
+		const store = new SessionStore();
+		await store.newChat();
+		const saved = store.serialize();
+		expect(saved[0].chats).toBe(true);
+		const again = new SessionStore();
+		vi.mocked(createSession).mockClear();
+		await again.restore(saved);
+		expect(again.projects[0].chats).toBe(true);
+		expect(createSession).toHaveBeenCalledWith(expect.any(String), '/home/u/.jucode/chats', 'jucode', expect.objectContaining({ chat: true }));
+	});
+});
+
 describe('SessionStore GUI ⇄ TUI handoff', () => {
 	const SID = '0f3d7a1c-9e2b-4b7e-9d4d-2a1b3c4d5e6f';
 
@@ -670,7 +700,7 @@ describe('sessions hosted by jucode daemon', () => {
 		store.projects.push(p);
 		const id = store.addSession(p);
 		expect(p.sessions[0].hosted).toBe(true);
-		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined, undefined);
+		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined, undefined, false);
 		expect(createSession).not.toHaveBeenCalled();
 		// Other engines never go through the daemon.
 		store.addSession(p, undefined, 'codex');
@@ -691,7 +721,7 @@ describe('sessions hosted by jucode daemon', () => {
 		vi.mocked(hostSession).mockClear();
 		store.handleExit(id);
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(id, p.path, 'daemon-sess', undefined);
+		expect(hostSession).toHaveBeenCalledWith(id, p.path, 'daemon-sess', undefined, false);
 		expect(sendLine).not.toHaveBeenCalledWith(id, expect.stringContaining('/resume'));
 		vi.unstubAllGlobals();
 	});
@@ -713,7 +743,7 @@ describe('sessions hosted by jucode daemon', () => {
 		await restored.restore(saved);
 		const s = restored.projects[0].sessions[0];
 		expect(s.hosted).toBe(true);
-		expect(hostSession).toHaveBeenCalledWith(s.id, p.path, 'daemon-sess', undefined);
+		expect(hostSession).toHaveBeenCalledWith(s.id, p.path, 'daemon-sess', undefined, false);
 		expect(sendLine).not.toHaveBeenCalledWith(s.id, expect.stringContaining('/resume'));
 		vi.unstubAllGlobals();
 	});
@@ -729,7 +759,7 @@ describe('agent sessions', () => {
 		expect(s.hosted).toBe(true);
 		expect(s.chat.title).toBe('Ops');
 		expect(store.activeId).toBe(id);
-		expect(hostSession).toHaveBeenCalledWith(id, '/srv/ops', undefined, 'ops');
+		expect(hostSession).toHaveBeenCalledWith(id, '/srv/ops', undefined, 'ops', false);
 	});
 
 	it("reuses the open tab of the agent's session, or reopens it by id", async () => {
@@ -738,7 +768,7 @@ describe('agent sessions', () => {
 		p.path = '/srv/ops';
 		store.projects.push(p);
 		const first = store.openAgentSession({ id: 'ops', name: 'Ops', cwd: '/srv/ops' }, 'daemon-1');
-		expect(hostSession).toHaveBeenCalledWith(first, '/srv/ops', 'daemon-1', undefined);
+		expect(hostSession).toHaveBeenCalledWith(first, '/srv/ops', 'daemon-1', undefined, false);
 		// The existing project is reused, and the same session is not opened twice.
 		expect(store.projects).toHaveLength(1);
 		vi.mocked(hostSession).mockClear();

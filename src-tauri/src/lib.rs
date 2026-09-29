@@ -1287,6 +1287,15 @@ fn project_root() -> String {
     resolve_cwd().display().to_string()
 }
 
+/// The directory chat sessions run in (`~/.jucode/chats`), created when
+/// missing so the file panel can list it before the first engine starts.
+#[tauri::command]
+fn chats_dir() -> Result<String, String> {
+    let dir = jucode_dir().join("chats");
+    std::fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
+    Ok(dir.display().to_string())
+}
+
 /// Scans PATH for an executable named `cmd`, returning its full path.
 /// 终端环境快照可用时优先用快照 PATH（GUI 进程的 PATH 往往缺用户目录），
 /// 再回退进程自身 PATH。
@@ -2983,6 +2992,7 @@ pub fn run() {
             git_checkpoint_capture,
             git_checkpoint_restore,
             project_root,
+            chats_dir,
             list_providers,
             list_dir,
             list_files,

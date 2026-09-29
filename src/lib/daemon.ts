@@ -79,14 +79,21 @@ export class DaemonClient {
 		return this.#toDaemon.get(desktopId);
 	}
 
-	/** Creates a daemon session in `cwd` (as `agent`, when given), or
-	 *  reopens `resume` (a daemon session id), then watches it. The watch snapshot (startup state and
+	/** Creates a daemon session in `cwd` (as `agent`, when given; as a chat
+	 *  in the chats directory, when `chat`), or reopens `resume` (a daemon
+	 *  session id), then watches it. The watch snapshot (startup state and
 	 *  transcript) arrives through `onFrame`. */
-	async open(desktopId: string, cwd: string, resume?: string, agent?: string): Promise<void> {
+	async open(desktopId: string, cwd: string, resume?: string, agent?: string, chat = false): Promise<void> {
 		await this.connect();
 		const reply = resume
 			? await this.request({ op: 'session_open', session: resume })
-			: await this.request(agent ? { op: 'session_create', agent } : { op: 'session_create', cwd });
+			: await this.request(
+					agent
+						? { op: 'session_create', agent }
+						: chat
+							? { op: 'session_create', chat: true }
+							: { op: 'session_create', cwd }
+				);
 		const session = String(reply.session);
 		this.#toDaemon.set(desktopId, session);
 		this.#toDesktop.set(session, desktopId);
