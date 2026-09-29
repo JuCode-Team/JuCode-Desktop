@@ -375,8 +375,7 @@
 		line-height: 1;
 	}
 	.bubble {
-		background: color-mix(in oklab, var(--accent) 10%, var(--panel));
-		border: 1px solid color-mix(in oklab, var(--accent) 22%, transparent);
+		background: var(--surface2);
 		border-radius: var(--r-lg) var(--r-lg) 6px var(--r-lg);
 		padding: 11px 14px;
 		line-height: 1.6;

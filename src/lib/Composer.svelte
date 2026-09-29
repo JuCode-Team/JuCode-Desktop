@@ -845,13 +845,13 @@
 	}
 	.composer {
 		background: var(--panel);
-		border: 1px solid var(--hairline);
 		border-radius: var(--r-xl);
 		padding: 12px 14px 10px;
-		transition: border-color var(--t-med) var(--ease-out);
+		box-shadow: var(--shadow-float);
+		transition: box-shadow var(--t-med) var(--ease-out);
 	}
 	.composer:focus-within {
-		border-color: color-mix(in oklab, var(--accent) 40%, var(--hairline));
+		box-shadow: var(--shadow-float-strong);
 	}
 	.rich {
 		width: 100%;

@@ -360,7 +360,8 @@
 		flex-shrink: 0;
 		display: flex;
 		flex-direction: column;
-		background: var(--sidebar);
+		background: var(--bg);
+		border-right: 1px solid var(--hairline);
 		min-width: 0;
 		overflow: hidden;
 		transition: width var(--t-med) var(--ease-out);
@@ -373,19 +374,14 @@
 	:global(:root[data-vibrancy='on']) .sidebar {
 		background: var(--vibrancy-tint);
 	}
-	/* Level with the macOS traffic lights in the rail (centerline ≈ 16px). */
 	.brand {
 		display: flex;
 		align-items: center;
 		gap: 8px;
 		height: 32px;
-		margin: 0 10px 12px;
+		margin: 10px 10px 8px;
 		padding: 0 4px 0 10px;
 		flex-shrink: 0;
-	}
-	:global(:root[data-os='windows']) .brand,
-	:global(:root[data-os='linux']) .brand {
-		margin-top: 10px;
 	}
 	.brand > :global(svg) {
 		color: var(--dim);

@@ -54,6 +54,7 @@
 	import type { TabIcon } from '$lib/workbench/tabChrome';
 	import Mosaic from '$lib/workbench/Mosaic.svelte';
 	import WorkspaceRail from '$lib/workbench/WorkspaceRail.svelte';
+	import TitleBar from '$lib/shell/TitleBar.svelte';
 	import TabChromePopover from '$lib/workbench/TabChromePopover.svelte';
 	import ChatPane, { type ChatPaneApi, type ProviderOption } from '$lib/ChatPane.svelte';
 	import Settings from '$lib/Settings.svelte';
@@ -863,7 +864,32 @@
 <svelte:window onkeydown={onWindowKey} />
 
 <div class="app">
-	<!-- Sits right of the macOS traffic lights, above everything: toggles the session list. -->
+	<!-- TOP: the window's own layer (traffic lights, sidebar toggle, title, canvas
+	     actions). With the rail it frames the content: session list + canvas
+	     share one layer below it. -->
+	<TitleBar
+		sidebarOpen={showSidebar}
+		onToggleSidebar={toggleSidebar}
+		title={active?.chat.title ?? ''}
+		subtitle={activeProject?.name ?? ''}
+		{addOptions}
+		onAdd={(key) => mosaicAdd(focusedLeaf, key)}
+	>
+		{#snippet actions()}
+			{#if active && active.surface !== 'tui' && canHandOffToTui(active.backendId)}
+				<button
+					class="tile-action"
+					disabled={!tuiReady(active.id)}
+					title={tuiReady(active.id) ? t('chat.tuiContinueTitle') : t('chat.tuiContinueUnavailable')}
+					aria-label={t('chat.tuiContinue')}
+					onclick={() => active && store.openInTui(active.id)}
+				>
+					<SquareTerminal size={16} strokeWidth={1.5} />
+				</button>
+			{/if}
+		{/snippet}
+	</TitleBar>
+	<div class="body">
 	<!-- FAR LEFT: the workspace rail (top-level context). -->
 	<WorkspaceRail
 		workspaces={workspaces.workspaces}
@@ -874,8 +900,6 @@
 		onRename={(id, name) => workspaces.rename(id, name)}
 		onChrome={(id, chrome) => workspaces.setChrome(id, chrome)}
 		onDelete={deleteWorkspace}
-		sidebarOpen={showSidebar}
-		onToggleSidebar={toggleSidebar}
 	/>
 	<!-- LEFT: the navigator — workspace / projects / sessions. Clicking a session
 	     opens or focuses its chat tile on the canvas. -->
@@ -926,6 +950,7 @@
 				</div>
 			{:else}
 				<Mosaic
+					hideSoloBar
 					layout={tiles}
 					onchange={onMosaicChange}
 					label={tileLabel}
@@ -1000,6 +1025,7 @@
 				</Mosaic>
 			{/if}
 		</div>
+	</div>
 	</div>
 
 	{#if showSettings}
@@ -1107,24 +1133,25 @@
 <style>
 	.app {
 		display: flex;
+		flex-direction: column;
 		height: 100vh;
 		overflow: hidden;
-		background: var(--sidebar);
+		background: var(--bg);
+	}
+	.body {
+		flex: 1;
+		display: flex;
+		min-height: 0;
 	}
 
 	/* ---------- the canvas ---------- */
-	/* The canvas is raised above the window chrome (rail + sidebar): the work
-	   surface reads as the front layer through light and shadow, not color. */
+	/* The canvas shares the session list's layer; only a hairline divides them. */
 	.canvas {
 		flex: 1;
 		display: flex;
 		flex-direction: column;
 		min-width: 0;
-		margin: 8px;
-		border-radius: var(--r-lg);
 		background: var(--bg);
-		box-shadow: var(--shadow-canvas);
-		overflow: hidden;
 		position: relative;
 	}
 	.stage {

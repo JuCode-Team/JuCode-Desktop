@@ -8,8 +8,10 @@
    Color: black, white and cool grays carry the UI. --accent is the *neutral*
    emphasis (primary buttons, selected state: near-white on dark, near-black on
    light); the brand purple (--brand) is kept for links and the focus ring only.
-   Layers, back to front: --sidebar (window chrome: rail + sidebar) → --bg (the
-   raised canvas, with --shadow-canvas) → --panel (cards, popovers, modals).
+   Layers, back to front: --rail (window chrome: title bar + workspace rail) →
+   --bg (content: session list and canvas share it) → --panel with
+   --shadow-float (composer, cards) → --panel with --shadow-pop (menus, modals).
+   Depth comes from these fills and shadows; strokes stay faint (--hairline).
 
    Type scale: every font-size uses a --fs-* step. Radius: every corner uses a
    --r-* step. Colors come only from the tokens below. */
@@ -29,9 +31,9 @@
 	--panel: #1b1b1f;
 	--surface: rgba(255, 255, 255, 0.028);
 	--surface2: rgba(255, 255, 255, 0.055);
-	--hairline: rgba(255, 255, 255, 0.065);
-	--border: #26262b;
-	--border-strong: #34343b;
+	--hairline: rgba(255, 255, 255, 0.045);
+	--border: #202024;
+	--border-strong: #2c2c32;
 
 	--text: #ededef;
 	--dim: #a1a1aa;
@@ -72,6 +74,9 @@
 	--t-slow: 0.32s;
 
 	--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+	/* Surfaces that float on the content layer (composer, cards): depth, no outline. */
+	--shadow-float: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 10px 30px rgba(0, 0, 0, 0.35);
+	--shadow-float-strong: 0 0 0 1px rgba(255, 255, 255, 0.07), 0 12px 36px rgba(0, 0, 0, 0.45);
 	--shadow-canvas: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 8px 28px rgba(0, 0, 0, 0.45);
 	--shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.07);
 	--shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.07);
@@ -105,9 +110,9 @@
 	--panel: #ffffff;
 	--surface: rgba(24, 24, 27, 0.025);
 	--surface2: rgba(24, 24, 27, 0.05);
-	--hairline: rgba(24, 24, 27, 0.07);
-	--border: #e4e4e7;
-	--border-strong: #d4d4d8;
+	--hairline: rgba(24, 24, 27, 0.05);
+	--border: #ececef;
+	--border-strong: #dcdce0;
 
 	--text: #18181b;
 	--dim: #52525b;
@@ -119,6 +124,8 @@
 	--warn: #a75f06;
 
 	--shadow-sm: 0 1px 2px rgba(24, 24, 27, 0.08);
+	--shadow-float: 0 0 0 1px rgba(24, 24, 27, 0.04), 0 6px 22px rgba(24, 24, 27, 0.07);
+	--shadow-float-strong: 0 0 0 1px rgba(24, 24, 27, 0.06), 0 8px 28px rgba(24, 24, 27, 0.11);
 	--shadow-canvas: 0 0 0 1px rgba(24, 24, 27, 0.06), 0 6px 24px rgba(24, 24, 27, 0.07);
 	--shadow-pop: 0 10px 28px rgba(24, 24, 27, 0.12), 0 0 0 1px rgba(24, 24, 27, 0.07);
 	--shadow-modal: 0 20px 56px rgba(24, 24, 27, 0.18), 0 0 0 1px rgba(24, 24, 27, 0.07);

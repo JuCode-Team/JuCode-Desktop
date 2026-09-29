@@ -113,15 +113,13 @@
 		font-family: var(--font-mono);
 		font-size: 0.88em;
 		background: var(--surface2);
-		border: 1px solid var(--hairline);
 		border-radius: var(--r-xs);
 		padding: 1px 5px;
 	}
 	.md :global(pre) {
 		margin: 0 0 12px;
 		padding: 12px 14px;
-		background: var(--sidebar);
-		border: 1px solid var(--hairline);
+		background: var(--surface);
 		border-radius: var(--r-md);
 		overflow-x: auto;
 	}
@@ -134,10 +132,9 @@
 	}
 	.md :global(.codeblock) {
 		margin: 0 0 12px;
-		border: 1px solid var(--hairline);
 		border-radius: var(--r-md);
 		overflow: hidden;
-		background: var(--sidebar);
+		background: var(--surface);
 	}
 	.md :global(.codeblock pre) {
 		margin: 0;
@@ -179,7 +176,8 @@
 	}
 	.md :global(th),
 	.md :global(td) {
-		border: 1px solid var(--hairline);
+		border: none;
+		border-bottom: 1px solid var(--hairline);
 		padding: 5px 10px;
 		text-align: left;
 	}

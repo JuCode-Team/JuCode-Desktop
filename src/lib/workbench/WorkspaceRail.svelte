@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Layers, Plus, PanelLeft } from 'lucide-svelte';
+	import { Layers, Plus } from 'lucide-svelte';
 	import { t } from '$lib/i18n';
 	import type { TabIcon } from './tabChrome';
 	import type { WorkspaceEntry } from './workspaces';
@@ -18,9 +18,7 @@
 		onNew,
 		onRename,
 		onChrome,
-		onDelete,
-		sidebarOpen,
-		onToggleSidebar
+		onDelete
 	}: {
 		workspaces: WorkspaceEntry[];
 		activeId: string;
@@ -31,8 +29,6 @@
 		onRename: (id: string, name: string) => void;
 		onChrome: (id: string, chrome: { color?: string | null; icon?: TabIcon | null }) => void;
 		onDelete: (id: string) => void;
-		sidebarOpen: boolean;
-		onToggleSidebar: () => void;
 	} = $props();
 
 	let menuFor = $state<{ id: string; x: number; y: number } | null>(null);
@@ -45,10 +41,6 @@
 </script>
 
 <nav class="rail" data-tauri-drag-region aria-label={t('shell.workspace.label')}>
-	<button class="ws toggle" class:on={sidebarOpen} title={t('shell.toggleSidebar')} aria-label={t('shell.toggleSidebar')} aria-pressed={sidebarOpen} onclick={onToggleSidebar}>
-		<span class="tile"><PanelLeft size={17} strokeWidth={1.5} /></span>
-	</button>
-	<div class="sep"></div>
 	<div class="items" role="tablist">
 		{#each workspaces as w (w.id)}
 			<button
@@ -99,19 +91,13 @@
 
 <style>
 	.rail {
-		width: 72px;
+		width: 60px;
 		flex-shrink: 0;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-				/* The rail is wide enough to hold the macOS traffic lights above it;
-		   other platforms have a native title bar. */
-		padding: 44px 0 12px;
+				padding: 10px 0 12px;
 		background: var(--rail);
-	}
-	:global(:root[data-os='windows']) .rail,
-	:global(:root[data-os='linux']) .rail {
-		padding-top: 12px;
 	}
 	.items {
 		display: flex;
@@ -122,21 +108,6 @@
 		overflow-y: auto;
 		/* Room for the selected tile's shadow inside the scroll box. */
 		padding: 4px 0 8px;
-	}
-	.sep {
-		width: 24px;
-		height: 1px;
-		margin: 10px 0 6px;
-		background: var(--hairline);
-	}
-	.ws.toggle.on .tile {
-		background: none;
-		box-shadow: none;
-		color: var(--dim);
-	}
-	.ws.toggle.on:hover .tile {
-		background: var(--surface2);
-		color: var(--text);
 	}
 	.ws {
 		display: flex;
@@ -167,9 +138,8 @@
 		color: var(--text);
 	}
 	.ws.on .tile {
-		background: var(--bg);
+		background: var(--surface2);
 		color: var(--text);
-		box-shadow: var(--shadow-canvas);
 	}
 	.ws:disabled {
 		opacity: 0.5;
