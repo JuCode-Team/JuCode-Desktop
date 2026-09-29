@@ -383,8 +383,8 @@ mod tests {
             "env": { "ANTHROPIC_API_KEY": "sk-old", "KEEP": "1" },
             "permissions": { "allow": [] }
         });
-        overlay_claude(&mut v, "https://api.jucode.cn", "tok", Some("claude-sonnet"));
-        assert_eq!(v["env"]["ANTHROPIC_BASE_URL"], "https://api.jucode.cn");
+        overlay_claude(&mut v, "https://api.jucode.net", "tok", Some("claude-sonnet"));
+        assert_eq!(v["env"]["ANTHROPIC_BASE_URL"], "https://api.jucode.net");
         assert_eq!(v["env"]["ANTHROPIC_AUTH_TOKEN"], "tok");
         assert_eq!(v["env"]["ANTHROPIC_MODEL"], "claude-sonnet");
         assert!(v["env"].get("ANTHROPIC_API_KEY").is_none());
@@ -395,15 +395,15 @@ mod tests {
     #[test]
     fn overlay_codex_config_inserts_provider_and_keeps_other_keys() {
         let original = "model = \"gpt-5.3-codex\"\nmodel_provider = \"openai\"\napproval_policy = \"on-request\"\n";
-        let out = overlay_codex_config(original, "https://api.jucode.cn/v1", Some("gpt-5.5")).unwrap();
+        let out = overlay_codex_config(original, "https://api.jucode.net/v1", Some("gpt-5.5")).unwrap();
         assert!(out.contains("model_provider = \"jucode\""));
         assert!(out.contains("model = \"gpt-5.5\""));
         assert!(out.contains("approval_policy = \"on-request\""));
         assert!(out.contains("[model_providers.jucode]"));
-        assert!(out.contains("base_url = \"https://api.jucode.cn/v1\""));
+        assert!(out.contains("base_url = \"https://api.jucode.net/v1\""));
         assert!(out.contains("wire_api = \"responses\""));
         // Idempotent: don't duplicate the table.
-        let again = overlay_codex_config(&out, "https://api.jucode.cn/v1", Some("gpt-5.5")).unwrap();
+        let again = overlay_codex_config(&out, "https://api.jucode.net/v1", Some("gpt-5.5")).unwrap();
         assert_eq!(
             again.matches("[model_providers.jucode]").count(),
             1
@@ -413,7 +413,7 @@ mod tests {
     #[test]
     fn overlay_codex_config_inserts_before_first_table() {
         let original = "[mcp_servers.fs]\ncommand = \"npx\"\n";
-        let out = overlay_codex_config(original, "https://api.jucode.cn/v1", None).unwrap();
+        let out = overlay_codex_config(original, "https://api.jucode.net/v1", None).unwrap();
         let provider_at = out.find("model_provider = \"jucode\"").unwrap();
         let table_at = out.find("[mcp_servers.fs]").unwrap();
         assert!(provider_at < table_at);
@@ -427,7 +427,7 @@ mod tests {
         fs::create_dir_all(live.parent().unwrap()).unwrap();
         fs::write(&live, "{\n  \"env\": { \"ANTHROPIC_API_KEY\": \"sk-sys\" }\n}\n").unwrap();
 
-        apply_jucode(&p, Tool::Claude, "https://api.jucode.cn", "tok", Some("claude-x")).unwrap();
+        apply_jucode(&p, Tool::Claude, "https://api.jucode.net", "tok", Some("claude-x")).unwrap();
         let after = fs::read_to_string(&live).unwrap();
         assert!(after.contains("ANTHROPIC_AUTH_TOKEN"));
         assert!(!after.contains("sk-sys"));
@@ -445,7 +445,7 @@ mod tests {
     fn missing_original_is_deleted_on_restore() {
         let home = tmp_home("absent");
         let p = paths(home.clone());
-        apply_jucode(&p, Tool::Claude, "https://api.jucode.cn", "tok", None).unwrap();
+        apply_jucode(&p, Tool::Claude, "https://api.jucode.net", "tok", None).unwrap();
         assert!(p.claude_settings().exists());
         restore(&p, Tool::Claude).unwrap();
         assert!(!p.claude_settings().exists());
@@ -459,8 +459,8 @@ mod tests {
         let live = p.claude_settings();
         fs::create_dir_all(live.parent().unwrap()).unwrap();
         fs::write(&live, "{\"env\":{\"ANTHROPIC_API_KEY\":\"sk-sys\"}}\n").unwrap();
-        apply_jucode(&p, Tool::Claude, "https://api.jucode.cn", "tok1", None).unwrap();
-        apply_jucode(&p, Tool::Claude, "https://api.jucode.cn", "tok2", None).unwrap();
+        apply_jucode(&p, Tool::Claude, "https://api.jucode.net", "tok1", None).unwrap();
+        apply_jucode(&p, Tool::Claude, "https://api.jucode.net", "tok2", None).unwrap();
         restore(&p, Tool::Claude).unwrap();
         let back = fs::read_to_string(&live).unwrap();
         assert!(back.contains("sk-sys"));

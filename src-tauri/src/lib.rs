@@ -663,15 +663,22 @@ fn remove_auth_key(provider: String) -> Result<(), String> {
     write_auth(&mut current)
 }
 
-const DEFAULT_API_URL: &str = "https://api.jucode.cn";
+const DEFAULT_API_URL: &str = "https://api.jucode.net";
 
 fn jucode_api_url() -> String {
-    read_json(&jucode_dir().join("config.json"))
+    let url = read_json(&jucode_dir().join("config.json"))
         .get("jucode_api_url")
         .and_then(|v| v.as_str())
         .unwrap_or(DEFAULT_API_URL)
         .trim_end_matches('/')
-        .to_string()
+        .to_string();
+    // The gateway moved from api.jucode.cn; the engine rewrites the saved
+    // config the next time it writes it (config.rs migrate_jucode_host).
+    if url == "https://api.jucode.cn" {
+        DEFAULT_API_URL.to_string()
+    } else {
+        url
+    }
 }
 
 fn unix_now() -> u64 {
