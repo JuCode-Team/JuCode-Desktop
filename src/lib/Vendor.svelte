@@ -1,34 +1,20 @@
 <script lang="ts">
 	import SparkleIcon from 'phosphor-svelte/lib/SparkleIcon';
-	import openai from '@lobehub/icons-static-svg/icons/openai.svg?raw';
-	import claude from '@lobehub/icons-static-svg/icons/claude.svg?raw';
-	import gemini from '@lobehub/icons-static-svg/icons/gemini.svg?raw';
-	import mistral from '@lobehub/icons-static-svg/icons/mistral.svg?raw';
-	import meta from '@lobehub/icons-static-svg/icons/meta.svg?raw';
-	import deepseek from '@lobehub/icons-static-svg/icons/deepseek.svg?raw';
-	import qwen from '@lobehub/icons-static-svg/icons/qwen.svg?raw';
-	import grok from '@lobehub/icons-static-svg/icons/grok.svg?raw';
+	import { modelBrand, providerBrand } from '$lib/brandIcons';
 
-	let { model, size = 14 }: { model: string; size?: number } = $props();
+	// Brand mark for a model (by name) or a provider (by id), from brandIcons.
+	// A model with no known brand shows a sparkle; a provider shows its initial,
+	// and JuCode its own serif monogram (the brand is a wordmark, no logo).
+	let { model, provider, size = 14 }: { model?: string; provider?: string; size?: number } = $props();
 
-	// Maps a model name to its vendor logo (from the maintained icon library) and
-	// brand color. Monochrome SVGs are tinted via `color`; '' inherits currentColor.
-	const VENDORS: Array<{ re: RegExp; svg: string; color: string }> = [
-		{ re: /(^|[^a-z])(gpt|o[134]|chatgpt|codex|openai)/i, svg: openai, color: '' },
-		{ re: /claude/i, svg: claude, color: '#D97757' },
-		{ re: /gemini/i, svg: gemini, color: '#8E75B2' },
-		{ re: /(mistral|mixtral|codestral|ministral|magistral)/i, svg: mistral, color: '#FA520F' },
-		{ re: /(llama|meta)/i, svg: meta, color: '#0467DF' },
-		{ re: /deepseek/i, svg: deepseek, color: '' },
-		{ re: /qwen/i, svg: qwen, color: '' },
-		{ re: /grok/i, svg: grok, color: '' }
-	];
-
-	const hit = $derived(VENDORS.find((v) => v.re.test(model)));
+	const svg = $derived(provider ? providerBrand(provider) : model ? modelBrand(model) : undefined);
+	const initial = $derived(provider === 'jucode' ? 'Ju' : (provider?.[0]?.toUpperCase() ?? ''));
 </script>
 
-{#if hit}
-	<span class="vendor" style:font-size="{size}px" style:color={hit.color || 'currentColor'} aria-hidden="true">{@html hit.svg}</span>
+{#if svg}
+	<span class="vendor" style:font-size="{size}px" aria-hidden="true">{@html svg}</span>
+{:else if provider}
+	<span class="mono" class:ju={provider === 'jucode'} style:font-size="{size}px" aria-hidden="true">{initial}</span>
 {:else}
 	<SparkleIcon {size} />
 {/if}
@@ -43,5 +29,21 @@
 	.vendor :global(svg) {
 		width: 1em;
 		height: 1em;
+	}
+	.mono {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 1em;
+		height: 1em;
+		flex-shrink: 0;
+		color: var(--text);
+		font-weight: 600;
+		line-height: 1;
+	}
+	.mono.ju {
+		font-family: var(--font-serif);
+		font-weight: 700;
+		letter-spacing: -0.04em;
 	}
 </style>

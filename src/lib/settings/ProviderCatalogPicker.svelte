@@ -45,7 +45,7 @@
 	<div class="catalog-list">
 		{#each matches as provider (provider.id)}
 			<button class="catalog-provider" class:featured={provider.featured} onclick={() => onSelect(provider)}>
-				<span class="catalog-icon"><Vendor model={provider.models[0]?.name ?? provider.id} size={19} /></span>
+				<span class="catalog-icon"><Vendor provider={provider.id} size={19} /></span>
 				<span class="catalog-copy">
 					<span class="catalog-name">
 						{provider.name}

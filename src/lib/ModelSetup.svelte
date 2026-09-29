@@ -131,14 +131,14 @@
 				{@const all = list.every((m) => picked.includes(m.id))}
 				<section>
 					<div class="ghead">
-						<span class="gname">{family}</span>
+						<span class="gname"><Vendor model={list[0].id} size={15} />{family}</span>
 						<span class="gcount">{list.filter((m) => picked.includes(m.id)).length}/{list.length}</span>
 						<button class="gtoggle" onclick={() => toggleGroup(list)}>{all ? t('shell.modelSetup.selectNone') : t('shell.modelSetup.selectAll')}</button>
 					</div>
 					{#each list as m (m.id)}
 						<div class="row">
 							<Checkbox checked={picked.includes(m.id)} onchange={(on) => toggle(m.id, on)}>
-								<span class="name"><Vendor model={m.id} size={16} />{m.id}</span>
+								<span class="name">{m.id}</span>
 							</Checkbox>
 							<span class="ctx">{fmtContext(m.context_window)}</span>
 						</div>
@@ -203,6 +203,10 @@
 		padding: 4px 4px 6px;
 	}
 	.gname {
+		display: inline-flex;
+		align-self: center;
+		align-items: center;
+		gap: 8px;
 		color: var(--text);
 		font-size: var(--fs-sm);
 		font-weight: 600;

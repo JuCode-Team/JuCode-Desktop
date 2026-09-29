@@ -70,7 +70,7 @@
 
 <div class="pcard" class:def={isDefault}>
 	<button class="pcard-main" onclick={() => onCardClick(provider, authed)}>
-		<span class="tile"><Vendor model={provider.models[0]?.name ?? provider.id} size={18} /></span>
+		<span class="tile"><Vendor provider={provider.id} size={18} /></span>
 		<span class="pcard-txt">
 			<span class="pcard-id">{provider.name ?? cap(provider.id)}
 				{#if isDefault}<span class="defbadge"><CheckCircleIcon size={11} /> {t('settings.account.default')}</span>{/if}
