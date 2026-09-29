@@ -54,15 +54,15 @@
 			>
 				<span class="tile">
 					{#if w.icon || w.isDefault}
-						<TabGlyph icon={w.icon ?? { kind: 'builtin', id: 'home' }} color={w.color} active={w.id === activeId} size={17} />
+						<TabGlyph icon={w.icon ?? { kind: 'builtin', id: 'home' }} color={w.color} active={w.id === activeId} size={20} />
 					{:else}
-						<Layers size={17} strokeWidth={1.5} />
+						<Layers size={20} strokeWidth={1.5} />
 					{/if}
 				</span>
 			</button>
 		{/each}
 		<button class="ws add" title={t('shell.workspace.new')} aria-label={t('shell.workspace.new')} disabled={busy} onclick={onNew}>
-			<span class="tile"><Plus size={17} strokeWidth={1.5} /></span>
+			<span class="tile"><Plus size={20} strokeWidth={1.5} /></span>
 		</button>
 	</div>
 </nav>
@@ -91,7 +91,7 @@
 
 <style>
 	.rail {
-		width: 60px;
+		width: 68px;
 		flex-shrink: 0;
 		display: flex;
 		flex-direction: column;
@@ -114,7 +114,7 @@
 		flex-direction: column;
 		align-items: center;
 		gap: 4px;
-		width: 56px;
+		width: 60px;
 		padding: 0;
 		border: none;
 		background: none;
@@ -125,8 +125,8 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 38px;
-		height: 38px;
+		width: 44px;
+		height: 44px;
 		border-radius: var(--r-md);
 		transition:
 			background var(--t-fast) var(--ease-out),

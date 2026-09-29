@@ -1,6 +1,7 @@
 <script lang="ts">
-	import type { Snippet } from 'svelte';
-	import { PanelLeft, Plus } from 'lucide-svelte';
+	import { onMount, type Snippet } from 'svelte';
+	import { PanelLeft, Plus, Minus, Square, Copy, X } from 'lucide-svelte';
+	import { getCurrentWindow } from '@tauri-apps/api/window';
 	import { t } from '$lib/i18n';
 
 	// The window's own layer: traffic lights (macOS), the sidebar toggle, the
@@ -27,6 +28,24 @@
 	} = $props();
 
 	let menuOpen = $state(false);
+
+	// Windows and Linux run without the system title bar (decorations off in
+	// tauri.windows/linux.conf.json), so the window controls are drawn here.
+	// macOS keeps its native traffic lights.
+	const drawnControls =
+		typeof document !== 'undefined' && document.documentElement.dataset.os !== 'macos';
+	let maximized = $state(false);
+	onMount(() => {
+		if (!drawnControls || !('__TAURI_INTERNALS__' in window)) return;
+		const win = getCurrentWindow();
+		const sync = () => win.isMaximized().then((m) => (maximized = m)).catch(() => {});
+		sync();
+		const unlisten = win.onResized(sync);
+		return () => {
+			unlisten.then((f) => f());
+		};
+	});
+	const win = () => getCurrentWindow();
 </script>
 
 <header class="titlebar" data-tauri-drag-region>
@@ -36,7 +55,7 @@
 		title={t('shell.toggleSidebar')}
 		aria-label={t('shell.toggleSidebar')}
 		aria-pressed={sidebarOpen}
-		onclick={onToggleSidebar}><PanelLeft size={16} strokeWidth={1.5} /></button
+		onclick={onToggleSidebar}><PanelLeft size={18} strokeWidth={1.5} /></button
 	>
 	<div class="title" data-tauri-drag-region>
 		{#if title}<span class="t">{title}</span>{/if}
@@ -46,7 +65,7 @@
 		{#if actions}{@render actions()}{/if}
 		{#if addOptions.length}
 			<button class="tb-btn" title={t('shell.addPanel')} aria-label={t('shell.addPanel')} aria-expanded={menuOpen} onclick={() => (menuOpen = !menuOpen)}
-				><Plus size={16} strokeWidth={1.5} /></button
+				><Plus size={18} strokeWidth={1.5} /></button
 			>
 			{#if menuOpen}
 				<button class="backdrop" aria-label="close menu" tabindex="-1" onclick={() => (menuOpen = false)}></button>
@@ -65,6 +84,20 @@
 			{/if}
 		{/if}
 	</div>
+	{#if drawnControls}
+		<div class="winctl">
+			<button class="wc" title={t('shell.window.minimize')} aria-label={t('shell.window.minimize')} onclick={() => win().minimize()}><Minus size={18} strokeWidth={1.5} /></button>
+			<button
+				class="wc"
+				title={maximized ? t('shell.window.restore') : t('shell.window.maximize')}
+				aria-label={maximized ? t('shell.window.restore') : t('shell.window.maximize')}
+				onclick={() => win().toggleMaximize()}
+			>
+				{#if maximized}<Copy size={14} strokeWidth={1.5} />{:else}<Square size={13} strokeWidth={1.5} />{/if}
+			</button>
+			<button class="wc close" title={t('shell.window.close')} aria-label={t('shell.window.close')} onclick={() => win().close()}><X size={18} strokeWidth={1.5} /></button>
+		</div>
+	{/if}
 </header>
 
 <style>
@@ -73,7 +106,7 @@
 		display: flex;
 		align-items: center;
 		gap: 12px;
-		height: 44px;
+		height: 48px;
 		flex-shrink: 0;
 		/* macOS: clear the traffic lights at the left edge. */
 		padding: 0 10px 0 84px;
@@ -83,14 +116,38 @@
 	}
 	:global(:root[data-os='windows']) .titlebar,
 	:global(:root[data-os='linux']) .titlebar {
-		padding-left: 12px;
+		padding: 0 0 0 12px;
+	}
+	.winctl {
+		display: flex;
+		align-self: stretch;
+		margin-left: 6px;
+	}
+	.wc {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 46px;
+		border: none;
+		background: none;
+		color: var(--dim);
+		cursor: pointer;
+	}
+	.wc:hover {
+		background: var(--surface2);
+		color: var(--text);
+	}
+	/* Close turns red on hover, as the system controls do. */
+	.wc.close:hover {
+		background: var(--err);
+		color: var(--on-accent);
 	}
 	.tb-btn {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 30px;
-		height: 30px;
+		width: 34px;
+		height: 34px;
 		flex-shrink: 0;
 		border: none;
 		border-radius: var(--r-sm);

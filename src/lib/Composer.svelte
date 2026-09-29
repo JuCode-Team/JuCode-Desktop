@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Send, Square, Plus, Paperclip, Target, ListChecks, FastForward, ShieldCheck, CircleStop, Mic, LoaderCircle, GitBranch, SquareSlash } from 'lucide-svelte';
+	import { ArrowUp, Square, Plus, Paperclip, Target, ListChecks, FastForward, ShieldCheck, CircleStop, Mic, LoaderCircle, GitBranch, SquareSlash } from 'lucide-svelte';
 	import { message } from '@tauri-apps/plugin-dialog';
 	import BackendIcon from '$lib/BackendIcon.svelte';
 	import Segmented from '$lib/ui/Segmented.svelte';
@@ -736,8 +736,22 @@
 				title={t('chat.addTitle')}
 				aria-expanded={showAdd}
 			>
-				<Plus size={16} strokeWidth={1.5} />
+				<Plus size={18} strokeWidth={1.5} />
 			</button>
+			{#if bcaps.approvalModes}
+				<div class="footsel">
+					<button class="foot-chip" class:auto={chat.approvalMode !== 'ask'} onclick={() => (showApproval = !showApproval)} title={t('chat.approvalModeTitle')}>
+						<ShieldCheck size={17} strokeWidth={1.5} /><span>{approvalLabel}</span>
+					</button>
+					{#if showApproval}
+						<button class="pop-backdrop" aria-label="close" onclick={() => (showApproval = false)}></button>
+						<div class="effort-pop">
+							<Segmented value={chat.approvalMode} options={APPROVAL} onChange={setApproval} />
+						</div>
+					{/if}
+				</div>
+			{/if}
+			<div class="cspace"></div>
 			{#if chat.efforts.length}
 				<!-- Combined model · effort trigger: opens the effort popover, whose
 				     model name leads on to the model picker. -->
@@ -790,7 +804,6 @@
 					onRefreshModels={() => onModel()}
 				/>
 			{/if}
-			<div class="cspace"></div>
 			<button
 				class="cact voice"
 				class:on={voice === 'rec'}
@@ -799,12 +812,12 @@
 				aria-label="voice input"
 				title={voice === 'rec' ? t('chat.voiceStopTitle') : voice === 'busy' ? t('chat.voiceBusyTitle') : t('chat.voiceTitle')}
 			>
-				{#if voice === 'busy'}<span class="vspin"><LoaderCircle size={15} /></span>{:else if voice === 'rec'}<CircleStop size={15} />{:else}<Mic size={15} />{/if}
+				{#if voice === 'busy'}<span class="vspin"><LoaderCircle size={15} /></span>{:else if voice === 'rec'}<CircleStop size={15} />{:else}<Mic size={17} strokeWidth={1.5} />{/if}
 			</button>
 			{#if chat.busy && !currentQ}
 				<button class="cact stop" onclick={onStop} aria-label="stop" title={t('chat.stopTitle')}><Square size={15} /></button>
 			{:else}
-				<button class="cact send" onclick={submit} disabled={!input.trim() && !attachments.length && !videos.length} aria-label="send" title={t('chat.sendTitle')}><Send size={15} /></button>
+				<button class="cact send" onclick={submit} disabled={!input.trim() && !attachments.length && !videos.length} aria-label="send" title={t('chat.sendTitle')}><ArrowUp size={17} strokeWidth={2} /></button>
 			{/if}
 		</div>
 	</div>
@@ -812,19 +825,6 @@
 	<div class="composer-foot">
 		{#if gitBranch}
 			<span class="foot-branch" title={t('chat.gitBranch')}><GitBranch size={12} /><span class="branch-name">{gitBranch}</span></span>
-		{/if}
-		{#if bcaps.approvalModes}
-			<div class="footsel">
-				<button class="foot-chip" class:auto={chat.approvalMode !== 'ask'} onclick={() => (showApproval = !showApproval)} title={t('chat.approvalModeTitle')}>
-					<ShieldCheck size={12} /><span>{approvalLabel}</span>
-				</button>
-				{#if showApproval}
-					<button class="pop-backdrop" aria-label="close" onclick={() => (showApproval = false)}></button>
-					<div class="effort-pop">
-						<Segmented value={chat.approvalMode} options={APPROVAL} onChange={setApproval} />
-					</div>
-				{/if}
-			</div>
 		{/if}
 		<div class="fspace"></div>
 		{#if bcaps.contextUsage && ctxLimit > 0}
@@ -839,14 +839,14 @@
 <style>
 	.composer-wrap {
 		padding: 0 18px 18px;
-		max-width: 880px;
+		max-width: 920px;
 		width: 100%;
 		margin: 0 auto;
 	}
 	.composer {
 		background: var(--panel);
 		border-radius: var(--r-xl);
-		padding: 12px 14px 10px;
+		padding: 14px 16px 12px;
 		box-shadow: var(--shadow-float);
 		transition: box-shadow var(--t-med) var(--ease-out);
 	}
@@ -938,7 +938,7 @@
 	}
 	.flatbtn.effort .m {
 		font-family: var(--font-mono);
-		font-size: var(--fs-xs);
+		font-size: var(--fs-sm);
 		min-width: 0;
 		max-width: 200px;
 		white-space: nowrap;
@@ -946,7 +946,7 @@
 		text-overflow: ellipsis;
 	}
 	.flatbtn.effort .e {
-		font-size: var(--fs-xs);
+		font-size: var(--fs-sm);
 		color: var(--dim);
 		flex-shrink: 0;
 	}
@@ -958,8 +958,8 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 28px;
-		height: 28px;
+		width: 34px;
+		height: 34px;
 		flex-shrink: 0;
 		border: 1px solid var(--hairline);
 		border-radius: var(--r-full);
@@ -993,6 +993,12 @@
 	.footsel {
 		position: relative;
 		display: inline-flex;
+	}
+	/* The approval-mode picker opens upward from its chip in the toolbar. */
+	.footsel .effort-pop {
+		position: absolute;
+		left: 0;
+		bottom: calc(100% + 8px);
 	}
 	.flatbtn.model {
 		min-width: 0;
@@ -1028,8 +1034,8 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 32px;
-		height: 32px;
+		width: 36px;
+		height: 36px;
 		border-radius: var(--r-full);
 		border: none;
 		cursor: pointer;
@@ -1122,13 +1128,13 @@
 	.foot-chip {
 		display: inline-flex;
 		align-items: center;
-		gap: 5px;
-		padding: 2px 9px;
-		border: 1px solid var(--hairline);
-		border-radius: var(--r-full);
+		gap: 6px;
+		padding: 5px 8px;
+		border: none;
+		border-radius: var(--r-sm);
 		background: none;
 		color: var(--dim);
-		font-size: var(--fs-2xs);
+		font-size: var(--fs-sm);
 		font-family: var(--font-sans);
 		cursor: pointer;
 		transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
@@ -1139,7 +1145,6 @@
 	}
 	.foot-chip.auto {
 		color: var(--warn);
-		border-color: color-mix(in oklab, var(--warn) 35%, transparent);
 	}
 	.fspace {
 		flex: 1;

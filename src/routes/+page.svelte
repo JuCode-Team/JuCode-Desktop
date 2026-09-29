@@ -172,7 +172,7 @@
 		return { provider: pick.id, baseUrl: pick.base_url, format: pick.format, model };
 	});
 
-	let sidebarWidth = $state(248);
+	let sidebarWidth = $state(292);
 	let showSidebar = $state(true);
 	let sbResizing = $state(false);
 
@@ -187,7 +187,7 @@
 		const startW = sidebarWidth;
 		sbResizing = true;
 		const move = (ev: PointerEvent) => {
-			sidebarWidth = Math.min(420, Math.max(190, startW + (ev.clientX - startX)));
+			sidebarWidth = Math.min(460, Math.max(240, startW + (ev.clientX - startX)));
 		};
 		const up = () => {
 			sbResizing = false;
@@ -724,7 +724,7 @@
 
 	onMount(() => {
 		const savedSb = Number(localStorage.getItem('jucode-sidebar-width'));
-		if (savedSb >= 190 && savedSb <= 420) sidebarWidth = savedSb;
+		if (savedSb >= 240 && savedSb <= 460) sidebarWidth = savedSb;
 		if (localStorage.getItem('jucode-sidebar-visible') === '0') showSidebar = false;
 		const cleanups: Array<() => void> = [];
 		let disposed = false;

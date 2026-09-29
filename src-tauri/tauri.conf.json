@@ -14,10 +14,10 @@
     "windows": [
       {
         "title": "JuCode",
-        "width": 1080,
-        "height": 740,
-        "minWidth": 820,
-        "minHeight": 560,
+        "width": 1320,
+        "height": 880,
+        "minWidth": 1040,
+        "minHeight": 680,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true
       }

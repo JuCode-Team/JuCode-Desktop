@@ -138,7 +138,7 @@
 	<!-- Header: the wordmark, or the session filter in its place while searching. -->
 	<div class="brand" data-tauri-drag-region>
 		{#if searchOpen}
-			<Search size={16} strokeWidth={1.5} />
+			<Search size={18} strokeWidth={1.5} />
 			<input
 				class="filter"
 				bind:this={searchEl}
@@ -147,18 +147,18 @@
 				onkeydown={searchKey}
 				onblur={() => !searchQuery && toggleSearch()}
 			/>
-			<button class="head-act" onclick={toggleSearch} aria-label={t('shell.closeSearch')} title={t('shell.closeSearch')}><X size={16} strokeWidth={1.5} /></button>
+			<button class="head-act" onclick={toggleSearch} aria-label={t('shell.closeSearch')} title={t('shell.closeSearch')}><X size={18} strokeWidth={1.5} /></button>
 		{:else}
 			<span class="word">JuCode</span>
-			<button class="head-act" onclick={toggleSearch} aria-label={t('shell.searchSessions')} title={t('shell.searchSessions')}><Search size={16} strokeWidth={1.5} /></button>
+			<button class="head-act" onclick={toggleSearch} aria-label={t('shell.searchSessions')} title={t('shell.searchSessions')}><Search size={18} strokeWidth={1.5} /></button>
 		{/if}
 	</div>
 
 	<nav class="primary">
-		<button class="row" onclick={newHere}><SquarePen size={16} strokeWidth={1.5} /><span>{t('shell.newChat')}</span></button>
+		<button class="row" onclick={newHere}><SquarePen size={18} strokeWidth={1.5} /><span>{t('shell.newChat')}</span></button>
 		{#if agentsStatus !== 'off'}
 			<button class="row" onclick={onDesk}>
-				<Inbox size={16} strokeWidth={1.5} /><span>{t('shell.desk.title')}</span>
+				<Inbox size={18} strokeWidth={1.5} /><span>{t('shell.desk.title')}</span>
 				{#if pendingCount > 0}<span class="count">{pendingCount}</span>{/if}
 			</button>
 		{/if}
@@ -198,9 +198,9 @@
 			{#if s.chat.pendingApproval || s.chat.trustPrompt}
 				<span class="tag" title={t('shell.awaitConfirm')}>{t('shell.awaitShort')}</span>
 			{:else if s.chat.busy}
-				<LoaderCircle size={14} strokeWidth={1.5} class="spin state" />
+				<LoaderCircle size={16} strokeWidth={1.5} class="spin state" />
 			{:else if s.chat.engineState === 'exited'}
-				<span class="state err"><CircleAlert size={14} strokeWidth={1.5} /></span>
+				<span class="state err"><CircleAlert size={16} strokeWidth={1.5} /></span>
 			{:else if s.chat.unseen}
 				<!-- A reply arrived while this session was not in view: the one place a dot is used. -->
 				<span class="unread" aria-label={t('shell.unread')}></span>
@@ -217,7 +217,7 @@
 				aria-label={s.archived ? 'unarchive' : 'archive'}
 				title={s.archived ? t('shell.unarchive') : t('shell.archive')}
 			>
-				{#if s.archived}<ArchiveRestore size={14} strokeWidth={1.5} />{:else}<Archive size={14} strokeWidth={1.5} />{/if}
+				{#if s.archived}<ArchiveRestore size={16} strokeWidth={1.5} />{:else}<Archive size={16} strokeWidth={1.5} />{/if}
 			</span>
 			<span
 				class="act"
@@ -228,7 +228,7 @@
 					onCloseSession(s.id);
 				}}
 				onkeydown={(e) => e.key === 'Enter' && (e.stopPropagation(), onCloseSession(s.id))}
-				aria-label="close"><X size={14} strokeWidth={1.5} /></span
+				aria-label="close"><X size={16} strokeWidth={1.5} /></span
 			>
 		</button>
 	{/snippet}
@@ -236,7 +236,7 @@
 	{#snippet archived(p: Project, arch: Project['sessions'], nested: boolean)}
 		{#if arch.length}
 			<button class="more" class:nested onclick={() => (showArchived[p.id] = !showArchived[p.id])}>
-				<span class="chev" class:open={showArchived[p.id]}><ChevronRight size={14} strokeWidth={1.5} /></span>
+				<span class="chev" class:open={showArchived[p.id]}><ChevronRight size={16} strokeWidth={1.5} /></span>
 				<span>{t('shell.archived')} · {arch.length}</span>
 			</button>
 			{#if showArchived[p.id] || query}
@@ -250,21 +250,21 @@
 		<section>
 			<div class="head">
 				<span>{t('shell.agents.title')}</span>
-				<button class="head-act" onclick={onNewAgent} aria-label={t('shell.agents.add')} title={t('shell.agents.add')}><Plus size={14} strokeWidth={1.5} /></button>
+				<button class="head-act" onclick={onNewAgent} aria-label={t('shell.agents.add')} title={t('shell.agents.add')}><Plus size={16} strokeWidth={1.5} /></button>
 			</div>
 			{#if agentsStatus === 'unreachable'}
 				<div class="note">{t('shell.agents.unreachable')}</div>
 			{:else if agentsStatus === 'off' || agents.length === 0}
-				<button class="sess ghost" onclick={onNewAgent}><Plus size={14} strokeWidth={1.5} /><span class="sess-title">{t('shell.agents.add')}</span></button>
+				<button class="sess ghost" onclick={onNewAgent}><Plus size={16} strokeWidth={1.5} /><span class="sess-title">{t('shell.agents.add')}</span></button>
 			{/if}
 			{#each agents as a (a.id)}
 				<button class="sess agent" onclick={() => onOpenAgent(a)} title={t('shell.agents.open', { name: a.name })}>
-					<Bot size={16} strokeWidth={1.5} />
+					<Bot size={18} strokeWidth={1.5} />
 					<span class="agent-text">
 						<span class="sess-title">{a.name}</span>
 						{#if a.summary}<span class="agent-summary">{a.summary}</span>{/if}
 					</span>
-					{#if a.busy}<LoaderCircle size={14} strokeWidth={1.5} class="spin state" />{/if}
+					{#if a.busy}<LoaderCircle size={16} strokeWidth={1.5} class="spin state" />{/if}
 					<span
 						class="act"
 						role="button"
@@ -275,7 +275,7 @@
 						}}
 						onkeydown={(e) => e.key === 'Enter' && (e.stopPropagation(), onAgentPage(a))}
 						aria-label={t('shell.agents.details')}
-						title={t('shell.agents.details')}><IdCard size={14} strokeWidth={1.5} /></span
+						title={t('shell.agents.details')}><IdCard size={16} strokeWidth={1.5} /></span
 					>
 				</button>
 			{/each}
@@ -289,8 +289,8 @@
 				<section>
 					<div class="head">
 						<span>{chats.name}</span>
-						<button class="head-act" onclick={() => onHistory(chats)} aria-label="history" title={t('shell.history')}><History size={14} strokeWidth={1.5} /></button>
-						<button class="head-act" onclick={onNewChat} aria-label={t('shell.newChat')} title={t('shell.newChat')}><Plus size={14} strokeWidth={1.5} /></button>
+						<button class="head-act" onclick={() => onHistory(chats)} aria-label="history" title={t('shell.history')}><History size={16} strokeWidth={1.5} /></button>
+						<button class="head-act" onclick={onNewChat} aria-label={t('shell.newChat')} title={t('shell.newChat')}><Plus size={16} strokeWidth={1.5} /></button>
 					</div>
 					{#each showAll[chats.id] || query ? active : active.slice(0, SHOW_LIMIT) as s (s.id)}{@render sessRow(s)}{/each}
 					{#if active.length > SHOW_LIMIT && !query}
@@ -305,7 +305,7 @@
 		<section>
 			<div class="head">
 				<span>{t('shell.projects')}</span>
-				<button class="head-act" onclick={onNewProject} aria-label="new project" title={t('shell.newProjectTitle')}><Plus size={14} strokeWidth={1.5} /></button>
+				<button class="head-act" onclick={onNewProject} aria-label="new project" title={t('shell.newProjectTitle')}><Plus size={16} strokeWidth={1.5} /></button>
 			</div>
 			{#each codeProjects as p (p.id)}
 				{@const active = p.sessions.filter((s) => !s.archived && sessionMatches(p, s))}
@@ -314,20 +314,20 @@
 				{#if !query || active.length || arch.length}
 					<div class="folder" class:stale={p.stale}>
 						<button class="folder-row" onclick={() => (collapsed[p.id] = !collapsed[p.id])} title={p.worktree ? t('shell.task.worktreeTip', { branch: p.worktree.branch, base: p.worktree.baseBranch || '?' }) : p.path}>
-							{#if p.worktree}<GitBranch size={16} strokeWidth={1.5} />{:else if open}<FolderOpen size={16} strokeWidth={1.5} />{:else}<Folder size={16} strokeWidth={1.5} />{/if}
+							{#if p.worktree}<GitBranch size={18} strokeWidth={1.5} />{:else if open}<FolderOpen size={18} strokeWidth={1.5} />{:else}<Folder size={18} strokeWidth={1.5} />{/if}
 							<span class="folder-name">{p.name}</span>
 						</button>
 						{#if p.stale}
 							<span class="tag" title={p.path}>{t('shell.task.stale')}</span>
 						{:else}
-							<button class="act" onclick={() => onHistory(p)} aria-label="history" title={t('shell.history')}><History size={14} strokeWidth={1.5} /></button>
+							<button class="act" onclick={() => onHistory(p)} aria-label="history" title={t('shell.history')}><History size={16} strokeWidth={1.5} /></button>
 							{#if !p.worktree}
-								<button class="act" onclick={() => onNewTask(p)} aria-label="new parallel task" title={t('shell.newTask')}><GitBranchPlus size={14} strokeWidth={1.5} /></button>
+								<button class="act" onclick={() => onNewTask(p)} aria-label="new parallel task" title={t('shell.newTask')}><GitBranchPlus size={16} strokeWidth={1.5} /></button>
 							{/if}
-							<button class="act" onclick={() => onNewSession(p)} aria-label="new session" title={t('shell.newSessionInProject')}><Plus size={14} strokeWidth={1.5} /></button>
+							<button class="act" onclick={() => onNewSession(p)} aria-label="new session" title={t('shell.newSessionInProject')}><Plus size={16} strokeWidth={1.5} /></button>
 						{/if}
 						{#if codeProjects.length > 1 || p.stale}
-							<button class="act" class:always={p.stale} onclick={() => onCloseProject(p)} aria-label="close project" title={p.stale ? t('shell.task.staleRemove') : t('shell.closeProject')}><X size={14} strokeWidth={1.5} /></button>
+							<button class="act" class:always={p.stale} onclick={() => onCloseProject(p)} aria-label="close project" title={p.stale ? t('shell.task.staleRemove') : t('shell.closeProject')}><X size={16} strokeWidth={1.5} /></button>
 						{/if}
 					</div>
 					{#if open}
@@ -336,7 +336,7 @@
 							<button class="more nested" onclick={() => (showAll[p.id] = !showAll[p.id])}>{showAll[p.id] ? t('shell.showLess') : t('shell.showMore')}</button>
 						{/if}
 						{#if active.length === 0 && arch.length === 0 && !p.stale && !query}
-							<button class="sess ghost nested" onclick={() => onNewSession(p)}><span class="sess-title">{t('shell.agentSession')}</span></button>
+							<button class="sess ghost nested" onclick={() => onNewSession(p)}><span class="sess-title">{t('shell.newChat')}</span></button>
 						{/if}
 						{@render archived(p, arch, true)}
 					{/if}
@@ -347,10 +347,10 @@
 
 	<div class="foot">
 		<button class="row account" onclick={onSettings} title={t('shell.accountSettings')}>
-			<CircleUserRound size={16} strokeWidth={1.5} />
+			<CircleUserRound size={18} strokeWidth={1.5} />
 			<span class="acc-name">{loggedIn ? providerName : t('shell.notLoggedIn')}</span>
 			{#if updateAvailable}<span class="tag">{t('shell.updateShort')}</span>{/if}
-			<Settings size={16} strokeWidth={1.5} />
+			<Settings size={18} strokeWidth={1.5} />
 		</button>
 	</div>
 </aside>
@@ -378,8 +378,8 @@
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		height: 32px;
-		margin: 10px 10px 8px;
+		height: 40px;
+		margin: 12px 12px 10px;
 		padding: 0 4px 0 10px;
 		flex-shrink: 0;
 	}
@@ -402,8 +402,9 @@
 	.word {
 		flex: 1;
 		font-family: var(--font-serif);
-		font-size: var(--fs-lg);
-		font-weight: 500;
+		font-size: var(--fs-xl);
+		/* Instrument Serif ships one weight; the wordmark is emboldened. */
+		font-weight: 700;
 		letter-spacing: -0.005em;
 		color: var(--text);
 	}
@@ -421,10 +422,10 @@
 		align-items: center;
 		gap: 10px;
 		width: 100%;
-		min-height: 34px;
-		padding: 0 10px;
+		min-height: 38px;
+		padding: 0 12px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r-md);
 		background: none;
 		color: var(--text);
 		font: inherit;
@@ -469,14 +470,14 @@
 		padding: 4px 10px 12px;
 	}
 	section + section {
-		margin-top: 18px;
+		margin-top: 22px;
 	}
 	.head {
 		display: flex;
 		align-items: center;
 		gap: 2px;
-		height: 28px;
-		padding: 0 4px 0 10px;
+		height: 32px;
+		padding: 0 4px 0 12px;
 		color: var(--dim2);
 		font-size: var(--fs-xs);
 		font-weight: 500;
@@ -489,8 +490,8 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 26px;
-		height: 26px;
+		width: 30px;
+		height: 30px;
 		flex-shrink: 0;
 		border: none;
 		border-radius: var(--r-xs);
@@ -520,7 +521,7 @@
 		box-shadow: var(--shadow-sm);
 	}
 	.sess.nested {
-		padding-left: 36px;
+		padding-left: 42px;
 	}
 	.sess.arch .sess-title {
 		color: var(--dim2);
@@ -626,7 +627,7 @@
 		font-size: var(--fs-xs);
 	}
 	.more.nested {
-		padding-left: 36px;
+		padding-left: 42px;
 	}
 	.chev {
 		display: inline-flex;

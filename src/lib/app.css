@@ -49,13 +49,13 @@
 	--font-sans: 'Inter Variable', Inter, -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif;
 	--font-mono: 'Geist Mono Variable', 'Geist Mono', 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 
-	--fs-2xs: 11.5px; /* mono labels, badges */
-	--fs-xs: 12.5px; /* meta, secondary rows */
-	--fs-sm: 14px; /* UI controls, lists */
-	--fs-md: 15px; /* chat body, inputs */
-	--fs-lg: 17px; /* section titles */
-	--fs-xl: 22px; /* page titles (serif) */
-	--fs-2xl: 34px; /* welcome wordmark (serif) */
+	--fs-2xs: 12px; /* mono labels, badges */
+	--fs-xs: 13px; /* meta, secondary rows */
+	--fs-sm: 15px; /* UI controls, lists */
+	--fs-md: 16px; /* chat body, inputs */
+	--fs-lg: 18px; /* section titles */
+	--fs-xl: 24px; /* page titles (serif) */
+	--fs-2xl: 36px; /* welcome wordmark (serif) */
 
 	--r-xs: 4px;
 	--r-sm: 6px;
