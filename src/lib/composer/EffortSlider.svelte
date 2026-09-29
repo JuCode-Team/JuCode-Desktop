@@ -11,12 +11,15 @@
 		effort,
 		disabled = false,
 		onEffort,
+		accent = '',
 		current = $bindable('')
 	}: {
 		efforts: string[];
 		effort: string;
 		disabled?: boolean;
 		onEffort: (effort: string) => void;
+		/** The model's colour (modelColor); '' keeps the neutral fill. */
+		accent?: string;
 		/** The shown effort (optimistic while the engine confirms), for the caller's label. */
 		current?: string;
 	} = $props();
@@ -37,6 +40,8 @@
 	const idx = $derived(Math.max(0, efforts.indexOf(shownEffort)));
 	const shown = $derived(drag ?? idx);
 	const last = $derived(Math.max(1, efforts.length - 1));
+	// The highest effort gets the sweeping fill (see .effort-max in app.css).
+	const top = $derived(efforts.length > 1 && shown === efforts.length - 1);
 	const pct = (i: number) => (efforts.length > 1 ? (i / last) * 100 : 0);
 
 	function commit(i: number) {
@@ -76,6 +81,9 @@
 	class="slider"
 	class:disabled
 	class:dragging={drag !== null}
+	class:top
+	class:tinted={!!accent}
+	style:--effort-accent={accent || 'var(--text)'}
 	role="slider"
 	tabindex="0"
 	aria-label={t('chat.effortTitle')}
@@ -141,7 +149,29 @@
 	}
 	.fill {
 		background: color-mix(in oklab, var(--text) 16%, transparent);
-		transition: width var(--t-fast) var(--ease-out);
+		transition:
+			width var(--t-fast) var(--ease-out),
+			background var(--t-med) var(--ease-out);
+	}
+	.slider.tinted .fill {
+		background: color-mix(in oklab, var(--effort-accent) 30%, transparent);
+	}
+	/* Top effort: the fill sweeps in the model's colour and the thumb glows. */
+	.slider.top .fill {
+		background: linear-gradient(
+			90deg,
+			color-mix(in oklab, var(--effort-accent) 22%, transparent) 0%,
+			color-mix(in oklab, var(--effort-accent) 55%, transparent) 50%,
+			color-mix(in oklab, var(--effort-accent) 22%, transparent) 100%
+		);
+		background-size: 200% 100%;
+		animation: sweep 2.4s linear infinite;
+	}
+	.slider.top .thumb {
+		box-shadow:
+			var(--shadow-pop),
+			0 0 0 3px color-mix(in oklab, var(--effort-accent) 30%, transparent),
+			0 0 18px color-mix(in oklab, var(--effort-accent) 55%, transparent);
 	}
 	.stop {
 		position: absolute;
@@ -165,7 +195,9 @@
 		border: 1px solid var(--border);
 		box-shadow: var(--shadow-pop);
 		transform: translate(-50%, -50%);
-		transition: left var(--t-fast) var(--ease-out);
+		transition:
+			left var(--t-fast) var(--ease-out),
+			box-shadow var(--t-med) var(--ease-out);
 	}
 	:global([data-theme='light']) .thumb {
 		background: var(--panel);

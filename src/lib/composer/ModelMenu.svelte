@@ -14,6 +14,7 @@
 	import type { ModelRow } from './modelRows';
 	import { defaultEffort, effortLabel } from './effort';
 	import EffortSlider from './EffortSlider.svelte';
+	import { modelColor, isTopEffort } from '$lib/modelColor';
 
 	// The composer's model menu, opened from the model button: everything about
 	// "who answers and how hard it thinks" in one place, top to bottom —
@@ -118,6 +119,8 @@
 	}
 
 	let shownEffort = $state('');
+	const accent = $derived(modelColor(chat.model));
+	const top = $derived(isTopEffort(shownEffort, chat.efforts));
 	const def = $derived(defaultEffort(chat.efforts));
 	// Group headers only help when the list spans more than one source.
 	const grouped = $derived(new Set(rows.map((r) => r.group)).size > 1);
@@ -157,7 +160,7 @@
 		<section class="effort">
 			<div class="ehead">
 				<span class="elabel">{t('chat.effortTitle')}</span>
-				{#key shownEffort}<span class="evalue">{effortLabel(shownEffort)}</span>{/key}
+				{#key shownEffort}<span class="evalue" class:effort-max={top} style:--effort-accent={accent || 'var(--text)'}>{effortLabel(shownEffort)}</span>{/key}
 				<span class="grow"></span>
 				<IconButton
 					size="sm"
@@ -169,7 +172,7 @@
 					<ArrowCounterClockwiseIcon size={14} />
 				</IconButton>
 			</div>
-			<EffortSlider efforts={chat.efforts} effort={chat.effort} disabled={effortDisabled} {onEffort} bind:current={shownEffort} />
+			<EffortSlider efforts={chat.efforts} effort={chat.effort} disabled={effortDisabled} {onEffort} {accent} bind:current={shownEffort} />
 		</section>
 	{/if}
 
@@ -346,6 +349,10 @@
 	/* Keep the check's column so names and context line up on every row. */
 	.pop-check.off {
 		visibility: hidden;
+	}
+	/* The check lands on a newly picked model. */
+	.pop-check:not(.off) :global(svg) {
+		animation: pop-in var(--t-med) var(--ease-spring);
 	}
 	.empty {
 		padding: 14px 12px;

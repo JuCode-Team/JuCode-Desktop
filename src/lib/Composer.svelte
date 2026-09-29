@@ -27,6 +27,8 @@
 	import AttachmentChips from '$lib/composer/AttachmentChips.svelte';
 	import ContextIndicator from '$lib/composer/ContextIndicator.svelte';
 	import ModelMenu from '$lib/composer/ModelMenu.svelte';
+	import Vendor from '$lib/Vendor.svelte';
+	import { modelColor, isTopEffort } from '$lib/modelColor';
 	import ComposerTray, { type TrayItem, type TraySection } from '$lib/composer/ComposerTray.svelte';
 	import { answerStep, startFlow, togglePick, type QuestionFlow } from '$lib/composer/tray';
 	import { effortLabel } from '$lib/composer/effort';
@@ -765,9 +767,18 @@
 					aria-haspopup="dialog"
 					aria-expanded={modelPopoverVisible}
 				>
-					<BackendIcon backend={chat.backendId} size={15} />
-					<span class="m">{chat.modelLabel || chat.model || backendLabel}</span>
-					{#if chat.efforts.length}{#key chat.effort}<span class="e">{effortLabel(chat.effort) || t('chat.effortTitle')}</span>{/key}{/if}
+					<!-- Model changes slide the name in; the top effort sweeps in the model's colour. -->
+					{#key chat.model}
+						<span class="mswap">
+							{#if chat.backendId === 'jucode' && chat.model}<Vendor model={chat.model} size={15} />{:else}<BackendIcon backend={chat.backendId} size={15} />{/if}
+							<span class="m">{chat.modelLabel || chat.model || backendLabel}</span>
+						</span>
+					{/key}
+					{#if chat.efforts.length}{#key chat.effort}<span
+								class="e"
+								class:effort-max={isTopEffort(chat.effort, chat.efforts)}
+								style:--effort-accent={modelColor(chat.model) || 'var(--text)'}>{effortLabel(chat.effort) || t('chat.effortTitle')}</span
+							>{/key}{/if}
 				</button>
 			{:else if chat.model}
 				<span class="flatbtn model static"><BackendIcon backend={chat.backendId} size={15} /><span>{chat.modelLabel || chat.model}</span></span>
@@ -920,6 +931,20 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+	.mswap {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		min-width: 0;
+		animation: model-in var(--t-med) var(--ease-spring);
+	}
+	@keyframes model-in {
+		from {
+			opacity: 0;
+			transform: translateY(8px);
+			filter: blur(3px);
+		}
 	}
 	.flatbtn.model .e {
 		flex-shrink: 0;

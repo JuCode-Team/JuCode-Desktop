@@ -264,6 +264,33 @@ body {
 		transform: translateY(0);
 	}
 }
+/* Top thinking effort: a slow light sweep over --effort-accent (slider fill,
+   effort labels). Stops under reduced motion like every animation. */
+@keyframes sweep {
+	from {
+		background-position: 200% 0;
+	}
+	to {
+		background-position: -200% 0;
+	}
+}
+.effort-max {
+	background: linear-gradient(
+		90deg,
+		var(--effort-accent) 0%,
+		color-mix(in oklab, var(--effort-accent) 35%, white) 25%,
+		var(--effort-accent) 50%,
+		color-mix(in oklab, var(--effort-accent) 35%, white) 75%,
+		var(--effort-accent) 100%
+	);
+	background-size: 200% 100%;
+	-webkit-background-clip: text;
+	background-clip: text;
+	/* Labels set their own colour and entrance animation in scoped styles,
+	   which outrank a global class; the sweep has to win over both. */
+	color: transparent !important;
+	animation: sweep 3.2s linear infinite !important;
+}
 @keyframes fade {
 	from {
 		opacity: 0;
