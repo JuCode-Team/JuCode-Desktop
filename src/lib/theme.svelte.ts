@@ -1,3 +1,5 @@
+import { getCurrentWindow } from '@tauri-apps/api/window';
+
 export type ThemePref = 'system' | 'light' | 'dark';
 
 // `pref` is the user's choice; `value` is the resolved theme actually applied
@@ -16,6 +18,14 @@ function resolve(pref: ThemePref): 'dark' | 'light' {
 function apply() {
 	themeState.value = resolve(themeState.pref);
 	document.documentElement.setAttribute('data-theme', themeState.value);
+	// The native window appearance drives the macOS frosted material behind the
+	// chrome: a light app on a dark system would otherwise sit on dark frost.
+	// "system" hands the appearance back to the OS.
+	if ('__TAURI_INTERNALS__' in window) {
+		getCurrentWindow()
+			.setTheme(themeState.pref === 'system' ? null : themeState.value)
+			.catch(() => {});
+	}
 }
 
 export function initTheme() {

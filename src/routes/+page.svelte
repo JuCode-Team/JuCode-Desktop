@@ -1189,7 +1189,8 @@
 		min-width: 0;
 		border-top-left-radius: var(--r-lg);
 		overflow: hidden;
-		background: var(--bg);
+		/* No fill of its own: the sidebar (frosted under vibrancy) and the
+		   canvas paint their parts. */
 	}
 
 	/* ---------- the canvas ---------- */
