@@ -252,6 +252,9 @@ pub fn refresh_shell_env() -> ShellEnvStatus {
 mod tests {
     use super::*;
 
+    /// The snapshot is process-global; tests that set it must not interleave.
+    static SNAPSHOT_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     fn wrap(body: &[u8]) -> Vec<u8> {
         let mut out = b"rc noise before\n".to_vec();
         out.extend_from_slice(MARKER);
@@ -327,6 +330,7 @@ mod tests {
     #[cfg(not(windows))]
     #[test]
     fn apply_precedence_snapshot_then_custom_explicit_wins() {
+        let _guard = SNAPSHOT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         // 直接对 Command 环境断言：优先级 快照 < custom < explicit(最终断言)。
         *state().write().unwrap() = Some(ShellEnv {
             vars: HashMap::from([
@@ -365,6 +369,7 @@ mod tests {
 
     #[test]
     fn apply_without_snapshot_or_disabled_keeps_inherited_env() {
+        let _guard = SNAPSHOT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         *state().write().unwrap() = None;
         let mut cmd = Command::new("true");
         apply_to_command(&mut cmd, true, &[("A", "1")], &[]);
