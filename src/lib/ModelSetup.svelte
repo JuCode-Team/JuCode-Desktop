@@ -1,0 +1,263 @@
+<script lang="ts">
+	// "Models to show": the JuCode account reaches every model in every group
+	// it may use, far more than a model menu can hold. The user checks the ones
+	// they want; they become `jucode_models` in config.json (and `models` while
+	// JuCode is the provider), which the engine's model menu lists.
+	import { onMount } from 'svelte';
+	import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon';
+	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
+	import Modal from '$lib/ui/Modal.svelte';
+	import Button from '$lib/ui/Button.svelte';
+	import Checkbox from '$lib/ui/Checkbox.svelte';
+	import Notice from '$lib/ui/Notice.svelte';
+	import Vendor from '$lib/Vendor.svelte';
+	import { toast } from '$lib/ui/toast.svelte';
+	import { fetchJucodeModels, readConfig, writeConfig, type JucodeModel } from '$lib/protocol';
+	import { fmtContext } from '$lib/composer/modelRows';
+	import { t } from '$lib/i18n';
+
+	let { onClose }: { onClose: () => void } = $props();
+
+	let models = $state<JucodeModel[]>([]);
+	let picked = $state<string[]>([]);
+	let query = $state('');
+	let loading = $state(true);
+	let error = $state('');
+	let saving = $state(false);
+	let cfg: Record<string, unknown> = {};
+
+	// Vendor families by model-name prefix; the order is the display order.
+	const FAMILIES: [string, RegExp][] = [
+		['OpenAI', /^(gpt|o\d|chatgpt|codex)/i],
+		['Anthropic', /^claude/i],
+		['Google', /^(gemini|gemma)/i],
+		['DeepSeek', /^deepseek/i],
+		['Qwen', /^(qwen|qwq)/i],
+		['GLM', /^(glm|chatglm)/i],
+		['Kimi', /^(kimi|moonshot)/i],
+		['xAI', /^grok/i],
+		['Doubao', /^(doubao|seed)/i],
+		['MiniMax', /^(minimax|abab)/i]
+	];
+	const familyOf = (id: string) => FAMILIES.find(([, re]) => re.test(id))?.[0] ?? t('shell.modelSetup.other');
+	const rank = (f: string) => {
+		const i = FAMILIES.findIndex(([name]) => name === f);
+		return i < 0 ? FAMILIES.length : i;
+	};
+
+	const groups = $derived.by(() => {
+		const q = query.trim().toLowerCase();
+		const map = new Map<string, JucodeModel[]>();
+		for (const m of models) {
+			if (q && !m.id.toLowerCase().includes(q)) continue;
+			const f = familyOf(m.id);
+			map.set(f, [...(map.get(f) ?? []), m]);
+		}
+		return [...map.entries()].sort((a, b) => rank(a[0]) - rank(b[0]));
+	});
+
+	async function load() {
+		loading = true;
+		error = '';
+		try {
+			const [list, config] = await Promise.all([fetchJucodeModels(), readConfig()]);
+			cfg = config;
+			models = list;
+			const names = (v: unknown) =>
+				Array.isArray(v) ? v.map((m) => (m as { name?: string }).name).filter((n): n is string => !!n) : [];
+			const prev = names(config.jucode_models);
+			const current = prev.length ? prev : config.provider === 'jucode' ? names(config.models) : [];
+			picked = current.filter((n) => list.some((m) => m.id === n));
+		} catch (e) {
+			error = String(e);
+		} finally {
+			loading = false;
+		}
+	}
+	onMount(load);
+
+	function toggle(id: string, on: boolean) {
+		picked = on ? [...picked, id] : picked.filter((p) => p !== id);
+	}
+	function toggleGroup(list: JucodeModel[]) {
+		const ids = list.map((m) => m.id);
+		const all = ids.every((id) => picked.includes(id));
+		picked = all ? picked.filter((p) => !ids.includes(p)) : [...new Set([...picked, ...ids])];
+	}
+
+	async function save() {
+		saving = true;
+		// Saved grouped by vendor, as shown, so the model menu reads the same way.
+		const order = groups.length && !query ? groups.flatMap(([, list]) => list) : models;
+		const chosen = order
+			.filter((m) => picked.includes(m.id))
+			.map((m) => ({
+				name: m.id,
+				context_window: m.context_window,
+				max_output_tokens: m.max_output_tokens,
+				reasoning_efforts: m.reasoning_efforts
+			}));
+		const patch: Record<string, unknown> = { jucode_models: chosen };
+		if (cfg.provider === 'jucode') {
+			patch.models = chosen;
+			if (!chosen.some((m) => m.name === cfg.model)) patch.model = chosen[0].name;
+		}
+		try {
+			await writeConfig(patch);
+			toast.success(t('shell.modelSetup.saved'));
+			onClose();
+		} catch (e) {
+			toast.error(String(e));
+		} finally {
+			saving = false;
+		}
+	}
+</script>
+
+<Modal title={t('shell.modelSetup.title')} width={600} dismissible={!saving} {onClose}>
+	{#if loading}
+		<div class="state"><CircleNotchIcon size={22} class="spin" /></div>
+	{:else if error}
+		<Notice>{t('shell.modelSetup.loadFailed', { error })}</Notice>
+		<div><Button size="sm" onclick={load}>{t('shell.modelSetup.retry')}</Button></div>
+	{:else}
+		<p class="intro">{t('shell.modelSetup.intro', { n: models.length })}</p>
+		<label class="search">
+			<MagnifyingGlassIcon size={16} />
+			<input bind:value={query} placeholder={t('shell.modelSetup.search')} />
+		</label>
+		<div class="list">
+			{#each groups as [family, list] (family)}
+				{@const all = list.every((m) => picked.includes(m.id))}
+				<section>
+					<div class="ghead">
+						<span class="gname">{family}</span>
+						<span class="gcount">{list.filter((m) => picked.includes(m.id)).length}/{list.length}</span>
+						<button class="gtoggle" onclick={() => toggleGroup(list)}>{all ? t('shell.modelSetup.selectNone') : t('shell.modelSetup.selectAll')}</button>
+					</div>
+					{#each list as m (m.id)}
+						<div class="row">
+							<Checkbox checked={picked.includes(m.id)} onchange={(on) => toggle(m.id, on)}>
+								<span class="name"><Vendor model={m.id} size={16} />{m.id}</span>
+							</Checkbox>
+							<span class="ctx">{fmtContext(m.context_window)}</span>
+						</div>
+					{/each}
+				</section>
+			{/each}
+		</div>
+	{/if}
+	{#snippet footer()}
+		{#if !loading && !error}<span class="count">{t('shell.modelSetup.selected', { n: picked.length })}</span>{/if}
+		<Button variant="ghost" disabled={saving} onclick={onClose}>{t('shell.modelSetup.later')}</Button>
+		<Button variant="primary" disabled={saving || loading || !!error || picked.length === 0} onclick={save}>{t('shell.modelSetup.done')}</Button>
+	{/snippet}
+</Modal>
+
+<style>
+	.state {
+		display: flex;
+		justify-content: center;
+		padding: 40px 0;
+		color: var(--dim);
+	}
+	.intro {
+		margin: 0;
+		color: var(--dim);
+		font-size: var(--fs-sm);
+		line-height: 1.55;
+	}
+	.search {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		height: 36px;
+		padding: 0 12px;
+		border-radius: var(--r-md);
+		background: var(--surface2);
+		color: var(--dim2);
+	}
+	.search input {
+		flex: 1;
+		min-width: 0;
+		border: none;
+		background: none;
+		color: var(--text);
+		font: inherit;
+		font-size: var(--fs-sm);
+		outline: none;
+	}
+	.list {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		max-height: 48vh;
+		margin: 0 -8px;
+		padding: 0 8px;
+		overflow-y: auto;
+	}
+	.ghead {
+		display: flex;
+		align-items: baseline;
+		gap: 8px;
+		padding: 4px 4px 6px;
+	}
+	.gname {
+		color: var(--text);
+		font-size: var(--fs-sm);
+		font-weight: 600;
+	}
+	.gcount {
+		color: var(--dim2);
+		font-size: var(--fs-xs);
+		font-variant-numeric: tabular-nums;
+	}
+	.gtoggle {
+		margin-left: auto;
+		padding: 2px 6px;
+		border: none;
+		border-radius: var(--r-xs);
+		background: none;
+		color: var(--dim);
+		font: inherit;
+		font-size: var(--fs-xs);
+		cursor: pointer;
+	}
+	.gtoggle:hover {
+		background: var(--surface2);
+		color: var(--text);
+	}
+	.row {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		min-height: 36px;
+		padding: 0 4px;
+		border-radius: var(--r-sm);
+	}
+	.row:hover {
+		background: var(--surface2);
+	}
+	.row :global(.cb) {
+		flex: 1;
+		min-height: 36px;
+	}
+	.name {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		color: var(--text);
+		font-size: var(--fs-sm);
+	}
+	.ctx {
+		color: var(--dim2);
+		font-size: var(--fs-xs);
+		font-variant-numeric: tabular-nums;
+	}
+	.count {
+		margin-right: auto;
+		align-self: center;
+		color: var(--dim);
+		font-size: var(--fs-sm);
+	}
+</style>

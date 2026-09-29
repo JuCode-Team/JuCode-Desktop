@@ -828,6 +828,13 @@ fn fetch_account_info() -> Result<serde_json::Value, String> {
     jucode_get("/v1/oauth/userinfo")
 }
 
+/// Every model the JuCode account can reach, across all of its groups (the
+/// OAuth token routes to any of them), for the "models to show" picker.
+#[tauri::command(async)]
+fn fetch_jucode_models() -> Result<serde_json::Value, String> {
+    jucode_get("/v1/models")
+}
+
 /// Plan quota usage (5h / weekly / monthly used vs cap).
 #[tauri::command(async)]
 fn fetch_usage() -> Result<serde_json::Value, String> {
@@ -2995,6 +3002,7 @@ pub fn run() {
             switch_tool_profile,
             fetch_usage,
             fetch_usage_logs,
+            fetch_jucode_models,
             fetch_deepseek_balance,
             transcribe_audio,
             generate_text,

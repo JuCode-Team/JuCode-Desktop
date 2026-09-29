@@ -64,6 +64,8 @@
 		onSetDefault: (p: Provider) => void;
 		onDelete: (id: string) => void;
 	} = $props();
+	import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon';
+	import { modelSetup } from '$lib/modelSetupState.svelte';
 </script>
 
 <div class="pcard" class:def={isDefault}>
@@ -102,6 +104,7 @@
 				<AccountPanel />
 				<div class="cardact">
 					{#if !isDefault}<Button variant="secondary" size="sm" onclick={() => onSetDefault(provider)}>{t('settings.account.setDefault')}</Button>{/if}
+					<Button size="sm" onclick={() => (modelSetup.open = true)}><ListChecksIcon size={13} /> {t('shell.modelSetup.manage')}</Button>
 					<Button variant="primary" size="sm" onclick={onLogin}><SignInIcon size={13} /> {t('settings.account.relogin')}</Button>
 					<Button variant="danger" size="sm" onclick={() => onLogout('jucode')}><SignOutIcon size={13} /> {t('settings.account.logout')}</Button>
 				</div>

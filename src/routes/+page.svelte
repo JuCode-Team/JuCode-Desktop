@@ -4,6 +4,8 @@
 	import { getCurrentWebview } from '@tauri-apps/api/webview';
 	import TerminalWindowIcon from 'phosphor-svelte/lib/TerminalWindowIcon';
 	import Toaster from '$lib/ui/Toaster.svelte';
+	import ModelSetup from '$lib/ModelSetup.svelte';
+	import { modelSetup } from '$lib/modelSetupState.svelte';
 	import ConfirmHost from '$lib/ui/ConfirmHost.svelte';
 	import { open } from '@tauri-apps/plugin-dialog';
 	import { toast } from '$lib/ui/toast.svelte';
@@ -1069,6 +1071,15 @@
 				showSettings = true;
 			}}
 			onClose={() => (showSetup = false)}
+		/>
+	{/if}
+
+	{#if modelSetup.open}
+		<ModelSetup
+			onClose={() => {
+				modelSetup.open = false;
+				loadProviders();
+			}}
 		/>
 	{/if}
 

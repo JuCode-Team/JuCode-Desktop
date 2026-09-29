@@ -233,6 +233,17 @@ export interface UsageLogRow {
 	cost_final?: string;
 	status?: string;
 }
+/** A model the JuCode account can use (GET /v1/models). */
+export type JucodeModel = {
+	id: string;
+	context_window?: number;
+	max_output_tokens?: number;
+	reasoning_efforts?: string[];
+};
+export async function fetchJucodeModels(): Promise<JucodeModel[]> {
+	const v = await invoke<{ data?: JucodeModel[] }>('fetch_jucode_models');
+	return Array.isArray(v.data) ? v.data : [];
+}
 export function fetchAccountInfo(): Promise<AccountInfo> {
 	return invoke('fetch_account_info');
 }

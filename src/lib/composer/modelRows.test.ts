@@ -60,7 +60,7 @@ describe('buildModelRows', () => {
 		expect(codexRows.find((r) => r.command.startsWith('/model'))?.group).toBe('Codex');
 	});
 
-	it('filters jucode catalog entries through the engine allow-list', () => {
+	it('lists every jucode model the user chose to show', () => {
 		const rows = buildModelRows({
 			...base,
 			backendId: 'jucode',
@@ -70,11 +70,11 @@ describe('buildModelRows', () => {
 			providersList: [
 				{
 					id: 'jucode',
-					models: [{ name: 'gpt-5.5' }, { name: 'claude-sonnet' }, { name: 'unsupported-model' }]
+					models: [{ name: 'gpt-5.5' }, { name: 'claude-sonnet' }, { name: 'gemini-3-pro' }]
 				}
 			]
 		});
-		expect(rows.map((r) => r.label)).toEqual(['gpt-5.5', 'claude-sonnet']);
+		expect(rows.map((r) => r.label)).toEqual(['gpt-5.5', 'claude-sonnet', 'gemini-3-pro']);
 	});
 
 	it('lists only providers with credentials', () => {

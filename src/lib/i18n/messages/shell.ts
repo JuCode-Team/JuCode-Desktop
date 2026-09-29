@@ -264,6 +264,21 @@ const shell = {
 			create: '创建',
 			creating: '创建中…'
 		},
+		modelSetup: {
+			title: '选择要显示的模型',
+			intro: '你的 JuCode 账户可以使用 {n} 个模型。勾选的模型会出现在模型菜单里，之后可以在设置中修改。',
+			search: '搜索模型',
+			selectAll: '全选',
+			selectNone: '取消全选',
+			selected: '已选 {n} 个',
+			later: '稍后',
+			done: '完成',
+			loadFailed: '获取模型列表失败：{error}',
+			retry: '重试',
+			saved: '模型列表已更新',
+			manage: '管理显示的模型',
+			other: '其他'
+		},
 		task: {
 			dialogTitle: '新建并行任务',
 			dialogHint: '在独立的 git worktree 中并行开工，不影响当前工作区。',
@@ -624,6 +639,21 @@ const shell = {
 			rolePlaceholder: 'e.g. Maintain the web front end and keep the build and tests green; ask me before changing an API.',
 			create: 'Create',
 			creating: 'Creating…'
+		},
+		modelSetup: {
+			title: 'Choose models to show',
+			intro: 'Your JuCode account can use {n} models. The ones you check appear in the model menu; you can change this later in Settings.',
+			search: 'Search models',
+			selectAll: 'Select all',
+			selectNone: 'Clear',
+			selected: '{n} selected',
+			later: 'Later',
+			done: 'Done',
+			loadFailed: 'Could not load models: {error}',
+			retry: 'Retry',
+			saved: 'Model list updated',
+			manage: 'Manage visible models',
+			other: 'Other'
 		},
 		task: {
 			dialogTitle: 'New parallel task',

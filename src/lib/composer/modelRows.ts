@@ -42,11 +42,6 @@ export const fmtContext = (n?: number) =>
  *  from several providers share one group, so they keep the provider id. */
 const detailOf = (provider: string | null, ctx?: number) => [provider, fmtContext(ctx)].filter(Boolean).join(' · ');
 
-// Mirror the engine's jucode allow-list so we don't offer a model it rejects.
-const jucodeOk = (n: string) =>
-	['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex', 'gpt-5.2'].includes(n) ||
-	n.startsWith('claude-');
-
 /**
  * The active provider's rows come from the engine's model_view (already
  * filtered and flagged with the active model — the running engine resolved
@@ -105,9 +100,7 @@ export function buildModelRows(input: {
 	const otherRows: ModelRow[] = (backendId !== 'jucode' ? [] : providersList)
 		.filter((pv) => pv.id !== cur && configured.includes(pv.id))
 		.flatMap((pv) =>
-			pv.models
-				.filter((m) => pv.id !== 'jucode' || jucodeOk(m.name))
-				.map((m) => ({
+			pv.models.map((m) => ({
 					id: `${pv.id}::${m.name}`,
 					label: m.name,
 					vendor: m.name,
@@ -133,7 +126,7 @@ export function buildModelRows(input: {
 		}
 		if (!onJucode) {
 			const catalog = providersList.find((p) => p.id === 'jucode')?.models ?? [];
-			for (const m of catalog.filter((m) => jucodeOk(m.name))) {
+			for (const m of catalog) {
 				toolRows.push({
 					id: `tool::jucode::${m.name}`,
 					label: m.name,

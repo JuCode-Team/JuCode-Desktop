@@ -92,7 +92,7 @@
 	}
 
 	function login() {
-		dispatch(sessionId, { op: 'command', input: '/login' });
+		dispatch(sessionId, { op: 'command', input: '/login jucode' });
 		loggingIn = true;
 	}
 	// Poll auth.json while waiting for the OAuth round-trip to land.
@@ -102,13 +102,17 @@
 		return () => clearInterval(t);
 	});
 	$effect(() => {
-		if (loggedIn) loggingIn = false;
+		if (loggedIn && loggingIn) {
+			loggingIn = false;
+			modelSetup.open = true;
+		}
 	});
 
 	function finish() {
 		localStorage.setItem('jucode-setup-done', '1');
 		onClose();
 	}
+	import { modelSetup } from '$lib/modelSetupState.svelte';
 </script>
 
 <Modal label={t('setup.wizardLabel')} width={560} padded={false} dismissible={false} onClose={finish}>

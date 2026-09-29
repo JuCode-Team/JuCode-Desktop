@@ -285,7 +285,9 @@
 	}
 	let loggingIn = $state(false);
 	function login() {
-		dispatch(sessionId, { op: 'command', input: '/login' });
+		// A bare /login answers with a provider picker; name the provider so the
+		// engine starts the OAuth flow (and opens the browser) directly.
+		dispatch(sessionId, { op: 'command', input: '/login jucode' });
 		loggingIn = true;
 	}
 	// While a login is in flight, poll auth state so the modal flips to
@@ -303,6 +305,7 @@
 				loggingIn = false;
 				loadBalances();
 				onAuthChange?.();
+				modelSetup.open = true;
 			}
 		}, 2000);
 		return () => clearInterval(t);
@@ -353,6 +356,7 @@
 	function setDefault(p: Provider) {
 		selectProvider(p);
 	}
+	import { modelSetup } from '$lib/modelSetupState.svelte';
 </script>
 
 <Modal label={t('settings.title')} width={880} padded={false} {onClose}>
