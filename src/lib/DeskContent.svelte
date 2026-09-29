@@ -3,7 +3,10 @@
 	// which agents are working, and their reports. Everything comes from the
 	// jucode daemon through agentDirectory. Shown in the desktop's desk sheet
 	// and on the remote page.
-	import { CircleHelp, ShieldCheck, FileText, LoaderCircle } from 'lucide-svelte';
+	import QuestionIcon from 'phosphor-svelte/lib/QuestionIcon';
+	import ShieldCheckIcon from 'phosphor-svelte/lib/ShieldCheckIcon';
+	import FileTextIcon from 'phosphor-svelte/lib/FileTextIcon';
+	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import {
@@ -77,7 +80,7 @@
 	{#each agentDirectory.questions as q (q.id)}
 		<article class="card" class:high={q.importance === 'high'}>
 			<div class="card-head">
-				<CircleHelp size={14} />
+				<QuestionIcon size={14} />
 				<span class="kind">{t('shell.desk.question')}</span>
 				<span class="who">{agentDirectory.agentName(q.agent)} · {when(q.asked_at)}</span>
 				{#if q.due_at}<span class="due">{t('shell.desk.due', { time: when(q.due_at) })}</span>{/if}
@@ -105,7 +108,7 @@
 					disabled={!(answers[q.id] ?? '').trim() || busy[q.id]}
 					onclick={() => answer(q)}
 				>
-					{#if busy[q.id]}<LoaderCircle size={13} class="spin" />{/if}
+					{#if busy[q.id]}<CircleNotchIcon size={13} class="spin" />{/if}
 					{t('shell.desk.answer')}
 				</Button>
 			</div>
@@ -115,7 +118,7 @@
 		{@const agent = agentDirectory.agentOfSession(a.session_id)}
 		<article class="card">
 			<div class="card-head">
-				<ShieldCheck size={14} />
+				<ShieldCheckIcon size={14} />
 				<span class="kind">{t('shell.desk.action')}</span>
 				<span class="who">{agent?.name ?? a.cwd} · {when(a.created_at)}</span>
 			</div>
@@ -143,7 +146,7 @@
 	{:else}
 		<div class="working">
 			{#each working as agent (agent.id)}
-				<span class="chip"><LoaderCircle size={14} strokeWidth={1.5} class="spin" />{agent.name}</span>
+				<span class="chip"><CircleNotchIcon size={14} class="spin" />{agent.name}</span>
 			{/each}
 		</div>
 	{/if}
@@ -157,7 +160,7 @@
 	{#each agentDirectory.reports as r (r.id)}
 		<article class="report" class:unread={!r.read}>
 			<button class="report-head" onclick={() => toggleReport(r)}>
-				<FileText size={13} />
+				<FileTextIcon size={13} />
 				<span class="title">{r.title}</span>
 				<span class="who">{agentDirectory.agentName(r.agent)} · {when(r.at)}</span>
 			</button>

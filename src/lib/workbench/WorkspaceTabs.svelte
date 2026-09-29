@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { ChevronDown, Plus, X } from 'lucide-svelte';
+	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
+	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
+	import XIcon from 'phosphor-svelte/lib/XIcon';
 	import { t } from '$lib/i18n';
 	import type { TabIcon } from './tabChrome';
 	import type { WorkspaceEntry } from './workspaces';
@@ -114,7 +116,7 @@
 					}}
 					ondblclick={(e) => e.stopPropagation()}
 				>
-					<ChevronDown size={11} />
+					<CaretDownIcon size={11} />
 				</button>
 				{#if !w.isDefault}
 					<button
@@ -128,13 +130,13 @@
 						}}
 						ondblclick={(e) => e.stopPropagation()}
 					>
-						<X size={11} />
+						<XIcon size={11} />
 					</button>
 				{/if}
 			</div>
 		{/each}
 		<button class="wsadd" aria-label={t('shell.workspace.new')} title={t('shell.workspace.new')} disabled={busy} onclick={onNew}>
-			<Plus size={13} />
+			<PlusIcon size={13} />
 		</button>
 	</div>
 	<div class="wspace" data-tauri-drag-region></div>

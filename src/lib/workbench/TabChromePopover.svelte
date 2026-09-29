@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { Ban, Trash2 } from 'lucide-svelte';
+	import ProhibitIcon from 'phosphor-svelte/lib/ProhibitIcon';
+	import TrashIcon from 'phosphor-svelte/lib/TrashIcon';
 	import { t } from '$lib/i18n';
 	import { BUILTIN_ICONS, parseTabIcon, sanitizeSvg, TAB_COLORS, type TabIcon } from './tabChrome';
 	import TabGlyph from './TabGlyph.svelte';
@@ -114,7 +115,7 @@
 			class:on={!color}
 			title={t('shell.chrome.noColor')}
 			aria-label={t('shell.chrome.noColor')}
-			onclick={() => onColor(null)}><Ban size={11} /></button
+			onclick={() => onColor(null)}><ProhibitIcon size={11} /></button
 		>
 		{#each TAB_COLORS as c (c)}
 			<button
@@ -142,7 +143,7 @@
 			</button>
 		{/each}
 		<button class="ic" class:on={!icon} title={t('shell.chrome.clearIcon')} aria-label={t('shell.chrome.clearIcon')} onclick={() => onIcon(null)}>
-			<Ban size={13} />
+			<ProhibitIcon size={13} />
 		</button>
 	</div>
 
@@ -175,7 +176,7 @@
 	</label>
 
 	{#if onDelete}
-		<Button variant="danger" size="sm" full onclick={onDelete}><Trash2 size={12} />{deleteLabel || t('shell.chrome.delete')}</Button>
+		<Button variant="danger" size="sm" full onclick={onDelete}><TrashIcon size={12} />{deleteLabel || t('shell.chrome.delete')}</Button>
 	{/if}
 </div>
 

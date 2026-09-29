@@ -1,5 +1,7 @@
 <script lang="ts">
-	import { Activity, Copy, Check } from 'lucide-svelte';
+	import PulseIcon from 'phosphor-svelte/lib/PulseIcon';
+	import CopyIcon from 'phosphor-svelte/lib/CopyIcon';
+	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
 	import Button from '$lib/ui/Button.svelte';
 	import { t } from '$lib/i18n';
 	import type { ChatState } from '$lib/chat.svelte';
@@ -101,10 +103,10 @@
 	</div>
 	<div class="foot">
 		<Button size="sm" onclick={copyAll}>
-			{#if copied}<Check size={12} />{t('dock.diag.copied')}{:else}<Copy size={12} />{t('dock.diag.copy')}{/if}
+			{#if copied}<CheckIcon size={12} />{t('dock.diag.copied')}{:else}<CopyIcon size={12} />{t('dock.diag.copy')}{/if}
 		</Button>
 		<span class="spacer"></span>
-		<Activity size={12} />
+		<PulseIcon size={12} />
 	</div>
 </div>
 

@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { X, Plus } from 'lucide-svelte';
+	import XIcon from 'phosphor-svelte/lib/XIcon';
+	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
 	import { t } from '$lib/i18n';
 	import Button from '$lib/ui/Button.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
@@ -58,12 +59,12 @@
 	<div class="np-models">
 		<span class="np-mlabel">{t('settings.custom.models')}</span>
 		{#each form.models as m (m.name)}
-			<span class="mchip">{m.name} · {fmt(m.context_window)}<IconButton size="xs" onclick={() => (form.models = form.models.filter((x) => x !== m))} label="remove"><X size={11} /></IconButton></span>
+			<span class="mchip">{m.name} · {fmt(m.context_window)}<IconButton size="xs" onclick={() => (form.models = form.models.filter((x) => x !== m))} label="remove"><XIcon size={11} /></IconButton></span>
 		{/each}
 		<div class="np-addm">
 			<TextField bind:value={mName} mono placeholder={t('settings.custom.modelName')} />
 			<TextField bind:value={mCtx} type="number" align="right" placeholder={t('settings.custom.contextWindow')} />
-			<Button size="sm" onclick={onAddModel}><Plus size={13} /></Button>
+			<Button size="sm" onclick={onAddModel}><PlusIcon size={13} /></Button>
 		</div>
 	</div>
 	<div class="np-foot">

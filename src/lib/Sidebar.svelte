@@ -1,6 +1,23 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { Plus, History, X, LoaderCircle, GitBranch, GitBranchPlus, Archive, ArchiveRestore, ChevronRight, Search, Inbox, IdCard, SquarePen, Bot, Folder, FolderOpen, MessagesSquare, CircleAlert } from 'lucide-svelte';
+	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
+	import ClockCounterClockwiseIcon from 'phosphor-svelte/lib/ClockCounterClockwiseIcon';
+	import XIcon from 'phosphor-svelte/lib/XIcon';
+	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
+	import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon';
+	import GitForkIcon from 'phosphor-svelte/lib/GitForkIcon';
+	import ArchiveIcon from 'phosphor-svelte/lib/ArchiveIcon';
+	import BoxArrowUpIcon from 'phosphor-svelte/lib/BoxArrowUpIcon';
+	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
+	import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon';
+	import TrayIcon from 'phosphor-svelte/lib/TrayIcon';
+	import IdentificationCardIcon from 'phosphor-svelte/lib/IdentificationCardIcon';
+	import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon';
+	import RobotIcon from 'phosphor-svelte/lib/RobotIcon';
+	import FolderIcon from 'phosphor-svelte/lib/FolderIcon';
+	import FolderOpenIcon from 'phosphor-svelte/lib/FolderOpenIcon';
+	import ChatsIcon from 'phosphor-svelte/lib/ChatsIcon';
+	import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon';
 	import { t } from '$lib/i18n';
 	import { BACKEND_LABELS } from '$lib/backends';
 	import BackendIcon from '$lib/BackendIcon.svelte';
@@ -130,7 +147,7 @@
 	<!-- Header: the wordmark, or the session filter in its place while searching. -->
 	<div class="brand" data-tauri-drag-region>
 		{#if searchOpen}
-			<Search size={18} strokeWidth={1.5} />
+			<MagnifyingGlassIcon size={18} />
 			<input
 				class="filter"
 				bind:this={searchEl}
@@ -139,18 +156,18 @@
 				onkeydown={searchKey}
 				onblur={() => !searchQuery && toggleSearch()}
 			/>
-			<button class="head-act" onclick={toggleSearch} aria-label={t('shell.closeSearch')} title={t('shell.closeSearch')}><X size={18} strokeWidth={1.5} /></button>
+			<button class="head-act" onclick={toggleSearch} aria-label={t('shell.closeSearch')} title={t('shell.closeSearch')}><XIcon size={18} /></button>
 		{:else}
 			<span class="word">JuCode</span>
-			<button class="head-act" onclick={toggleSearch} aria-label={t('shell.searchSessions')} title={t('shell.searchSessions')}><Search size={18} strokeWidth={1.5} /></button>
+			<button class="head-act" onclick={toggleSearch} aria-label={t('shell.searchSessions')} title={t('shell.searchSessions')}><MagnifyingGlassIcon size={18} /></button>
 		{/if}
 	</div>
 
 	<nav class="primary">
-		<button class="row" onclick={newHere}><SquarePen size={18} strokeWidth={1.5} /><span>{t('shell.newChat')}</span></button>
+		<button class="row" onclick={newHere}><NotePencilIcon size={18} /><span>{t('shell.newChat')}</span></button>
 		{#if agentsStatus !== 'off'}
 			<button class="row" onclick={onDesk}>
-				<Inbox size={18} strokeWidth={1.5} /><span>{t('shell.desk.title')}</span>
+				<TrayIcon size={18} /><span>{t('shell.desk.title')}</span>
 				{#if pendingCount > 0}<span class="count">{pendingCount}</span>{/if}
 			</button>
 		{/if}
@@ -190,9 +207,9 @@
 			{#if s.chat.pendingApproval || s.chat.trustPrompt}
 				<span class="tag" title={t('shell.awaitConfirm')}>{t('shell.awaitShort')}</span>
 			{:else if s.chat.busy}
-				<LoaderCircle size={16} strokeWidth={1.5} class="spin state" />
+				<CircleNotchIcon size={16} class="spin state" />
 			{:else if s.chat.engineState === 'exited'}
-				<span class="state err"><CircleAlert size={16} strokeWidth={1.5} /></span>
+				<span class="state err"><WarningCircleIcon size={16} /></span>
 			{:else if s.chat.unseen}
 				<!-- A reply arrived while this session was not in view: the one place a dot is used. -->
 				<span class="unread" aria-label={t('shell.unread')}></span>
@@ -209,7 +226,7 @@
 				aria-label={s.archived ? 'unarchive' : 'archive'}
 				title={s.archived ? t('shell.unarchive') : t('shell.archive')}
 			>
-				{#if s.archived}<ArchiveRestore size={16} strokeWidth={1.5} />{:else}<Archive size={16} strokeWidth={1.5} />{/if}
+				{#if s.archived}<BoxArrowUpIcon size={16} />{:else}<ArchiveIcon size={16} />{/if}
 			</span>
 			<span
 				class="act"
@@ -220,7 +237,7 @@
 					onCloseSession(s.id);
 				}}
 				onkeydown={(e) => e.key === 'Enter' && (e.stopPropagation(), onCloseSession(s.id))}
-				aria-label="close"><X size={16} strokeWidth={1.5} /></span
+				aria-label="close"><XIcon size={16} /></span
 			>
 		</button>
 	{/snippet}
@@ -228,7 +245,7 @@
 	{#snippet archived(p: Project, arch: Project['sessions'], nested: boolean)}
 		{#if arch.length}
 			<button class="more" class:nested onclick={() => (showArchived[p.id] = !showArchived[p.id])}>
-				<span class="chev" class:open={showArchived[p.id]}><ChevronRight size={16} strokeWidth={1.5} /></span>
+				<span class="chev" class:open={showArchived[p.id]}><CaretRightIcon size={16} /></span>
 				<span>{t('shell.archived')} · {arch.length}</span>
 			</button>
 			{#if showArchived[p.id] || query}
@@ -242,21 +259,21 @@
 		<section>
 			<div class="head">
 				<span>{t('shell.agents.title')}</span>
-				<button class="head-act" onclick={onNewAgent} aria-label={t('shell.agents.add')} title={t('shell.agents.add')}><Plus size={16} strokeWidth={1.5} /></button>
+				<button class="head-act" onclick={onNewAgent} aria-label={t('shell.agents.add')} title={t('shell.agents.add')}><PlusIcon size={16} /></button>
 			</div>
 			{#if agentsStatus === 'unreachable'}
 				<div class="note">{t('shell.agents.unreachable')}</div>
 			{:else if agentsStatus === 'off' || agents.length === 0}
-				<button class="sess ghost" onclick={onNewAgent}><Plus size={16} strokeWidth={1.5} /><span class="sess-title">{t('shell.agents.add')}</span></button>
+				<button class="sess ghost" onclick={onNewAgent}><PlusIcon size={16} /><span class="sess-title">{t('shell.agents.add')}</span></button>
 			{/if}
 			{#each agents as a (a.id)}
 				<button class="sess agent" onclick={() => onOpenAgent(a)} title={t('shell.agents.open', { name: a.name })}>
-					<Bot size={18} strokeWidth={1.5} />
+					<RobotIcon size={18} />
 					<span class="agent-text">
 						<span class="sess-title">{a.name}</span>
 						{#if a.summary}<span class="agent-summary">{a.summary}</span>{/if}
 					</span>
-					{#if a.busy}<LoaderCircle size={16} strokeWidth={1.5} class="spin state" />{/if}
+					{#if a.busy}<CircleNotchIcon size={16} class="spin state" />{/if}
 					<span
 						class="act"
 						role="button"
@@ -267,7 +284,7 @@
 						}}
 						onkeydown={(e) => e.key === 'Enter' && (e.stopPropagation(), onAgentPage(a))}
 						aria-label={t('shell.agents.details')}
-						title={t('shell.agents.details')}><IdCard size={16} strokeWidth={1.5} /></span
+						title={t('shell.agents.details')}><IdentificationCardIcon size={16} /></span
 					>
 				</button>
 			{/each}
@@ -281,8 +298,8 @@
 				<section>
 					<div class="head">
 						<span>{chats.name}</span>
-						<button class="head-act" onclick={() => onHistory(chats)} aria-label="history" title={t('shell.history')}><History size={16} strokeWidth={1.5} /></button>
-						<button class="head-act" onclick={onNewChat} aria-label={t('shell.newChat')} title={t('shell.newChat')}><Plus size={16} strokeWidth={1.5} /></button>
+						<button class="head-act" onclick={() => onHistory(chats)} aria-label="history" title={t('shell.history')}><ClockCounterClockwiseIcon size={16} /></button>
+						<button class="head-act" onclick={onNewChat} aria-label={t('shell.newChat')} title={t('shell.newChat')}><PlusIcon size={16} /></button>
 					</div>
 					{#each showAll[chats.id] || query ? active : active.slice(0, SHOW_LIMIT) as s (s.id)}{@render sessRow(s)}{/each}
 					{#if active.length > SHOW_LIMIT && !query}
@@ -297,29 +314,30 @@
 		<section>
 			<div class="head">
 				<span>{t('shell.projects')}</span>
-				<button class="head-act" onclick={onNewProject} aria-label="new project" title={t('shell.newProjectTitle')}><Plus size={16} strokeWidth={1.5} /></button>
+				<button class="head-act" onclick={onNewProject} aria-label="new project" title={t('shell.newProjectTitle')}><PlusIcon size={16} /></button>
 			</div>
 			{#each codeProjects as p (p.id)}
 				{@const active = p.sessions.filter((s) => !s.archived && sessionMatches(p, s))}
 				{@const arch = p.sessions.filter((s) => s.archived && sessionMatches(p, s))}
 				{@const open = !collapsed[p.id] || !!query}
+				{@const w = p.sessions.some((s) => s.id === activeId) ? 'fill' : 'regular'}
 				{#if !query || active.length || arch.length}
 					<div class="folder" class:stale={p.stale}>
 						<button class="folder-row" onclick={() => (collapsed[p.id] = !collapsed[p.id])} title={p.worktree ? t('shell.task.worktreeTip', { branch: p.worktree.branch, base: p.worktree.baseBranch || '?' }) : p.path}>
-							{#if p.worktree}<GitBranch size={18} strokeWidth={1.5} />{:else if open}<FolderOpen size={18} strokeWidth={1.5} />{:else}<Folder size={18} strokeWidth={1.5} />{/if}
+							{#if p.worktree}<GitBranchIcon size={18} weight={w} />{:else if open}<FolderOpenIcon size={18} weight={w} />{:else}<FolderIcon size={18} weight={w} />{/if}
 							<span class="folder-name">{p.name}</span>
 						</button>
 						{#if p.stale}
 							<span class="tag" title={p.path}>{t('shell.task.stale')}</span>
 						{:else}
-							<button class="act" onclick={() => onHistory(p)} aria-label="history" title={t('shell.history')}><History size={16} strokeWidth={1.5} /></button>
+							<button class="act" onclick={() => onHistory(p)} aria-label="history" title={t('shell.history')}><ClockCounterClockwiseIcon size={16} /></button>
 							{#if !p.worktree}
-								<button class="act" onclick={() => onNewTask(p)} aria-label="new parallel task" title={t('shell.newTask')}><GitBranchPlus size={16} strokeWidth={1.5} /></button>
+								<button class="act" onclick={() => onNewTask(p)} aria-label="new parallel task" title={t('shell.newTask')}><GitForkIcon size={16} /></button>
 							{/if}
-							<button class="act" onclick={() => onNewSession(p)} aria-label="new session" title={t('shell.newSessionInProject')}><Plus size={16} strokeWidth={1.5} /></button>
+							<button class="act" onclick={() => onNewSession(p)} aria-label="new session" title={t('shell.newSessionInProject')}><PlusIcon size={16} /></button>
 						{/if}
 						{#if codeProjects.length > 1 || p.stale}
-							<button class="act" class:always={p.stale} onclick={() => onCloseProject(p)} aria-label="close project" title={p.stale ? t('shell.task.staleRemove') : t('shell.closeProject')}><X size={16} strokeWidth={1.5} /></button>
+							<button class="act" class:always={p.stale} onclick={() => onCloseProject(p)} aria-label="close project" title={p.stale ? t('shell.task.staleRemove') : t('shell.closeProject')}><XIcon size={16} /></button>
 						{/if}
 					</div>
 					{#if open}

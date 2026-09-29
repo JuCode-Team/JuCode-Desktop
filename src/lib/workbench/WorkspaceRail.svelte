@@ -1,5 +1,9 @@
 <script lang="ts">
-	import { Layers, Plus, CircleUserRound, Settings, CircleArrowDown } from 'lucide-svelte';
+	import StackIcon from 'phosphor-svelte/lib/StackIcon';
+	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
+	import UserCircleIcon from 'phosphor-svelte/lib/UserCircleIcon';
+	import GearIcon from 'phosphor-svelte/lib/GearIcon';
+	import ArrowCircleDownIcon from 'phosphor-svelte/lib/ArrowCircleDownIcon';
 	import { t } from '$lib/i18n';
 	import type { TabIcon } from './tabChrome';
 	import type { WorkspaceEntry } from './workspaces';
@@ -65,27 +69,27 @@
 					{#if w.icon || w.isDefault}
 						<TabGlyph icon={w.icon ?? { kind: 'builtin', id: 'home' }} color={w.color} active={w.id === activeId} size={20} />
 					{:else}
-						<Layers size={20} strokeWidth={1.5} />
+						<StackIcon size={20} weight={w.id === activeId ? 'fill' : 'regular'} />
 					{/if}
 				</span>
 			</button>
 		{/each}
 		<button class="ws add" title={t('shell.workspace.new')} aria-label={t('shell.workspace.new')} disabled={busy} onclick={onNew}>
-			<span class="tile"><Plus size={20} strokeWidth={1.5} /></span>
+			<span class="tile"><PlusIcon size={20} /></span>
 		</button>
 	</div>
 	<!-- Bottom: the person and the app, as in Codex — out of the session list. -->
 	<div class="foot">
 		{#if updateAvailable}
 			<button class="ws" title={t('shell.updateAvailable')} aria-label={t('shell.updateAvailable')} onclick={onSettings}>
-				<span class="tile"><CircleArrowDown size={20} strokeWidth={1.5} /></span>
+				<span class="tile"><ArrowCircleDownIcon size={20} /></span>
 			</button>
 		{/if}
 		<button class="ws" title={accountLabel} aria-label={accountLabel} onclick={onAccount}>
-			<span class="tile"><CircleUserRound size={20} strokeWidth={1.5} /></span>
+			<span class="tile"><UserCircleIcon size={20} /></span>
 		</button>
 		<button class="ws" title={t('shell.settings')} aria-label={t('shell.settings')} onclick={onSettings}>
-			<span class="tile"><Settings size={20} strokeWidth={1.5} /></span>
+			<span class="tile"><GearIcon size={20} /></span>
 		</button>
 	</div>
 </nav>

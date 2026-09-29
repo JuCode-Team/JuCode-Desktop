@@ -3,7 +3,8 @@
 	// 可选任务描述。确认后在 <repo-parent>/.jucode-worktrees/<repo>/<slug> 创建
 	// worktree（分支 task/<slug>），由父组件把它作为新项目打开。
 	import { onMount, tick } from 'svelte';
-	import { GitBranch, LoaderCircle } from 'lucide-svelte';
+	import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon';
+	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import Button from '$lib/ui/Button.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
@@ -73,7 +74,7 @@
 <svelte:window onkeydown={onKey} />
 
 <Modal title={t('shell.task.dialogTitle')} dismissible={!busy} {onClose}>
-	{#snippet icon()}<GitBranch size={15} />{/snippet}
+	{#snippet icon()}<GitBranchIcon size={15} />{/snippet}
 	<p class="hint">{t('shell.task.dialogHint')}</p>
 	<label class="field">
 		<span>{t('shell.task.nameLabel')}</span>
@@ -112,7 +113,7 @@
 	{#snippet footer()}
 		<Button size="sm" onclick={onClose} disabled={busy}>{t('common.cancel')}</Button>
 		<Button size="sm" variant="primary" onclick={create} disabled={!canCreate}>
-			{#if busy}<LoaderCircle size={13} class="spin" /> {t('shell.task.creating')}{:else}{t('shell.task.create')}{/if}
+			{#if busy}<CircleNotchIcon size={13} class="spin" /> {t('shell.task.creating')}{:else}{t('shell.task.create')}{/if}
 		</Button>
 	{/snippet}
 </Modal>

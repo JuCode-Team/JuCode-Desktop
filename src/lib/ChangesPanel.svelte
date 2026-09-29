@@ -1,5 +1,8 @@
 <script lang="ts">
-	import { FileDiff, RefreshCw, Undo2, SquarePen } from 'lucide-svelte';
+	import GitDiffIcon from 'phosphor-svelte/lib/GitDiffIcon';
+	import ArrowsClockwiseIcon from 'phosphor-svelte/lib/ArrowsClockwiseIcon';
+	import ArrowUUpLeftIcon from 'phosphor-svelte/lib/ArrowUUpLeftIcon';
+	import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
@@ -98,16 +101,16 @@
 
 <div class="changes">
 	<div class="bar">
-		<FileDiff size={14} class="ccol" />
+		<GitDiffIcon size={14} class="ccol" />
 		<span class="title">{t('dock.changes.title')} <span class="count">{files.length}</span></span>
-		<IconButton size="sm" onclick={refresh} label="refresh"><RefreshCw size={13} /></IconButton>
+		<IconButton size="sm" onclick={refresh} label="refresh"><ArrowsClockwiseIcon size={13} /></IconButton>
 	</div>
 	{#if error}
 		<div class="oerr"><Notice mono onDismiss={() => (error = '')}>{error}</Notice></div>
 	{/if}
 	{#if files.length === 0}
 		<div class="empty">
-			<FileDiff size={26} />
+			<GitDiffIcon size={26} />
 			<p>{t('dock.changes.empty')}</p>
 			<span>{t('dock.changes.emptyHint')}</span>
 		</div>
@@ -121,8 +124,8 @@
 						<span class="rdir">{f}</span>
 					</button>
 					{#if s}<span class="stat"><span class="add">+{s.add}</span> <span class="del">−{s.del}</span></span>{/if}
-					<IconButton size="sm" onclick={() => openInEditor(f)} label={t('editor.openInEditor')} title={t('editor.openInEditor')}><SquarePen size={13} /></IconButton>
-					<IconButton size="sm" onclick={() => revert(f)} disabled={busy} label={t('dock.changes.revert')} title={t('dock.changes.revertFile')}><Undo2 size={13} /></IconButton>
+					<IconButton size="sm" onclick={() => openInEditor(f)} label={t('editor.openInEditor')} title={t('editor.openInEditor')}><NotePencilIcon size={13} /></IconButton>
+					<IconButton size="sm" onclick={() => revert(f)} disabled={busy} label={t('dock.changes.revert')} title={t('dock.changes.revertFile')}><ArrowUUpLeftIcon size={13} /></IconButton>
 				</div>
 			{/each}
 		</div>

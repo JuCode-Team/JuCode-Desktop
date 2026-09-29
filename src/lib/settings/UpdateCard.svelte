@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { RefreshCw, CircleCheck, Download, RotateCw } from 'lucide-svelte';
+	import ArrowsClockwiseIcon from 'phosphor-svelte/lib/ArrowsClockwiseIcon';
+	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
+	import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon';
+	import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon';
 	import { getVersion } from '@tauri-apps/api/app';
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
@@ -14,7 +17,7 @@
 </script>
 
 <div class="group">
-	<div class="glabel"><RefreshCw size={12} /> {t('settings.update.groupLabel')}</div>
+	<div class="glabel"><ArrowsClockwiseIcon size={12} /> {t('settings.update.groupLabel')}</div>
 	<div class="card">
 		<div class="row">
 			<span class="txt">
@@ -24,17 +27,17 @@
 			{#if updater.phase === 'checking'}
 				<Button variant="secondary" size="sm" disabled>{t('settings.update.checking')}</Button>
 			{:else if updater.phase === 'available'}
-				<Button variant="primary" size="sm" onclick={() => updater.download()}><Download size={14} /> {t('settings.update.download')}</Button>
+				<Button variant="primary" size="sm" onclick={() => updater.download()}><DownloadSimpleIcon size={14} /> {t('settings.update.download')}</Button>
 			{:else if updater.phase === 'downloading'}
 				<Button variant="primary" size="sm" disabled>{t('settings.update.downloading', { pct: updater.progress })}</Button>
 			{:else if updater.phase === 'ready'}
-				<Button variant="primary" size="sm" onclick={() => updater.restart()}><RotateCw size={14} /> {t('settings.update.restart')}</Button>
+				<Button variant="primary" size="sm" onclick={() => updater.restart()}><ArrowClockwiseIcon size={14} /> {t('settings.update.restart')}</Button>
 			{:else}
 				<Button variant="secondary" size="sm" onclick={() => updater.check()}>{t('settings.update.check')}</Button>
 			{/if}
 		</div>
 		{#if updater.phase === 'latest'}
-			<p class="status ok"><CircleCheck size={13} /> {t('settings.update.latest')}</p>
+			<p class="status ok"><CheckCircleIcon size={13} /> {t('settings.update.latest')}</p>
 		{:else if updater.available}
 			<p class="status accent">{t('settings.update.found', { version: updater.version })}</p>
 		{:else if updater.phase === 'error'}
@@ -44,7 +47,7 @@
 			<div class="bar"><div class="fill" style:width="{updater.progress}%"></div></div>
 		{/if}
 		{#if updater.phase === 'ready'}
-			<p class="status ok"><CircleCheck size={13} /> {t('settings.update.readyHint')}</p>
+			<p class="status ok"><CheckCircleIcon size={13} /> {t('settings.update.readyHint')}</p>
 		{/if}
 	</div>
 </div>

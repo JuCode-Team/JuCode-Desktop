@@ -3,7 +3,10 @@
 	// approval and a composer. Watching it makes the session attended, so
 	// approvals prompt here; leaving only unwatches it.
 	import { onDestroy, onMount, tick } from 'svelte';
-	import { ArrowLeft, Send, Square, RotateCw } from 'lucide-svelte';
+	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
+	import PaperPlaneTiltIcon from 'phosphor-svelte/lib/PaperPlaneTiltIcon';
+	import SquareIcon from 'phosphor-svelte/lib/SquareIcon';
+	import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon';
 	import MessageList from '$lib/MessageList.svelte';
 	import ApprovalCard from '$lib/ApprovalCard.svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -115,7 +118,7 @@
 
 <div class="session">
 	<header>
-		<button class="back" onclick={onBack} aria-label={t('shell.remote.back')}><ArrowLeft size={18} /></button>
+		<button class="back" onclick={onBack} aria-label={t('shell.remote.back')}><ArrowLeftIcon size={18} /></button>
 		<span class="title">{title}</span>
 		{#if chat.busy}<span class="busy pulse"></span>{/if}
 	</header>
@@ -143,7 +146,7 @@
 	{#if exited}
 		<div class="exit">
 			<div class="exit-msg"><Notice tone={error ? 'error' : 'warn'}>{error || t('shell.remote.disconnected')}</Notice></div>
-			<Button size="sm" onclick={connect}><RotateCw size={13} /> {t('shell.remote.reconnect')}</Button>
+			<Button size="sm" onclick={connect}><ArrowClockwiseIcon size={13} /> {t('shell.remote.reconnect')}</Button>
 		</div>
 	{/if}
 
@@ -156,11 +159,11 @@
 		></textarea>
 		{#if chat.busy}
 			<button type="button" class="icon" onclick={() => send({ op: 'interrupt' })} aria-label={t('shell.remote.stop')}>
-				<Square size={16} />
+				<SquareIcon size={16} />
 			</button>
 		{/if}
 		<button type="submit" class="icon primary" disabled={!text.trim() || !connected} aria-label={t('shell.remote.send')}>
-			<Send size={16} />
+			<PaperPlaneTiltIcon size={16} />
 		</button>
 	</form>
 </div>

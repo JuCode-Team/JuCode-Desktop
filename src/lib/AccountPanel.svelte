@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { RefreshCw, Wallet, Package, Activity } from 'lucide-svelte';
+	import ArrowsClockwiseIcon from 'phosphor-svelte/lib/ArrowsClockwiseIcon';
+	import WalletIcon from 'phosphor-svelte/lib/WalletIcon';
+	import PackageIcon from 'phosphor-svelte/lib/PackageIcon';
+	import PulseIcon from 'phosphor-svelte/lib/PulseIcon';
 	import {
 		fetchAccountInfo,
 		fetchUsage,
@@ -73,7 +76,7 @@
 	<div class="glabel-row">
 		<div class="glabel">{t('settings.usage.groupLabel')}</div>
 		<button class="refresh" onclick={load} disabled={loading} aria-label={t('settings.usage.refresh')}>
-			<RefreshCw size={13} class={loading ? 'spin' : ''} />
+			<ArrowsClockwiseIcon size={13} class={loading ? 'spin' : ''} />
 		</button>
 	</div>
 
@@ -84,12 +87,12 @@
 	{:else if account}
 		<div class="cards">
 			<div class="card">
-				<span class="ci"><Wallet size={15} /></span>
+				<span class="ci"><WalletIcon size={15} /></span>
 				<span class="cl">{t('settings.usage.balance')}</span>
 				<span class="cv">{account.balance ?? '0'} {account.currency ?? ''}</span>
 			</div>
 			<div class="card">
-				<span class="ci"><Package size={15} /></span>
+				<span class="ci"><PackageIcon size={15} /></span>
 				<span class="cl">{t('settings.usage.plan')}</span>
 				<span class="cv">{account.active_plan?.name ?? t('settings.usage.noActivePlan')}</span>
 			</div>
@@ -104,7 +107,7 @@
 		{/if}
 
 		<div class="logs">
-			<div class="logs-h"><Activity size={13} /> {t('settings.usage.recentCalls')}</div>
+			<div class="logs-h"><PulseIcon size={13} /> {t('settings.usage.recentCalls')}</div>
 			{#if logs.length === 0}
 				<p class="hint">{t('settings.usage.noCalls')}</p>
 			{:else}

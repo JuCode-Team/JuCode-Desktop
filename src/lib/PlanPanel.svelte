@@ -1,14 +1,17 @@
 <script lang="ts">
-	import { ListTodo, Circle, CircleDot, CircleCheck } from 'lucide-svelte';
+	import ListBulletsIcon from 'phosphor-svelte/lib/ListBulletsIcon';
+	import CircleIcon from 'phosphor-svelte/lib/CircleIcon';
+	import RecordIcon from 'phosphor-svelte/lib/RecordIcon';
+	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
 	import type { PlanStep } from '$lib/chat.svelte';
 	import { t } from '$lib/i18n';
 
 	let { plan }: { plan: PlanStep[] } = $props();
 
-	const META: Record<string, { icon: typeof Circle; cls: string }> = {
-		pending: { icon: Circle, cls: 'pending' },
-		in_progress: { icon: CircleDot, cls: 'active' },
-		completed: { icon: CircleCheck, cls: 'done' }
+	const META: Record<string, { icon: typeof CircleIcon; cls: string }> = {
+		pending: { icon: CircleIcon, cls: 'pending' },
+		in_progress: { icon: RecordIcon, cls: 'active' },
+		completed: { icon: CheckCircleIcon, cls: 'done' }
 	};
 	const metaOf = (s: string) => META[s] ?? META.pending;
 	const done = $derived(plan.filter((p) => p.status === 'completed').length);
@@ -31,7 +34,7 @@
 		</ol>
 	{:else}
 		<div class="empty">
-			<ListTodo size={26} />
+			<ListBulletsIcon size={26} />
 			<p>{t('dock.plan.empty')}</p>
 			<span>{t('dock.plan.emptyHint')}</span>
 		</div>

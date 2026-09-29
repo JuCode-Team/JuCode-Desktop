@@ -1,6 +1,10 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
-	import { ArrowLeft, ArrowRight, RotateCw, Globe, SquareDashedMousePointer } from 'lucide-svelte';
+	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
+	import ArrowRightIcon from 'phosphor-svelte/lib/ArrowRightIcon';
+	import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon';
+	import GlobeIcon from 'phosphor-svelte/lib/GlobeIcon';
+	import SelectionIcon from 'phosphor-svelte/lib/SelectionIcon';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import { browser } from '$lib/browser.svelte';
 	import { t } from '$lib/i18n';
@@ -50,10 +54,10 @@
 
 <div class="bp">
 	<form class="bar" onsubmit={go}>
-		<IconButton size="sm" type="button" onclick={() => browser.goBack()} label="back" title={t('dock.browser.back')}><ArrowLeft size={14} /></IconButton>
-		<IconButton size="sm" type="button" onclick={() => browser.goForward()} label="forward" title={t('dock.browser.forward')}><ArrowRight size={14} /></IconButton>
+		<IconButton size="sm" type="button" onclick={() => browser.goBack()} label="back" title={t('dock.browser.back')}><ArrowLeftIcon size={14} /></IconButton>
+		<IconButton size="sm" type="button" onclick={() => browser.goForward()} label="forward" title={t('dock.browser.forward')}><ArrowRightIcon size={14} /></IconButton>
 		<IconButton size="sm" type="button" onclick={() => browser.reload()} label="reload" title={t('dock.browser.reload')}>
-			<RotateCw size={13} class={browser.loading ? 'spin' : undefined} />
+			<ArrowClockwiseIcon size={13} class={browser.loading ? 'spin' : undefined} />
 		</IconButton>
 		<input
 			class="url"
@@ -71,7 +75,7 @@
 			title={t('dock.browser.pick')}
 			onclick={() => browser.setPicking(!browser.picking)}
 		>
-			<SquareDashedMousePointer size={14} />
+			<SelectionIcon size={14} />
 		</button>
 	</form>
 	{#if browser.picking}
@@ -80,7 +84,7 @@
 	<div class="ph" bind:this={placeholder}>
 		{#if !browser.created}
 			<div class="empty">
-				<Globe size={22} />
+				<GlobeIcon size={22} />
 				<p>{t('dock.browser.empty')}</p>
 				<span>{t('dock.browser.emptyHint')}</span>
 			</div>

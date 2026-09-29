@@ -3,7 +3,9 @@
 	// engine warnings, stderr, restart notices) — kept out of the conversation
 	// bubble stream (T3 Code's "work log" idea). Collapsed by default: a muted pill
 	// showing the latest notice + a count; click to expand the full list.
-	import { Info, X, ChevronUp } from 'lucide-svelte';
+	import InfoIcon from 'phosphor-svelte/lib/InfoIcon';
+	import XIcon from 'phosphor-svelte/lib/XIcon';
+	import CaretUpIcon from 'phosphor-svelte/lib/CaretUpIcon';
 	import { slide } from 'svelte/transition';
 	import { t } from '$lib/i18n';
 
@@ -19,7 +21,7 @@
 			<div class="panel" transition:slide={{ duration: 140 }}>
 				<div class="phead">
 					<span class="ptitle">{t('chat.statusTitle')} · {items.length}</span>
-					<button class="pclose" onclick={() => (open = false)} aria-label="close"><X size={13} /></button>
+					<button class="pclose" onclick={() => (open = false)} aria-label="close"><XIcon size={13} /></button>
 				</div>
 				<div class="plist">
 					{#each items as it, i (i)}
@@ -29,10 +31,10 @@
 			</div>
 		{/if}
 		<button class="pill" class:on={open} onclick={() => (open = !open)} title={t('chat.statusTitle')}>
-			<Info size={13} />
+			<InfoIcon size={13} />
 			<span class="ptext">{latest}</span>
 			<span class="pcount">{items.length}</span>
-			<span class="pchev" class:up={open}><ChevronUp size={13} /></span>
+			<span class="pchev" class:up={open}><CaretUpIcon size={13} /></span>
 		</button>
 	</div>
 {/if}

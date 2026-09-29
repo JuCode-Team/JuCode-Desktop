@@ -4,7 +4,16 @@
 	// global, so any live engine is authoritative); with no live session the
 	// config.json entries render read-only.
 	import { onMount } from 'svelte';
-	import { Plus, Pencil, Trash2, RotateCw, ChevronDown, Server, Blocks, CircleCheck, CircleX, CircleDashed } from 'lucide-svelte';
+	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
+	import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon';
+	import TrashIcon from 'phosphor-svelte/lib/TrashIcon';
+	import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon';
+	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
+	import HardDrivesIcon from 'phosphor-svelte/lib/HardDrivesIcon';
+	import CubeIcon from 'phosphor-svelte/lib/CubeIcon';
+	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
+	import XCircleIcon from 'phosphor-svelte/lib/XCircleIcon';
+	import CircleDashedIcon from 'phosphor-svelte/lib/CircleDashedIcon';
 	import { readConfig, type Op } from '$lib/protocol';
 	import { dispatch } from '$lib/backends/router';
 	import type { ChatState } from '$lib/chat.svelte';
@@ -118,7 +127,7 @@
 </script>
 
 <div class="group">
-	<div class="glabel"><Server size={12} /> {t('settings.mcp.groupLabel')}</div>
+	<div class="glabel"><HardDrivesIcon size={12} /> {t('settings.mcp.groupLabel')}</div>
 	<p class="hint">{t('settings.mcp.hint')}</p>
 	{#if !live}
 		<div class="notice"><Notice tone="info">{t('settings.mcp.noSession')}</Notice></div>
@@ -131,7 +140,7 @@
 		<div class="mcp-empty">
 			<p>{t('settings.mcp.empty')}</p>
 			<Button variant="primary" size="sm" disabled={!live} onclick={openCreate}>
-				<Plus size={14} /> {t('settings.mcp.addServer')}
+				<PlusIcon size={14} /> {t('settings.mcp.addServer')}
 			</Button>
 		</div>
 	{:else if rows.length > 0}
@@ -147,7 +156,7 @@
 							<span
 								class="state {stateOf(row)}"
 								title={row.view?.error ?? t(`settings.mcp.state.${stateOf(row)}`)}
-							>{#if stateOf(row) === 'connected'}<CircleCheck size={14} strokeWidth={1.5} />{:else if stateOf(row) === 'failed'}<CircleX size={14} strokeWidth={1.5} />{:else}<CircleDashed size={14} strokeWidth={1.5} />{/if}</span>
+							>{#if stateOf(row) === 'connected'}<CheckCircleIcon size={14} />{:else if stateOf(row) === 'failed'}<XCircleIcon size={14} />{:else}<CircleDashedIcon size={14} />{/if}</span>
 							<span class="sname">{row.name}</span>
 							<span class="tchip">{row.transport}</span>
 							<span class="scount">
@@ -159,19 +168,19 @@
 									{t('settings.mcp.state.unknown')}
 								{/if}
 							</span>
-							<span class="chev" class:up={expanded === row.name}><ChevronDown size={14} /></span>
+							<span class="chev" class:up={expanded === row.name}><CaretDownIcon size={14} /></span>
 						</button>
 						<span class="sacts">
 							{#if live && stateOf(row) === 'failed' && row.entry}
 								<IconButton size="sm" title={t('settings.mcp.reconnect')} onclick={() => reconnect(row)}>
-									<RotateCw size={14} />
+									<ArrowClockwiseIcon size={14} />
 								</IconButton>
 							{/if}
 							<span class="swwrap" class:off={!live}>
 								<Switch bind:checked={() => row.enabled, (v) => toggle(row, v)} label={row.name} />
 							</span>
 							<IconButton size="sm" title={t('settings.mcp.edit')} disabled={!live} onclick={() => openEdit(row)}>
-								<Pencil size={14} />
+								<PencilSimpleIcon size={14} />
 							</IconButton>
 							<IconButton
 								size="sm"
@@ -179,7 +188,7 @@
 								disabled={!live}
 								onclick={() => (confirmDelete = confirmDelete === row.name ? null : row.name)}
 							>
-								<Trash2 size={14} />
+								<TrashIcon size={14} />
 							</IconButton>
 						</span>
 					</div>
@@ -282,13 +291,13 @@
 		</div>
 	{:else if rows.length > 0}
 		<button class="addsrv" disabled={!live} onclick={openCreate}>
-			<Plus size={15} /> {t('settings.mcp.addServer')}
+			<PlusIcon size={15} /> {t('settings.mcp.addServer')}
 		</button>
 	{/if}
 </div>
 
 <div class="group">
-	<div class="glabel"><Blocks size={12} /> {t('settings.ext.groupLabel')}</div>
+	<div class="glabel"><CubeIcon size={12} /> {t('settings.ext.groupLabel')}</div>
 	<p class="hint">{t('settings.ext.hint')}</p>
 	{#if extensions.length === 0}
 		<p class="hint">{t('settings.ext.empty')}</p>

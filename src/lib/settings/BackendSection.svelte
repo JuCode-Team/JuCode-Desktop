@@ -4,7 +4,10 @@
 	// preferences persist to localStorage immediately (independent of the
 	// engine config's save button).
 	import { onMount } from 'svelte';
-	import { RotateCw, CircleCheck, CircleAlert, ChevronRight } from 'lucide-svelte';
+	import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon';
+	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
+	import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon';
+	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
 	import {
 		checkBackend,
 		shellEnvStatus,
@@ -138,7 +141,7 @@
 				label="refresh shell env"
 				title={t('settings.backend.shellEnvRefresh')}
 			>
-				<RotateCw size={14} class={refreshing ? 'spin' : ''} />
+				<ArrowClockwiseIcon size={14} class={refreshing ? 'spin' : ''} />
 			</IconButton>
 			<Switch bind:checked={settings.useShellEnv} label={t('settings.backend.shellEnvToggle')} />
 		</div>
@@ -156,9 +159,9 @@
 						{#if st === 'checking'}
 							<span class="bstate dim">{t('settings.backend.checking')}</span>
 						{:else if st?.found}
-							<span class="bstate ok"><CircleCheck size={12} /> {versionLabel(st) || t('settings.backend.found')}</span>
+							<span class="bstate ok"><CheckCircleIcon size={12} /> {versionLabel(st) || t('settings.backend.found')}</span>
 						{:else if st}
-							<span class="bstate warn"><CircleAlert size={12} /> {t('settings.backend.notFound')}</span>
+							<span class="bstate warn"><WarningCircleIcon size={12} /> {t('settings.backend.notFound')}</span>
 						{/if}
 					</div>
 					{#if st && st !== 'checking' && st.found && st.path}
@@ -174,7 +177,7 @@
 						/>
 					</div>
 					<button class="envhead" onclick={() => (envOpen[id] = !envOpen[id])}>
-						<span class="chev" class:open={envOpen[id]}><ChevronRight size={12} /></span>
+						<span class="chev" class:open={envOpen[id]}><CaretRightIcon size={12} /></span>
 						{t('settings.backend.envLabel')}
 						{#if envCount(id)}<span class="envcount">{envCount(id)}</span>{/if}
 					</button>
@@ -194,7 +197,7 @@
 					{/if}
 				</div>
 				<IconButton onclick={() => check(id)} label="re-check backend" title={t('settings.backend.recheck')}>
-					<RotateCw size={14} />
+					<ArrowClockwiseIcon size={14} />
 				</IconButton>
 			</div>
 		{/each}

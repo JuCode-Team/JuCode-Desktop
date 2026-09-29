@@ -1,10 +1,24 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import {
-		Search, Plus, FolderPlus, Cpu, RotateCcw, History, Layers,
-		Gauge, Activity, Stethoscope, GitBranch, GitBranchPlus, Store, Settings as SettingsIcon,
-		PanelLeft, LayoutGrid, SunMoon, ChevronRight, Wrench
-	} from 'lucide-svelte';
+	import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon';
+	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
+	import FolderPlusIcon from 'phosphor-svelte/lib/FolderPlusIcon';
+	import CpuIcon from 'phosphor-svelte/lib/CpuIcon';
+	import ArrowCounterClockwiseIcon from 'phosphor-svelte/lib/ArrowCounterClockwiseIcon';
+	import ClockCounterClockwiseIcon from 'phosphor-svelte/lib/ClockCounterClockwiseIcon';
+	import StackIcon from 'phosphor-svelte/lib/StackIcon';
+	import GaugeIcon from 'phosphor-svelte/lib/GaugeIcon';
+	import PulseIcon from 'phosphor-svelte/lib/PulseIcon';
+	import StethoscopeIcon from 'phosphor-svelte/lib/StethoscopeIcon';
+	import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon';
+	import GitForkIcon from 'phosphor-svelte/lib/GitForkIcon';
+	import StorefrontIcon from 'phosphor-svelte/lib/StorefrontIcon';
+	import SettingsIcon from 'phosphor-svelte/lib/GearIcon';
+	import SidebarSimpleIcon from 'phosphor-svelte/lib/SidebarSimpleIcon';
+	import SquaresFourIcon from 'phosphor-svelte/lib/SquaresFourIcon';
+	import CircleHalfIcon from 'phosphor-svelte/lib/CircleHalfIcon';
+	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
+	import WrenchIcon from 'phosphor-svelte/lib/WrenchIcon';
 	import type { ChatState } from '$lib/chat.svelte';
 	import { caps, type BackendCaps } from '$lib/backends';
 	import Modal from '$lib/ui/Modal.svelte';
@@ -52,7 +66,7 @@
 		label: string;
 		hint?: string;
 		keys?: string;
-		icon: typeof Plus;
+		icon: typeof PlusIcon;
 		keywords?: string;
 		disabled?: boolean;
 		/** Backend capability required for the entry (omit = always shown). */
@@ -76,31 +90,31 @@
 	// curated ones, which already cover the common /model, /tree, /resume… verbs).
 	const actions = $derived.by<Action[]>(() => {
 		const curated: Action[] = [
-			{ id: 'new-session', label: t('shell.cmd.newSession'), keys: '⌘N', icon: Plus, keywords: t('shell.cmd.newSessionKw'), disabled: !hasProject, run: wrap(onNewSession) },
-			{ id: 'new-project', label: t('shell.cmd.newProject'), icon: FolderPlus, keywords: t('shell.cmd.newProjectKw'), run: wrap(onNewProject) },
-			{ id: 'new-task', label: t('shell.cmd.newTask'), hint: t('shell.cmd.newTaskHint'), icon: GitBranchPlus, keywords: t('shell.cmd.newTaskKw'), disabled: !canNewTask, run: wrap(onNewTask) },
-			{ id: 'model', label: t('shell.cmd.model'), icon: Cpu, keywords: t('shell.cmd.modelKw'), cap: 'modelPicker', run: wrap(() => onRun('/model')) },
-			{ id: 'rewind', label: t('shell.cmd.rewind'), hint: t('shell.cmd.rewindHint'), icon: RotateCcw, keywords: t('shell.cmd.rewindKw'), cap: 'checkpoints', run: wrap(() => onRun('/rewind')) },
-			{ id: 'resume', label: t('shell.cmd.resume'), icon: History, keywords: t('shell.cmd.resumeKw'), cap: 'resume', run: wrap(() => onRun('/resume')) },
-			{ id: 'tree', label: t('shell.cmd.tree'), icon: GitBranch, keywords: t('shell.cmd.treeKw'), cap: 'branchTree', run: wrap(() => onRun('/tree')) },
-			{ id: 'compact', label: t('shell.cmd.compact'), icon: Layers, keywords: t('shell.cmd.compactKw'), cap: 'compact', run: wrap(() => onRun('/compact')) },
-			{ id: 'context', label: t('shell.cmd.context'), icon: Gauge, keywords: t('shell.cmd.contextKw'), cap: 'slashCommands', run: wrap(() => onRun('/context')) },
-			{ id: 'stats', label: t('shell.cmd.stats'), icon: Activity, keywords: t('shell.cmd.statsKw'), cap: 'slashCommands', run: wrap(() => onRun('/stats')) },
-			{ id: 'doctor', label: t('shell.cmd.doctor'), icon: Stethoscope, keywords: t('shell.cmd.doctorKw'), cap: 'slashCommands', run: wrap(() => onRun('/doctor')) },
-			{ id: 'market', label: t('shell.cmd.market'), icon: Store, keywords: t('shell.cmd.marketKw'), cap: 'skills', run: wrap(onMarket) },
+			{ id: 'new-session', label: t('shell.cmd.newSession'), keys: '⌘N', icon: PlusIcon, keywords: t('shell.cmd.newSessionKw'), disabled: !hasProject, run: wrap(onNewSession) },
+			{ id: 'new-project', label: t('shell.cmd.newProject'), icon: FolderPlusIcon, keywords: t('shell.cmd.newProjectKw'), run: wrap(onNewProject) },
+			{ id: 'new-task', label: t('shell.cmd.newTask'), hint: t('shell.cmd.newTaskHint'), icon: GitForkIcon, keywords: t('shell.cmd.newTaskKw'), disabled: !canNewTask, run: wrap(onNewTask) },
+			{ id: 'model', label: t('shell.cmd.model'), icon: CpuIcon, keywords: t('shell.cmd.modelKw'), cap: 'modelPicker', run: wrap(() => onRun('/model')) },
+			{ id: 'rewind', label: t('shell.cmd.rewind'), hint: t('shell.cmd.rewindHint'), icon: ArrowCounterClockwiseIcon, keywords: t('shell.cmd.rewindKw'), cap: 'checkpoints', run: wrap(() => onRun('/rewind')) },
+			{ id: 'resume', label: t('shell.cmd.resume'), icon: ClockCounterClockwiseIcon, keywords: t('shell.cmd.resumeKw'), cap: 'resume', run: wrap(() => onRun('/resume')) },
+			{ id: 'tree', label: t('shell.cmd.tree'), icon: GitBranchIcon, keywords: t('shell.cmd.treeKw'), cap: 'branchTree', run: wrap(() => onRun('/tree')) },
+			{ id: 'compact', label: t('shell.cmd.compact'), icon: StackIcon, keywords: t('shell.cmd.compactKw'), cap: 'compact', run: wrap(() => onRun('/compact')) },
+			{ id: 'context', label: t('shell.cmd.context'), icon: GaugeIcon, keywords: t('shell.cmd.contextKw'), cap: 'slashCommands', run: wrap(() => onRun('/context')) },
+			{ id: 'stats', label: t('shell.cmd.stats'), icon: PulseIcon, keywords: t('shell.cmd.statsKw'), cap: 'slashCommands', run: wrap(() => onRun('/stats')) },
+			{ id: 'doctor', label: t('shell.cmd.doctor'), icon: StethoscopeIcon, keywords: t('shell.cmd.doctorKw'), cap: 'slashCommands', run: wrap(() => onRun('/doctor')) },
+			{ id: 'market', label: t('shell.cmd.market'), icon: StorefrontIcon, keywords: t('shell.cmd.marketKw'), cap: 'skills', run: wrap(onMarket) },
 			// Tool tiles on the canvas: Git, Terminal, Files, Browser, Plan, …
 			...panelOptions.map((p): Action => ({
 				id: `panel-${p.key}`,
 				label: t('shell.cmd.openPanel', { name: p.label }),
 				hint: t('shell.cmd.openPanelHint'),
-				icon: LayoutGrid,
+				icon: SquaresFourIcon,
 				keywords: `${t('shell.cmd.openPanelKw')} ${p.key} ${p.label}`,
 				run: wrap(() => onOpenPanel(p.key))
 			})),
 			{ id: 'settings', label: t('shell.cmd.settings'), keys: '⌘,', icon: SettingsIcon, keywords: t('shell.cmd.settingsKw'), run: wrap(onSettings) },
-			{ id: 'setup', label: t('shell.cmd.setup'), hint: t('shell.cmd.setupHint'), icon: Wrench, keywords: t('shell.cmd.setupKw'), run: wrap(onSetup) },
-			{ id: 'sidebar', label: t('shell.cmd.sidebar'), keys: '⌘B', icon: PanelLeft, keywords: t('shell.cmd.sidebarKw'), run: wrap(onToggleSidebar) },
-			{ id: 'theme', label: t('shell.cmd.theme'), icon: SunMoon, keywords: t('shell.cmd.themeKw'), run: wrap(onToggleTheme) }
+			{ id: 'setup', label: t('shell.cmd.setup'), hint: t('shell.cmd.setupHint'), icon: WrenchIcon, keywords: t('shell.cmd.setupKw'), run: wrap(onSetup) },
+			{ id: 'sidebar', label: t('shell.cmd.sidebar'), keys: '⌘B', icon: SidebarSimpleIcon, keywords: t('shell.cmd.sidebarKw'), run: wrap(onToggleSidebar) },
+			{ id: 'theme', label: t('shell.cmd.theme'), icon: CircleHalfIcon, keywords: t('shell.cmd.themeKw'), run: wrap(onToggleTheme) }
 		];
 		const known = new Set(['/model', '/rewind', '/undo', '/resume', '/tree', '/compact', '/context', '/stats', '/doctor', '/new']);
 		const gated = curated.filter((a) => !a.cap || bcaps[a.cap]);
@@ -110,7 +124,7 @@
 				id: `cmd${c.command}`,
 				label: c.command,
 				hint: c.description,
-				icon: ChevronRight,
+				icon: CaretRightIcon,
 				keywords: `${c.command} ${c.description ?? ''}`,
 				run: wrap(() => onRun(c.command))
 			}));
@@ -152,7 +166,7 @@
 
 <Modal label={t('shell.paletteLabel')} width={560} placement="top" padded={false} {onClose}>
 	<div class="search">
-		<Search size={16} />
+		<MagnifyingGlassIcon size={16} />
 		<input bind:this={inputEl} bind:value={query} onkeydown={onKey} placeholder={t('shell.paletteSearch')} />
 	</div>
 	<div class="rows">

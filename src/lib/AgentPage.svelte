@@ -1,7 +1,11 @@
 <script lang="ts">
 	// One long-lived agent: its settings, brief, memory and sessions.
 	import { onMount } from 'svelte';
-	import { X, Bot, Plus, LoaderCircle, FolderPlus } from 'lucide-svelte';
+	import XIcon from 'phosphor-svelte/lib/XIcon';
+	import RobotIcon from 'phosphor-svelte/lib/RobotIcon';
+	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
+	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
+	import FolderPlusIcon from 'phosphor-svelte/lib/FolderPlusIcon';
 	import { open } from '@tauri-apps/plugin-dialog';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -94,16 +98,16 @@
 	<div class="sheet">
 		<div class="head">
 			<div>
-				<h2><Bot size={18} /> {detail?.agent.name ?? agentId}</h2>
+				<h2><RobotIcon size={18} /> {detail?.agent.name ?? agentId}</h2>
 				<p><code>{agentId}</code>{#if detail} · <code>{detail.agent.cwd}</code>{/if}</p>
 			</div>
-			<IconButton onclick={onClose} label="close"><X size={18} /></IconButton>
+			<IconButton onclick={onClose} label="close"><XIcon size={18} /></IconButton>
 		</div>
 
 		<div class="body">
 			{#if error}<div class="err"><Notice>{error}</Notice></div>{/if}
 			{#if !detail}
-				{#if !error}<div class="loading"><LoaderCircle size={18} class="spin" /></div>{/if}
+				{#if !error}<div class="loading"><CircleNotchIcon size={18} class="spin" /></div>{/if}
 			{:else}
 				<section>
 					<h3>{t('shell.agentPage.settings')}</h3>
@@ -147,7 +151,7 @@
 
 					<div class="section-head sub">
 						<span>{t('shell.agentPage.directories')}</span>
-						<Button size="sm" onclick={addDirectory}><FolderPlus size={13} /> {t('shell.agentPage.addDirectory')}</Button>
+						<Button size="sm" onclick={addDirectory}><FolderPlusIcon size={13} /> {t('shell.agentPage.addDirectory')}</Button>
 					</div>
 					<p class="hint">{t('shell.agentPage.directoriesHint')}</p>
 					{#each detail.agent.directories as dir, index (dir.path)}
@@ -168,7 +172,7 @@
 								onclick={() =>
 									change({ directories: detail!.agent.directories.filter((_, i) => i !== index) })}
 							>
-								<X size={13} />
+								<XIcon size={13} />
 							</IconButton>
 						</div>
 					{/each}
@@ -176,7 +180,7 @@
 					<div class="section-head sub">
 						<span>{t('shell.agentPage.rules')}</span>
 						<Button size="sm" onclick={() => (rules = [...rules, { prefix: '', action: 'ask' }])}>
-							<Plus size={13} /> {t('shell.agentPage.addRule')}
+							<PlusIcon size={13} /> {t('shell.agentPage.addRule')}
 						</Button>
 					</div>
 					<p class="hint">{t('shell.agentPage.rulesHint')}</p>
@@ -203,7 +207,7 @@
 									saveRules();
 								}}
 							>
-								<X size={13} />
+								<XIcon size={13} />
 							</IconButton>
 						</div>
 					{/each}
@@ -212,7 +216,7 @@
 				<section>
 					<div class="section-head">
 						<h3>{t('shell.agentPage.sessions')}</h3>
-						<Button size="sm" onclick={onNewSession}><Plus size={13} /> {t('shell.agentPage.newSession')}</Button>
+						<Button size="sm" onclick={onNewSession}><PlusIcon size={13} /> {t('shell.agentPage.newSession')}</Button>
 					</div>
 					{#if sessions.length === 0}
 						<p class="empty">{t('shell.agentPage.noSessions')}</p>

@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { Search, Star } from 'lucide-svelte';
+	import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon';
+	import StarIcon from 'phosphor-svelte/lib/StarIcon';
 	import { t } from '$lib/i18n';
 	import type { CatalogProvider } from '$lib/providers/catalog';
 	import Vendor from '$lib/Vendor.svelte';
@@ -38,7 +39,7 @@
 		<p class="catalog-hint">{t('settings.catalog.hint')}</p>
 	</div>
 	<label class="search">
-		<Search size={14} />
+		<MagnifyingGlassIcon size={14} />
 		<TextField bind:value={query} placeholder={t('settings.catalog.search')} />
 	</label>
 	<div class="catalog-list">
@@ -48,7 +49,7 @@
 				<span class="catalog-copy">
 					<span class="catalog-name">
 						{provider.name}
-						{#if provider.featured}<span class="featured-tag"><Star size={10} /> {t('settings.catalog.featured')}</span>{/if}
+						{#if provider.featured}<span class="featured-tag"><StarIcon size={10} /> {t('settings.catalog.featured')}</span>{/if}
 					</span>
 					<span class="catalog-description">{provider.description}</span>
 					<span class="catalog-meta">

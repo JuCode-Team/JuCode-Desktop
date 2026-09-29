@@ -1,9 +1,18 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import {
-		Check, X, RefreshCw, Download, ExternalLink, GitBranch, Cpu,
-		LogIn, LoaderCircle, Copy, ShieldCheck, KeyRound, PartyPopper
-	} from 'lucide-svelte';
+	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
+	import XIcon from 'phosphor-svelte/lib/XIcon';
+	import ArrowsClockwiseIcon from 'phosphor-svelte/lib/ArrowsClockwiseIcon';
+	import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon';
+	import ArrowSquareOutIcon from 'phosphor-svelte/lib/ArrowSquareOutIcon';
+	import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon';
+	import CpuIcon from 'phosphor-svelte/lib/CpuIcon';
+	import SignInIcon from 'phosphor-svelte/lib/SignInIcon';
+	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
+	import CopyIcon from 'phosphor-svelte/lib/CopyIcon';
+	import ShieldCheckIcon from 'phosphor-svelte/lib/ShieldCheckIcon';
+	import KeyIcon from 'phosphor-svelte/lib/KeyIcon';
+	import ConfettiIcon from 'phosphor-svelte/lib/ConfettiIcon';
 	import { openUrl } from '@tauri-apps/plugin-opener';
 	import { checkEnvironment, installDependency, type EnvReport } from '$lib/protocol';
 	import { dispatch } from '$lib/backends/router';
@@ -104,13 +113,13 @@
 
 <Modal label={t('setup.wizardLabel')} width={560} padded={false} dismissible={false} onClose={finish}>
 	<div class="wiz">
-		<button class="skip" onclick={finish} aria-label="skip" title={t('setup.skip')}><X size={18} /></button>
+		<button class="skip" onclick={finish} aria-label="skip" title={t('setup.skip')}><XIcon size={18} /></button>
 
 		<div class="brand">JuCode</div>
 		<div class="steps">
 			{#each STEPS as s, i (s)}
 				<div class="stepdot" class:on={i === step} class:done={i < step}>
-					<span class="num">{#if i < step}<Check size={13} />{:else}{i + 1}{/if}</span>
+					<span class="num">{#if i < step}<CheckIcon size={13} />{:else}{i + 1}{/if}</span>
 					<span class="slabel">{s}</span>
 				</div>
 				{#if i < STEPS.length - 1}<span class="bar" class:done={i < step}></span>{/if}
@@ -124,23 +133,23 @@
 
 				<div class="checks">
 					<div class="dep">
-						<span class="dep-ico"><GitBranch size={17} /></span>
+						<span class="dep-ico"><GitBranchIcon size={17} /></span>
 						<div class="dep-txt">
 							<span class="dep-name">Git</span>
 							<span class="dep-detail">{gitOk ? env?.git.detail : t('setup.envCheck.notDetected')}</span>
 						</div>
 						<span class="dep-state" class:ok={gitOk} class:bad={!gitOk && !checking}>
-							{#if checking}<LoaderCircle size={15} class="spin" />{:else if gitOk}<Check size={16} />{:else}<X size={16} />{/if}
+							{#if checking}<CircleNotchIcon size={15} class="spin" />{:else if gitOk}<CheckIcon size={16} />{:else}<XIcon size={16} />{/if}
 						</span>
 					</div>
 					<div class="dep">
-						<span class="dep-ico"><Cpu size={17} /></span>
+						<span class="dep-ico"><CpuIcon size={17} /></span>
 						<div class="dep-txt">
 							<span class="dep-name">{t('setup.envCheck.engineName')}</span>
 							<span class="dep-detail">{engineOk ? env?.engine.detail : t('setup.envCheck.engineNotFound')}</span>
 						</div>
 						<span class="dep-state" class:ok={engineOk} class:bad={!engineOk && !checking}>
-							{#if checking}<LoaderCircle size={15} class="spin" />{:else if engineOk}<Check size={16} />{:else}<X size={16} />{/if}
+							{#if checking}<CircleNotchIcon size={15} class="spin" />{:else if engineOk}<CheckIcon size={16} />{:else}<XIcon size={16} />{/if}
 						</span>
 					</div>
 				</div>
@@ -152,17 +161,17 @@
 						{#if installUi.auto}
 							<div class="fix-row">
 								<Button variant="primary" size="sm" disabled={installing} onclick={autoInstall}>
-									{#if installing}<LoaderCircle size={14} class="spin" /> {t('setup.installGit.starting')}{:else}<Download size={14} /> {t('setup.installGit.autoInstall')}{/if}
+									{#if installing}<CircleNotchIcon size={14} class="spin" /> {t('setup.installGit.starting')}{:else}<DownloadSimpleIcon size={14} /> {t('setup.installGit.autoInstall')}{/if}
 								</Button>
-								<Button variant="ghost" size="sm" onclick={() => openUrl(installUi.url)}><ExternalLink size={14} /> {t('setup.installGit.downloadPage')}</Button>
+								<Button variant="ghost" size="sm" onclick={() => openUrl(installUi.url)}><ArrowSquareOutIcon size={14} /> {t('setup.installGit.downloadPage')}</Button>
 							</div>
 						{/if}
 						{#if installMsg}<p class="fix-msg">{installMsg}</p>{/if}
 						{#if installCmd}
-							<div class="cmd"><code>{installCmd}</code><IconButton size="sm" onclick={copyCmd} label="copy" title={t('common.copy')}>{#if copied}<Check size={14} />{:else}<Copy size={14} />{/if}</IconButton></div>
+							<div class="cmd"><code>{installCmd}</code><IconButton size="sm" onclick={copyCmd} label="copy" title={t('common.copy')}>{#if copied}<CheckIcon size={14} />{:else}<CopyIcon size={14} />{/if}</IconButton></div>
 						{/if}
 						{#if !installUi.auto}
-							<Button variant="ghost" size="sm" onclick={() => openUrl(installUi.url)}><ExternalLink size={14} /> {t('setup.installGit.officialDownloadPage')}</Button>
+							<Button variant="ghost" size="sm" onclick={() => openUrl(installUi.url)}><ArrowSquareOutIcon size={14} /> {t('setup.installGit.officialDownloadPage')}</Button>
 						{/if}
 					</div>
 				{/if}
@@ -182,20 +191,20 @@
 				<p class="sub">{t('setup.loginOauth.sub')}</p>
 
 				{#if loggedIn}
-					<div class="loginok"><span class="loginok-ico"><Check size={18} /></span> {t('setup.loginOauth.loggedIn')}</div>
+					<div class="loginok"><span class="loginok-ico"><CheckIcon size={18} /></span> {t('setup.loginOauth.loggedIn')}</div>
 				{:else}
 					<div class="loginbox">
 						<Button variant="primary" full onclick={login} disabled={loggingIn}>
-							{#if loggingIn}<LoaderCircle size={15} class="spin" /> {t('setup.loginOauth.waiting')}{:else}<LogIn size={15} /> {t('setup.loginOauth.loginBtn')}{/if}
+							{#if loggingIn}<CircleNotchIcon size={15} class="spin" /> {t('setup.loginOauth.waiting')}{:else}<SignInIcon size={15} /> {t('setup.loginOauth.loginBtn')}{/if}
 						</Button>
 						{#if loggingIn}<p class="hint center">{t('setup.loginOauth.browserOpened')}</p>{/if}
 						<div class="or"><span>{t('setup.loginOauth.or')}</span></div>
-						<Button variant="secondary" full onclick={onOpenSettings}><KeyRound size={15} /> {t('setup.loginOauth.apiKeyBtn')}</Button>
+						<Button variant="secondary" full onclick={onOpenSettings}><KeyIcon size={15} /> {t('setup.loginOauth.apiKeyBtn')}</Button>
 					</div>
 				{/if}
 			{:else}
 				<div class="done">
-					<span class="done-ico"><PartyPopper size={30} /></span>
+					<span class="done-ico"><ConfettiIcon size={30} /></span>
 					<h2>{t('setup.done.title')}</h2>
 					<p class="sub center">
 						{gitOk ? t('setup.done.gitReady') : t('setup.done.gitMissing')} ·
@@ -208,7 +217,7 @@
 
 		<div class="foot">
 			{#if step === 0}
-				<Button variant="ghost" size="sm" onclick={runCheck} disabled={checking}><RefreshCw size={14} /> {t('setup.nav.recheck')}</Button>
+				<Button variant="ghost" size="sm" onclick={runCheck} disabled={checking}><ArrowsClockwiseIcon size={14} /> {t('setup.nav.recheck')}</Button>
 				<div class="spacer"></div>
 				<Button variant="ghost" size="sm" onclick={finish}>{t('setup.nav.skip')}</Button>
 				<Button variant="primary" size="sm" onclick={() => (step = 1)}>{t('setup.nav.next')}</Button>
@@ -220,7 +229,7 @@
 			{:else}
 				<Button variant="ghost" size="sm" onclick={() => (step = 1)}>{t('setup.nav.prev')}</Button>
 				<div class="spacer"></div>
-				<Button variant="primary" onclick={finish}><ShieldCheck size={15} /> {t('setup.nav.start')}</Button>
+				<Button variant="primary" onclick={finish}><ShieldCheckIcon size={15} /> {t('setup.nav.start')}</Button>
 			{/if}
 		</div>
 	</div>

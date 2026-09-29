@@ -3,7 +3,7 @@
 	// footer, focus kept inside, Escape and a scrim click close it. Callers
 	// render it inside {#if}; entrance and exit use ui/motion.
 	import type { Snippet } from 'svelte';
-	import { X } from 'lucide-svelte';
+	import XIcon from 'phosphor-svelte/lib/XIcon';
 	import { focusTrap } from '$lib/focusTrap';
 	import { t } from '$lib/i18n';
 	import { scrim, sheet } from './motion';
@@ -64,7 +64,7 @@
 		{#if title}
 			<div class="head">
 				<span class="title">{#if icon}{@render icon()}{/if}{title}</span>
-				<button class="x" aria-label={t('common.close')} disabled={!dismissible} onclick={onClose}><X size={18} strokeWidth={1.5} /></button>
+				<button class="x" aria-label={t('common.close')} disabled={!dismissible} onclick={onClose}><XIcon size={18} /></button>
 			</div>
 		{/if}
 		<div class="body" class:padded>{@render children()}</div>

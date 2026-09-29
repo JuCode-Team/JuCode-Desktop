@@ -4,7 +4,10 @@
 	// command output (mono) keeps its line breaks. Transient feedback about an
 	// action belongs in ui/toast instead.
 	import type { Snippet } from 'svelte';
-	import { CircleAlert, Info, TriangleAlert, X } from 'lucide-svelte';
+	import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon';
+	import InfoIcon from 'phosphor-svelte/lib/InfoIcon';
+	import WarningIcon from 'phosphor-svelte/lib/WarningIcon';
+	import XIcon from 'phosphor-svelte/lib/XIcon';
 	import { t } from '$lib/i18n';
 
 	let {
@@ -20,14 +23,14 @@
 		children: Snippet;
 	} = $props();
 
-	const Icon = $derived(tone === 'error' ? CircleAlert : tone === 'warn' ? TriangleAlert : Info);
+	const Icon = $derived(tone === 'error' ? WarningCircleIcon : tone === 'warn' ? WarningIcon : InfoIcon);
 </script>
 
 <div class="notice {tone}" role={tone === 'error' ? 'alert' : 'status'}>
-	<span class="ico"><Icon size={16} strokeWidth={1.75} /></span>
+	<span class="ico"><Icon size={16} /></span>
 	<div class="txt selectable" class:mono>{@render children()}</div>
 	{#if onDismiss}
-		<button class="x" aria-label={t('common.close')} onclick={onDismiss}><X size={14} strokeWidth={1.75} /></button>
+		<button class="x" aria-label={t('common.close')} onclick={onDismiss}><XIcon size={14} /></button>
 	{/if}
 </div>
 

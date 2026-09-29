@@ -1,5 +1,5 @@
 // Tab chrome shared by workspaces and sessions: an optional tag color plus an
-// optional icon (builtin lucide id, free-form slug/emoji, or pasted SVG).
+// optional icon (builtin icon id, free-form slug/emoji, or pasted SVG).
 // Pure data + node-safe validation — no DOM, so the SVG sanitizer is a strict
 // string allowlist that rejects (returns null) instead of stripping.
 
@@ -101,7 +101,7 @@ export function normalizeColor(raw: unknown): string | undefined {
 }
 
 /** A short non-ASCII slug (an emoji or a grapheme cluster or two) renders as
- *  literal text rather than being looked up as a lucide icon name. */
+ *  literal text rather than being looked up as an icon name. */
 export function isEmojiSlug(s: string): boolean {
 	const v = s.trim();
 	if (!v || /^[\x20-\x7e]*$/.test(v)) return false;

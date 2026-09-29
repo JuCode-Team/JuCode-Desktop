@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Folder, FileText, ArrowUp, RefreshCw } from 'lucide-svelte';
+	import FolderIcon from 'phosphor-svelte/lib/FolderIcon';
+	import FileTextIcon from 'phosphor-svelte/lib/FileTextIcon';
+	import ArrowUpIcon from 'phosphor-svelte/lib/ArrowUpIcon';
+	import ArrowsClockwiseIcon from 'phosphor-svelte/lib/ArrowsClockwiseIcon';
 	import { projectRoot, listDir, type FsEntry } from '$lib/protocol';
 	import { editorStore } from '$lib/editor/editorStore.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
@@ -52,9 +55,9 @@
 
 <div class="files">
 	<div class="bar">
-		<IconButton size="sm" onclick={up} disabled={cwd === root} label="up"><ArrowUp size={14} /></IconButton>
+		<IconButton size="sm" onclick={up} disabled={cwd === root} label="up"><ArrowUpIcon size={14} /></IconButton>
 		<span class="crumb" title={cwd}>{rel}</span>
-		<IconButton size="sm" onclick={() => load(cwd)} label="refresh"><RefreshCw size={13} /></IconButton>
+		<IconButton size="sm" onclick={() => load(cwd)} label="refresh"><ArrowsClockwiseIcon size={13} /></IconButton>
 	</div>
 	{#if error}
 		<div class="err"><Notice mono>{error}</Notice></div>
@@ -62,7 +65,7 @@
 		<div class="list">
 			{#each entries as e (e.path)}
 				<button class="ent" onclick={() => open(e)}>
-					{#if e.is_dir}<Folder size={15} class="fcol" />{:else}<FileText size={15} />{/if}
+					{#if e.is_dir}<FolderIcon size={15} class="fcol" />{:else}<FileTextIcon size={15} />{/if}
 					<span class="ename">{e.name}</span>
 				</button>
 			{/each}

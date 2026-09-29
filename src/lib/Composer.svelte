@@ -1,5 +1,21 @@
 <script lang="ts">
-	import { ArrowUp, Square, Plus, Paperclip, Target, ListChecks, FastForward, ShieldCheck, ShieldAlert, Hand, ClipboardList, FilePen, CircleStop, Mic, LoaderCircle, GitBranch, SquareSlash } from 'lucide-svelte';
+	import ArrowUpIcon from 'phosphor-svelte/lib/ArrowUpIcon';
+	import SquareIcon from 'phosphor-svelte/lib/SquareIcon';
+	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
+	import PaperclipIcon from 'phosphor-svelte/lib/PaperclipIcon';
+	import TargetIcon from 'phosphor-svelte/lib/TargetIcon';
+	import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon';
+	import FastForwardIcon from 'phosphor-svelte/lib/FastForwardIcon';
+	import ShieldCheckIcon from 'phosphor-svelte/lib/ShieldCheckIcon';
+	import ShieldWarningIcon from 'phosphor-svelte/lib/ShieldWarningIcon';
+	import HandIcon from 'phosphor-svelte/lib/HandIcon';
+	import ClipboardTextIcon from 'phosphor-svelte/lib/ClipboardTextIcon';
+	import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon';
+	import StopCircleIcon from 'phosphor-svelte/lib/StopCircleIcon';
+	import MicrophoneIcon from 'phosphor-svelte/lib/MicrophoneIcon';
+	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
+	import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon';
+	import CommandIcon from 'phosphor-svelte/lib/CommandIcon';
 	import { toast } from '$lib/ui/toast.svelte';
 	import BackendIcon from '$lib/BackendIcon.svelte';
 	import PopMenu, { type PopMenuItem } from '$lib/ui/PopMenu.svelte';
@@ -242,11 +258,11 @@
 	// Claude exposes two extra native modes (plan / auto) between ask and edits;
 	// other backends keep the shared three (gated by extendedApprovalModes).
 	const APPROVAL_MODES: Record<string, PopMenuItem> = {
-		ask: { key: 'ask', label: t('chat.approvalAsk'), desc: t('chat.approvalAskDesc'), icon: Hand },
-		plan: { key: 'plan', label: t('chat.approvalPlan'), desc: t('chat.approvalPlanDesc'), icon: ClipboardList },
-		auto: { key: 'auto', label: t('chat.approvalAuto'), desc: t('chat.approvalAutoDesc'), icon: ShieldCheck },
-		edits: { key: 'edits', label: t('chat.approvalEdits'), desc: t('chat.approvalEditsDesc'), icon: FilePen },
-		all: { key: 'all', label: t('chat.approvalAll'), desc: t('chat.approvalAllDesc'), icon: ShieldAlert, tone: 'warn' }
+		ask: { key: 'ask', label: t('chat.approvalAsk'), desc: t('chat.approvalAskDesc'), icon: HandIcon },
+		plan: { key: 'plan', label: t('chat.approvalPlan'), desc: t('chat.approvalPlanDesc'), icon: ClipboardTextIcon },
+		auto: { key: 'auto', label: t('chat.approvalAuto'), desc: t('chat.approvalAutoDesc'), icon: ShieldCheckIcon },
+		edits: { key: 'edits', label: t('chat.approvalEdits'), desc: t('chat.approvalEditsDesc'), icon: NotePencilIcon },
+		all: { key: 'all', label: t('chat.approvalAll'), desc: t('chat.approvalAllDesc'), icon: ShieldWarningIcon, tone: 'warn' }
 	};
 	const APPROVAL = $derived(
 		(bcaps.extendedApprovalModes ? ['ask', 'plan', 'auto', 'edits', 'all'] : ['ask', 'edits', 'all']).map((k) => ({
@@ -262,12 +278,12 @@
 	const addSections = $derived.by(() => {
 		const add: TraySection = {
 			label: t('chat.addSection'),
-			items: [{ id: 'files', icon: Paperclip, title: t('chat.addFiles'), desc: t('chat.addFilesDesc'), onSelect: onPick }]
+			items: [{ id: 'files', icon: PaperclipIcon, title: t('chat.addFiles'), desc: t('chat.addFilesDesc'), onSelect: onPick }]
 		};
 		if (chat.commands.some((c) => c.command === '/goal')) {
 			add.items.push({
 				id: 'goal',
-				icon: Target,
+				icon: TargetIcon,
 				title: t('chat.addGoal'),
 				desc: t('chat.addGoalDesc'),
 				onSelect: () => {
@@ -283,7 +299,7 @@
 				items: [
 					{
 						id: 'plan',
-						icon: ListChecks,
+						icon: ListChecksIcon,
 						title: t('chat.addPlan'),
 						desc: t('chat.addPlanDesc'),
 						checked: chat.approvalMode === 'plan',
@@ -396,7 +412,7 @@
 				{
 					items: slashMatches.map((c) => ({
 						id: c.command,
-						icon: SquareSlash,
+						icon: CommandIcon,
 						title: c.command,
 						mono: true,
 						hint: c.args,
@@ -670,7 +686,7 @@
 				<span class="qchip" title={q}>{q}</span>
 			{/each}
 			{#if bcaps.steer}
-				<button class="qsteer" onclick={onSteer} title={t('chat.steerTitle')}><FastForward size={12} />{t('chat.steerAction')}</button>
+				<button class="qsteer" onclick={onSteer} title={t('chat.steerTitle')}><FastForwardIcon size={12} />{t('chat.steerAction')}</button>
 			{/if}
 		</div>
 	{/if}
@@ -719,12 +735,12 @@
 				title={t('chat.addTitle')}
 				aria-expanded={showAdd}
 			>
-				<Plus size={18} strokeWidth={1.5} />
+				<PlusIcon size={18} />
 			</button>
 			{#if bcaps.approvalModes}
 				<div class="footsel">
 					<button class="foot-chip" class:auto={chat.approvalMode !== 'ask'} class:warn={approvalCurrent.tone === 'warn'} onclick={() => (showApproval = !showApproval)} title={t('chat.approvalModeTitle')}>
-						{#if approvalCurrent.icon}<approvalCurrent.icon size={17} strokeWidth={1.5} />{/if}<span>{approvalCurrent.label}</span>
+						{#if approvalCurrent.icon}<approvalCurrent.icon size={17} />{/if}<span>{approvalCurrent.label}</span>
 					</button>
 					{#if showApproval}
 						<PopMenu
@@ -782,19 +798,19 @@
 				aria-label="voice input"
 				title={voice === 'rec' ? t('chat.voiceStopTitle') : voice === 'busy' ? t('chat.voiceBusyTitle') : t('chat.voiceTitle')}
 			>
-				{#if voice === 'busy'}<LoaderCircle size={15} class="spin" />{:else if voice === 'rec'}<CircleStop size={15} />{:else}<Mic size={17} strokeWidth={1.5} />{/if}
+				{#if voice === 'busy'}<CircleNotchIcon size={15} class="spin" />{:else if voice === 'rec'}<StopCircleIcon size={15} />{:else}<MicrophoneIcon size={17} />{/if}
 			</button>
 			{#if chat.busy && !currentQ}
-				<button class="cact stop" onclick={onStop} aria-label="stop" title={t('chat.stopTitle')}><Square size={15} /></button>
+				<button class="cact stop" onclick={onStop} aria-label="stop" title={t('chat.stopTitle')}><SquareIcon size={15} /></button>
 			{:else}
-				<button class="cact send" onclick={submit} disabled={!input.trim() && !attachments.length && !videos.length} aria-label="send" title={t('chat.sendTitle')}><ArrowUp size={17} strokeWidth={2} /></button>
+				<button class="cact send" onclick={submit} disabled={!input.trim() && !attachments.length && !videos.length} aria-label="send" title={t('chat.sendTitle')}><ArrowUpIcon size={17} /></button>
 			{/if}
 		</div>
 	</div>
 	<!-- Slim strip in the blank area under the card: branch · approval | context. -->
 	<div class="composer-foot">
 		{#if gitBranch}
-			<span class="foot-branch" title={t('chat.gitBranch')}><GitBranch size={12} /><span class="branch-name">{gitBranch}</span></span>
+			<span class="foot-branch" title={t('chat.gitBranch')}><GitBranchIcon size={12} /><span class="branch-name">{gitBranch}</span></span>
 		{/if}
 		<div class="fspace"></div>
 		{#if showCtx}

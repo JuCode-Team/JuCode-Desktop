@@ -2,7 +2,7 @@
 	import { onMount, untrack } from 'svelte';
 	import { listen } from '@tauri-apps/api/event';
 	import { getCurrentWebview } from '@tauri-apps/api/webview';
-	import { SquareTerminal } from 'lucide-svelte';
+	import TerminalWindowIcon from 'phosphor-svelte/lib/TerminalWindowIcon';
 	import Toaster from '$lib/ui/Toaster.svelte';
 	import ConfirmHost from '$lib/ui/ConfirmHost.svelte';
 	import { open } from '@tauri-apps/plugin-dialog';
@@ -898,7 +898,7 @@
 					aria-label={t('chat.tuiContinue')}
 					onclick={() => active && store.openInTui(active.id)}
 				>
-					<SquareTerminal size={16} strokeWidth={1.5} />
+					<TerminalWindowIcon size={16} />
 				</button>
 			{/if}
 		{/snippet}
@@ -994,7 +994,7 @@
 											aria-label={t('chat.tuiContinue')}
 											onclick={() => store.openInTui(sid)}
 										>
-											<SquareTerminal size={13} />
+											<TerminalWindowIcon size={13} />
 										</button>
 									{/if}
 								{/snippet}

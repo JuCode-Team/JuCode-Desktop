@@ -1,5 +1,8 @@
 <script lang="ts">
-	import { X, FileText, Film, Globe } from 'lucide-svelte';
+	import XIcon from 'phosphor-svelte/lib/XIcon';
+	import FileTextIcon from 'phosphor-svelte/lib/FileTextIcon';
+	import FilmStripIcon from 'phosphor-svelte/lib/FilmStripIcon';
+	import GlobeIcon from 'phosphor-svelte/lib/GlobeIcon';
 	import { convertFileSrc } from '@tauri-apps/api/core';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import type { WebRef } from '$lib/browser.svelte';
@@ -28,25 +31,25 @@
 <div class="chips">
 	{#each attachments as a, i (a.path)}
 		<span class="chip" class:imgchip={a.image}>
-			{#if a.image}<img class="chip-thumb" src={convertFileSrc(a.path)} alt="" />{:else}<FileText size={12} />{/if}
+			{#if a.image}<img class="chip-thumb" src={convertFileSrc(a.path)} alt="" />{:else}<FileTextIcon size={12} />{/if}
 			<span class="chip-name">{base(a.path)}</span>
-			<IconButton size="xs" onclick={() => onRemove(i)} label="remove"><X size={12} /></IconButton>
+			<IconButton size="xs" onclick={() => onRemove(i)} label="remove"><XIcon size={12} /></IconButton>
 		</span>
 	{/each}
 	{#each videos as v, i (v.path)}
 		<span class="chip videochip">
-			{#if v.frames.length}<img class="chip-thumb" src={convertFileSrc(v.frames[0])} alt="" />{:else}<Film size={12} />{/if}
+			{#if v.frames.length}<img class="chip-thumb" src={convertFileSrc(v.frames[0])} alt="" />{:else}<FilmStripIcon size={12} />{/if}
 			<span class="chip-name">{base(v.path)}</span>
 			<span class="chip-meta">{t('chat.videoMeta', { s: v.duration.toFixed(0), n: v.frames.length })}</span>
-			<IconButton size="xs" onclick={() => onRemoveVideo?.(i)} label="remove"><X size={12} /></IconButton>
+			<IconButton size="xs" onclick={() => onRemoveVideo?.(i)} label="remove"><XIcon size={12} /></IconButton>
 		</span>
 	{/each}
 	{#each webRefs as r, i (r.url + r.selector + i)}
 		<span class="chip refchip" title={`${r.url}\n${r.selector}`}>
-			<Globe size={12} />
+			<GlobeIcon size={12} />
 			<span class="chip-name">{refLabel(r)}</span>
 			<span class="chip-meta">&lt;{r.tag}&gt;</span>
-			<IconButton size="xs" onclick={() => onRemoveRef?.(i)} label="remove"><X size={12} /></IconButton>
+			<IconButton size="xs" onclick={() => onRemoveRef?.(i)} label="remove"><XIcon size={12} /></IconButton>
 		</span>
 	{/each}
 </div>

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Sparkles } from 'lucide-svelte';
+	import SparkleIcon from 'phosphor-svelte/lib/SparkleIcon';
 	import openai from '@lobehub/icons-static-svg/icons/openai.svg?raw';
 	import claude from '@lobehub/icons-static-svg/icons/claude.svg?raw';
 	import gemini from '@lobehub/icons-static-svg/icons/gemini.svg?raw';
@@ -30,7 +30,7 @@
 {#if hit}
 	<span class="vendor" style:font-size="{size}px" style:color={hit.color || 'currentColor'} aria-hidden="true">{@html hit.svg}</span>
 {:else}
-	<Sparkles {size} />
+	<SparkleIcon {size} />
 {/if}
 
 <style>

@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import { Check, RotateCcw, Search } from 'lucide-svelte';
+	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
+	import ArrowCounterClockwiseIcon from 'phosphor-svelte/lib/ArrowCounterClockwiseIcon';
+	import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Vendor from '$lib/Vendor.svelte';
 	import BackendIcon from '$lib/BackendIcon.svelte';
@@ -164,7 +166,7 @@
 					disabled={effortDisabled || !def || shownEffort === def}
 					onclick={() => onEffort(def)}
 				>
-					<RotateCcw size={14} strokeWidth={1.5} />
+					<ArrowCounterClockwiseIcon size={14} />
 				</IconButton>
 			</div>
 			<EffortSlider efforts={chat.efforts} effort={chat.effort} disabled={effortDisabled} {onEffort} bind:current={shownEffort} />
@@ -175,7 +177,7 @@
 		<section class="models">
 			{#if showSearch}
 				<label class="search">
-					<Search size={15} strokeWidth={1.5} />
+					<MagnifyingGlassIcon size={15} />
 					<!-- svelte-ignore a11y_autofocus -->
 					<input bind:value={query} placeholder={t('shell.pickerSearchPlaceholder')} autofocus />
 				</label>
@@ -196,7 +198,7 @@
 						<span class="pop-ico"><Vendor model={row.vendor ?? row.label} size={16} /></span>
 						<span class="pop-txt"><span class="pop-label">{row.label || t('shell.empty')}</span></span>
 						{#if row.detail}<span class="ctx">{row.detail}</span>{/if}
-						<span class="pop-check" class:off={!row.active}><Check size={16} strokeWidth={1.75} /></span>
+						<span class="pop-check" class:off={!row.active}><CheckIcon size={16} /></span>
 					</button>
 				{/each}
 				{#if rows.length === 0}

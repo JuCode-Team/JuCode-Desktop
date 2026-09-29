@@ -2,7 +2,9 @@
 	// The remote control page, served by jucode daemon for a phone's browser:
 	// pair once, then the desk, the agents and their sessions.
 	import { onMount } from 'svelte';
-	import { Inbox, Bot, LoaderCircle } from 'lucide-svelte';
+	import TrayIcon from 'phosphor-svelte/lib/TrayIcon';
+	import RobotIcon from 'phosphor-svelte/lib/RobotIcon';
+	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import DeskContent from '$lib/DeskContent.svelte';
 	import RemoteSession from '$lib/RemoteSession.svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -99,7 +101,7 @@
 					<input bind:value={code} autocapitalize="characters" autocomplete="one-time-code" />
 				</label>
 				<Button variant="primary" disabled={!code.trim() || pairing}>
-					{#if pairing}<LoaderCircle size={14} class="spin" /> {t('shell.remote.pairing')}{:else}{t('shell.remote.pair')}{/if}
+					{#if pairing}<CircleNotchIcon size={14} class="spin" /> {t('shell.remote.pairing')}{:else}{t('shell.remote.pair')}{/if}
 				</Button>
 			</form>
 			{#if pairError}<div class="err"><Notice>{pairError}</Notice></div>{/if}
@@ -124,7 +126,7 @@
 				{/if}
 				{#each agentDirectory.agents as agent (agent.id)}
 					<button class="agent" onclick={() => openAgent(agent)}>
-						{#if agent.busy}<LoaderCircle size={14} strokeWidth={1.5} class="spin" />{:else}<Bot size={14} strokeWidth={1.5} />{/if}
+						{#if agent.busy}<CircleNotchIcon size={14} class="spin" />{:else}<RobotIcon size={14} />{/if}
 						<span class="text">
 							<span class="name">{agent.name}</span>
 							{#if agent.summary}<span class="summary">{agent.summary}</span>{/if}
@@ -135,12 +137,12 @@
 		</main>
 		<nav>
 			<button class:on={tab === 'desk'} onclick={() => (tab = 'desk')}>
-				<Inbox size={18} />
+				<TrayIcon size={18} />
 				<span>{t('shell.desk.title')}</span>
 				{#if agentDirectory.pending > 0}<span class="badge">{agentDirectory.pending}</span>{/if}
 			</button>
 			<button class:on={tab === 'agents'} onclick={() => (tab = 'agents')}>
-				<Bot size={18} />
+				<RobotIcon size={18} />
 				<span>{t('shell.remote.agents')}</span>
 			</button>
 		</nav>

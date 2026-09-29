@@ -2,7 +2,8 @@
 	// New long-lived agent: id, name, working directory and role. Created in
 	// the local jucode daemon; the parent opens its first session.
 	import { onMount, tick } from 'svelte';
-	import { Bot, LoaderCircle } from 'lucide-svelte';
+	import RobotIcon from 'phosphor-svelte/lib/RobotIcon';
+	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import { open } from '@tauri-apps/plugin-dialog';
 	import Button from '$lib/ui/Button.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
@@ -83,7 +84,7 @@
 <svelte:window onkeydown={onKey} />
 
 <Modal title={t('shell.agents.dialogTitle')} width={480} dismissible={!busy} {onClose}>
-	{#snippet icon()}<Bot size={15} />{/snippet}
+	{#snippet icon()}<RobotIcon size={15} />{/snippet}
 	<p class="hint">{t('shell.agents.dialogHint')}</p>
 	<label class="field">
 		<span>{t('shell.agents.nameLabel')}</span>
@@ -117,7 +118,7 @@
 	{#snippet footer()}
 		<Button size="sm" onclick={onClose} disabled={busy}>{t('common.cancel')}</Button>
 		<Button size="sm" variant="primary" onclick={create} disabled={!canCreate}>
-			{#if busy}<LoaderCircle size={13} class="spin" />
+			{#if busy}<CircleNotchIcon size={13} class="spin" />
 				{t('shell.agents.creating')}{:else}{t('shell.agents.create')}{/if}
 		</Button>
 	{/snippet}

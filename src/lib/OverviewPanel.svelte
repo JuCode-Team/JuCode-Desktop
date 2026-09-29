@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { CalendarDays, Activity } from 'lucide-svelte';
+	import CalendarDotsIcon from 'phosphor-svelte/lib/CalendarDotsIcon';
+	import PulseIcon from 'phosphor-svelte/lib/PulseIcon';
 	import UsageHeatmap from '$lib/UsageHeatmap.svelte';
 	import Segmented from '$lib/ui/Segmented.svelte';
 	import {
@@ -54,13 +55,13 @@
 </script>
 
 <div class="group">
-	<div class="glabel"><CalendarDays size={13} /> {t('settings.overview.dailyTitle')}</div>
+	<div class="glabel"><CalendarDotsIcon size={13} /> {t('settings.overview.dailyTitle')}</div>
 	<p class="hint">{t('settings.overview.dailyHint')}</p>
 	<UsageHeatmap />
 
 	<div class="detail">
 		<div class="dhead">
-			<div class="glabel"><Activity size={13} /> {t('settings.overview.detail')}</div>
+			<div class="glabel"><PulseIcon size={13} /> {t('settings.overview.detail')}</div>
 			<Segmented
 				value={dim}
 				options={[

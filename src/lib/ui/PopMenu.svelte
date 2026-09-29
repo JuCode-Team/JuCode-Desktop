@@ -1,5 +1,5 @@
 <script lang="ts" module>
-	import type { Check as IconType } from 'lucide-svelte';
+	import type IconType from 'phosphor-svelte/lib/CheckIcon';
 
 	export type PopMenuItem = {
 		key: string;
@@ -17,7 +17,7 @@
 	// The app's list popover: an optional gray question on top, then rows of
 	// icon · label (· gray description) with a check on the current choice.
 	// Anchored to its positioned parent; `placement` says which way it opens.
-	import { Check } from 'lucide-svelte';
+	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
 
 	let {
 		items,
@@ -43,12 +43,12 @@
 	{#if title}<div class="pop-head">{title}</div>{/if}
 	{#each items as it (it.key)}
 		<button class="pop-row" class:warn={it.tone === 'warn'} class:two={!!it.desc} role="menuitemradio" aria-checked={!!it.checked} onclick={() => onSelect(it.key)}>
-			{#if it.icon}<span class="pop-ico"><it.icon size={18} strokeWidth={1.5} /></span>{:else if hasIcons}<span class="pop-ico"></span>{/if}
+			{#if it.icon}<span class="pop-ico"><it.icon size={18} /></span>{:else if hasIcons}<span class="pop-ico"></span>{/if}
 			<span class="pop-txt">
 				<span class="pop-label">{it.label}</span>
 				{#if it.desc}<span class="pop-desc">{it.desc}</span>{/if}
 			</span>
-			{#if it.checked}<span class="pop-check"><Check size={16} strokeWidth={1.75} /></span>{/if}
+			{#if it.checked}<span class="pop-check"><CheckIcon size={16} /></span>{/if}
 		</button>
 	{/each}
 </div>

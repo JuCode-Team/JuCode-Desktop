@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { ChevronDown, Check } from 'lucide-svelte';
+	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
+	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
 	import type { Snippet } from 'svelte';
 
 	type Opt = { value: string; label?: string; group?: string } & Record<string, unknown>;
@@ -35,7 +36,7 @@
 				<span class="ph">{placeholder}</span>
 			{/if}
 		</span>
-		<span class="chev" class:up={open}><ChevronDown size={15} /></span>
+		<span class="chev" class:up={open}><CaretDownIcon size={15} /></span>
 	</button>
 	{#if open}
 		<button class="backdrop" aria-label="close" onclick={() => (open = false)}></button>
@@ -46,7 +47,7 @@
 				{/if}
 				<button class="opt" class:on={o.value === value} onclick={() => pick(o.value)}>
 					<span class="opt-c">{#if item}{@render item(o)}{:else}{o.label ?? o.value}{/if}</span>
-					{#if o.value === value}<Check size={14} class="opt-chk" />{/if}
+					{#if o.value === value}<CheckIcon size={14} class="opt-chk" />{/if}
 				</button>
 			{/each}
 			{#if options.length === 0}<div class="opt-empty">无可选项</div>{/if}

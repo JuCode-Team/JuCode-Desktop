@@ -1,6 +1,18 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { GitBranch, RefreshCw, Plus, Minus, Undo2, ChevronDown, Check, ArrowUp, ArrowDown, LoaderCircle, GitPullRequest, ExternalLink, Sparkles } from 'lucide-svelte';
+	import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon';
+	import ArrowsClockwiseIcon from 'phosphor-svelte/lib/ArrowsClockwiseIcon';
+	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
+	import MinusIcon from 'phosphor-svelte/lib/MinusIcon';
+	import ArrowUUpLeftIcon from 'phosphor-svelte/lib/ArrowUUpLeftIcon';
+	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
+	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
+	import ArrowUpIcon from 'phosphor-svelte/lib/ArrowUpIcon';
+	import ArrowDownIcon from 'phosphor-svelte/lib/ArrowDownIcon';
+	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
+	import GitPullRequestIcon from 'phosphor-svelte/lib/GitPullRequestIcon';
+	import ArrowSquareOutIcon from 'phosphor-svelte/lib/ArrowSquareOutIcon';
+	import SparkleIcon from 'phosphor-svelte/lib/SparkleIcon';
 	import { openUrl } from '@tauri-apps/plugin-opener';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -355,18 +367,18 @@
 		<div class="err">{error.includes('not a git repository') ? t('dock.git.notRepo') : error}</div>
 	{:else}
 		<div class="bar">
-			<GitBranch size={14} class="bcol" />
+			<GitBranchIcon size={14} class="bcol" />
 			<button class="branchbtn" onclick={() => (branchOpen = !branchOpen)} title={t('dock.git.switchBranch')} aria-expanded={branchOpen}>
 				<span class="branch">{branch || 'detached'}</span>
-				<ChevronDown size={12} />
+				<CaretDownIcon size={12} />
 			</button>
 			{#if sync.upstream && (sync.ahead || sync.behind)}
 				<span class="ab" title={t('dock.git.aheadBehind', { upstream: sync.upstream, ahead: sync.ahead, behind: sync.behind })}>
-					{#if sync.ahead}<span class="up"><ArrowUp size={11} />{sync.ahead}</span>{/if}
-					{#if sync.behind}<span class="down"><ArrowDown size={11} />{sync.behind}</span>{/if}
+					{#if sync.ahead}<span class="up"><ArrowUpIcon size={11} />{sync.ahead}</span>{/if}
+					{#if sync.behind}<span class="down"><ArrowDownIcon size={11} />{sync.behind}</span>{/if}
 				</span>
 			{/if}
-			<IconButton size="sm" onclick={refresh} label="refresh"><RefreshCw size={13} /></IconButton>
+			<IconButton size="sm" onclick={refresh} label="refresh"><ArrowsClockwiseIcon size={13} /></IconButton>
 		</div>
 		{#if branchOpen}
 			<div class="pop-catch" role="presentation" onclick={() => (branchOpen = false)}></div>
@@ -375,7 +387,7 @@
 					{#each branches as b (b)}
 						<button class="pop-row popitem" class:cur={b === branch} role="menuitem" onclick={() => switchBranch(b)} disabled={busy}>
 							<span class="popname">{b}</span>
-							{#if b === branch}<span class="pop-check"><Check size={12} /></span>{/if}
+							{#if b === branch}<span class="pop-check"><CheckIcon size={12} /></span>{/if}
 						</button>
 					{/each}
 				</div>
@@ -391,15 +403,15 @@
 		{/if}
 		<div class="syncrow">
 			<Button size="sm" onclick={() => doSync('pull')} disabled={busy || !!syncBusy}>
-				{#if syncBusy === 'pull'}<LoaderCircle size={13} class="spin" />{:else}<ArrowDown size={13} />{/if}
+				{#if syncBusy === 'pull'}<CircleNotchIcon size={13} class="spin" />{:else}<ArrowDownIcon size={13} />{/if}
 				{t('dock.git.pull')}
 			</Button>
 			<Button size="sm" onclick={() => doSync('push')} disabled={busy || !!syncBusy}>
-				{#if syncBusy === 'push'}<LoaderCircle size={13} class="spin" />{:else}<ArrowUp size={13} />{/if}
+				{#if syncBusy === 'push'}<CircleNotchIcon size={13} class="spin" />{:else}<ArrowUpIcon size={13} />{/if}
 				{t('dock.git.push')}{#if sync.ahead > 0}&nbsp;({sync.ahead}){/if}
 			</Button>
 			<Button size="sm" onclick={() => doSync('fetch')} disabled={busy || !!syncBusy}>
-				{#if syncBusy === 'fetch'}<LoaderCircle size={13} class="spin" />{:else}<RefreshCw size={13} />{/if}
+				{#if syncBusy === 'fetch'}<CircleNotchIcon size={13} class="spin" />{:else}<ArrowsClockwiseIcon size={13} />{/if}
 				{t('dock.git.fetch')}
 			</Button>
 		</div>
@@ -421,12 +433,12 @@
 					<button class="cpath" onclick={() => showDiff(c)} title={c.path}>{c.path}</button>
 					<div class="acts">
 						{#if c.staged}
-							<IconButton size="sm" onclick={() => unstage(c)} disabled={busy} label="unstage" title={t('dock.git.unstage')}><Minus size={13} /></IconButton>
+							<IconButton size="sm" onclick={() => unstage(c)} disabled={busy} label="unstage" title={t('dock.git.unstage')}><MinusIcon size={13} /></IconButton>
 						{/if}
 						{#if c.y !== ' ' || c.untracked}
-							<IconButton size="sm" onclick={() => stage(c)} disabled={busy} label="stage" title={t('dock.git.stage')}><Plus size={13} /></IconButton>
+							<IconButton size="sm" onclick={() => stage(c)} disabled={busy} label="stage" title={t('dock.git.stage')}><PlusIcon size={13} /></IconButton>
 						{/if}
-						<IconButton size="sm" onclick={() => discard(c)} disabled={busy} label="discard" title={t('dock.git.discard')}><Undo2 size={13} /></IconButton>
+						<IconButton size="sm" onclick={() => discard(c)} disabled={busy} label="discard" title={t('dock.git.discard')}><ArrowUUpLeftIcon size={13} /></IconButton>
 					</div>
 				</div>
 			{/each}
@@ -434,11 +446,11 @@
 
 			<div class="sec">
 				<button class="rvtoggle" onclick={toggleCompare} aria-expanded={compareOpen}>
-					<span class="chev" class:open={compareOpen}><ChevronDown size={12} /></span>
+					<span class="chev" class:open={compareOpen}><CaretDownIcon size={12} /></span>
 					{t('dock.git.review')}
 				</button>
 				{#if compareOpen}
-					{#if compareBusy}<LoaderCircle size={12} class="spin" />{:else}<span class="count">{compareFiles.length}</span>{/if}
+					{#if compareBusy}<CircleNotchIcon size={12} class="spin" />{:else}<span class="count">{compareFiles.length}</span>{/if}
 				{/if}
 			</div>
 			{#if compareOpen}
@@ -448,7 +460,7 @@
 						{#each branches.filter((b) => b !== branch) as b (b)}<option value={b}>{b}</option>{/each}
 					</select>
 					<span class="rvhead">…HEAD</span>
-					<IconButton size="sm" onclick={loadCompare} label="refresh-review" title={t('dock.git.refresh')}><RefreshCw size={12} /></IconButton>
+					<IconButton size="sm" onclick={loadCompare} label="refresh-review" title={t('dock.git.refresh')}><ArrowsClockwiseIcon size={12} /></IconButton>
 				</div>
 				{#each compareFiles as f (f.path)}
 					<div class="chg">
@@ -486,12 +498,12 @@
 						<span class="prstate {pr.state.toLowerCase()}">{pr.isDraft ? 'DRAFT' : pr.state}</span>
 						<button class="prlink" onclick={() => pr && openUrl(pr.url)} title={t('dock.git.prOpenHint')}>
 							<span class="prtitle">{pr.title || pr.url}</span>
-							<ExternalLink size={11} />
+							<ArrowSquareOutIcon size={11} />
 						</button>
 					</div>
 				{:else}
 					<div class="prrow">
-						<Button size="sm" onclick={openPrForm} disabled={busy}><GitPullRequest size={13} /> {t('dock.git.createPr')}</Button>
+						<Button size="sm" onclick={openPrForm} disabled={busy}><GitPullRequestIcon size={13} /> {t('dock.git.createPr')}</Button>
 					</div>
 				{/if}
 			{/if}
@@ -514,7 +526,7 @@
 			<div class="commitbar">
 				{#if llm}
 					<Button size="icon" onclick={genCommit} disabled={!!genning} title={t('dock.git.aiCommit')} aria-label="generate commit message">
-						{#if genning === 'commit'}<LoaderCircle size={14} class="spin" />{:else}<Sparkles size={14} />{/if}
+						{#if genning === 'commit'}<CircleNotchIcon size={14} class="spin" />{:else}<SparkleIcon size={14} />{/if}
 					</Button>
 				{/if}
 				<input
@@ -539,7 +551,7 @@
 	<Modal title={t('dock.git.prCreateTitle')} width={440} dismissible={!prBusy} onClose={() => (prForm = false)}>
 		{#if llm}
 			<Button size="sm" full onclick={genPr} disabled={!!genning}>
-				{#if genning === 'pr'}<LoaderCircle size={13} class="spin" />{:else}<Sparkles size={13} />{/if}
+				{#if genning === 'pr'}<CircleNotchIcon size={13} class="spin" />{:else}<SparkleIcon size={13} />{/if}
 				<span>{t('dock.git.aiPr')}</span>
 			</Button>
 		{/if}
@@ -565,7 +577,7 @@
 		{/if}
 		{#snippet footer()}
 			<Button size="sm" variant="primary" onclick={createPr} disabled={!prTitle.trim() || prBusy}>
-				{#if prBusy}<LoaderCircle size={13} class="spin" /> {t('dock.git.prCreating')}{:else}{t('dock.git.prSubmit')}{/if}
+				{#if prBusy}<CircleNotchIcon size={13} class="spin" /> {t('dock.git.prCreating')}{:else}{t('dock.git.prSubmit')}{/if}
 			</Button>
 		{/snippet}
 	</Modal>

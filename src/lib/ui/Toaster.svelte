@@ -2,13 +2,17 @@
 	// Renders ui/toast.svelte.ts: a stack centred under the title bar. The
 	// newest notice is in front; older ones tuck in behind it and fan out while
 	// the pointer is over the stack.
-	import { CircleAlert, CircleCheck, Info, TriangleAlert, X } from 'lucide-svelte';
+	import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon';
+	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
+	import InfoIcon from 'phosphor-svelte/lib/InfoIcon';
+	import WarningIcon from 'phosphor-svelte/lib/WarningIcon';
+	import XIcon from 'phosphor-svelte/lib/XIcon';
 	import { fly } from 'svelte/transition';
 	import { T_FAST, T_MED } from './motion';
 	import { toast, type ToastTone } from './toast.svelte';
 	import { t } from '$lib/i18n';
 
-	const ICONS: Record<ToastTone, typeof Info> = { info: Info, success: CircleCheck, warn: TriangleAlert, error: CircleAlert };
+	const ICONS: Record<ToastTone, typeof InfoIcon> = { info: InfoIcon, success: CheckCircleIcon, warn: WarningIcon, error: WarningCircleIcon };
 	/** Offset of each stacked notice (collapsed) and the gap when fanned out. */
 	const PEEK = 8;
 	const GAP = 8;
@@ -44,7 +48,7 @@
 				in:fly={{ y: -12, duration: T_MED }}
 				out:fly={{ y: -8, duration: T_FAST }}
 			>
-				<span class="ico"><Icon size={18} strokeWidth={1.75} /></span>
+				<span class="ico"><Icon size={18} /></span>
 				<span class="msg selectable">{it.message}</span>
 				{#if it.action}
 					<button
@@ -55,7 +59,7 @@
 						}}>{it.action.label}</button
 					>
 				{/if}
-				<button class="close" aria-label={t('common.close')} onclick={() => toast.dismiss(it.id)}><X size={16} strokeWidth={1.75} /></button>
+				<button class="close" aria-label={t('common.close')} onclick={() => toast.dismiss(it.id)}><XIcon size={16} /></button>
 			</div>
 		{/each}
 	</div>

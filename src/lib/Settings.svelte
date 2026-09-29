@@ -1,6 +1,22 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
-	import { X, LogIn, LogOut, KeyRound, SlidersHorizontal, Plus, Trash2, Zap, CircleCheck, CircleX, CircleDashed, ChevronDown, Wallet, LayoutDashboard, Mic, Puzzle, Store } from 'lucide-svelte';
+	import XIcon from 'phosphor-svelte/lib/XIcon';
+	import SignInIcon from 'phosphor-svelte/lib/SignInIcon';
+	import SignOutIcon from 'phosphor-svelte/lib/SignOutIcon';
+	import KeyIcon from 'phosphor-svelte/lib/KeyIcon';
+	import SlidersHorizontalIcon from 'phosphor-svelte/lib/SlidersHorizontalIcon';
+	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
+	import TrashIcon from 'phosphor-svelte/lib/TrashIcon';
+	import LightningIcon from 'phosphor-svelte/lib/LightningIcon';
+	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
+	import XCircleIcon from 'phosphor-svelte/lib/XCircleIcon';
+	import CircleDashedIcon from 'phosphor-svelte/lib/CircleDashedIcon';
+	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
+	import WalletIcon from 'phosphor-svelte/lib/WalletIcon';
+	import SquaresFourIcon from 'phosphor-svelte/lib/SquaresFourIcon';
+	import MicrophoneIcon from 'phosphor-svelte/lib/MicrophoneIcon';
+	import PuzzlePieceIcon from 'phosphor-svelte/lib/PuzzlePieceIcon';
+	import StorefrontIcon from 'phosphor-svelte/lib/StorefrontIcon';
 	import { readConfig, writeConfig, readAuthProviders, setAuthKey, removeAuthKey, listProviders, fetchAccountInfo, fetchDeepseekBalance, type AccountInfo, type DeepseekBalance } from '$lib/protocol';
 	import { dispatch } from '$lib/backends/router';
 	import { caps } from '$lib/backends';
@@ -98,10 +114,10 @@
 	const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 	const NAV = [
-		{ key: 'overview', labelKey: 'settings.nav.overview', icon: LayoutDashboard, subKey: 'settings.nav.overviewSub' },
-		{ key: 'account', labelKey: 'settings.nav.account', icon: KeyRound, subKey: 'settings.nav.accountSub' },
-		{ key: 'behavior', labelKey: 'settings.nav.behavior', icon: SlidersHorizontal, subKey: 'settings.nav.behaviorSub' },
-		{ key: 'extensions', labelKey: 'settings.nav.extensions', icon: Puzzle, subKey: 'settings.nav.extensionsSub' }
+		{ key: 'overview', labelKey: 'settings.nav.overview', icon: SquaresFourIcon, subKey: 'settings.nav.overviewSub' },
+		{ key: 'account', labelKey: 'settings.nav.account', icon: KeyIcon, subKey: 'settings.nav.accountSub' },
+		{ key: 'behavior', labelKey: 'settings.nav.behavior', icon: SlidersHorizontalIcon, subKey: 'settings.nav.behaviorSub' },
+		{ key: 'extensions', labelKey: 'settings.nav.extensions', icon: PuzzlePieceIcon, subKey: 'settings.nav.extensionsSub' }
 	] as const;
 	const meta = $derived(NAV.find((n) => n.key === section)!);
 
@@ -362,7 +378,7 @@
 					<h2>{t(meta.labelKey)}</h2>
 					<p class="head-sub">{t(meta.subKey)}</p>
 				</div>
-				<Button variant="ghost" size="sm" onclick={onClose}><X size={18} /></Button>
+				<Button variant="ghost" size="sm" onclick={onClose}><XIcon size={18} /></Button>
 			</header>
 
 			<div class="scroll">
@@ -418,12 +434,12 @@
 								onCancel={() => (editing = selectedCatalog ? '__catalog__' : null)}
 							/>
 						{:else}
-							<button class="addprov" onclick={openCreate}><Plus size={15} /> {t('settings.custom.add')}</button>
+							<button class="addprov" onclick={openCreate}><PlusIcon size={15} /> {t('settings.custom.add')}</button>
 						{/if}
 					</div>
 
 					<div class="group">
-						<div class="glabel"><Mic size={12} /> {t('settings.voice.groupLabel')}</div>
+						<div class="glabel"><MicrophoneIcon size={12} /> {t('settings.voice.groupLabel')}</div>
 						<p class="hint">{t('settings.voice.hint')}</p>
 						<div class="voicefields">
 							<label class="voicefield">
@@ -446,11 +462,11 @@
 								<Button variant="ghost" size="sm" onclick={() => logout(selectedAsr.authKey)}>{t('settings.account.clearKey')}</Button>
 							{/if}
 						</div>
-						{#if keyed.includes(selectedAsr.authKey)}<p class="hint mt keyok"><CircleCheck size={13} /> {t('settings.account.keyed')}</p>{/if}
+						{#if keyed.includes(selectedAsr.authKey)}<p class="hint mt keyok"><CheckCircleIcon size={13} /> {t('settings.account.keyed')}</p>{/if}
 					</div>
 				{:else if section === 'extensions'}
 					<div class="group">
-						<div class="glabel"><Puzzle size={12} /> {t('settings.plugins.groupLabel')}</div>
+						<div class="glabel"><PuzzlePieceIcon size={12} /> {t('settings.plugins.groupLabel')}</div>
 						<p class="hint">{t('settings.plugins.hint')}</p>
 						<div class="setlist">
 							{#each PLUGINS as plugin (plugin.id)}
@@ -476,9 +492,9 @@
 					</div>
 					{#if onMarket}
 						<div class="group">
-							<div class="glabel"><Store size={12} /> {t('settings.market.groupLabel')}</div>
+							<div class="glabel"><StorefrontIcon size={12} /> {t('settings.market.groupLabel')}</div>
 							<p class="hint">{t('settings.market.hint')}</p>
-							<Button size="sm" onclick={onMarket}><Store size={14} /> {t('settings.market.open')}</Button>
+							<Button size="sm" onclick={onMarket}><StorefrontIcon size={14} /> {t('settings.market.open')}</Button>
 						</div>
 					{/if}
 					{#if caps(chat).mcpManage}
@@ -491,7 +507,7 @@
 							<div class="mcp-ro">
 								{#each chat.mcpServers as s (s.name)}
 									<div class="mcp-ro-row">
-										<span class="mcp-ro-dot" class:bad={s.state === 'failed'}>{#if s.state === 'connected'}<CircleCheck size={14} strokeWidth={1.5} />{:else if s.state === 'failed'}<CircleX size={14} strokeWidth={1.5} />{:else}<CircleDashed size={14} strokeWidth={1.5} />{/if}</span>
+										<span class="mcp-ro-dot" class:bad={s.state === 'failed'}>{#if s.state === 'connected'}<CheckCircleIcon size={14} />{:else if s.state === 'failed'}<XCircleIcon size={14} />{:else}<CircleDashedIcon size={14} />{/if}</span>
 										<span class="mcp-ro-name">{s.name}</span>
 										<span class="mcp-ro-state">{s.state}</span>
 									</div>
@@ -570,7 +586,7 @@
 
 					{#if effortOpts.length}
 						<div class="group">
-							<div class="glabel"><Zap size={12} /> {t('settings.behavior.reasoningEffort')}</div>
+							<div class="glabel"><LightningIcon size={12} /> {t('settings.behavior.reasoningEffort')}</div>
 							<Segmented bind:value={cfg.reasoning_effort} options={effortOpts} />
 						</div>
 					{/if}
@@ -614,7 +630,7 @@
 			{#if section !== 'overview' && section !== 'extensions'}
 				<div class="foot">
 					<span class="foot-hint">{t('settings.footHint')}</span>
-					<Button variant="primary" onclick={save}>{#if saved}<CircleCheck size={15} /> {t('settings.saved')}{:else}{t('settings.saveChanges')}{/if}</Button>
+					<Button variant="primary" onclick={save}>{#if saved}<CheckCircleIcon size={15} /> {t('settings.saved')}{:else}{t('settings.saveChanges')}{/if}</Button>
 				</div>
 			{/if}
 		</div>

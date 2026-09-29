@@ -1,5 +1,7 @@
 <script lang="ts">
-	import { X, Check, Search } from 'lucide-svelte';
+	import XIcon from 'phosphor-svelte/lib/XIcon';
+	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
+	import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
 	import { t } from '$lib/i18n';
@@ -50,7 +52,7 @@
 	{#if anchored}
 		<div class="modal-head">
 			<span>{title}</span>
-			<IconButton onclick={onClose} label="close"><X size={15} /></IconButton>
+			<IconButton onclick={onClose} label="close"><XIcon size={15} /></IconButton>
 		</div>
 	{/if}
 	{#if chat.picker?.kind === 'model' && activeModel}
@@ -63,7 +65,7 @@
 	{/if}
 	{#if showSearch}
 		<div class="psearch">
-			<Search size={14} />
+			<MagnifyingGlassIcon size={14} />
 			<!-- svelte-ignore a11y_autofocus -->
 			<input bind:value={query} placeholder={t('shell.pickerSearchPlaceholder')} autofocus />
 		</div>
@@ -78,7 +80,7 @@
 				{#if row.depth != null && row.depth > 0}<span class="twig">↳</span>{/if}
 				<span class="prow-main">{row.label || t('shell.empty')}</span>
 				<span class="prow-detail">{row.detail}</span>
-				{#if row.active}<Check size={14} class="prow-check" />{/if}
+				{#if row.active}<CheckIcon size={14} class="prow-check" />{/if}
 			</button>
 		{/each}
 		{#if rows.length === 0}<div class="pempty">{query.trim() ? t('shell.noMatch') : t('shell.noOptions')}</div>{/if}

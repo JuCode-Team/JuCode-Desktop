@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { onDestroy, tick, untrack } from 'svelte';
-	import { X, Save, Sparkles, PanelRightClose } from 'lucide-svelte';
+	import XIcon from 'phosphor-svelte/lib/XIcon';
+	import FloppyDiskIcon from 'phosphor-svelte/lib/FloppyDiskIcon';
+	import SparkleIcon from 'phosphor-svelte/lib/SparkleIcon';
+	import SidebarSimpleIcon from 'phosphor-svelte/lib/SidebarSimpleIcon';
 	import {
 		EditorView,
 		keymap,
@@ -351,13 +354,13 @@
 						onclick={(e: MouseEvent) => {
 							e.stopPropagation();
 							void closeTab(tab);
-						}}><X size={12} /></IconButton>
+						}}><XIcon size={12} /></IconButton>
 				</div>
 			{/each}
 		</div>
 		<div class="eactions">
-			<IconButton size="sm" label={t('editor.save')} title="{t('editor.save')} ⌘S" disabled={!active?.dirty} onclick={saveActive}><Save size={14} /></IconButton>
-			<IconButton size="sm" label={t('editor.closePane')} title={t('editor.closePane')} onclick={() => (store.visible = false)}><PanelRightClose size={14} /></IconButton>
+			<IconButton size="sm" label={t('editor.save')} title="{t('editor.save')} ⌘S" disabled={!active?.dirty} onclick={saveActive}><FloppyDiskIcon size={14} /></IconButton>
+			<IconButton size="sm" label={t('editor.closePane')} title={t('editor.closePane')} onclick={() => (store.visible = false)}><SidebarSimpleIcon size={14} /></IconButton>
 		</div>
 	</div>
 
@@ -380,7 +383,7 @@
 		<div class="ehost" bind:this={host}>
 			{#if aiPrompt}
 				<div class="ai-prompt" style:top="{aiPrompt.top}px" style:left="{aiPrompt.left}px">
-					<Sparkles size={13} class="ai-ico" />
+					<SparkleIcon size={13} class="ai-ico" />
 					<input
 						bind:this={aiInputEl}
 						bind:value={aiInput}
@@ -396,7 +399,7 @@
 		<div class="estatus">
 			<span class="spath" title={active.path}>{active.rel}</span>
 			{#if active.aiRange}
-				<span class="sai pulse"><Sparkles size={11} /> {t('editor.aiPending')}</span>
+				<span class="sai pulse"><SparkleIcon size={11} /> {t('editor.aiPending')}</span>
 			{/if}
 			<span class="sflex"></span>
 			{#if active.dirty}

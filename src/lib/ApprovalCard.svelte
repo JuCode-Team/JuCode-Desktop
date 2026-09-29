@@ -1,5 +1,12 @@
 <script lang="ts">
-	import { ShieldAlert, ChevronRight, Bot, MessageCircleQuestion, Check, ClipboardList, Copy, Download } from 'lucide-svelte';
+	import ShieldWarningIcon from 'phosphor-svelte/lib/ShieldWarningIcon';
+	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
+	import RobotIcon from 'phosphor-svelte/lib/RobotIcon';
+	import ChatCircleDotsIcon from 'phosphor-svelte/lib/ChatCircleDotsIcon';
+	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
+	import ClipboardTextIcon from 'phosphor-svelte/lib/ClipboardTextIcon';
+	import CopyIcon from 'phosphor-svelte/lib/CopyIcon';
+	import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon';
 	import { t } from '$lib/i18n';
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
@@ -113,13 +120,13 @@
 <div class="approval" class:ask={!!questions} class:plan={isPlan}>
 	<div class="approval-head">
 		{#if questions}
-			<MessageCircleQuestion size={15} />
+			<ChatCircleDotsIcon size={15} />
 			<span>{t('shell.askQuestion')}</span>
 		{:else if isPlan}
-			<ClipboardList size={15} />
+			<ClipboardTextIcon size={15} />
 			<span>{t('shell.proposePlan')}</span>
 		{:else}
-			<ShieldAlert size={15} />
+			<ShieldWarningIcon size={15} />
 			<span
 				>{isShell ? t('shell.approveCommand') : t('shell.approveFile')} · <b>{approval.name}</b
 				></span
@@ -130,7 +137,7 @@
 		{/if}
 		{#if approval.subagentId}
 			<span class="subagent-chip" title={approval.subagentId}
-				><Bot size={11} />{t('chat.subagentChip', { id: approval.subagentId })}</span
+				><RobotIcon size={11} />{t('chat.subagentChip', { id: approval.subagentId })}</span
 			>
 		{/if}
 	</div>
@@ -144,7 +151,7 @@
 						{#each q.options as o (o.label)}
 							{@const on = (picks[qi] ?? []).includes(o.label)}
 							<button class="q-opt" class:on onclick={() => pickOption(qi, o.label, q.multiSelect)}>
-								<span class="q-mark" class:multi={q.multiSelect}>{#if on}<Check size={12} />{/if}</span>
+								<span class="q-mark" class:multi={q.multiSelect}>{#if on}<CheckIcon size={12} />{/if}</span>
 								<span class="q-body">
 									<span class="q-label">{o.label}</span>
 									{#if o.description}<span class="q-desc">{o.description}</span>{/if}
@@ -178,9 +185,9 @@
 			>
 			<span class="plan-spacer"></span>
 			<Button variant="ghost" size="sm" onclick={copyPlan}>
-				{#if copied}<Check size={13} />{t('shell.copiedPlan')}{:else}<Copy size={13} />{t('shell.copyPlan')}{/if}
+				{#if copied}<CheckIcon size={13} />{t('shell.copiedPlan')}{:else}<CopyIcon size={13} />{t('shell.copyPlan')}{/if}
 			</Button>
-			<Button variant="ghost" size="sm" onclick={downloadPlan}><Download size={13} />{t('shell.downloadPlan')}</Button>
+			<Button variant="ghost" size="sm" onclick={downloadPlan}><DownloadSimpleIcon size={13} />{t('shell.downloadPlan')}</Button>
 		</div>
 	{:else if multiHunk}
 		<div class="hunks">
@@ -202,7 +209,7 @@
 							title={t('shell.toggleDiff')}
 							onclick={() => (expanded[h.id] = !expanded[h.id])}
 						>
-							<span class="chev" class:open={expanded[h.id]}><ChevronRight size={13} /></span>
+							<span class="chev" class:open={expanded[h.id]}><CaretRightIcon size={13} /></span>
 						</button>
 					</div>
 					{#if expanded[h.id]}

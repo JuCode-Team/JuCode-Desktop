@@ -1,5 +1,9 @@
 <script lang="ts">
-	import { Pencil, Copy, Check, ChevronRight, RotateCcw } from 'lucide-svelte';
+	import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon';
+	import CopyIcon from 'phosphor-svelte/lib/CopyIcon';
+	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
+	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
+	import ArrowCounterClockwiseIcon from 'phosphor-svelte/lib/ArrowCounterClockwiseIcon';
 	import { slide } from 'svelte/transition';
 	import Markdown from '$lib/Markdown.svelte';
 	import ToolCard from '$lib/ToolCard.svelte';
@@ -254,9 +258,9 @@
 			{@const drop = userOrdinal.size - (userOrdinal.get(m) ?? 0)}
 			<div class="row user">
 				<button class="uedit rewind" onclick={() => onRewind(m.text, userOrdinal.get(m) ?? 0)} aria-label="rewind" title={t('chat.rewindTitleN', { n: drop })}>
-					<RotateCcw size={12} />{#if drop > 1}<span class="rwn">{drop}</span>{/if}
+					<ArrowCounterClockwiseIcon size={12} />{#if drop > 1}<span class="rwn">{drop}</span>{/if}
 				</button>
-				<button class="uedit" onclick={() => onEdit(m.text)} aria-label="quote" title={t('chat.quoteTitle')}><Pencil size={12} /></button>
+				<button class="uedit" onclick={() => onEdit(m.text)} aria-label="quote" title={t('chat.quoteTitle')}><PencilSimpleIcon size={12} /></button>
 				<div class="bubble">{m.text}</div>
 			</div>
 		{:else if m.kind === 'assistant'}
@@ -272,7 +276,7 @@
 						{#if m.elapsed}<span class="mono">{fmtDur(m.elapsed)}</span>{/if}
 						{#if m.tokens}<span class="mono">{t('chat.tokens', { n: m.tokens })}</span>{/if}
 						<button class="copy" onclick={() => copy(m.text, m)} aria-label="copy">
-							{#if copied === m}<Check size={13} /> {t('common.copied')}{:else}<Copy size={13} /> {t('common.copy')}{/if}
+							{#if copied === m}<CheckIcon size={13} /> {t('common.copied')}{:else}<CopyIcon size={13} /> {t('common.copy')}{/if}
 						</button>
 					</div>
 				{/if}
@@ -281,7 +285,7 @@
 			<div class="reason" class:open={!m.collapsed}>
 				<button class="reason-head" onclick={() => (m.collapsed = !m.collapsed)}>
 					<span>{t('chat.reasoning')}</span>
-					<span class="rchev"><ChevronRight size={13} /></span>
+					<span class="rchev"><CaretRightIcon size={13} /></span>
 				</button>
 				{#if !m.collapsed}
 					<div class="reason-body" transition:slide={{ duration: 180 }}>

@@ -24,7 +24,8 @@
 
 <script lang="ts">
 	import { onDestroy, onMount, tick, untrack } from 'svelte';
-	import { ChevronDown, LoaderCircle } from 'lucide-svelte';
+	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
+	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import { open } from '@tauri-apps/plugin-dialog';
 	import { treeRows } from '$lib/tree';
 	import { buildSetApprovalModeOp, needsClaudeYoloRespawn, type ApprovalMode, type ApproveOp } from '$lib/approval';
@@ -737,7 +738,7 @@
 		</div>
 		{#if chat.booting && chat.engineState !== 'exited'}
 			<div class="welcome spawning">
-				<span class="spawn-spin"><LoaderCircle size={26} class="spin" /></span>
+				<span class="spawn-spin"><CircleNotchIcon size={26} class="spin" /></span>
 				<p class="welcome-tip">{t('shell.spawning')}</p>
 			</div>
 		{:else if chat.messages.length === 0 && !chat.busy}
@@ -753,7 +754,7 @@
 		{/if}
 	</main>
 	{#if !atBottom}
-		<button class="jump" style:bottom="{bottomH + 14}px" onclick={jumpToBottom} aria-label="scroll to bottom"><ChevronDown size={18} /></button>
+		<button class="jump" style:bottom="{bottomH + 14}px" onclick={jumpToBottom} aria-label="scroll to bottom"><CaretDownIcon size={18} /></button>
 	{/if}
 
 	<div class="bottom" bind:clientHeight={bottomH}>

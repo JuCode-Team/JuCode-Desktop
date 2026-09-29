@@ -2,10 +2,18 @@
 	import { onMount } from 'svelte';
 	import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 	import { openUrl } from '@tauri-apps/plugin-opener';
-	import {
-		Check, X, Download, RefreshCw, LoaderCircle, Copy, ExternalLink,
-		Hexagon, Film, Sparkles, SquareTerminal, Cpu
-	} from 'lucide-svelte';
+	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
+	import XIcon from 'phosphor-svelte/lib/XIcon';
+	import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon';
+	import ArrowsClockwiseIcon from 'phosphor-svelte/lib/ArrowsClockwiseIcon';
+	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
+	import CopyIcon from 'phosphor-svelte/lib/CopyIcon';
+	import ArrowSquareOutIcon from 'phosphor-svelte/lib/ArrowSquareOutIcon';
+	import HexagonIcon from 'phosphor-svelte/lib/HexagonIcon';
+	import FilmStripIcon from 'phosphor-svelte/lib/FilmStripIcon';
+	import SparkleIcon from 'phosphor-svelte/lib/SparkleIcon';
+	import TerminalWindowIcon from 'phosphor-svelte/lib/TerminalWindowIcon';
+	import CpuIcon from 'phosphor-svelte/lib/CpuIcon';
 	import {
 		checkDependencies, runInstall,
 		type DepReport, type InstallOutputEvent, type InstallDoneEvent
@@ -15,12 +23,12 @@
 	import Notice from '$lib/ui/Notice.svelte';
 	import { t } from '$lib/i18n';
 
-	const ICONS: Record<string, typeof Hexagon> = {
-		node: Hexagon,
-		ffmpeg: Film,
-		claude: Sparkles,
-		codex: SquareTerminal,
-		jucode: Cpu
+	const ICONS: Record<string, typeof HexagonIcon> = {
+		node: HexagonIcon,
+		ffmpeg: FilmStripIcon,
+		claude: SparkleIcon,
+		codex: TerminalWindowIcon,
+		jucode: CpuIcon
 	};
 
 	let deps = $state<DepReport[]>([]);
@@ -121,14 +129,14 @@
 			<p class="sub">{t('setup.deps.sub')}</p>
 		</div>
 		<Button variant="ghost" size="sm" onclick={recheck} disabled={loading}>
-			{#if loading}<LoaderCircle size={14} class="spin" />{:else}<RefreshCw size={14} />{/if}
+			{#if loading}<CircleNotchIcon size={14} class="spin" />{:else}<ArrowsClockwiseIcon size={14} />{/if}
 			{t('setup.deps.recheck')}
 		</Button>
 	</div>
 
 	<div class="list">
 		{#each deps as dep (dep.id)}
-			{@const Icon = ICONS[dep.id] ?? SquareTerminal}
+			{@const Icon = ICONS[dep.id] ?? TerminalWindowIcon}
 			{@const cmd = planCommand(dep)}
 			<div class="dep" class:on={dep.present}>
 				<span class="dep-ico"><Icon size={17} /></span>
@@ -141,18 +149,18 @@
 
 				<div class="dep-action">
 					{#if dep.present}
-						<span class="badge ok"><Check size={14} /> {t('setup.deps.installed')}</span>
+						<span class="badge ok"><CheckIcon size={14} /> {t('setup.deps.installed')}</span>
 					{:else if installing[dep.id]}
 						<Button variant="secondary" size="sm" disabled>
-							<LoaderCircle size={14} class="spin" /> {t('setup.deps.installing')}
+							<CircleNotchIcon size={14} class="spin" /> {t('setup.deps.installing')}
 						</Button>
 					{:else if dep.plan.kind === 'run'}
 						<Button variant="primary" size="sm" onclick={() => install(dep)}>
-							<Download size={14} /> {msgs[dep.id] && !msgs[dep.id]?.ok ? t('setup.deps.retry') : t('setup.deps.install')}
+							<DownloadSimpleIcon size={14} /> {msgs[dep.id] && !msgs[dep.id]?.ok ? t('setup.deps.retry') : t('setup.deps.install')}
 						</Button>
 					{:else if dep.plan.kind === 'open-url'}
 						<Button variant="secondary" size="sm" onclick={() => dep.plan.kind === 'open-url' && openUrl(dep.plan.url)}>
-							<ExternalLink size={14} /> {t('setup.deps.openPage')}
+							<ArrowSquareOutIcon size={14} /> {t('setup.deps.openPage')}
 						</Button>
 					{:else if dep.plan.kind === 'needs-prereq'}
 						<span class="badge warn">{t('setup.deps.needsNode')}</span>
@@ -169,7 +177,7 @@
 					<div class="cmd">
 						<code>{cmd}</code>
 						<IconButton size="sm" onclick={() => copyCmd(dep.id, cmd)} label="copy" title={t('setup.deps.copy')}>
-							{#if copied === dep.id}<Check size={14} />{:else}<Copy size={14} />{/if}
+							{#if copied === dep.id}<CheckIcon size={14} />{:else}<CopyIcon size={14} />{/if}
 						</IconButton>
 					</div>
 				</div>

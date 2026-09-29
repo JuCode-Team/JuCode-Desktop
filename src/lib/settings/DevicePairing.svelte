@@ -2,7 +2,8 @@
 	// Pair a phone with the local jucode daemon: a one-time code (and a QR
 	// code of the phone address + code), and the paired devices with revoke.
 	import { onDestroy, onMount } from 'svelte';
-	import { Smartphone, X } from 'lucide-svelte';
+	import DeviceMobileIcon from 'phosphor-svelte/lib/DeviceMobileIcon';
+	import XIcon from 'phosphor-svelte/lib/XIcon';
 	import { renderSVG } from 'uqr';
 	import Button from '$lib/ui/Button.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
@@ -93,10 +94,10 @@
 				})}</strong>
 				<span>{base ? t('settings.backend.pairScan', { address: base }) : t('settings.backend.pairNoAddress')}</span>
 			</div>
-			<IconButton onclick={stopPairing} label="close"><X size={14} /></IconButton>
+			<IconButton onclick={stopPairing} label="close"><XIcon size={14} /></IconButton>
 		</div>
 	{:else}
-		<Button size="sm" onclick={addDevice}><Smartphone size={13} /> {t('settings.backend.addDevice')}</Button>
+		<Button size="sm" onclick={addDevice}><DeviceMobileIcon size={13} /> {t('settings.backend.addDevice')}</Button>
 	{/if}
 
 	<div class="devices">
@@ -106,7 +107,7 @@
 		{/if}
 		{#each devices as device (device.id)}
 			<div class="device">
-				<Smartphone size={13} />
+				<DeviceMobileIcon size={13} />
 				<span class="name">{device.name}</span>
 				<span class="when">{new Date(device.paired_at).toLocaleDateString()}</span>
 				<Button size="sm" onclick={() => revoke(device)}>{t('settings.backend.revoke')}</Button>
