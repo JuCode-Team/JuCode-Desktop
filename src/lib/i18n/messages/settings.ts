@@ -322,34 +322,26 @@ const settings = {
 				'Anthropic 的 docx、pdf、pptx 与 xlsx 技能仅源码可见且不可再分发。Claude Code 不提供 API 的预置文档技能；此处安装的是仓库中的自定义技能副本，并受 Anthropic 条款约束。'
 		},
 		overview: {
-			dailyTitle: '每日 Token 用量',
 			dailyHint: '聚合所有 Provider，统计本机会话消耗，随使用逐日累计。',
-			detail: '明细',
 			noData: '暂无用量数据，开始对话后这里会按天展示明细。',
-			total: '共',
+			total: '总计',
 			other: '其他',
-			noProvDetail: '无 Provider 明细',
-			noModelDetail: '无模型明细',
-			noAgentDetail: '无智能体明细',
 			dimProvider: '渠道',
 			dimModel: '模型',
 			dimAgent: '智能体',
-			windowTotal: '近 {n} 天合计',
-			heatmap: {
-				month: '{n}月',
-				ariaLabel: '每日 Token 用量热力图',
-				noUsage: '无用量',
-				year: '近一年',
-				months: '近 {n} 个月',
-				recent: '近期',
-				activeDays: '{range}活跃 {days} 天 · 共',
-				empty: '暂无本机用量数据，开始对话后将逐日累计',
-				less: '少',
-				more: '多',
-				wdMon: '一',
-				wdWed: '三',
-				wdFri: '五'
-			}
+			summaryTitle: '概览',
+			breakdownTitle: '分布',
+			range: '{n} 天',
+			input: '输入',
+			output: '输出',
+			activeDays: '活跃天数',
+			perActiveDay: '活跃日均 {n}',
+			chartLabel: '每日 Token 用量柱状图',
+			peak: '单日峰值 {n}',
+			today: '今天',
+			date: '{m}月{d}日',
+			colName: '名称',
+			colShare: '占比'
 		}
 	},
 	en: {
@@ -673,34 +665,26 @@ const settings = {
 				'Anthropic’s docx, pdf, pptx, and xlsx skills are source-available and not for redistribution. Claude Code does not include the API’s preset document skills; installs here are custom repository copies governed by Anthropic’s terms.'
 		},
 		overview: {
-			dailyTitle: 'Daily token usage',
 			dailyHint: 'Aggregated across all providers from local session usage, accumulated day by day.',
-			detail: 'Details',
 			noData: 'No usage data yet; daily details appear here once you start chatting.',
-			total: 'total',
+			total: 'Total',
 			other: 'Other',
-			noProvDetail: 'No provider breakdown',
-			noModelDetail: 'No model breakdown',
-			noAgentDetail: 'No agent breakdown',
 			dimProvider: 'Provider',
 			dimModel: 'Model',
 			dimAgent: 'Agent',
-			windowTotal: 'Last {n} days total',
-			heatmap: {
-				month: 'M{n}',
-				ariaLabel: 'Daily token usage heatmap',
-				noUsage: 'no usage',
-				year: 'Past year',
-				months: 'Past {n} months',
-				recent: 'Recently',
-				activeDays: '{range}: {days} active days · total',
-				empty: 'No local usage data yet; it accumulates daily once you start chatting.',
-				less: 'Less',
-				more: 'More',
-				wdMon: 'M',
-				wdWed: 'W',
-				wdFri: 'F'
-			}
+			summaryTitle: 'Overview',
+			breakdownTitle: 'Breakdown',
+			range: '{n} days',
+			input: 'Input',
+			output: 'Output',
+			activeDays: 'Active days',
+			perActiveDay: '{n} per active day',
+			chartLabel: 'Daily token usage chart',
+			peak: 'Peak day {n}',
+			today: 'Today',
+			date: '{m}/{d}',
+			colName: 'Name',
+			colShare: 'Share'
 		}
 	}
 };
