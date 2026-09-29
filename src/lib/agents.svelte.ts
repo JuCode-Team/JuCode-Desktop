@@ -84,7 +84,9 @@ export interface NewAgent {
 	role: string;
 }
 
-const RETRY_MS = 5000;
+/** Reconnect backoff: 1 s, doubling to 30 s; reset by a good connection. */
+const RETRY_MIN_MS = 1000;
+const RETRY_MAX_MS = 30_000;
 
 export class AgentDirectory {
 	agents = $state<AgentView[]>([]);
@@ -98,14 +100,18 @@ export class AgentDirectory {
 	status = $state<'off' | 'connecting' | 'on' | 'unreachable'>('off');
 	error = $state('');
 	#retry: ReturnType<typeof setInterval> | null = null;
+	#delay = RETRY_MIN_MS;
+	#nextAttempt = 0;
 
-	/** Connects now and keeps reconnecting while the daemon is unreachable. */
+	/** Connects now and keeps reconnecting, with backoff, while the daemon is
+	 *  unreachable. */
 	start() {
 		if (this.#retry) return;
+		this.#delay = RETRY_MIN_MS;
 		void this.#connect();
 		this.#retry = setInterval(() => {
-			if (this.status === 'unreachable') void this.#connect();
-		}, RETRY_MS);
+			if (this.status === 'unreachable' && Date.now() >= this.#nextAttempt) void this.#connect();
+		}, RETRY_MIN_MS);
 	}
 
 	stop() {
@@ -220,10 +226,16 @@ export class AgentDirectory {
 			await daemon.connect();
 			this.status = 'on';
 			this.error = '';
+			this.#delay = RETRY_MIN_MS;
+			this.#nextAttempt = 0;
 			await this.loadReports();
 		} catch (e) {
+			// Stopped while connecting: stay off.
+			if (!this.#retry) return;
 			this.status = 'unreachable';
 			this.error = String(e);
+			this.#nextAttempt = Date.now() + this.#delay;
+			this.#delay = Math.min(this.#delay * 2, RETRY_MAX_MS);
 		}
 	}
 }

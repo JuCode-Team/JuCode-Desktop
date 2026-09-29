@@ -74,6 +74,8 @@ export const ROWS: SearchRow[] = [
 	{ section: 'agents', id: 'backend-list', titleKey: 'settings.backend.groupLabel', descKey: 'settings.backend.hint' },
 	{ section: 'agents', id: 'default-backend', titleKey: 'settings.backend.defaultLabel', descKey: 'settings.backend.defaultHint' },
 	{ section: 'agents', id: 'daemon', titleKey: 'settings.backend.daemonToggle', descKey: 'settings.backend.daemonHint' },
+	{ section: 'agents', id: 'relay', titleKey: 'settings.backend.relayToggle', descKey: 'settings.backend.relayHint' },
+	{ section: 'agents', id: 'devices', titleKey: 'settings.backend.devices', descKey: 'settings.backend.devicesHint' },
 	{ section: 'agents', id: 'dependencies', titleKey: 'setup.deps.title', descKey: 'setup.deps.sub' },
 	{ section: 'acp', id: 'acp-agents', titleKey: 'settings.acp.groupLabel', descKey: 'settings.acp.hint' },
 	{ section: 'updates', id: 'app-version', titleKey: 'settings.update.currentVersion', descKey: 'settings.update.groupLabel' }

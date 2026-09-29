@@ -12,6 +12,9 @@ const config = {
     adapter: adapter({
       fallback: "index.html",
     }),
+    // src/service-worker.ts is for the phone PWA only: the /remote page
+    // registers it outside Tauri, so it never runs in the desktop app.
+    serviceWorker: { register: false },
   },
 };
 

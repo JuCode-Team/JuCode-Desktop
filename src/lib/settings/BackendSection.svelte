@@ -213,12 +213,13 @@
 	<SettingsRow id="daemon" title={t('settings.backend.daemonToggle')} description={t('settings.backend.daemonHint')}>
 		<Switch bind:checked={settings.daemon} label={t('settings.backend.daemonToggle')} />
 	</SettingsRow>
-	{#if settings.daemon}
-		<SettingsRow stacked>
-			<DevicePairing bind:address={settings.remoteAddress} onAddressChange={persist} />
-		</SettingsRow>
-	{/if}
 </SettingsSection>
+
+{#if settings.daemon}
+	<SettingsSection id="remote" title={t('settings.backend.remoteGroup')} description={t('settings.backend.remoteGroupHint')}>
+		<DevicePairing bind:address={settings.remoteAddress} onAddressChange={persist} />
+	</SettingsSection>
+{/if}
 
 <style>
 	.brow {
