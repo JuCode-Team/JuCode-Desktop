@@ -12,6 +12,7 @@
 	} from '$lib/protocol';
 	import Button from '$lib/ui/Button.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
+	import Notice from '$lib/ui/Notice.svelte';
 	import { t } from '$lib/i18n';
 
 	const ICONS: Record<string, typeof Hexagon> = {
@@ -182,10 +183,10 @@
 				</div>
 			{/if}
 
-			{#if msgs[dep.id]}
-				<p class="donemsg" class:ok={msgs[dep.id]?.ok} class:bad={!msgs[dep.id]?.ok}>
-					{msgs[dep.id]?.text}
-				</p>
+			{#if msgs[dep.id]?.ok}
+				<p class="donemsg">{msgs[dep.id]?.text}</p>
+			{:else if msgs[dep.id]}
+				<Notice>{msgs[dep.id]?.text}</Notice>
 			{/if}
 		{/each}
 	</div>
@@ -335,11 +336,6 @@
 		margin: 2px 2px 4px;
 		font-size: var(--fs-xs);
 		line-height: 1.5;
-	}
-	.donemsg.ok {
 		color: var(--ok);
-	}
-	.donemsg.bad {
-		color: var(--err);
 	}
 </style>

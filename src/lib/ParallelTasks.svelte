@@ -3,9 +3,10 @@
 	//  · 当前项目是任务 worktree：展示分支/基于/领先落后 + 合并回主仓库 / 完成并清理 / 放弃任务；
 	//  · 当前项目是主仓库：列出容器目录下的所有任务 worktree（脏标记、打开、快捷合并/清理）。
 	import { GitMerge, GitBranch, Trash2, RefreshCw, LoaderCircle, FolderOpen, CheckCircle2, FilePen } from 'lucide-svelte';
-	import { ask } from '@tauri-apps/plugin-dialog';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Button from '$lib/ui/Button.svelte';
+	import Notice from '$lib/ui/Notice.svelte';
+	import { confirm } from '$lib/ui/confirm.svelte';
 	import { git, worktreeBase } from '$lib/protocol';
 	import {
 		parseWorktreeList,
@@ -131,8 +132,10 @@
 
 	async function finishTask() {
 		if (!worktree || busy || !finishable) return;
-		const ok = await ask(t('dock.tasks.finishConfirm', { slug: worktree.slug, branch: worktree.branch }), {
-			title: t('dock.tasks.finishTitle')
+		const ok = await confirm({
+			title: t('dock.tasks.finishTitle'),
+			message: t('dock.tasks.finishConfirm', { slug: worktree.slug, branch: worktree.branch }),
+			confirmLabel: t('dock.tasks.finish')
 		});
 		if (!ok) return;
 		busy = true;
@@ -150,9 +153,11 @@
 
 	async function abandonTask() {
 		if (!worktree || busy) return;
-		const ok = await ask(t('dock.tasks.abandonConfirm', { slug: worktree.slug, branch: worktree.branch }), {
+		const ok = await confirm({
 			title: t('dock.tasks.abandonTitle'),
-			kind: 'warning'
+			message: t('dock.tasks.abandonConfirm', { slug: worktree.slug, branch: worktree.branch }),
+			confirmLabel: t('dock.tasks.abandon'),
+			danger: true
 		});
 		if (!ok) return;
 		busy = true;
@@ -206,9 +211,10 @@
 			refresh();
 		} catch (e) {
 			busy = false;
-			const force = await ask(t('dock.tasks.forceCleanupConfirm', { msg: String(e) }), {
+			const force = await confirm({
 				title: t('dock.tasks.forceCleanupTitle'),
-				kind: 'warning'
+				message: t('dock.tasks.forceCleanupConfirm', { msg: String(e) }),
+				danger: true
 			});
 			if (!force) return;
 			busy = true;
@@ -265,7 +271,7 @@
 		{/if}
 		<div class="acts">
 			<Button size="sm" variant="primary" onclick={mergeBack} disabled={busy || !!blocker}>
-				{#if busy}<LoaderCircle size={13} class="gspin" />{:else}<GitMerge size={13} />{/if}
+				{#if busy}<LoaderCircle size={13} class="spin" />{:else}<GitMerge size={13} />{/if}
 				{t('dock.tasks.merge')}
 			</Button>
 			<Button size="sm" onclick={finishTask} disabled={busy || !finishable} title={finishable ? '' : t('dock.tasks.finishBlocked')}>
@@ -276,7 +282,7 @@
 			</Button>
 		</div>
 		{#if error}
-			<div class="terr" role="button" tabindex="0" onclick={() => (error = '')} onkeydown={(e) => e.key === 'Enter' && (error = '')}>{error}</div>
+			<Notice mono onDismiss={() => (error = '')}>{error}</Notice>
 		{/if}
 	</div>
 {:else if listAvailable}
@@ -313,7 +319,7 @@
 		<div class="tempty">{t('dock.tasks.empty')} · {t('dock.tasks.emptyHint')}</div>
 	{/if}
 	{#if error}
-		<div class="terr" role="button" tabindex="0" onclick={() => (error = '')} onkeydown={(e) => e.key === 'Enter' && (error = '')}>{error}</div>
+		<div class="terr"><Notice mono onDismiss={() => (error = '')}>{error}</Notice></div>
 	{/if}
 {/if}
 
@@ -389,24 +395,6 @@
 	}
 	.terr {
 		margin: 4px 6px 0;
-		padding: 7px 10px;
-		font-family: var(--font-mono);
-		font-size: var(--fs-xs);
-		color: var(--err);
-		background: color-mix(in oklab, var(--err) 12%, transparent);
-		border: 1px solid color-mix(in oklab, var(--err) 30%, transparent);
-		border-radius: var(--r-sm);
-		white-space: pre-wrap;
-		word-break: break-word;
-		cursor: pointer;
-	}
-	:global(.gspin) {
-		animation: gspin 0.9s linear infinite;
-	}
-	@keyframes gspin {
-		to {
-			transform: rotate(360deg);
-		}
 	}
 	.trow {
 		display: flex;

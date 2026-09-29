@@ -1,9 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Folder, FileText, ArrowUp, RefreshCw, X } from 'lucide-svelte';
+	import { Folder, FileText, ArrowUp, RefreshCw } from 'lucide-svelte';
 	import { projectRoot, listDir, type FsEntry } from '$lib/protocol';
 	import { editorStore } from '$lib/editor/editorStore.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
+	import Modal from '$lib/ui/Modal.svelte';
+	import Notice from '$lib/ui/Notice.svelte';
 	import { t } from '$lib/i18n';
 
 	let { rootDir = '' }: { rootDir?: string } = $props();
@@ -55,7 +57,7 @@
 		<IconButton size="sm" onclick={() => load(cwd)} label="refresh"><RefreshCw size={13} /></IconButton>
 	</div>
 	{#if error}
-		<div class="err">{error}</div>
+		<div class="err"><Notice mono>{error}</Notice></div>
 	{:else}
 		<div class="list">
 			{#each entries as e (e.path)}
@@ -70,15 +72,9 @@
 </div>
 
 {#if viewer}
-	<div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && (viewer = null)}>
-		<div class="sheet" role="dialog" tabindex="-1" aria-label={viewer.name}>
-			<div class="sheet-head">
-				<span class="sheet-name">{viewer.name}</span>
-				<IconButton onclick={() => (viewer = null)} label="close"><X size={15} /></IconButton>
-			</div>
-			<pre class="code">{viewer.content}</pre>
-		</div>
-	</div>
+	<Modal title={viewer.name} width={720} padded={false} onClose={() => (viewer = null)}>
+		<pre class="code">{viewer.content}</pre>
+	</Modal>
 {/if}
 
 <style>
@@ -135,47 +131,14 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
-	.empty,
-	.err {
+	.empty {
 		padding: 16px;
 		font-size: var(--fs-xs);
 		color: var(--dim2);
 		text-align: center;
 	}
 	.err {
-		font-family: var(--font-mono);
-		color: var(--err);
-	}
-	.overlay {
-		position: fixed;
-		inset: 0;
-		background: var(--scrim);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 55;
-	}
-	.sheet {
-		width: min(720px, 90vw);
-		max-height: 82vh;
-		display: flex;
-		flex-direction: column;
-		background: var(--panel);
-		border: 1px solid var(--border);
-		border-radius: var(--r-lg);
-		box-shadow: var(--shadow-modal);
-		overflow: hidden;
-	}
-	.sheet-head {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 11px 14px;
-		border-bottom: 1px solid var(--hairline);
-	}
-	.sheet-name {
-		font-family: var(--font-mono);
-		font-size: var(--fs-sm);
+		padding: 10px;
 	}
 	.code {
 		margin: 0;

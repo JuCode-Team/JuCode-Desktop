@@ -2,11 +2,11 @@
 	// New long-lived agent: id, name, working directory and role. Created in
 	// the local jucode daemon; the parent opens its first session.
 	import { onMount, tick } from 'svelte';
-	import { X, Bot, LoaderCircle } from 'lucide-svelte';
+	import { Bot, LoaderCircle } from 'lucide-svelte';
 	import { open } from '@tauri-apps/plugin-dialog';
-	import IconButton from '$lib/ui/IconButton.svelte';
 	import Button from '$lib/ui/Button.svelte';
-	import { focusTrap } from '$lib/focusTrap';
+	import Modal from '$lib/ui/Modal.svelte';
+	import Notice from '$lib/ui/Notice.svelte';
 	import { agentDirectory, type AgentView } from '$lib/agents.svelte';
 	import { t } from '$lib/i18n';
 
@@ -71,121 +71,59 @@
 		}
 	}
 
+	// ⌘/Ctrl+Enter creates from any field; Escape is the modal's.
 	function onKey(e: KeyboardEvent) {
-		if (e.key === 'Escape') {
-			e.preventDefault();
-			if (!busy) onClose();
-		} else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+		if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
 			e.preventDefault();
 			create();
 		}
 	}
 </script>
 
-<div
-	class="overlay"
-	role="presentation"
-	onclick={(e) => e.target === e.currentTarget && !busy && onClose()}
-	onkeydown={onKey}
->
-	<div
-		class="modal"
-		role="dialog"
-		aria-modal="true"
-		tabindex="-1"
-		aria-label={t('shell.agents.dialogTitle')}
-		use:focusTrap
-	>
-		<div class="head">
-			<span class="title"><Bot size={15} /> {t('shell.agents.dialogTitle')}</span>
-			<IconButton onclick={onClose} label="close" disabled={busy}><X size={15} /></IconButton>
-		</div>
-		<div class="body">
-			<p class="hint">{t('shell.agents.dialogHint')}</p>
-			<label class="field">
-				<span>{t('shell.agents.nameLabel')}</span>
-				<input bind:this={nameEl} bind:value={name} />
-			</label>
-			<label class="field">
-				<span>{t('shell.agents.idLabel')}</span>
-				<input
-					class="mono"
-					class:bad={!!id && !idValid}
-					bind:value={id}
-					oninput={() => (idEdited = true)}
-				/>
-				<small>{t('shell.agents.idHint')}</small>
-			</label>
-			<div class="field">
-				<span>{t('shell.agents.dirLabel')}</span>
-				<div class="dir">
-					<input class="mono" bind:value={cwd} />
-					<Button size="sm" onclick={browse}>{t('shell.agents.browse')}</Button>
-				</div>
-			</div>
-			<label class="field">
-				<span>{t('shell.agents.roleLabel')}</span>
-				<textarea bind:value={role} rows="4" placeholder={t('shell.agents.rolePlaceholder')}
-				></textarea>
-			</label>
-			{#if error}
-				<div class="err">{error}</div>
-			{/if}
-		</div>
-		<div class="foot">
-			<Button size="sm" onclick={onClose} disabled={busy}>{t('common.cancel')}</Button>
-			<Button size="sm" variant="primary" onclick={create} disabled={!canCreate}>
-				{#if busy}<LoaderCircle size={13} class="gspin" />
-					{t('shell.agents.creating')}{:else}{t('shell.agents.create')}{/if}
-			</Button>
+<svelte:window onkeydown={onKey} />
+
+<Modal title={t('shell.agents.dialogTitle')} width={480} dismissible={!busy} {onClose}>
+	{#snippet icon()}<Bot size={15} />{/snippet}
+	<p class="hint">{t('shell.agents.dialogHint')}</p>
+	<label class="field">
+		<span>{t('shell.agents.nameLabel')}</span>
+		<input bind:this={nameEl} bind:value={name} />
+	</label>
+	<label class="field">
+		<span>{t('shell.agents.idLabel')}</span>
+		<input
+			class="mono"
+			class:bad={!!id && !idValid}
+			bind:value={id}
+			oninput={() => (idEdited = true)}
+		/>
+		<small>{t('shell.agents.idHint')}</small>
+	</label>
+	<div class="field">
+		<span>{t('shell.agents.dirLabel')}</span>
+		<div class="dir">
+			<input class="mono" bind:value={cwd} />
+			<Button size="sm" onclick={browse}>{t('shell.agents.browse')}</Button>
 		</div>
 	</div>
-</div>
+	<label class="field">
+		<span>{t('shell.agents.roleLabel')}</span>
+		<textarea bind:value={role} rows="4" placeholder={t('shell.agents.rolePlaceholder')}
+		></textarea>
+	</label>
+	{#if error}
+		<Notice mono>{error}</Notice>
+	{/if}
+	{#snippet footer()}
+		<Button size="sm" onclick={onClose} disabled={busy}>{t('common.cancel')}</Button>
+		<Button size="sm" variant="primary" onclick={create} disabled={!canCreate}>
+			{#if busy}<LoaderCircle size={13} class="spin" />
+				{t('shell.agents.creating')}{:else}{t('shell.agents.create')}{/if}
+		</Button>
+	{/snippet}
+</Modal>
 
 <style>
-	.overlay {
-		position: fixed;
-		inset: 0;
-		background: var(--scrim);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 60;
-		animation: scrim-in var(--t-fast) var(--ease-out);
-	}
-	.modal {
-		width: min(480px, 92vw);
-		max-height: 82vh;
-		display: flex;
-		flex-direction: column;
-		background: var(--panel);
-		border: 1px solid var(--border);
-		border-radius: var(--r-lg);
-		box-shadow: var(--shadow-modal);
-		overflow: hidden;
-		animation: sheet-in var(--t-med) var(--ease-spring);
-	}
-	.head {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 12px 14px;
-		border-bottom: 1px solid var(--hairline);
-	}
-	.title {
-		display: inline-flex;
-		align-items: center;
-		gap: 8px;
-		font-weight: 600;
-		font-size: var(--fs-md);
-	}
-	.body {
-		display: flex;
-		flex-direction: column;
-		gap: 11px;
-		padding: 13px 14px;
-		overflow-y: auto;
-	}
 	.hint {
 		margin: 0;
 		font-size: var(--fs-xs);
@@ -234,23 +172,5 @@
 	}
 	.dir input {
 		flex: 1;
-	}
-	.err {
-		padding: 7px 10px;
-		font-family: var(--font-mono);
-		font-size: var(--fs-xs);
-		color: var(--err);
-		background: color-mix(in oklab, var(--err) 12%, transparent);
-		border: 1px solid color-mix(in oklab, var(--err) 30%, transparent);
-		border-radius: var(--r-sm);
-		white-space: pre-wrap;
-		word-break: break-word;
-	}
-	.foot {
-		display: flex;
-		justify-content: flex-end;
-		gap: 8px;
-		padding: 11px 14px;
-		border-top: 1px solid var(--hairline);
 	}
 </style>

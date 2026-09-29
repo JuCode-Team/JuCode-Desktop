@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { RefreshCw, CircleCheck, CircleAlert, Download, RotateCw } from 'lucide-svelte';
+	import { RefreshCw, CircleCheck, Download, RotateCw } from 'lucide-svelte';
 	import { getVersion } from '@tauri-apps/api/app';
 	import Button from '$lib/ui/Button.svelte';
+	import Notice from '$lib/ui/Notice.svelte';
 	import { updater } from '$lib/updater.svelte';
 	import { t } from '$lib/i18n';
 
@@ -37,7 +38,7 @@
 		{:else if updater.available}
 			<p class="status accent">{t('settings.update.found', { version: updater.version })}</p>
 		{:else if updater.phase === 'error'}
-			<p class="status err"><CircleAlert size={13} /> {t('settings.update.error', { msg: updater.error })}</p>
+			<div class="err"><Notice>{t('settings.update.error', { msg: updater.error })}</Notice></div>
 		{/if}
 		{#if updater.phase === 'downloading'}
 			<div class="bar"><div class="fill" style:width="{updater.progress}%"></div></div>
@@ -102,9 +103,8 @@
 	.status.ok {
 		color: var(--ok);
 	}
-	.status.err {
-		color: var(--err);
-		word-break: break-all;
+	.err {
+		margin-top: 10px;
 	}
 	.status.accent {
 		color: var(--accent-bright);

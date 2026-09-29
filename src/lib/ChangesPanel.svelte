@@ -1,7 +1,9 @@
 <script lang="ts">
-	import { FileDiff, RefreshCw, X, Undo2, SquarePen } from 'lucide-svelte';
-	import { ask } from '@tauri-apps/plugin-dialog';
+	import { FileDiff, RefreshCw, Undo2, SquarePen } from 'lucide-svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
+	import Modal from '$lib/ui/Modal.svelte';
+	import Notice from '$lib/ui/Notice.svelte';
+	import { confirm } from '$lib/ui/confirm.svelte';
 	import { git } from '$lib/protocol';
 	import { editorStore } from '$lib/editor/editorStore.svelte';
 	import { t } from '$lib/i18n';
@@ -71,7 +73,12 @@
 	}
 
 	async function revert(path: string) {
-		const ok = await ask(t('dock.changes.revertConfirm', { path }), { title: t('dock.changes.revertTitle'), kind: 'warning' });
+		const ok = await confirm({
+			title: t('dock.changes.revertTitle'),
+			message: t('dock.changes.revertConfirm', { path }),
+			confirmLabel: t('dock.changes.revert'),
+			danger: true
+		});
 		if (!ok) return;
 		busy = true;
 		error = '';
@@ -96,7 +103,7 @@
 		<IconButton size="sm" onclick={refresh} label="refresh"><RefreshCw size={13} /></IconButton>
 	</div>
 	{#if error}
-		<div class="oerr" role="button" tabindex="0" onclick={() => (error = '')} onkeydown={(e) => e.key === 'Enter' && (error = '')}>{error}</div>
+		<div class="oerr"><Notice mono onDismiss={() => (error = '')}>{error}</Notice></div>
 	{/if}
 	{#if files.length === 0}
 		<div class="empty">
@@ -123,16 +130,10 @@
 </div>
 
 {#if diff}
-	<div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && (diff = null)}>
-		<div class="sheet" role="dialog" tabindex="-1" aria-label={diff.path}>
-			<div class="sheet-head">
-				<span class="sheet-name">{diff.path}</span>
-				<IconButton onclick={() => (diff = null)} label="close"><X size={15} /></IconButton>
-			</div>
-			<pre class="diff">{#each diff.lines as d (d)}<span class={d.cls}>{d.line}
+	<Modal title={diff.path} width={760} padded={false} onClose={() => (diff = null)}>
+		<pre class="diff">{#each diff.lines as d (d)}<span class={d.cls}>{d.line}
 </span>{/each}</pre>
-		</div>
-	</div>
+	</Modal>
 {/if}
 
 <style>
@@ -241,47 +242,6 @@
 	}
 	.oerr {
 		margin: 8px 12px 0;
-		padding: 7px 10px;
-		font-family: var(--font-mono);
-		font-size: var(--fs-xs);
-		color: var(--err);
-		background: color-mix(in oklab, var(--err) 12%, transparent);
-		border: 1px solid color-mix(in oklab, var(--err) 30%, transparent);
-		border-radius: var(--r-sm);
-		white-space: pre-wrap;
-		word-break: break-word;
-		cursor: pointer;
-	}
-	.overlay {
-		position: fixed;
-		inset: 0;
-		background: var(--scrim);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 55;
-	}
-	.sheet {
-		width: min(760px, 92vw);
-		max-height: 82vh;
-		display: flex;
-		flex-direction: column;
-		background: var(--panel);
-		border: 1px solid var(--border);
-		border-radius: var(--r-lg);
-		box-shadow: var(--shadow-modal);
-		overflow: hidden;
-	}
-	.sheet-head {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 11px 14px;
-		border-bottom: 1px solid var(--hairline);
-	}
-	.sheet-name {
-		font-family: var(--font-mono);
-		font-size: var(--fs-sm);
 	}
 	.diff {
 		margin: 0;

@@ -18,6 +18,8 @@
 	import BackendIcon from '$lib/BackendIcon.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Button from '$lib/ui/Button.svelte';
+	import Notice from '$lib/ui/Notice.svelte';
+	import TextField from '$lib/ui/TextField.svelte';
 	import { t } from '$lib/i18n';
 
 	let agents = $state<AcpAgent[]>([]);
@@ -121,7 +123,7 @@
 	<div class="glabel">{t('settings.acp.groupLabel')}</div>
 	<p class="hint">{t('settings.acp.hint')}</p>
 	{#if listError}
-		<p class="err">{listError}</p>
+		<div class="listerr"><Notice>{listError}</Notice></div>
 	{/if}
 
 	<div class="alist">
@@ -162,7 +164,7 @@
 								<textarea class="tf envta" rows="2" bind:value={envText[agent.id]} onchange={() => onFieldChange(agent)} placeholder={t('settings.acp.envPlaceholder')}></textarea>
 							</label>
 							{#if rowError[agent.id]}
-								<span class="err">{rowError[agent.id]}</span>
+								<Notice>{rowError[agent.id]}</Notice>
 							{/if}
 						</div>
 					{/if}
@@ -184,22 +186,22 @@
 		<div class="draft">
 			<label class="fl">
 				<span>{t('settings.acp.name')}</span>
-				<input class="tf" bind:value={draft.name} placeholder={t('settings.acp.namePlaceholder')} />
+				<TextField mono bind:value={draft.name} placeholder={t('settings.acp.namePlaceholder')} />
 			</label>
 			<label class="fl">
 				<span>{t('settings.acp.command')}</span>
-				<input class="tf" bind:value={draft.command} placeholder={t('settings.acp.commandPlaceholder')} />
+				<TextField mono bind:value={draft.command} placeholder={t('settings.acp.commandPlaceholder')} />
 			</label>
 			<label class="fl">
 				<span>{t('settings.acp.args')}</span>
-				<input class="tf" bind:value={draft.args} placeholder={t('settings.acp.argsPlaceholder')} />
+				<TextField mono bind:value={draft.args} placeholder={t('settings.acp.argsPlaceholder')} />
 			</label>
 			<label class="fl">
 				<span>{t('settings.acp.env')}</span>
 				<textarea class="tf envta" rows="2" bind:value={draft.env} placeholder={t('settings.acp.envPlaceholder')}></textarea>
 			</label>
 			{#if draftError}
-				<span class="err">{draftError}</span>
+				<Notice>{draftError}</Notice>
 			{/if}
 			<div class="draftbtns">
 				<Button variant="primary" size="sm" onclick={saveDraft}>{t('settings.acp.save')}</Button>
@@ -375,9 +377,8 @@
 		min-height: 44px;
 		line-height: 1.5;
 	}
-	.err {
-		font-size: var(--fs-2xs);
-		color: var(--warn);
+	.listerr {
+		margin-bottom: 10px;
 	}
 	.empty {
 		margin: 0;

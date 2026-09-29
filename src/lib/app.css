@@ -280,7 +280,13 @@ body {
      drop-in    menus that open downward from an anchor (title bar)  --t-med --ease-spring
      pane-in    a session or panel coming into view      --t-med   --ease-out
      rise/fade  small in-flow reveals (tray, labels)     --t-fast/med --ease-out
+     spin       loading icons (class .spin)              0.8s linear, infinite
+     pulse      live / recording indicators (class .pulse) 1.2s, infinite
+   Exit animations (modals, toasts) use the Svelte transitions in ui/motion.ts.
    Reduced motion collapses all of them (see the media query at the end). */
+.pulse {
+	animation: pulse 1.2s var(--ease-in-out) infinite;
+}
 @keyframes scrim-in {
 	from {
 		opacity: 0;

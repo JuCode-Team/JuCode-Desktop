@@ -7,6 +7,7 @@
 	import MessageList from '$lib/MessageList.svelte';
 	import ApprovalCard from '$lib/ApprovalCard.svelte';
 	import Button from '$lib/ui/Button.svelte';
+	import Notice from '$lib/ui/Notice.svelte';
 	import { ChatState } from '$lib/chat.svelte';
 	import { createJucodeAdapter } from '$lib/backends/jucode';
 	import { daemon, type Op } from '$lib/protocol';
@@ -116,7 +117,7 @@
 	<header>
 		<button class="back" onclick={onBack} aria-label={t('shell.remote.back')}><ArrowLeft size={18} /></button>
 		<span class="title">{title}</span>
-		{#if chat.busy}<span class="busy"></span>{/if}
+		{#if chat.busy}<span class="busy pulse"></span>{/if}
 	</header>
 
 	<div class="scroll" bind:this={scroller}>
@@ -140,8 +141,8 @@
 	{/if}
 
 	{#if exited}
-		<div class="notice">
-			<span>{error || t('shell.remote.disconnected')}</span>
+		<div class="exit">
+			<div class="exit-msg"><Notice tone={error ? 'error' : 'warn'}>{error || t('shell.remote.disconnected')}</Notice></div>
 			<Button size="sm" onclick={connect}><RotateCw size={13} /> {t('shell.remote.reconnect')}</Button>
 		</div>
 	{/if}
@@ -201,7 +202,6 @@
 		height: 8px;
 		border-radius: 50%;
 		background: var(--accent-bright);
-		animation: pulse 1.2s ease-in-out infinite;
 	}
 	.scroll {
 		flex: 1;
@@ -214,15 +214,15 @@
 		max-height: 50vh;
 		overflow-y: auto;
 	}
-	.notice {
+	.exit {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
 		gap: 8px;
 		padding: 8px 12px;
-		font-size: var(--fs-sm);
-		color: var(--warn);
-		background: color-mix(in oklab, var(--warn) 10%, transparent);
+	}
+	.exit-msg {
+		flex: 1;
+		min-width: 0;
 	}
 	.composer {
 		display: flex;
@@ -262,7 +262,7 @@
 	.icon.primary {
 		border-color: transparent;
 		background: var(--accent);
-		color: var(--accent-contrast, #fff);
+		color: var(--on-accent);
 	}
 	.icon:disabled {
 		opacity: 0.45;

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Activity, Copy, Check } from 'lucide-svelte';
+	import Button from '$lib/ui/Button.svelte';
 	import { t } from '$lib/i18n';
 	import type { ChatState } from '$lib/chat.svelte';
 
@@ -99,9 +100,9 @@
 		</div>
 	</div>
 	<div class="foot">
-		<button class="copybtn" onclick={copyAll}>
+		<Button size="sm" onclick={copyAll}>
 			{#if copied}<Check size={12} />{t('dock.diag.copied')}{:else}<Copy size={12} />{t('dock.diag.copy')}{/if}
-		</button>
+		</Button>
 		<span class="spacer"></span>
 		<Activity size={12} />
 	</div>
@@ -200,21 +201,5 @@
 	}
 	.spacer {
 		flex: 1;
-	}
-	.copybtn {
-		display: inline-flex;
-		align-items: center;
-		gap: 5px;
-		padding: 4px 9px;
-		font-size: var(--fs-xs);
-		color: var(--dim);
-		background: none;
-		border: 1px solid var(--hairline);
-		border-radius: var(--r-sm);
-		cursor: pointer;
-	}
-	.copybtn:hover {
-		color: var(--text);
-		background: var(--surface2);
 	}
 </style>

@@ -2,6 +2,7 @@
 	import { LoaderCircle, ChevronRight } from 'lucide-svelte';
 	import { slide } from 'svelte/transition';
 	import { t } from '$lib/i18n';
+	import Notice from '$lib/ui/Notice.svelte';
 
 	let { name, output, running, isError }: { name: string; output: string; running: boolean; isError: boolean } =
 		$props();
@@ -164,7 +165,7 @@
 	{#if !collapsed && !isRead}
 		<div class="body" transition:slide={{ duration: 180 }}>
 			{#if errorText}
-				<div class="err-text">{errorText}</div>
+				<div class="err-text"><Notice mono>{errorText}</Notice></div>
 			{:else if !parsed}
 				{#if output}<pre>{output}</pre>{/if}
 			{:else if imageSrc}
@@ -298,10 +299,6 @@
 	}
 	.err-text {
 		padding: 4px 0;
-		font-family: var(--font-mono);
-		font-size: var(--fs-xs);
-		color: var(--err);
-		white-space: pre-wrap;
 	}
 	.meta {
 		padding: 4px 0;

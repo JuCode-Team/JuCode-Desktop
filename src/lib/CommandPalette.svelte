@@ -7,7 +7,7 @@
 	} from 'lucide-svelte';
 	import type { ChatState } from '$lib/chat.svelte';
 	import { caps, type BackendCaps } from '$lib/backends';
-	import { focusTrap } from '$lib/focusTrap';
+	import Modal from '$lib/ui/Modal.svelte';
 	import { t } from '$lib/i18n';
 
 	let {
@@ -137,10 +137,7 @@
 		if (a && !a.disabled) a.run();
 	}
 	function onKey(e: KeyboardEvent) {
-		if (e.key === 'Escape') {
-			e.preventDefault();
-			onClose();
-		} else if (e.key === 'ArrowDown') {
+		if (e.key === 'ArrowDown') {
 			e.preventDefault();
 			idx = Math.min(idx + 1, filtered.length - 1);
 		} else if (e.key === 'ArrowUp') {
@@ -153,56 +150,26 @@
 	}
 </script>
 
-<div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && onClose()}>
-	<div class="palette" role="dialog" aria-modal="true" tabindex="-1" aria-label={t('shell.paletteLabel')} use:focusTrap>
-		<div class="search">
-			<Search size={16} />
-			<input bind:this={inputEl} bind:value={query} onkeydown={onKey} placeholder={t('shell.paletteSearch')} />
-		</div>
-		<div class="rows">
-			{#each filtered as a, i (a.id)}
-				<button class="row" class:sel={i === idx} class:off={a.disabled} onclick={() => run(a)} onmouseenter={() => (idx = i)}>
-					<span class="ico"><a.icon size={15} /></span>
-					<span class="label">{a.label}</span>
-					{#if a.hint}<span class="hint">{a.hint}</span>{/if}
-					{#if a.keys}<span class="keys">{a.keys}</span>{/if}
-				</button>
-			{/each}
-			{#if filtered.length === 0}<div class="empty">{t('shell.paletteEmpty')}</div>{/if}
-		</div>
-		<div class="foot">{t('shell.paletteFoot')}</div>
+<Modal label={t('shell.paletteLabel')} width={560} placement="top" padded={false} {onClose}>
+	<div class="search">
+		<Search size={16} />
+		<input bind:this={inputEl} bind:value={query} onkeydown={onKey} placeholder={t('shell.paletteSearch')} />
 	</div>
-</div>
+	<div class="rows">
+		{#each filtered as a, i (a.id)}
+			<button class="row" class:sel={i === idx} class:off={a.disabled} onclick={() => run(a)} onmouseenter={() => (idx = i)}>
+				<span class="ico"><a.icon size={15} /></span>
+				<span class="label">{a.label}</span>
+				{#if a.hint}<span class="hint">{a.hint}</span>{/if}
+				{#if a.keys}<span class="keys">{a.keys}</span>{/if}
+			</button>
+		{/each}
+		{#if filtered.length === 0}<div class="empty">{t('shell.paletteEmpty')}</div>{/if}
+	</div>
+	<div class="foot">{t('shell.paletteFoot')}</div>
+</Modal>
 
 <style>
-	.overlay {
-		position: fixed;
-		inset: 0;
-		background: var(--scrim);
-		display: flex;
-		align-items: flex-start;
-		justify-content: center;
-		padding-top: 14vh;
-		z-index: 70;
-		animation: scrim-in var(--t-fast) var(--ease-out);
-	}
-	@keyframes fade {
-		from {
-			opacity: 0;
-		}
-	}
-	.palette {
-		width: min(560px, 92vw);
-		max-height: 64vh;
-		display: flex;
-		flex-direction: column;
-		background: var(--panel);
-		border: 1px solid var(--border);
-		border-radius: var(--r-lg);
-		box-shadow: var(--shadow-modal);
-		overflow: hidden;
-		animation: sheet-in var(--t-med) var(--ease-spring);
-	}
 	.search {
 		display: flex;
 		align-items: center;
@@ -224,6 +191,7 @@
 		color: var(--dim2);
 	}
 	.rows {
+		max-height: calc(64vh - 90px);
 		overflow-y: auto;
 		padding: 6px;
 	}

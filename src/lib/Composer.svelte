@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { ArrowUp, Square, Plus, Paperclip, Target, ListChecks, FastForward, ShieldCheck, ShieldAlert, Hand, ClipboardList, FilePen, CircleStop, Mic, LoaderCircle, GitBranch, SquareSlash } from 'lucide-svelte';
-	import { message } from '@tauri-apps/plugin-dialog';
+	import { toast } from '$lib/ui/toast.svelte';
 	import BackendIcon from '$lib/BackendIcon.svelte';
 	import PopMenu, { type PopMenuItem } from '$lib/ui/PopMenu.svelte';
 	import { listFiles, saveTempImage, transcribeAudio } from '$lib/protocol';
@@ -638,7 +638,7 @@
 			voiceTimer = setTimeout(stopVoice, 180_000);
 		} catch (e) {
 			recorder = null;
-			await message(t('chat.voiceMicError', { error: String(e) }), { title: 'JuCode', kind: 'error' });
+			toast.error(t('chat.voiceMicError', { error: String(e) }));
 		}
 	}
 
@@ -660,7 +660,7 @@
 				el?.focus();
 			}
 		} catch (e) {
-			await message(String(e), { title: 'JuCode', kind: 'error' });
+			toast.error(String(e));
 		} finally {
 			voice = 'idle';
 		}
@@ -812,12 +812,13 @@
 			<button
 				class="cact voice"
 				class:on={voice === 'rec'}
+				class:pulse={voice === 'rec'}
 				onclick={toggleVoice}
 				disabled={voice === 'busy'}
 				aria-label="voice input"
 				title={voice === 'rec' ? t('chat.voiceStopTitle') : voice === 'busy' ? t('chat.voiceBusyTitle') : t('chat.voiceTitle')}
 			>
-				{#if voice === 'busy'}<span class="vspin"><LoaderCircle size={15} /></span>{:else if voice === 'rec'}<CircleStop size={15} />{:else}<Mic size={17} strokeWidth={1.5} />{/if}
+				{#if voice === 'busy'}<LoaderCircle size={15} class="spin" />{:else if voice === 'rec'}<CircleStop size={15} />{:else}<Mic size={17} strokeWidth={1.5} />{/if}
 			</button>
 			{#if chat.busy && !currentQ}
 				<button class="cact stop" onclick={onStop} aria-label="stop" title={t('chat.stopTitle')}><Square size={15} /></button>
@@ -1069,20 +1070,10 @@
 	.cact.voice.on {
 		color: var(--err);
 		background: color-mix(in oklab, var(--err) 12%, transparent);
-		animation: pulse 1.2s ease-in-out infinite;
 	}
 	.cact.voice:disabled {
 		cursor: default;
 		color: var(--dim2);
-	}
-	.vspin {
-		display: inline-flex;
-		animation: vspin 0.9s linear infinite;
-	}
-	@keyframes vspin {
-		to {
-			transform: rotate(360deg);
-		}
 	}
 
 	/* ---------- footer strip (outside the card) ---------- */

@@ -413,14 +413,6 @@
 		font-size: var(--fs-2xs);
 		color: var(--warn);
 	}
-	:global(.spin) {
-		animation: benv-spin 0.8s linear infinite;
-	}
-	@keyframes benv-spin {
-		to {
-			transform: rotate(360deg);
-		}
-	}
 	.opt-ico {
 		display: inline-flex;
 		width: 22px;

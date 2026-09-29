@@ -53,7 +53,7 @@
 		<IconButton size="sm" type="button" onclick={() => browser.goBack()} label="back" title={t('dock.browser.back')}><ArrowLeft size={14} /></IconButton>
 		<IconButton size="sm" type="button" onclick={() => browser.goForward()} label="forward" title={t('dock.browser.forward')}><ArrowRight size={14} /></IconButton>
 		<IconButton size="sm" type="button" onclick={() => browser.reload()} label="reload" title={t('dock.browser.reload')}>
-			<span class="spin" class:on={browser.loading}><RotateCw size={13} /></span>
+			<RotateCw size={13} class={browser.loading ? 'spin' : undefined} />
 		</IconButton>
 		<input
 			class="url"
@@ -140,17 +140,6 @@
 	.pick:disabled {
 		opacity: 0.4;
 		cursor: default;
-	}
-	.spin {
-		display: inline-flex;
-	}
-	.spin.on {
-		animation: rot 0.9s linear infinite;
-	}
-	@keyframes rot {
-		to {
-			transform: rotate(360deg);
-		}
 	}
 	.pickhint {
 		font-size: var(--fs-2xs);

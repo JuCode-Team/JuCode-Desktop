@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { X, Check, Search } from 'lucide-svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
-	import { focusTrap } from '$lib/focusTrap';
+	import Modal from '$lib/ui/Modal.svelte';
 	import { t } from '$lib/i18n';
 	import Vendor from '$lib/Vendor.svelte';
 	import type { ChatState } from '$lib/chat.svelte';
@@ -47,10 +47,12 @@
 </script>
 
 {#snippet body()}
-	<div class="modal-head">
-		<span>{title}</span>
-		<IconButton onclick={onClose} label="close"><X size={15} /></IconButton>
-	</div>
+	{#if anchored}
+		<div class="modal-head">
+			<span>{title}</span>
+			<IconButton onclick={onClose} label="close"><X size={15} /></IconButton>
+		</div>
+	{/if}
 	{#if chat.picker?.kind === 'model' && activeModel}
 		<div class="efforts">
 			<span class="dim">effort</span>
@@ -90,32 +92,17 @@
 		{@render body()}
 	</div>
 {:else}
-	<div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && onClose()}>
-		<div class="modal" role="dialog" aria-modal="true" tabindex="-1" aria-label={title} use:focusTrap>
-			{@render body()}
-		</div>
-	</div>
+	<Modal {title} width={560} placement="top" padded={false} {onClose}>
+		{@render body()}
+	</Modal>
 {/if}
 
 <style>
-	.overlay {
-		position: fixed;
-		inset: 0;
-		background: var(--scrim);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 50;
-	}
 	.modal {
-		width: min(560px, 92vw);
-		max-height: 76vh;
 		display: flex;
 		flex-direction: column;
 		background: var(--panel);
 		border: 1px solid var(--border);
-		border-radius: var(--r-lg);
-		box-shadow: var(--shadow-modal);
 		overflow: hidden;
 	}
 	/* Anchored popover: sits above the caller (composer's model button), not
@@ -139,12 +126,6 @@
 		box-shadow: var(--shadow-pop);
 		transform-origin: bottom left;
 		animation: pop-in var(--t-med) var(--ease-spring);
-	}
-	@keyframes rise {
-		from {
-			opacity: 0;
-			transform: translateY(4px);
-		}
 	}
 	.modal-head {
 		display: flex;

@@ -1,10 +1,12 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { GitBranch, RefreshCw, X, Plus, Minus, Undo2, ChevronDown, Check, ArrowUp, ArrowDown, LoaderCircle, GitPullRequest, ExternalLink, Sparkles } from 'lucide-svelte';
-	import { ask } from '@tauri-apps/plugin-dialog';
+	import { GitBranch, RefreshCw, Plus, Minus, Undo2, ChevronDown, Check, ArrowUp, ArrowDown, LoaderCircle, GitPullRequest, ExternalLink, Sparkles } from 'lucide-svelte';
 	import { openUrl } from '@tauri-apps/plugin-opener';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Button from '$lib/ui/Button.svelte';
+	import Modal from '$lib/ui/Modal.svelte';
+	import Notice from '$lib/ui/Notice.svelte';
+	import { confirm } from '$lib/ui/confirm.svelte';
 	import { git, generateText } from '$lib/protocol';
 	import {
 		isValidBranchName,
@@ -141,7 +143,12 @@
 	const unstage = (c: Change) => run(['restore', '--staged', '--', c.path]);
 	const stageAll = () => run(['add', '-A']);
 	async function discard(c: Change) {
-		const ok = await ask(t('dock.git.discardConfirm', { path: c.path }), { title: t('dock.git.discardTitle'), kind: 'warning' });
+		const ok = await confirm({
+			title: t('dock.git.discardTitle'),
+			message: t('dock.git.discardConfirm', { path: c.path }),
+			confirmLabel: t('dock.git.discard'),
+			danger: true
+		});
 		if (!ok) return;
 		if (c.untracked) await run(['clean', '-fd', '--', c.path]);
 		else await run(['restore', '--staged', '--worktree', '--', c.path]);
@@ -363,12 +370,12 @@
 		</div>
 		{#if branchOpen}
 			<div class="pop-catch" role="presentation" onclick={() => (branchOpen = false)}></div>
-			<div class="pop" role="menu">
+			<div class="pop branchpop" role="menu">
 				<div class="poplist">
 					{#each branches as b (b)}
-						<button class="popitem" class:cur={b === branch} role="menuitem" onclick={() => switchBranch(b)} disabled={busy}>
+						<button class="pop-row popitem" class:cur={b === branch} role="menuitem" onclick={() => switchBranch(b)} disabled={busy}>
 							<span class="popname">{b}</span>
-							{#if b === branch}<Check size={12} />{/if}
+							{#if b === branch}<span class="pop-check"><Check size={12} /></span>{/if}
 						</button>
 					{/each}
 				</div>
@@ -384,20 +391,20 @@
 		{/if}
 		<div class="syncrow">
 			<Button size="sm" onclick={() => doSync('pull')} disabled={busy || !!syncBusy}>
-				{#if syncBusy === 'pull'}<LoaderCircle size={13} class="gspin" />{:else}<ArrowDown size={13} />{/if}
+				{#if syncBusy === 'pull'}<LoaderCircle size={13} class="spin" />{:else}<ArrowDown size={13} />{/if}
 				{t('dock.git.pull')}
 			</Button>
 			<Button size="sm" onclick={() => doSync('push')} disabled={busy || !!syncBusy}>
-				{#if syncBusy === 'push'}<LoaderCircle size={13} class="gspin" />{:else}<ArrowUp size={13} />{/if}
+				{#if syncBusy === 'push'}<LoaderCircle size={13} class="spin" />{:else}<ArrowUp size={13} />{/if}
 				{t('dock.git.push')}{#if sync.ahead > 0}&nbsp;({sync.ahead}){/if}
 			</Button>
 			<Button size="sm" onclick={() => doSync('fetch')} disabled={busy || !!syncBusy}>
-				{#if syncBusy === 'fetch'}<LoaderCircle size={13} class="gspin" />{:else}<RefreshCw size={13} />{/if}
+				{#if syncBusy === 'fetch'}<LoaderCircle size={13} class="spin" />{:else}<RefreshCw size={13} />{/if}
 				{t('dock.git.fetch')}
 			</Button>
 		</div>
 		{#if error}
-			<div class="oerr" role="button" tabindex="0" onclick={() => (error = '')} onkeydown={(e) => e.key === 'Enter' && (error = '')} title={t('dock.git.closeHint')}>{error}</div>
+			<div class="oerr"><Notice mono onDismiss={() => (error = '')}>{error}</Notice></div>
 		{/if}
 		<div class="scroll">
 			{#if worktree}
@@ -431,7 +438,7 @@
 					{t('dock.git.review')}
 				</button>
 				{#if compareOpen}
-					{#if compareBusy}<LoaderCircle size={12} class="gspin" />{:else}<span class="count">{compareFiles.length}</span>{/if}
+					{#if compareBusy}<LoaderCircle size={12} class="spin" />{:else}<span class="count">{compareFiles.length}</span>{/if}
 				{/if}
 			</div>
 			{#if compareOpen}
@@ -506,9 +513,9 @@
 		{#if stagedCount > 0}
 			<div class="commitbar">
 				{#if llm}
-					<button class="ai-btn" onclick={genCommit} disabled={!!genning} title={t('dock.git.aiCommit')} aria-label="generate commit message">
+					<Button size="icon" onclick={genCommit} disabled={!!genning} title={t('dock.git.aiCommit')} aria-label="generate commit message">
 						{#if genning === 'commit'}<LoaderCircle size={14} class="spin" />{:else}<Sparkles size={14} />{/if}
-					</button>
+					</Button>
 				{/if}
 				<input
 					bind:value={message}
@@ -522,60 +529,46 @@
 </div>
 
 {#if diff}
-	<div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && (diff = null)}>
-		<div class="sheet" role="dialog" tabindex="-1" aria-label={diff.path}>
-			<div class="sheet-head">
-				<span class="sheet-name">{diff.path}</span>
-				<IconButton onclick={() => (diff = null)} label="close"><X size={15} /></IconButton>
-			</div>
-			<pre class="diff">{#each diff.lines as d (d)}<span class={d.cls}>{d.line}
+	<Modal title={diff.path} width={760} padded={false} onClose={() => (diff = null)}>
+		<pre class="diff">{#each diff.lines as d (d)}<span class={d.cls}>{d.line}
 </span>{/each}</pre>
-		</div>
-	</div>
+	</Modal>
 {/if}
 
 {#if prForm}
-	<div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && !prBusy && (prForm = false)}>
-		<div class="sheet prsheet" role="dialog" tabindex="-1" aria-label={t('dock.git.prCreateTitle')}>
-			<div class="sheet-head">
-				<span class="sheet-name">{t('dock.git.prCreateTitle')}</span>
-				<IconButton onclick={() => (prForm = false)} label="close"><X size={15} /></IconButton>
-			</div>
-			<div class="prform">
-				{#if llm}
-					<button class="ai-btn wide" onclick={genPr} disabled={!!genning}>
-						{#if genning === 'pr'}<LoaderCircle size={13} class="spin" />{:else}<Sparkles size={13} />{/if}
-						<span>{t('dock.git.aiPr')}</span>
-					</button>
-				{/if}
-				<label class="pfield">
-					<span>{t('dock.git.prTitleLabel')}</span>
-					<input bind:value={prTitle} />
-				</label>
-				<label class="pfield">
-					<span>{t('dock.git.prBodyLabel')}</span>
-					<textarea bind:value={prBody} rows="5" placeholder={t('dock.git.prBodyPlaceholder')}></textarea>
-				</label>
-				<div class="prow">
-					<label class="pfield base">
-						<span>{t('dock.git.prBaseLabel')}</span>
-						<select bind:value={prBase}>
-							{#each branches.filter((b) => b !== branch) as b (b)}<option value={b}>{b}</option>{/each}
-						</select>
-					</label>
-					<label class="pcheck"><input type="checkbox" bind:checked={prDraft} /> {t('dock.git.prDraft')}</label>
-				</div>
-				{#if prError}
-					<div class="oerr" role="button" tabindex="0" onclick={() => (prError = '')} onkeydown={(e) => e.key === 'Enter' && (prError = '')} title={t('dock.git.closeHint')}>{prError}</div>
-				{/if}
-				<div class="practs">
-					<Button size="sm" variant="primary" onclick={createPr} disabled={!prTitle.trim() || prBusy}>
-						{#if prBusy}<LoaderCircle size={13} class="gspin" /> {t('dock.git.prCreating')}{:else}{t('dock.git.prSubmit')}{/if}
-					</Button>
-				</div>
-			</div>
+	<Modal title={t('dock.git.prCreateTitle')} width={440} dismissible={!prBusy} onClose={() => (prForm = false)}>
+		{#if llm}
+			<Button size="sm" full onclick={genPr} disabled={!!genning}>
+				{#if genning === 'pr'}<LoaderCircle size={13} class="spin" />{:else}<Sparkles size={13} />{/if}
+				<span>{t('dock.git.aiPr')}</span>
+			</Button>
+		{/if}
+		<label class="pfield">
+			<span>{t('dock.git.prTitleLabel')}</span>
+			<input bind:value={prTitle} />
+		</label>
+		<label class="pfield">
+			<span>{t('dock.git.prBodyLabel')}</span>
+			<textarea bind:value={prBody} rows="5" placeholder={t('dock.git.prBodyPlaceholder')}></textarea>
+		</label>
+		<div class="prow">
+			<label class="pfield base">
+				<span>{t('dock.git.prBaseLabel')}</span>
+				<select bind:value={prBase}>
+					{#each branches.filter((b) => b !== branch) as b (b)}<option value={b}>{b}</option>{/each}
+				</select>
+			</label>
+			<label class="pcheck"><input type="checkbox" bind:checked={prDraft} /> {t('dock.git.prDraft')}</label>
 		</div>
-	</div>
+		{#if prError}
+			<Notice mono onDismiss={() => (prError = '')}>{prError}</Notice>
+		{/if}
+		{#snippet footer()}
+			<Button size="sm" variant="primary" onclick={createPr} disabled={!prTitle.trim() || prBusy}>
+				{#if prBusy}<LoaderCircle size={13} class="spin" /> {t('dock.git.prCreating')}{:else}{t('dock.git.prSubmit')}{/if}
+			</Button>
+		{/snippet}
+	</Modal>
 {/if}
 
 <style>
@@ -647,42 +640,26 @@
 		inset: 0;
 		z-index: 49;
 	}
-	.pop {
+	.branchpop {
 		position: absolute;
 		top: 40px;
 		left: 10px;
 		right: 10px;
 		z-index: 50;
-		background: var(--panel);
-		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
-		box-shadow: var(--shadow-modal);
 		overflow: hidden;
+		transform-origin: top center;
+		animation: drop-in var(--t-med) var(--ease-spring);
 	}
 	.poplist {
 		max-height: 220px;
 		overflow-y: auto;
-		padding: 4px;
 	}
 	.popitem {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		width: 100%;
-		border: none;
-		background: none;
-		color: var(--text);
-		cursor: pointer;
+		min-height: 0;
 		font-family: var(--font-mono);
-		font-size: var(--fs-sm);
-		padding: 6px 8px;
-		border-radius: var(--r-sm);
-		text-align: left;
 	}
-	.popitem:hover {
-		background: var(--surface2);
-	}
-	.popitem.cur {
+	.popitem.cur,
+	.popitem.cur .pop-check {
 		color: var(--accent-bright);
 	}
 	.popitem:disabled {
@@ -699,7 +676,7 @@
 	.popnew {
 		display: flex;
 		gap: 6px;
-		padding: 7px;
+		padding: 7px 0 0;
 		border-top: 1px solid var(--hairline);
 	}
 	.popnew input {
@@ -725,14 +702,6 @@
 	}
 	.syncrow :global(.b) {
 		flex: 1;
-	}
-	:global(.gspin) {
-		animation: gspin 0.9s linear infinite;
-	}
-	@keyframes gspin {
-		to {
-			transform: rotate(360deg);
-		}
 	}
 	.ghrow {
 		padding: 6px 9px;
@@ -809,16 +778,6 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
-	.prsheet {
-		width: min(440px, 92vw);
-	}
-	.prform {
-		display: flex;
-		flex-direction: column;
-		gap: 10px;
-		padding: 12px 14px 14px;
-		overflow-y: auto;
-	}
 	.pfield {
 		display: flex;
 		flex-direction: column;
@@ -860,13 +819,6 @@
 		color: var(--dim);
 		padding-bottom: 8px;
 		cursor: pointer;
-	}
-	.practs {
-		display: flex;
-		justify-content: flex-end;
-	}
-	.prform .oerr {
-		margin: 0;
 	}
 	.scroll {
 		flex: 1;
@@ -1062,33 +1014,6 @@
 		border-top: 1px solid var(--hairline);
 		flex-shrink: 0;
 	}
-	/* AI-generate affordance (commit message / PR text). */
-	.ai-btn {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: 6px;
-		padding: 0 9px;
-		border: 1px solid color-mix(in oklab, var(--accent) 40%, var(--border));
-		border-radius: var(--r-sm);
-		background: var(--accent-soft);
-		color: var(--accent-bright);
-		cursor: pointer;
-		flex-shrink: 0;
-	}
-	.ai-btn:hover {
-		background: color-mix(in oklab, var(--accent) 18%, transparent);
-	}
-	.ai-btn:disabled {
-		opacity: 0.6;
-		cursor: default;
-	}
-	.ai-btn.wide {
-		width: 100%;
-		padding: 7px 10px;
-		font-size: var(--fs-sm);
-		margin-bottom: 2px;
-	}
 	.commitbar input {
 		flex: 1;
 		min-width: 0;
@@ -1116,47 +1041,6 @@
 	}
 	.oerr {
 		margin: 8px 12px 0;
-		padding: 7px 10px;
-		font-family: var(--font-mono);
-		font-size: var(--fs-xs);
-		color: var(--err);
-		background: color-mix(in oklab, var(--err) 12%, transparent);
-		border: 1px solid color-mix(in oklab, var(--err) 30%, transparent);
-		border-radius: var(--r-sm);
-		white-space: pre-wrap;
-		word-break: break-word;
-		cursor: pointer;
-	}
-	.overlay {
-		position: fixed;
-		inset: 0;
-		background: var(--scrim);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 55;
-	}
-	.sheet {
-		width: min(760px, 92vw);
-		max-height: 82vh;
-		display: flex;
-		flex-direction: column;
-		background: var(--panel);
-		border: 1px solid var(--border);
-		border-radius: var(--r-lg);
-		box-shadow: var(--shadow-modal);
-		overflow: hidden;
-	}
-	.sheet-head {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 11px 14px;
-		border-bottom: 1px solid var(--hairline);
-	}
-	.sheet-name {
-		font-family: var(--font-mono);
-		font-size: var(--fs-sm);
 	}
 	.diff {
 		margin: 0;

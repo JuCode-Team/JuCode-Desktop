@@ -3,11 +3,11 @@
 	// 可选任务描述。确认后在 <repo-parent>/.jucode-worktrees/<repo>/<slug> 创建
 	// worktree（分支 task/<slug>），由父组件把它作为新项目打开。
 	import { onMount, tick } from 'svelte';
-	import { X, GitBranch, LoaderCircle } from 'lucide-svelte';
-	import IconButton from '$lib/ui/IconButton.svelte';
+	import { GitBranch, LoaderCircle } from 'lucide-svelte';
 	import Button from '$lib/ui/Button.svelte';
+	import Modal from '$lib/ui/Modal.svelte';
+	import Notice from '$lib/ui/Notice.svelte';
 	import { git, worktreeBase } from '$lib/protocol';
-	import { focusTrap } from '$lib/focusTrap';
 	import { slugifyTaskName, parseBranches, isValidBranchName } from '$lib/gitops';
 	import { t } from '$lib/i18n';
 	import type { Project, WorktreeMeta } from '$lib/types';
@@ -61,113 +61,63 @@
 		}
 	}
 
+	// ⌘/Ctrl+Enter creates from any field; Escape is the modal's.
 	function onKey(e: KeyboardEvent) {
-		if (e.key === 'Escape') {
-			e.preventDefault();
-			if (!busy) onClose();
-		} else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+		if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
 			e.preventDefault();
 			create();
 		}
 	}
 </script>
 
-<div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && !busy && onClose()} onkeydown={onKey}>
-	<div class="modal" role="dialog" aria-modal="true" tabindex="-1" aria-label={t('shell.task.dialogTitle')} use:focusTrap>
-		<div class="head">
-			<span class="title"><GitBranch size={15} /> {t('shell.task.dialogTitle')}</span>
-			<IconButton onclick={onClose} label="close" disabled={busy}><X size={15} /></IconButton>
-		</div>
-		<div class="body">
-			<p class="hint">{t('shell.task.dialogHint')}</p>
-			<label class="field">
-				<span>{t('shell.task.nameLabel')}</span>
-				<input
-					bind:this={nameEl}
-					bind:value={name}
-					placeholder={t('shell.task.namePlaceholder')}
-					onkeydown={(e) => e.key === 'Enter' && (e.preventDefault(), create())}
-				/>
-			</label>
-			<div class="preview" class:bad={!!name.trim() && !slug}>
-				<span class="plabel">{t('shell.task.slugPreview')}</span>
-				{#if slug}
-					<code>…/.jucode-worktrees/{project.name}/{slug}</code>
-					<code class="pbranch">task/{slug} ← {base || '…'}</code>
-				{:else if name.trim()}
-					<span class="pbad">{t('shell.task.slugInvalid')}</span>
-				{:else}
-					<code class="dim">—</code>
-				{/if}
-			</div>
-			<label class="field">
-				<span>{t('shell.task.baseLabel')}</span>
-				<select bind:value={base}>
-					{#each branches as b (b)}<option value={b}>{b}</option>{/each}
-					{#if base && !branches.includes(base)}<option value={base}>{base}</option>{/if}
-				</select>
-			</label>
-			<label class="field">
-				<span>{t('shell.task.descLabel')}</span>
-				<textarea bind:value={description} rows="4" placeholder={t('shell.task.descPlaceholder')}></textarea>
-			</label>
-			{#if error}
-				<div class="err" role="button" tabindex="0" onclick={() => (error = '')} onkeydown={(e) => e.key === 'Enter' && (error = '')}>{error}</div>
-			{/if}
-		</div>
-		<div class="foot">
-			<Button size="sm" onclick={onClose} disabled={busy}>{t('common.cancel')}</Button>
-			<Button size="sm" variant="primary" onclick={create} disabled={!canCreate}>
-				{#if busy}<LoaderCircle size={13} class="gspin" /> {t('shell.task.creating')}{:else}{t('shell.task.create')}{/if}
-			</Button>
-		</div>
+<svelte:window onkeydown={onKey} />
+
+<Modal title={t('shell.task.dialogTitle')} dismissible={!busy} {onClose}>
+	{#snippet icon()}<GitBranch size={15} />{/snippet}
+	<p class="hint">{t('shell.task.dialogHint')}</p>
+	<label class="field">
+		<span>{t('shell.task.nameLabel')}</span>
+		<input
+			bind:this={nameEl}
+			bind:value={name}
+			placeholder={t('shell.task.namePlaceholder')}
+			onkeydown={(e) => e.key === 'Enter' && (e.preventDefault(), create())}
+		/>
+	</label>
+	<div class="preview" class:bad={!!name.trim() && !slug}>
+		<span class="plabel">{t('shell.task.slugPreview')}</span>
+		{#if slug}
+			<code>…/.jucode-worktrees/{project.name}/{slug}</code>
+			<code class="pbranch">task/{slug} ← {base || '…'}</code>
+		{:else if name.trim()}
+			<span class="pbad">{t('shell.task.slugInvalid')}</span>
+		{:else}
+			<code class="dim">—</code>
+		{/if}
 	</div>
-</div>
+	<label class="field">
+		<span>{t('shell.task.baseLabel')}</span>
+		<select bind:value={base}>
+			{#each branches as b (b)}<option value={b}>{b}</option>{/each}
+			{#if base && !branches.includes(base)}<option value={base}>{base}</option>{/if}
+		</select>
+	</label>
+	<label class="field">
+		<span>{t('shell.task.descLabel')}</span>
+		<textarea bind:value={description} rows="4" placeholder={t('shell.task.descPlaceholder')}></textarea>
+	</label>
+	{#if error}
+		<Notice mono onDismiss={() => (error = '')}>{error}</Notice>
+	{/if}
+	{#snippet footer()}
+		<Button size="sm" onclick={onClose} disabled={busy}>{t('common.cancel')}</Button>
+		<Button size="sm" variant="primary" onclick={create} disabled={!canCreate}>
+			{#if busy}<LoaderCircle size={13} class="spin" /> {t('shell.task.creating')}{:else}{t('shell.task.create')}{/if}
+		</Button>
+	{/snippet}
+</Modal>
 
 <style>
-	.overlay {
-		position: fixed;
-		inset: 0;
-		background: var(--scrim);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 60;
-		animation: scrim-in var(--t-fast) var(--ease-out);
-	}
-	.modal {
-		width: min(460px, 92vw);
-		max-height: 82vh;
-		display: flex;
-		flex-direction: column;
-		background: var(--panel);
-		border: 1px solid var(--border);
-		border-radius: var(--r-lg);
-		box-shadow: var(--shadow-modal);
-		overflow: hidden;
-		animation: sheet-in var(--t-med) var(--ease-spring);
-	}
-	.head {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 12px 14px;
-		border-bottom: 1px solid var(--hairline);
-	}
-	.title {
-		display: inline-flex;
-		align-items: center;
-		gap: 8px;
-		font-weight: 600;
-		font-size: var(--fs-md);
-	}
-	.body {
-		display: flex;
-		flex-direction: column;
-		gap: 11px;
-		padding: 13px 14px;
-		overflow-y: auto;
-	}
 	.hint {
 		margin: 0;
 		font-size: var(--fs-xs);
@@ -233,32 +183,5 @@
 	.pbad {
 		font-size: var(--fs-xs);
 		color: var(--warn);
-	}
-	.err {
-		padding: 7px 10px;
-		font-family: var(--font-mono);
-		font-size: var(--fs-xs);
-		color: var(--err);
-		background: color-mix(in oklab, var(--err) 12%, transparent);
-		border: 1px solid color-mix(in oklab, var(--err) 30%, transparent);
-		border-radius: var(--r-sm);
-		white-space: pre-wrap;
-		word-break: break-word;
-		cursor: pointer;
-	}
-	.foot {
-		display: flex;
-		justify-content: flex-end;
-		gap: 8px;
-		padding: 11px 14px;
-		border-top: 1px solid var(--hairline);
-	}
-	:global(.gspin) {
-		animation: gspin 0.9s linear infinite;
-	}
-	@keyframes gspin {
-		to {
-			transform: rotate(360deg);
-		}
 	}
 </style>

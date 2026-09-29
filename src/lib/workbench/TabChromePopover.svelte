@@ -4,6 +4,7 @@
 	import { t } from '$lib/i18n';
 	import { BUILTIN_ICONS, parseTabIcon, sanitizeSvg, TAB_COLORS, type TabIcon } from './tabChrome';
 	import TabGlyph from './TabGlyph.svelte';
+	import Button from '$lib/ui/Button.svelte';
 
 	// Shared chrome editor for workspace tabs and session tabs: rename, tag
 	// color, and icon (builtin grid / slug / pasted SVG). Fixed-position at the
@@ -174,7 +175,7 @@
 	</label>
 
 	{#if onDelete}
-		<button class="del" onclick={onDelete}><Trash2 size={12} />{deleteLabel || t('shell.chrome.delete')}</button>
+		<Button variant="danger" size="sm" full onclick={onDelete}><Trash2 size={12} />{deleteLabel || t('shell.chrome.delete')}</Button>
 	{/if}
 </div>
 
@@ -215,17 +216,20 @@
 	.txt {
 		width: 100%;
 		padding: 6px 8px;
-		border: 1px solid var(--hairline);
+		border: 1px solid var(--border);
 		border-radius: var(--r-sm);
-		background: var(--surface);
+		background: var(--surface2);
 		color: var(--text);
 		font-size: var(--fs-sm);
 		font-family: var(--font-sans);
 		outline: none;
 		resize: vertical;
 	}
+	.txt::placeholder {
+		color: var(--dim2);
+	}
 	.txt:focus {
-		border-color: color-mix(in oklab, var(--accent) 45%, var(--hairline));
+		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
 	}
 	.txt.mono {
 		font-family: var(--font-mono);
@@ -285,23 +289,5 @@
 	.ic.on {
 		background: var(--accent-soft);
 		color: var(--accent-bright);
-	}
-	.del {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: 5px;
-		margin-top: 2px;
-		padding: 6px 0;
-		border: 1px solid color-mix(in oklab, var(--err) 35%, transparent);
-		border-radius: var(--r-sm);
-		background: none;
-		color: var(--err);
-		font-size: var(--fs-xs);
-		cursor: pointer;
-		transition: background var(--t-fast) var(--ease-out);
-	}
-	.del:hover {
-		background: color-mix(in oklab, var(--err) 12%, transparent);
 	}
 </style>

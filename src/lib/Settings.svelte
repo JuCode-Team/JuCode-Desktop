@@ -22,7 +22,7 @@
 	import Select from '$lib/ui/Select.svelte';
 	import Switch from '$lib/ui/Switch.svelte';
 	import Segmented from '$lib/ui/Segmented.svelte';
-	import { focusTrap } from '$lib/focusTrap';
+	import Modal from '$lib/ui/Modal.svelte';
 	import { t, setLocale, getLocale, LOCALES, LOCALE_LABELS } from '$lib/i18n';
 	import { ASR_PROVIDERS, asrProvider, resolveAsrSettings, type AsrSettings } from '$lib/audio';
 	import { PLUGINS, loadPluginSettings, setPluginEnabled } from '$lib/plugins/registry';
@@ -339,9 +339,8 @@
 	}
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && onClose()} />
-<div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && onClose()}>
-	<div class="sheet" role="dialog" aria-modal="true" tabindex="-1" aria-label={t('settings.title')} use:focusTrap>
+<Modal label={t('settings.title')} width={880} padded={false} {onClose}>
+	<div class="frame">
 		<aside class="nav">
 			<div class="brand">JuCode</div>
 			<div class="nav-list">
@@ -620,35 +619,12 @@
 			{/if}
 		</div>
 	</div>
-</div>
+</Modal>
 
 <style>
-	.overlay {
-		position: fixed;
-		inset: 0;
-		background: var(--scrim);
-		backdrop-filter: blur(6px);
+	.frame {
 		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 60;
-		animation: scrim-in var(--t-fast) var(--ease-out);
-	}
-	@keyframes fade {
-		from {
-			opacity: 0;
-		}
-	}
-	.sheet {
-		width: min(880px, 95vw);
-		height: min(660px, 90vh);
-		display: flex;
-		background: var(--panel);
-		border: 1px solid var(--border);
-		border-radius: var(--r-lg);
-		box-shadow: var(--shadow-modal);
-		overflow: hidden;
-		animation: sheet-in var(--t-med) var(--ease-spring);
+		height: min(660px, 84vh);
 	}
 	.nav {
 		width: 220px;
@@ -874,12 +850,6 @@
 	:global(.pcard .dimx) {
 		color: var(--dim2);
 	}
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
-	}
-
 	.voicekey {
 		display: flex;
 		align-items: center;

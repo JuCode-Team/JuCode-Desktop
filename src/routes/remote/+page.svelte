@@ -6,6 +6,7 @@
 	import DeskContent from '$lib/DeskContent.svelte';
 	import RemoteSession from '$lib/RemoteSession.svelte';
 	import Button from '$lib/ui/Button.svelte';
+	import Notice from '$lib/ui/Notice.svelte';
 	import { agentDirectory, type AgentView } from '$lib/agents.svelte';
 	import { daemon, setDaemonEndpoint } from '$lib/protocol';
 	import { deviceName, forgetRemoteToken, pairDevice, remoteEndpoint, remoteToken } from '$lib/remote';
@@ -101,15 +102,15 @@
 					{#if pairing}<LoaderCircle size={14} class="spin" /> {t('shell.remote.pairing')}{:else}{t('shell.remote.pair')}{/if}
 				</Button>
 			</form>
-			{#if pairError}<div class="err">{pairError}</div>{/if}
+			{#if pairError}<div class="err"><Notice>{pairError}</Notice></div>{/if}
 		</div>
 	{:else}
 		<main>
 			<!-- The daemon served this page, so a failing connection most likely
 			     means this device's token was revoked; offer to pair again. -->
 			{#if agentDirectory.status === 'unreachable'}
-				<div class="notice">
-					<span>{t('shell.remote.refused')}</span>
+				<div class="refused">
+					<div class="refused-msg"><Notice tone="warn">{t('shell.remote.refused')}</Notice></div>
 					<Button size="sm" onclick={repair}>{t('shell.remote.repair')}</Button>
 				</div>
 			{/if}
@@ -210,20 +211,16 @@
 	}
 	.err {
 		margin-top: 12px;
-		font-size: var(--fs-sm);
-		color: var(--err);
 	}
-	.notice {
+	.refused {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
 		gap: 10px;
 		margin-bottom: 12px;
-		padding: 10px 12px;
-		border-radius: var(--r-md);
-		font-size: var(--fs-sm);
-		color: var(--warn);
-		background: color-mix(in oklab, var(--warn) 10%, transparent);
+	}
+	.refused-msg {
+		flex: 1;
+		min-width: 0;
 	}
 	.empty {
 		color: var(--dim2);

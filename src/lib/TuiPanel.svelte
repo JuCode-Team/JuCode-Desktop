@@ -15,6 +15,8 @@
 	import type { BackendId } from '$lib/backends/types';
 	import { loadBackendSettings } from '$lib/backends/settings';
 	import { themeState, terminalPalette } from '$lib/theme.svelte';
+	import Button from '$lib/ui/Button.svelte';
+	import Notice from '$lib/ui/Notice.svelte';
 	import { t } from '$lib/i18n';
 
 	let {
@@ -191,33 +193,33 @@
 	{#if onBackToGui}
 		<div class="handoffbar">
 			<span class="hb-text">{t('dock.tui.handoff')}</span>
-			<button class="btn sm" disabled={closing} onclick={backToGui}>{t('dock.tui.backToGui')}</button>
+			<Button size="sm" disabled={closing} onclick={backToGui}>{t('dock.tui.backToGui')}</Button>
 		</div>
 	{/if}
 	<div class="term-host" bind:this={host}></div>
 	{#if status === 'missing' || status === 'error'}
-		<div class="notice">
+		<div class="failed">
 			<p class="title">
 				{status === 'missing' ? t('dock.tui.missing', { bin: backend }) : t('dock.tui.failed')}
 			</p>
 			{#if status === 'missing'}
 				<p class="hint">{t('dock.tui.missingHint', { bin: backend })}</p>
 			{:else}
-				<p class="hint mono">{errMsg}</p>
+				<div class="err"><Notice mono>{errMsg}</Notice></div>
 			{/if}
 			<div class="row">
 				{#if status === 'missing' && onOpenSettings}
-					<button class="btn" onclick={onOpenSettings}>{t('dock.tui.openSettings')}</button>
+					<Button size="sm" onclick={onOpenSettings}>{t('dock.tui.openSettings')}</Button>
 				{/if}
-				<button class="btn" onclick={restart}>{t('dock.tui.retry')}</button>
+				<Button size="sm" onclick={restart}>{t('dock.tui.retry')}</Button>
 			</div>
 		</div>
 	{:else if status === 'exited'}
 		<div class="exitbar">
 			<span>{t('dock.tui.exited')}</span>
-			<button class="btn sm" onclick={restart}>{t('dock.tui.restart')}</button>
+			<Button size="sm" onclick={restart}>{t('dock.tui.restart')}</Button>
 			{#if onBackToGui}
-				<button class="btn sm" disabled={closing} onclick={backToGui}>{t('dock.tui.backToGui')}</button>
+				<Button size="sm" disabled={closing} onclick={backToGui}>{t('dock.tui.backToGui')}</Button>
 			{/if}
 		</div>
 	{/if}
@@ -260,7 +262,8 @@
 	:global(.tui-wrap .xterm-viewport) {
 		background: transparent !important;
 	}
-	.notice {
+	/* Launch failure: covers the (empty) terminal. */
+	.failed {
 		position: absolute;
 		inset: 0;
 		z-index: 2;
@@ -273,24 +276,24 @@
 		text-align: center;
 		background: var(--panel);
 	}
-	.notice .title {
+	.failed .title {
 		margin: 0;
 		font-size: var(--fs-sm);
 		font-weight: 600;
 		color: var(--text);
 	}
-	.notice .hint {
+	.failed .hint {
 		margin: 0;
 		max-width: 340px;
 		font-size: var(--fs-sm);
 		line-height: 1.5;
 		color: var(--dim);
 	}
-	.notice .hint.mono {
-		font-family: var(--font-mono);
-		word-break: break-all;
+	.failed .err {
+		width: min(420px, 100%);
+		text-align: left;
 	}
-	.notice .row {
+	.failed .row {
 		display: flex;
 		gap: 8px;
 		margin-top: 6px;
@@ -310,25 +313,5 @@
 		color: var(--dim);
 		background: var(--surface);
 		border-top: 1px solid var(--hairline);
-	}
-	.btn {
-		padding: 5px 12px;
-		font-size: var(--fs-sm);
-		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
-		background: var(--surface);
-		color: var(--text);
-		cursor: pointer;
-		transition:
-			border-color var(--t-fast) var(--ease-out),
-			background var(--t-fast) var(--ease-out);
-	}
-	.btn:hover {
-		background: var(--surface2);
-		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
-	}
-	.btn.sm {
-		padding: 3px 10px;
-		font-size: var(--fs-xs);
 	}
 </style>

@@ -26,6 +26,7 @@
 	import Button from '$lib/ui/Button.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import TextField from '$lib/ui/TextField.svelte';
+	import Notice from '$lib/ui/Notice.svelte';
 	import Segmented from '$lib/ui/Segmented.svelte';
 	import Switch from '$lib/ui/Switch.svelte';
 	import { t } from '$lib/i18n';
@@ -120,10 +121,10 @@
 	<div class="glabel"><Server size={12} /> {t('settings.mcp.groupLabel')}</div>
 	<p class="hint">{t('settings.mcp.hint')}</p>
 	{#if !live}
-		<div class="notice">{t('settings.mcp.noSession')}</div>
+		<div class="notice"><Notice tone="info">{t('settings.mcp.noSession')}</Notice></div>
 	{/if}
 	{#if opError}
-		<div class="notice bad">{opError}</div>
+		<div class="notice"><Notice>{opError}</Notice></div>
 	{/if}
 
 	{#if rows.length === 0 && editing !== '__new__'}
@@ -192,7 +193,7 @@
 					{#if expanded === row.name}
 						<div class="sdetail">
 							{#if row.view?.error}
-								<p class="serr">{row.view.error}</p>
+								<div class="serr"><Notice mono>{row.view.error}</Notice></div>
 							{/if}
 							{#if row.view?.tools.length}
 								<ul class="tlist">
@@ -326,16 +327,6 @@
 	}
 	.notice {
 		margin: 0 0 10px;
-		padding: 9px 12px;
-		font-size: var(--fs-xs);
-		color: var(--dim);
-		background: var(--surface2);
-		border: 1px solid var(--hairline);
-		border-radius: var(--r-sm);
-	}
-	.notice.bad {
-		color: var(--err);
-		border-color: color-mix(in oklab, var(--err) 35%, transparent);
 	}
 
 	.mcp-empty {
@@ -458,10 +449,6 @@
 	}
 	.serr {
 		margin: 8px 0 4px;
-		font-family: var(--font-mono);
-		font-size: var(--fs-xs);
-		color: var(--err);
-		word-break: break-all;
 	}
 	.tlist {
 		list-style: none;

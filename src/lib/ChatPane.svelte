@@ -25,10 +25,9 @@
 <script lang="ts">
 	import { onDestroy, onMount, tick, untrack } from 'svelte';
 	import { ChevronDown, LoaderCircle } from 'lucide-svelte';
-	import { open, message } from '@tauri-apps/plugin-dialog';
+	import { open } from '@tauri-apps/plugin-dialog';
 	import { treeRows } from '$lib/tree';
 	import { buildSetApprovalModeOp, needsClaudeYoloRespawn, type ApprovalMode, type ApproveOp } from '$lib/approval';
-	import { focusTrap } from '$lib/focusTrap';
 	import {
 		processVideo,
 		claudeSessions,
@@ -52,6 +51,8 @@
 	import ApprovalCard from '$lib/ApprovalCard.svelte';
 	import RateLimitBanner from '$lib/RateLimitBanner.svelte';
 	import Button from '$lib/ui/Button.svelte';
+	import Modal from '$lib/ui/Modal.svelte';
+	import { toast } from '$lib/ui/toast.svelte';
 	import Picker from '$lib/shell/Picker.svelte';
 	import FindBar from '$lib/shell/FindBar.svelte';
 
@@ -382,7 +383,7 @@
 			const info = await processVideo(path);
 			videos.push({ path: info.path, frames: info.frames, duration: info.duration });
 		} catch (e) {
-			await message(String(e), { title: 'JuCode', kind: 'error' });
+			toast.error(String(e));
 		}
 	}
 
@@ -736,7 +737,7 @@
 		</div>
 		{#if chat.booting && chat.engineState !== 'exited'}
 			<div class="welcome spawning">
-				<span class="spawn-spin"><LoaderCircle size={26} /></span>
+				<span class="spawn-spin"><LoaderCircle size={26} class="spin" /></span>
 				<p class="welcome-tip">{t('shell.spawning')}</p>
 			</div>
 		{:else if chat.messages.length === 0 && !chat.busy}
@@ -811,20 +812,19 @@
 </div>
 
 {#if isActive && chat.trustPrompt}
-	<div class="overlay" role="presentation">
-		<div class="modal trust" role="dialog" aria-modal="true" tabindex="-1" aria-label={t('shell.trustLabel')} use:focusTrap>
-			<div class="modal-head"><span>{t('shell.trustQuestion')}</span></div>
-			<div class="trust-body">
-				<p>{t('shell.trustBody')}</p>
-				<code class="trust-path">{chat.trustPrompt.repoRoot ?? chat.trustPrompt.cwd}</code>
-			</div>
-			<div class="trust-actions">
-				<button class="btn ghost" onclick={() => respondTrust('no')}>{t('shell.distrust')}</button>
-				{#if chat.trustPrompt.repoRoot}<button class="btn" onclick={() => respondTrust('repo')}>{t('shell.trustRepo')}</button>{/if}
-				<button class="btn primary" onclick={() => respondTrust('yes')}>{t('shell.trust')}</button>
-			</div>
+	<!-- The engine waits for an answer: no close button, Escape or scrim close. -->
+	<Modal label={t('shell.trustLabel')} dismissible={false} onClose={() => {}}>
+		<div class="trust-body">
+			<h2 class="trust-q">{t('shell.trustQuestion')}</h2>
+			<p>{t('shell.trustBody')}</p>
+			<code class="trust-path">{chat.trustPrompt.repoRoot ?? chat.trustPrompt.cwd}</code>
 		</div>
-	</div>
+		{#snippet footer()}
+			<Button variant="ghost" onclick={() => respondTrust('no')}>{t('shell.distrust')}</Button>
+			{#if chat.trustPrompt?.repoRoot}<Button onclick={() => respondTrust('repo')}>{t('shell.trustRepo')}</Button>{/if}
+			<Button variant="primary" onclick={() => respondTrust('yes')}>{t('shell.trust')}</Button>
+		{/snippet}
+	</Modal>
 {/if}
 
 {#if isActive && chat.picker && chat.picker.kind !== 'model'}
@@ -843,19 +843,16 @@
 {/if}
 
 {#if isActive && chat.pendingRewind}
-	<div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && (chat.pendingRewind = null)}>
-		<div class="modal trust" role="dialog" aria-modal="true" tabindex="-1" aria-label={t('shell.rewindLabel')} use:focusTrap>
-			<div class="modal-head"><span>{t('shell.rewindQuestion')}</span></div>
-			<div class="trust-body">
-				<p>{@html t('shell.rewindBody')}</p>
-				<code class="trust-path">{chat.pendingRewind.text.slice(0, 120)}</code>
-			</div>
-			<div class="trust-actions">
-				<button class="btn ghost" onclick={() => (chat.pendingRewind = null)}>{t('common.cancel')}</button>
-				<button class="btn primary" onclick={confirmRewind}>{t('shell.rewindConfirm')}</button>
-			</div>
+	<Modal title={t('shell.rewindQuestion')} onClose={() => (chat.pendingRewind = null)}>
+		<div class="trust-body">
+			<p>{@html t('shell.rewindBody')}</p>
+			<code class="trust-path">{chat.pendingRewind.text.slice(0, 120)}</code>
 		</div>
-	</div>
+		{#snippet footer()}
+			<Button variant="ghost" onclick={() => (chat.pendingRewind = null)}>{t('common.cancel')}</Button>
+			<Button variant="primary" onclick={confirmRewind}>{t('shell.rewindConfirm')}</Button>
+		{/snippet}
+	</Modal>
 {/if}
 
 <style>
@@ -974,12 +971,6 @@
 	.spawn-spin {
 		display: inline-flex;
 		color: var(--accent);
-		animation: spawn-spin 0.8s linear infinite;
-	}
-	@keyframes spawn-spin {
-		to {
-			transform: rotate(360deg);
-		}
 	}
 	.welcome-tip {
 		margin: 0;
@@ -1011,44 +1002,14 @@
 	}
 
 	/* ---------- modals (trust / rewind) ---------- */
-	.overlay {
-		position: fixed;
-		inset: 0;
-		background: var(--scrim);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 50;
-		animation: fade var(--t-fast) var(--ease-out);
-	}
-	.modal {
-		width: min(560px, 92vw);
-		max-height: 76vh;
-		display: flex;
-		flex-direction: column;
-		background: var(--panel);
-		border: 1px solid var(--border);
-		border-radius: var(--r-lg);
-		box-shadow: var(--shadow-modal);
-		overflow: hidden;
-		animation: pop-in var(--t-med) var(--ease-spring);
-	}
-	.modal-head {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 13px 16px;
-		font-weight: 600;
-		font-size: var(--fs-md);
-		border-bottom: 1px solid var(--hairline);
-	}
-	.modal.trust {
-		width: min(460px, 92vw);
-	}
 	.trust-body {
-		padding: 16px;
 		font-size: var(--fs-md);
 		line-height: 1.55;
+	}
+	.trust-q {
+		margin: 6px 0 12px;
+		font-size: var(--fs-md);
+		font-weight: 600;
 	}
 	.trust-body p {
 		margin: 0 0 12px;
@@ -1063,39 +1024,5 @@
 		border-radius: var(--r-sm);
 		padding: 8px 10px;
 		word-break: break-all;
-	}
-	.trust-actions {
-		display: flex;
-		justify-content: flex-end;
-		gap: 8px;
-		padding: 12px 16px 16px;
-	}
-	.btn {
-		font-size: var(--fs-sm);
-		padding: 8px 14px;
-		border-radius: var(--r-sm);
-		border: 1px solid var(--border);
-		background: var(--surface2);
-		color: var(--text);
-		cursor: pointer;
-		transition:
-			background var(--t-fast) var(--ease-out),
-			border-color var(--t-fast) var(--ease-out),
-			transform var(--t-fast) var(--ease-spring);
-	}
-	.btn:hover {
-		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
-	}
-	.btn:active {
-		transform: scale(0.97);
-	}
-	.btn.ghost {
-		color: var(--dim);
-	}
-	.btn.primary {
-		background: var(--accent);
-		border-color: var(--accent);
-		color: var(--on-accent);
-		font-weight: 600;
 	}
 </style>

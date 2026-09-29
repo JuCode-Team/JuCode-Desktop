@@ -11,7 +11,8 @@
 	import Dependencies from '$lib/Dependencies.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
-	import { focusTrap } from '$lib/focusTrap';
+	import Modal from '$lib/ui/Modal.svelte';
+	import Notice from '$lib/ui/Notice.svelte';
 	import { t } from '$lib/i18n';
 
 	let {
@@ -101,8 +102,8 @@
 	}
 </script>
 
-<div class="overlay" role="presentation">
-	<div class="wiz" role="dialog" aria-modal="true" tabindex="-1" aria-label={t('setup.wizardLabel')} use:focusTrap>
+<Modal label={t('setup.wizardLabel')} width={560} padded={false} dismissible={false} onClose={finish}>
+	<div class="wiz">
 		<button class="skip" onclick={finish} aria-label="skip" title={t('setup.skip')}><X size={18} /></button>
 
 		<div class="brand">JuCode</div>
@@ -167,9 +168,11 @@
 				{/if}
 
 				{#if !checking && !engineOk}
-					<div class="fix warn">
-						<div class="fix-head">{t('setup.engineMissing.head')}</div>
-						<p class="fix-tip">{@html t('setup.engineMissing.tip', { bin: '<code>JUCODE_BIN</code>' })}</p>
+					<div class="fixnote">
+						<Notice tone="warn">
+							<div class="fix-head">{t('setup.engineMissing.head')}</div>
+							<p class="fix-tip">{@html t('setup.engineMissing.tip', { bin: '<code>JUCODE_BIN</code>' })}</p>
+						</Notice>
 					</div>
 				{/if}
 
@@ -221,37 +224,14 @@
 			{/if}
 		</div>
 	</div>
-</div>
+</Modal>
 
 <style>
-	.overlay {
-		position: fixed;
-		inset: 0;
-		background: var(--scrim);
-		backdrop-filter: blur(6px);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 80;
-		animation: scrim-in var(--t-fast) var(--ease-out);
-	}
-	@keyframes fade {
-		from {
-			opacity: 0;
-		}
-	}
 	.wiz {
 		position: relative;
-		width: min(560px, 94vw);
-		max-height: 90vh;
 		display: flex;
 		flex-direction: column;
-		background: var(--panel);
-		border: 1px solid var(--border);
-		border-radius: var(--r-lg);
-		box-shadow: var(--shadow-modal);
-		overflow: hidden;
-		animation: sheet-in var(--t-med) var(--ease-spring);
+		min-height: 0;
 	}
 	.skip {
 		position: absolute;
@@ -329,6 +309,7 @@
 	}
 	.body {
 		flex: 1;
+		min-height: 0;
 		overflow-y: auto;
 		padding: 4px 24px 8px;
 	}
@@ -402,9 +383,15 @@
 		border-radius: var(--r-md);
 		background: var(--accent-soft);
 	}
-	.fix.warn {
-		border-color: color-mix(in oklab, var(--warn) 35%, transparent);
-		background: color-mix(in oklab, var(--warn) 10%, transparent);
+	.fixnote {
+		margin-top: 14px;
+	}
+	.fixnote .fix-head {
+		margin-bottom: 2px;
+	}
+	.fixnote .fix-tip {
+		margin: 0;
+		font-size: inherit;
 	}
 	.fix-head {
 		font-size: var(--fs-sm);

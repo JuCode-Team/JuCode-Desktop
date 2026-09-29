@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { onDestroy, tick, untrack } from 'svelte';
 	import { X, Save, Sparkles, PanelRightClose } from 'lucide-svelte';
-	import { ask } from '@tauri-apps/plugin-dialog';
 	import {
 		EditorView,
 		keymap,
@@ -18,6 +17,8 @@
 	import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Button from '$lib/ui/Button.svelte';
+	import Notice from '$lib/ui/Notice.svelte';
+	import { confirm } from '$lib/ui/confirm.svelte';
 	import { t } from '$lib/i18n';
 	import { themeState } from '$lib/theme.svelte';
 	import { editorStore, type EditorTab } from './editorStore.svelte';
@@ -244,9 +245,10 @@
 
 	async function closeTab(tab: EditorTab) {
 		if (!store.close(tab.path)) {
-			const ok = await ask(t('editor.unsavedClose', { name: tab.name }), {
+			const ok = await confirm({
 				title: t('editor.unsavedTitle'),
-				kind: 'warning'
+				message: t('editor.unsavedClose', { name: tab.name }),
+				danger: true
 			});
 			if (!ok) return;
 			store.close(tab.path, true);
@@ -373,7 +375,7 @@
 			</div>
 		{/if}
 		{#if active.error}
-			<div class="eerr" role="button" tabindex="0" onclick={() => (active.error = '')} onkeydown={(e) => e.key === 'Enter' && (active.error = '')}>{active.error}</div>
+			<div class="eerr"><Notice mono onDismiss={() => (active.error = '')}>{active.error}</Notice></div>
 		{/if}
 		<div class="ehost" bind:this={host}>
 			{#if aiPrompt}
@@ -386,7 +388,7 @@
 						onkeydown={aiKey}
 					/>
 					<span class="ai-range">L{aiPrompt.fromLine}{aiPrompt.toLine !== aiPrompt.fromLine ? `-${aiPrompt.toLine}` : ''}</span>
-					<button class="ai-send" onclick={submitAi}>{active.dirty ? t('editor.aiSaveSend') : t('editor.aiSend')}</button>
+					<Button size="sm" variant="primary" onclick={submitAi}>{active.dirty ? t('editor.aiSaveSend') : t('editor.aiSend')}</Button>
 					{#if aiError}<span class="ai-err">{aiError}</span>{/if}
 				</div>
 			{/if}
@@ -394,7 +396,7 @@
 		<div class="estatus">
 			<span class="spath" title={active.path}>{active.rel}</span>
 			{#if active.aiRange}
-				<span class="sai"><Sparkles size={11} /> {t('editor.aiPending')}</span>
+				<span class="sai pulse"><Sparkles size={11} /> {t('editor.aiPending')}</span>
 			{/if}
 			<span class="sflex"></span>
 			{#if active.dirty}
@@ -522,16 +524,8 @@
 		flex-shrink: 0;
 	}
 	.eerr {
-		padding: 6px 12px;
-		font-family: var(--font-mono);
-		font-size: var(--fs-xs);
-		color: var(--err);
-		background: color-mix(in oklab, var(--err) 10%, transparent);
-		border-bottom: 1px solid color-mix(in oklab, var(--err) 28%, transparent);
-		cursor: pointer;
+		padding: 6px 8px;
 		flex-shrink: 0;
-		white-space: pre-wrap;
-		word-break: break-word;
 	}
 	.ehost {
 		flex: 1;
@@ -574,17 +568,6 @@
 		color: var(--dim2);
 		flex-shrink: 0;
 	}
-	.ai-send {
-		flex-shrink: 0;
-		border: none;
-		border-radius: var(--r-sm);
-		padding: 4px 10px;
-		background: var(--accent);
-		color: var(--on-accent);
-		font-size: var(--fs-xs);
-		font-weight: 600;
-		cursor: pointer;
-	}
 	.ai-err {
 		font-size: var(--fs-2xs);
 		color: var(--err);
@@ -613,7 +596,6 @@
 		gap: 4px;
 		color: var(--accent-bright);
 		flex-shrink: 0;
-		animation: pulse 1.2s ease-in-out infinite;
 	}
 	.sflex {
 		flex: 1;

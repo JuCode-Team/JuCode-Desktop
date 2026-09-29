@@ -6,6 +6,7 @@
 	import { renderSVG } from 'uqr';
 	import Button from '$lib/ui/Button.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
+	import Notice from '$lib/ui/Notice.svelte';
 	import { daemon } from '$lib/protocol';
 	import { t } from '$lib/i18n';
 
@@ -112,7 +113,7 @@
 			</div>
 		{/each}
 	</div>
-	{#if error}<div class="err">{error}</div>{/if}
+	{#if error}<Notice>{error}</Notice>{/if}
 </div>
 
 <style>
@@ -138,6 +139,9 @@
 		font-size: var(--fs-xs);
 		padding: 7px 10px;
 		outline: none;
+	}
+	.field input::placeholder {
+		color: var(--dim2);
 	}
 	.field input:focus {
 		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
@@ -208,10 +212,5 @@
 	.when {
 		color: var(--dim2);
 		font-size: var(--fs-xs);
-	}
-	.err {
-		font-family: var(--font-mono);
-		font-size: var(--fs-xs);
-		color: var(--err);
 	}
 </style>

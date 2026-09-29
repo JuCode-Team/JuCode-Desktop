@@ -7,7 +7,8 @@
 	import Button from '$lib/ui/Button.svelte';
 	import Select from '$lib/ui/Select.svelte';
 	import Switch from '$lib/ui/Switch.svelte';
-	import { focusTrap } from '$lib/focusTrap';
+	import Modal from '$lib/ui/Modal.svelte';
+	import Notice from '$lib/ui/Notice.svelte';
 	import { agentDirectory, type AgentChanges, type AgentDetail, type AgentView } from '$lib/agents.svelte';
 	import { t } from '$lib/i18n';
 
@@ -89,9 +90,8 @@
 	}
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && onClose()} />
-<div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && onClose()}>
-	<div class="sheet" role="dialog" aria-modal="true" tabindex="-1" aria-label={agentId} use:focusTrap>
+<Modal label={agentId} width={720} padded={false} {onClose}>
+	<div class="sheet">
 		<div class="head">
 			<div>
 				<h2><Bot size={18} /> {detail?.agent.name ?? agentId}</h2>
@@ -101,7 +101,7 @@
 		</div>
 
 		<div class="body">
-			{#if error}<div class="err">{error}</div>{/if}
+			{#if error}<div class="err"><Notice>{error}</Notice></div>{/if}
 			{#if !detail}
 				{#if !error}<div class="loading"><LoaderCircle size={18} class="spin" /></div>{/if}
 			{:else}
@@ -251,30 +251,14 @@
 			{/if}
 		</div>
 	</div>
-</div>
+</Modal>
 
 <style>
-	.overlay {
-		position: fixed;
-		inset: 0;
-		background: var(--scrim);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 60;
-		animation: scrim-in var(--t-fast) var(--ease-out);
-	}
+	/* Fixed height so the sheet doesn't resize as the detail loads. */
 	.sheet {
-		width: min(720px, 94vw);
-		height: min(720px, 90vh);
+		height: min(720px, 84vh);
 		display: flex;
 		flex-direction: column;
-		background: var(--panel);
-		border: 1px solid var(--border);
-		border-radius: var(--r-lg);
-		box-shadow: var(--shadow-modal);
-		overflow: hidden;
-		animation: sheet-in var(--t-med) var(--ease-spring);
 	}
 	.head {
 		display: flex;
@@ -426,9 +410,6 @@
 	}
 	.err {
 		margin-top: 12px;
-		font-family: var(--font-mono);
-		font-size: var(--fs-xs);
-		color: var(--err);
 	}
 	.loading {
 		display: flex;

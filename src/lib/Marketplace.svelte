@@ -6,7 +6,8 @@
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import Chip from '$lib/ui/Chip.svelte';
-	import { focusTrap } from '$lib/focusTrap';
+	import Modal from '$lib/ui/Modal.svelte';
+	import Notice from '$lib/ui/Notice.svelte';
 	import { t } from '$lib/i18n';
 
 	let { backend, onClose }: { backend: BackendId; onClose: () => void } = $props();
@@ -66,9 +67,8 @@
 	}
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && onClose()} />
-<div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && onClose()}>
-	<div class="sheet" role="dialog" aria-modal="true" tabindex="-1" aria-label={t('settings.marketplace.title')} use:focusTrap>
+<Modal label={t('settings.marketplace.title')} width={820} padded={false} {onClose}>
+	<div class="sheet">
 		<div class="head">
 			<div>
 				<h2>{t('settings.marketplace.title')}</h2>
@@ -105,9 +105,9 @@
 			{#if loading}
 				<div class="state"><LoaderCircle size={20} class="spin" /> {t('common.loading')}</div>
 			{:else}
-				{#if error}<div class="notice err">{t('settings.marketplace.loadFailed', { error })}</div>{/if}
+				{#if error}<Notice>{t('settings.marketplace.loadFailed', { error })}</Notice>{/if}
 				{#each warnings as warning (warning)}
-					<div class="notice warn">{warning.includes('401') || warning.toLowerCase().includes('unauth') ? t('settings.marketplace.needLogin') : warning}</div>
+					<Notice tone="warn">{warning.includes('401') || warning.toLowerCase().includes('unauth') ? t('settings.marketplace.needLogin') : warning}</Notice>
 				{/each}
 				<div class="license-note">{t('settings.marketplace.licenseNotice')}</div>
 				{#if filtered.length === 0}
@@ -144,30 +144,14 @@
 		</div>
 		{#if installDir}<div class="install-dir">{t('settings.marketplace.installDir', { path: installDir })}</div>{/if}
 	</div>
-</div>
+</Modal>
 
 <style>
-	.overlay {
-		position: fixed;
-		inset: 0;
-		background: var(--scrim);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 60;
-		animation: scrim-in var(--t-fast) var(--ease-out);
-	}
+	/* Fixed height so the sheet doesn't resize as the catalog loads/filters. */
 	.sheet {
-		width: min(820px, 94vw);
-		height: min(640px, 88vh);
+		height: min(640px, 84vh);
 		display: flex;
 		flex-direction: column;
-		background: var(--panel);
-		border: 1px solid var(--border);
-		border-radius: var(--r-lg);
-		box-shadow: var(--shadow-modal);
-		overflow: hidden;
-		animation: sheet-in var(--t-med) var(--ease-spring);
 	}
 	.head {
 		display: flex;
@@ -229,7 +213,7 @@
 		padding-bottom: 10px;
 	}
 	.license-note {
-		margin: 0 0 12px;
+		margin: 0 0 4px;
 		padding: 9px 11px;
 		border: 1px solid var(--hairline);
 		border-radius: var(--r-md);
@@ -238,21 +222,10 @@
 		font-size: var(--fs-xs);
 		line-height: 1.45;
 	}
-	.notice {
-		margin: 0 0 8px;
-		padding: 8px 10px;
-		border-radius: var(--r-md);
-		font-size: var(--fs-xs);
-	}
-	.notice.warn {
-		color: var(--warn);
-		background: color-mix(in oklab, var(--warn) 10%, transparent);
-	}
-	.notice.err {
-		color: var(--err);
-		background: color-mix(in oklab, var(--err) 10%, transparent);
-	}
 	.body {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
 		flex: 1;
 		overflow-y: auto;
 		padding: 6px 20px 20px;

@@ -2,8 +2,8 @@
 	// The desk sheet on the desktop; its content is DeskContent.
 	import { X } from 'lucide-svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
+	import Modal from '$lib/ui/Modal.svelte';
 	import DeskContent from '$lib/DeskContent.svelte';
-	import { focusTrap } from '$lib/focusTrap';
 	import { t } from '$lib/i18n';
 
 	let {
@@ -16,9 +16,8 @@
 	} = $props();
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && onClose()} />
-<div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && onClose()}>
-	<div class="sheet" role="dialog" aria-modal="true" tabindex="-1" aria-label={t('shell.desk.title')} use:focusTrap>
+<Modal label={t('shell.desk.title')} width={760} padded={false} {onClose}>
+	<div class="sheet">
 		<div class="head">
 			<div>
 				<h2>{t('shell.desk.title')}</h2>
@@ -30,30 +29,14 @@
 			<DeskContent {onOpenSession} />
 		</div>
 	</div>
-</div>
+</Modal>
 
 <style>
-	.overlay {
-		position: fixed;
-		inset: 0;
-		background: var(--scrim);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 60;
-		animation: scrim-in var(--t-fast) var(--ease-out);
-	}
+	/* Fixed height so the sheet doesn't resize as its content loads. */
 	.sheet {
-		width: min(760px, 94vw);
-		height: min(720px, 90vh);
+		height: min(720px, 84vh);
 		display: flex;
 		flex-direction: column;
-		background: var(--panel);
-		border: 1px solid var(--border);
-		border-radius: var(--r-lg);
-		box-shadow: var(--shadow-modal);
-		overflow: hidden;
-		animation: sheet-in var(--t-med) var(--ease-spring);
 	}
 	.head {
 		display: flex;

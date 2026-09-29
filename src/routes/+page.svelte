@@ -3,7 +3,11 @@
 	import { listen } from '@tauri-apps/api/event';
 	import { getCurrentWebview } from '@tauri-apps/api/webview';
 	import { SquareTerminal } from 'lucide-svelte';
-	import { open, ask, message } from '@tauri-apps/plugin-dialog';
+	import Toaster from '$lib/ui/Toaster.svelte';
+	import ConfirmHost from '$lib/ui/ConfirmHost.svelte';
+	import { open } from '@tauri-apps/plugin-dialog';
+	import { toast } from '$lib/ui/toast.svelte';
+	import { confirm } from '$lib/ui/confirm.svelte';
 	import { cycleTheme } from '$lib/theme.svelte';
 	import {
 		isPermissionGranted,
@@ -531,12 +535,14 @@
 		const ws = workspaces.workspaces.find((w) => w.id === id);
 		if (!ws) return;
 		if (ws.isDefault) {
-			await message(t('shell.workspace.cannotDeleteDefault'), { title: 'JuCode', kind: 'warning' });
+			toast.warn(t('shell.workspace.cannotDeleteDefault'));
 			return;
 		}
-		const ok = await ask(t('shell.workspace.deleteConfirm', { name: ws.name }), {
+		const ok = await confirm({
 			title: t('shell.workspace.delete'),
-			kind: 'warning'
+			message: t('shell.workspace.deleteConfirm', { name: ws.name }),
+			confirmLabel: t('shell.workspace.delete'),
+			danger: true
 		});
 		if (!ok || wsBusy) return; // a swap may have started under the dialog
 		const next = workspaces.remove(id);
@@ -576,9 +582,11 @@
 	}
 	async function removeProject(p: Project) {
 		if (p.sessions.length) {
-			const ok = await ask(t('shell.closeProjectConfirm', { name: p.name, count: p.sessions.length }), {
+			const ok = await confirm({
 				title: t('shell.closeProjectTitle'),
-				kind: 'warning'
+				message: t('shell.closeProjectConfirm', { name: p.name, count: p.sessions.length }),
+				confirmLabel: t('shell.closeProjectTitle'),
+				danger: true
 			});
 			if (!ok) return;
 		}
@@ -587,9 +595,10 @@
 		const projRoot = p.path.replace(/\/+$/, '');
 		const dirtyTabs = editorStore.tabs.filter((tb) => tb.dirty && tb.path.startsWith(projRoot + '/'));
 		if (dirtyTabs.length) {
-			const ok = await ask(t('editor.dirtyProjectConfirm'), {
+			const ok = await confirm({
 				title: t('editor.unsavedTitle'),
-				kind: 'warning'
+				message: t('editor.dirtyProjectConfirm'),
+				danger: true
 			});
 			if (!ok) return;
 			for (const tb of dirtyTabs) editorStore.close(tb.path, true);
@@ -637,7 +646,7 @@
 		try {
 			await listDir(path, path); // confine to itself: just an existence check
 		} catch {
-			await message(t('shell.deepLinkBadPath', { path }), { title: 'JuCode', kind: 'error' });
+			toast.error(t('shell.deepLinkBadPath', { path }));
 			return null;
 		}
 		return store.createProject(path);
@@ -865,6 +874,9 @@
 
 <svelte:window onkeydown={onWindowKey} />
 
+<Toaster />
+<ConfirmHost />
+
 <div class="app">
 	<!-- TOP: one title bar across the window (traffic lights, sidebar toggle,
 	     the title of what is in front aligned with the canvas, panel actions). -->
@@ -1067,7 +1079,7 @@
 			onClose={() => (showQuickOpen = false)}
 			onOpen={(rel) => {
 				showQuickOpen = false;
-				editorStore.open(rel, qoRoot).catch((e) => message(String(e), { title: 'JuCode', kind: 'error' }));
+				editorStore.open(rel, qoRoot).catch((e) => toast.error(String(e)));
 			}}
 		/>
 	{/if}

@@ -4,6 +4,7 @@
 	import Markdown from '$lib/Markdown.svelte';
 	import ToolCard from '$lib/ToolCard.svelte';
 	import Indicator from '$lib/Indicator.svelte';
+	import Notice from '$lib/ui/Notice.svelte';
 	import { t } from '$lib/i18n';
 	import type { Msg } from '$lib/chat.svelte';
 
@@ -297,7 +298,7 @@
 		{:else if m.kind === 'tool'}
 			<ToolCard name={m.name} output={m.output} running={m.running} isError={m.isError} />
 		{:else if m.kind === 'error'}
-			<div class="error">{m.text}</div>
+			<Notice mono>{m.text}</Notice>
 				{/if}
 			</div>
 		{/if}
@@ -474,14 +475,5 @@
 			opacity: 1;
 			transform: translateY(0);
 		}
-	}
-	.error {
-		font-family: var(--font-mono);
-		font-size: var(--fs-sm);
-		color: var(--err);
-		background: color-mix(in oklab, var(--err) 12%, transparent);
-		border: 1px solid color-mix(in oklab, var(--err) 32%, transparent);
-		padding: 9px 12px;
-		border-radius: var(--r-md);
 	}
 </style>

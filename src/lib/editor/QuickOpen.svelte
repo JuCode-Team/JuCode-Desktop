@@ -3,7 +3,7 @@
 	import { Search, FileText } from 'lucide-svelte';
 	import { listFiles } from '$lib/protocol';
 	import { fuzzyScore } from '$lib/mention';
-	import { focusTrap } from '$lib/focusTrap';
+	import Modal from '$lib/ui/Modal.svelte';
 	import { t } from '$lib/i18n';
 
 	let { root, onOpen, onClose }: { root: string; onOpen: (rel: string) => void; onClose: () => void } = $props();
@@ -45,10 +45,7 @@
 	});
 
 	function key(e: KeyboardEvent) {
-		if (e.key === 'Escape') {
-			e.preventDefault();
-			onClose();
-		} else if (e.key === 'ArrowDown') {
+		if (e.key === 'ArrowDown') {
 			e.preventDefault();
 			selIdx = Math.min(selIdx + 1, matches.length - 1);
 		} else if (e.key === 'ArrowUp') {
@@ -62,50 +59,26 @@
 	}
 </script>
 
-<div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && onClose()}>
-	<div class="qo" role="dialog" aria-modal="true" tabindex="-1" aria-label={t('editor.quickOpenPlaceholder')} use:focusTrap>
-		<div class="qhead">
-			<Search size={15} class="qico" />
-			<input bind:this={inputEl} bind:value={query} placeholder={t('editor.quickOpenPlaceholder')} onkeydown={key} />
-		</div>
-		<div class="qlist">
-			{#each matches as m, i (m)}
-				<button class="qrow" class:sel={i === selIdx} onclick={() => onOpen(m)} onpointerenter={() => (selIdx = i)}>
-					<FileText size={14} />
-					<span class="qname">{baseName(m)}</span>
-					<span class="qdir">{m}</span>
-				</button>
-			{/each}
-			{#if matches.length === 0}
-				<div class="qempty">{t('editor.quickOpenEmpty')}</div>
-			{/if}
-		</div>
+<Modal label={t('editor.quickOpenPlaceholder')} width={560} placement="top" padded={false} {onClose}>
+	<div class="qhead">
+		<Search size={15} class="qico" />
+		<input bind:this={inputEl} bind:value={query} placeholder={t('editor.quickOpenPlaceholder')} onkeydown={key} />
 	</div>
-</div>
+	<div class="qlist">
+		{#each matches as m, i (m)}
+			<button class="qrow" class:sel={i === selIdx} onclick={() => onOpen(m)} onpointerenter={() => (selIdx = i)}>
+				<FileText size={14} />
+				<span class="qname">{baseName(m)}</span>
+				<span class="qdir">{m}</span>
+			</button>
+		{/each}
+		{#if matches.length === 0}
+			<div class="qempty">{t('editor.quickOpenEmpty')}</div>
+		{/if}
+	</div>
+</Modal>
 
 <style>
-	.overlay {
-		position: fixed;
-		inset: 0;
-		background: var(--scrim);
-		display: flex;
-		align-items: flex-start;
-		justify-content: center;
-		padding-top: 12vh;
-		z-index: 60;
-	}
-	.qo {
-		width: min(560px, 92vw);
-		max-height: 60vh;
-		display: flex;
-		flex-direction: column;
-		background: var(--panel);
-		border: 1px solid var(--border);
-		border-radius: var(--r-lg);
-		box-shadow: var(--shadow-modal);
-		overflow: hidden;
-		animation: pop-in var(--t-med) var(--ease-spring);
-	}
 	.qhead {
 		display: flex;
 		align-items: center;
@@ -126,7 +99,7 @@
 		outline: none;
 	}
 	.qlist {
-		flex: 1;
+		max-height: calc(60vh - 50px);
 		overflow-y: auto;
 		padding: 6px;
 	}

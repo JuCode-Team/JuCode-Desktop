@@ -5,6 +5,7 @@
 	// and on the remote page.
 	import { CircleHelp, ShieldCheck, FileText, LoaderCircle } from 'lucide-svelte';
 	import Button from '$lib/ui/Button.svelte';
+	import Notice from '$lib/ui/Notice.svelte';
 	import {
 		agentDirectory,
 		type ActionView,
@@ -65,7 +66,7 @@
 </script>
 
 {#if agentDirectory.status === 'unreachable'}
-	<div class="notice">{t('shell.desk.unreachable')}</div>
+	<div class="unreachable"><Notice tone="warn">{t('shell.desk.unreachable')}</Notice></div>
 {/if}
 
 <section>
@@ -95,7 +96,7 @@
 				placeholder={t('shell.desk.answerPlaceholder')}
 				onkeydown={(e) => e.key === 'Enter' && (e.metaKey || e.ctrlKey) && (e.preventDefault(), answer(q))}
 			></textarea>
-			{#if errors[q.id]}<div class="err">{errors[q.id]}</div>{/if}
+			{#if errors[q.id]}<Notice>{errors[q.id]}</Notice>{/if}
 			<div class="actions">
 				<Button size="sm" onclick={() => onOpenSession(q.session)}>{t('shell.desk.openSession')}</Button>
 				<Button
@@ -123,7 +124,7 @@
 				<summary>{t('shell.desk.arguments')}</summary>
 				<pre>{a.arguments}</pre>
 			</details>
-			{#if errors[a.id]}<div class="err">{errors[a.id]}</div>{/if}
+			{#if errors[a.id]}<Notice>{errors[a.id]}</Notice>{/if}
 			<div class="actions">
 				<Button size="sm" onclick={() => onOpenSession(a.session_id)}>{t('shell.desk.openSession')}</Button>
 				<Button size="sm" disabled={busy[a.id]} onclick={() => decide(a, false)}>{t('shell.desk.deny')}</Button>
@@ -196,13 +197,8 @@
 		font-size: var(--fs-sm);
 		color: var(--dim2);
 	}
-	.notice {
+	.unreachable {
 		margin-top: 10px;
-		padding: 9px 11px;
-		border-radius: var(--r-md);
-		font-size: var(--fs-sm);
-		color: var(--warn);
-		background: color-mix(in oklab, var(--warn) 10%, transparent);
 	}
 	.card {
 		display: flex;
@@ -298,11 +294,6 @@
 		justify-content: flex-end;
 		gap: 8px;
 	}
-	.err {
-		font-family: var(--font-mono);
-		font-size: var(--fs-xs);
-		color: var(--err);
-	}
 	.working {
 		display: flex;
 		flex-wrap: wrap;
@@ -344,13 +335,5 @@
 	.report.unread .title {
 		font-weight: 600;
 		color: var(--text);
-	}
-	:global(.spin) {
-		animation: spin 0.9s linear infinite;
-	}
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
 	}
 </style>

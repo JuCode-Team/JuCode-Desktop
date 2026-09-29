@@ -10,6 +10,7 @@
 		type UsageLogRow
 	} from '$lib/protocol';
 	import { t } from '$lib/i18n';
+	import Notice from '$lib/ui/Notice.svelte';
 
 	let loading = $state(true);
 	let error = $state<string | null>(null);
@@ -77,7 +78,7 @@
 	</div>
 
 	{#if error}
-		<p class="hint err">{error}</p>
+		<div class="err"><Notice>{error}</Notice></div>
 	{:else if loading && !account}
 		<p class="hint">{t('common.loading')}</p>
 	{:else if account}
@@ -141,16 +142,8 @@
 	.refresh:hover {
 		color: var(--text);
 	}
-	:global(.refresh .spin) {
-		animation: spin 0.9s linear infinite;
-	}
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
-	}
-	.hint.err {
-		color: var(--err);
+	.err {
+		margin-top: 8px;
 	}
 	.cards {
 		display: grid;

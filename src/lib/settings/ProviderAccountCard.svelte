@@ -269,13 +269,7 @@
 		border-radius: 50%;
 		border: 2px solid var(--border);
 		border-top-color: var(--accent);
-		animation: spin 0.8s linear infinite;
 		flex: none;
-	}
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
 	}
 	.ekey {
 		display: flex;

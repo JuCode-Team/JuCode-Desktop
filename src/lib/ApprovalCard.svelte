@@ -2,6 +2,7 @@
 	import { ShieldAlert, ChevronRight, Bot, MessageCircleQuestion, Check, ClipboardList, Copy, Download } from 'lucide-svelte';
 	import { t } from '$lib/i18n';
 	import Button from '$lib/ui/Button.svelte';
+	import Notice from '$lib/ui/Notice.svelte';
 	import Markdown from '$lib/Markdown.svelte';
 	import {
 		allHunkIds,
@@ -176,10 +177,10 @@
 				>{t('shell.keepPlanning')}</Button
 			>
 			<span class="plan-spacer"></span>
-			<button class="plan-util" onclick={copyPlan}>
+			<Button variant="ghost" size="sm" onclick={copyPlan}>
 				{#if copied}<Check size={13} />{t('shell.copiedPlan')}{:else}<Copy size={13} />{t('shell.copyPlan')}{/if}
-			</button>
-			<button class="plan-util" onclick={downloadPlan}><Download size={13} />{t('shell.downloadPlan')}</button>
+			</Button>
+			<Button variant="ghost" size="sm" onclick={downloadPlan}><Download size={13} />{t('shell.downloadPlan')}</Button>
 		</div>
 	{:else if multiHunk}
 		<div class="hunks">
@@ -212,7 +213,7 @@
 			{/each}
 		</div>
 		{#if selState === 'none'}
-			<div class="none-hint">{t('shell.noneSelectedHint')}</div>
+			<div class="none-hint"><Notice tone="warn">{t('shell.noneSelectedHint')}</Notice></div>
 		{/if}
 		<div class="approval-actions">
 			<Button
@@ -297,22 +298,6 @@
 	}
 	.plan-spacer {
 		flex: 1;
-	}
-	.plan-util {
-		display: inline-flex;
-		align-items: center;
-		gap: 5px;
-		padding: 4px 8px;
-		font-size: var(--fs-xs);
-		color: var(--dim);
-		background: none;
-		border: 1px solid var(--hairline);
-		border-radius: var(--r-sm);
-		cursor: pointer;
-	}
-	.plan-util:hover {
-		color: var(--text);
-		background: var(--surface2);
 	}
 	.approval-head {
 		display: flex;
@@ -516,8 +501,6 @@
 	}
 	.none-hint {
 		margin-top: 8px;
-		font-size: var(--fs-xs);
-		color: var(--err);
 	}
 	/* Diff rendering, matching ToolCard's diff styles. */
 	.diff {

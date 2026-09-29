@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { AlertTriangle, X } from 'lucide-svelte';
+	// Rate-limit warning above the composer, with a live reset countdown.
 	import { t } from '$lib/i18n';
+	import Notice from '$lib/ui/Notice.svelte';
 
 	let {
 		rateLimit,
@@ -28,42 +29,24 @@
 	});
 </script>
 
-<div class="rl" class:limited={rateLimit.level === 'limited'}>
-	<AlertTriangle size={14} />
-	<span class="rl-body">
-		<b>{rateLimit.level === 'limited' ? t('shell.rlLimited') : t('shell.rlWarning')}</b>
-		{#if rateLimit.message}<span class="rl-msg">{rateLimit.message}</span>{/if}
-		{#if countdown}<span class="rl-reset">{t('shell.rlResetsIn', { t: countdown })}</span>{/if}
-	</span>
-	<button class="rl-x" aria-label={t('shell.rlDismiss')} title={t('shell.rlDismiss')} onclick={onDismiss}>
-		<X size={13} />
-	</button>
+<div class="rl">
+	<Notice tone={rateLimit.level === 'limited' ? 'error' : 'warn'} {onDismiss}>
+		<span class="rl-body">
+			<b>{rateLimit.level === 'limited' ? t('shell.rlLimited') : t('shell.rlWarning')}</b>
+			{#if rateLimit.message}<span class="rl-msg">{rateLimit.message}</span>{/if}
+			{#if countdown}<span class="rl-reset">{t('shell.rlResetsIn', { t: countdown })}</span>{/if}
+		</span>
+	</Notice>
 </div>
 
 <style>
 	.rl {
-		display: flex;
-		align-items: center;
-		gap: 8px;
 		margin: 0 0 8px;
-		padding: 7px 10px;
-		font-size: var(--fs-xs);
-		color: var(--warn);
-		background: color-mix(in oklab, var(--warn) 10%, var(--panel));
-		border: 1px solid color-mix(in oklab, var(--warn) 38%, transparent);
-		border-radius: var(--r-md);
-	}
-	.rl.limited {
-		color: var(--err);
-		background: color-mix(in oklab, var(--err) 10%, var(--panel));
-		border-color: color-mix(in oklab, var(--err) 40%, transparent);
 	}
 	.rl-body {
 		display: flex;
 		align-items: baseline;
 		gap: 8px;
-		flex: 1;
-		min-width: 0;
 		flex-wrap: wrap;
 	}
 	.rl-msg {
@@ -75,18 +58,5 @@
 	.rl-reset {
 		font-variant-numeric: tabular-nums;
 		color: var(--dim);
-	}
-	.rl-x {
-		display: inline-flex;
-		padding: 2px;
-		border: none;
-		background: none;
-		color: inherit;
-		opacity: 0.7;
-		cursor: pointer;
-		flex-shrink: 0;
-	}
-	.rl-x:hover {
-		opacity: 1;
 	}
 </style>
