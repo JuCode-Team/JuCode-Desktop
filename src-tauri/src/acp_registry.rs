@@ -89,17 +89,10 @@ pub fn validate_agent(agent: &AcpAgent) -> Result<(), String> {
     Ok(())
 }
 
-/// First-run default: the native engine's own ACP surface, so the picker has
-/// a working ACP option out of the box.
-fn default_agents() -> Vec<AcpAgent> {
-    vec![AcpAgent {
-        id: "jucode-acp".to_string(),
-        name: "JuCode (ACP)".to_string(),
-        command: "jucode".to_string(),
-        args: vec!["acp".to_string()],
-        env: BTreeMap::new(),
-    }]
-}
+/// Id of the engine's own ACP surface that earlier versions seeded as the
+/// first-run entry. JuCode runs natively, so wrapping it in ACP added nothing;
+/// the entry is dropped from existing registries on load.
+const RETIRED_DEFAULT_ID: &str = "jucode-acp";
 
 /// Parses the registry file contents, validating every entry.
 fn parse_registry(text: &str) -> Result<Vec<AcpAgent>, String> {
@@ -108,7 +101,11 @@ fn parse_registry(text: &str) -> Result<Vec<AcpAgent>, String> {
     for agent in &file.agents {
         validate_agent(agent)?;
     }
-    Ok(file.agents)
+    Ok(file
+        .agents
+        .into_iter()
+        .filter(|a| a.id != RETIRED_DEFAULT_ID)
+        .collect())
 }
 
 fn registry_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -119,13 +116,12 @@ fn registry_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(dir.join(FILE_NAME))
 }
 
-/// Loads the registry; a missing file seeds the defaults (an existing but
-/// EMPTY registry stays empty — deleting the default entry is respected).
+/// Loads the registry; a missing file is an empty registry.
 pub fn load(app: &AppHandle) -> Result<Vec<AcpAgent>, String> {
     let path = registry_path(app)?;
     match std::fs::read_to_string(&path) {
         Ok(text) => parse_registry(&text),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(default_agents()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
         Err(e) => Err(format!("failed to read {}: {e}", path.display())),
     }
 }
@@ -237,13 +233,11 @@ mod tests {
     }
 
     #[test]
-    fn default_registry_launches_jucode_acp() {
-        let agents = default_agents();
+    fn the_retired_jucode_acp_entry_is_dropped_on_load() {
+        let text = r#"{"agents":[{"id":"jucode-acp","name":"JuCode (ACP)","command":"jucode","args":["acp"]},{"id":"gemini","name":"Gemini","command":"gemini","args":["--experimental-acp"]}]}"#;
+        let agents = parse_registry(text).unwrap();
         assert_eq!(agents.len(), 1);
-        assert_eq!(agents[0].id, "jucode-acp");
-        assert_eq!(agents[0].command, "jucode");
-        assert_eq!(agents[0].args, vec!["acp"]);
-        validate_agent(&agents[0]).unwrap();
+        assert_eq!(agents[0].id, "gemini");
     }
 
     #[test]
