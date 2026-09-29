@@ -284,7 +284,11 @@
 		setTimeout(() => (saved = false), 1500);
 	}
 	let loggingIn = $state(false);
+	let loginError = $state('');
+	let loginMark = 0;
 	function login() {
+		loginError = '';
+		loginMark = chat?.messages.length ?? 0;
 		// A bare /login answers with a provider picker; name the provider so the
 		// engine starts the OAuth flow (and opens the browser) directly.
 		dispatch(sessionId, { op: 'command', input: '/login jucode' });
@@ -295,6 +299,12 @@
 	// completes — without making the user close and reopen Settings.
 	$effect(() => {
 		if (!loggingIn) return;
+		const failed = loginErrorSince(chat, loginMark);
+		if (failed) {
+			loginError = failed;
+			loggingIn = false;
+			return;
+		}
 		if (keyed.includes('jucode')) {
 			loggingIn = false;
 			return;
@@ -357,6 +367,8 @@
 		selectProvider(p);
 	}
 	import { modelSetup } from '$lib/modelSetupState.svelte';
+	import { loginErrorSince } from '$lib/loginWatch';
+	import Notice from '$lib/ui/Notice.svelte';
 </script>
 
 <Modal label={t('settings.title')} width={880} padded={false} {onClose}>
@@ -393,6 +405,7 @@
 					<div class="group">
 						<div class="glabel">{t('settings.account.groupLabel')}</div>
 						<p class="hint">{t('settings.account.hint')}</p>
+						{#if loginError}<Notice onDismiss={() => (loginError = '')}>{loginError}</Notice>{/if}
 						<div class="plist">
 							{#each allProviders as p (p.id)}
 								<ProviderAccountCard

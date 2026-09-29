@@ -26,12 +26,15 @@
 
 	let {
 		sessionId,
+		chat,
 		loggedIn,
 		onRefreshAuth,
 		onOpenSettings,
 		onClose
 	}: {
 		sessionId: string;
+		/** The session the /login runs in, to catch a failed login. */
+		chat?: ChatState;
 		loggedIn: boolean;
 		onRefreshAuth: () => void;
 		onOpenSettings: () => void;
@@ -91,10 +94,22 @@
 		setTimeout(() => (copied = false), 1400);
 	}
 
+	let loginError = $state('');
+	let loginMark = 0;
 	function login() {
+		loginError = '';
+		loginMark = chat?.messages.length ?? 0;
 		dispatch(sessionId, { op: 'command', input: '/login jucode' });
 		loggingIn = true;
 	}
+	$effect(() => {
+		if (!loggingIn) return;
+		const failed = loginErrorSince(chat, loginMark);
+		if (failed) {
+			loginError = failed;
+			loggingIn = false;
+		}
+	});
 	// Poll auth.json while waiting for the OAuth round-trip to land.
 	$effect(() => {
 		if (!loggingIn || loggedIn) return;
@@ -113,6 +128,8 @@
 		onClose();
 	}
 	import { modelSetup } from '$lib/modelSetupState.svelte';
+	import { loginErrorSince } from '$lib/loginWatch';
+	import type { ChatState } from '$lib/chat.svelte';
 </script>
 
 <Modal label={t('setup.wizardLabel')} width={560} padded={false} dismissible={false} onClose={finish}>
@@ -202,6 +219,7 @@
 							{#if loggingIn}<CircleNotchIcon size={15} class="spin" /> {t('setup.loginOauth.waiting')}{:else}<SignInIcon size={15} /> {t('setup.loginOauth.loginBtn')}{/if}
 						</Button>
 						{#if loggingIn}<p class="hint center">{t('setup.loginOauth.browserOpened')}</p>{/if}
+						{#if loginError}<Notice onDismiss={() => (loginError = '')}>{loginError}</Notice>{/if}
 						<div class="or"><span>{t('setup.loginOauth.or')}</span></div>
 						<Button variant="secondary" full onclick={onOpenSettings}><KeyIcon size={15} /> {t('setup.loginOauth.apiKeyBtn')}</Button>
 					</div>

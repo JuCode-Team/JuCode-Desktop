@@ -1062,6 +1062,7 @@
 	{#if showSetup && activeId}
 		<Setup
 			sessionId={activeId}
+			{chat}
 			{loggedIn}
 			onRefreshAuth={refreshAuth}
 			onOpenSettings={() => {
