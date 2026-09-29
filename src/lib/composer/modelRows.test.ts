@@ -24,7 +24,7 @@ describe('buildModelRows', () => {
 		expect(rows[0]).toMatchObject({
 			active: true,
 			group: 'JuCode',
-			detail: 'jucode · 200.0k'
+			detail: '200K'
 		});
 	});
 
@@ -44,7 +44,7 @@ describe('buildModelRows', () => {
 		const byo = rows.find((r) => r.id === 'byo::my-model');
 		expect(byo).toMatchObject({
 			command: '@switch byo my-model',
-			detail: 'byo · 0'
+			detail: 'byo'
 		});
 		expect(rows.find((r) => r.id === 'jucode::gpt-5.5')?.command).toBe('@switch jucode gpt-5.5');
 

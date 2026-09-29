@@ -796,7 +796,6 @@
 			onModelSelect={selectRow}
 			onModelClose={() => chat.closePicker()}
 			modelRows={filteredRows}
-			modelTitle={pickerTitle}
 			modelSearch={showPickerSearch}
 			{backendLocked}
 			{gitBranch}

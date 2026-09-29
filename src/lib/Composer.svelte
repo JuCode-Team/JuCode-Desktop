@@ -10,8 +10,7 @@
 	import MentionMenu from '$lib/composer/MentionMenu.svelte';
 	import AttachmentChips from '$lib/composer/AttachmentChips.svelte';
 	import ContextIndicator from '$lib/composer/ContextIndicator.svelte';
-	import AgentModelPopover from '$lib/composer/AgentModelPopover.svelte';
-	import EffortPopover from '$lib/composer/EffortPopover.svelte';
+	import ModelMenu from '$lib/composer/ModelMenu.svelte';
 	import ComposerTray, { type TrayItem, type TraySection } from '$lib/composer/ComposerTray.svelte';
 	import { answerStep, startFlow, togglePick, type QuestionFlow } from '$lib/composer/tray';
 	import { effortLabel } from '$lib/composer/effort';
@@ -29,7 +28,6 @@
 		pickerQuery = $bindable(''),
 		pickerSelIdx = $bindable(0),
 		modelRows = [],
-		modelTitle = '',
 		modelSearch = false,
 		backendLocked = true,
 		gitBranch = '',
@@ -54,7 +52,6 @@
 		pickerQuery?: string;
 		pickerSelIdx?: number;
 		modelRows?: ModelRow[];
-		modelTitle?: string;
 		modelSearch?: boolean;
 		/** False only while the session is still virgin (no user turn) — the
 		 *  agent rail in the model popover shows then and disappears afterwards. */
@@ -76,23 +73,9 @@
 		onRespond?: (op: ApproveOp) => void;
 	} = $props();
 
-	let showEffort = $state(false);
 	let showApproval = $state(false);
 	let showAdd = $state(false);
-	let effortButton = $state<HTMLButtonElement>();
 	let modelButton = $state<HTMLButtonElement>();
-
-	function toggleEffort() {
-		if (modelPopoverVisible) closeModelPopover();
-		showAdd = false;
-		showEffort = !showEffort;
-	}
-	// The effort popover's model name hands over to the model picker, anchored
-	// on the same combined trigger.
-	function effortToModel() {
-		showEffort = false;
-		toggleModelPopover();
-	}
 
 	// The model popover holds its own open flag so it can outlive an agent
 	// switch (the new session ChatState starts with no picker) and open for
@@ -105,7 +88,6 @@
 			closeModelPopover();
 			return;
 		}
-		showEffort = false;
 		showAdd = false;
 		modelOpen = true;
 		if (bcaps.modelPicker) onModel();
@@ -118,11 +100,10 @@
 	// (ACP agents — `modelOpen` is ours, not chat.picker). Capture phase so the
 	// key never reaches the pane's window handler or the editor.
 	function onWindowKeyCapture(e: KeyboardEvent) {
-		if (e.key === 'Escape' && (modelPopoverVisible || showEffort || showAdd)) {
+		if (e.key === 'Escape' && (modelPopoverVisible || showAdd)) {
 			e.preventDefault();
 			e.stopPropagation();
 			if (modelPopoverVisible) closeModelPopover();
-			showEffort = false;
 			showAdd = false;
 		}
 	}
@@ -757,54 +738,37 @@
 				</div>
 			{/if}
 			<div class="cspace"></div>
-			{#if chat.efforts.length}
-				<!-- Combined model · effort trigger: opens the effort popover, whose
-				     model name leads on to the model picker. -->
+			{#if chat.efforts.length || bcaps.modelPicker || !backendLocked}
+				<!-- Model · effort: one button, one menu (agent, effort, models). -->
 				<button
-					class="flatbtn effort"
+					class="flatbtn model"
 					class:pending={effortDisabled}
-					bind:this={effortButton}
-					onclick={toggleEffort}
-					title={t('chat.effortTitle')}
+					bind:this={modelButton}
+					onclick={toggleModelPopover}
+					title={t('chat.switchModel')}
 					aria-haspopup="dialog"
-					aria-expanded={showEffort}
+					aria-expanded={modelPopoverVisible}
 				>
 					<BackendIcon backend={chat.backendId} size={15} />
 					<span class="m">{chat.modelLabel || chat.model || backendLabel}</span>
-					{#key chat.effort}<span class="e">{effortLabel(chat.effort) || t('chat.effortTitle')}</span>{/key}
-				</button>
-				{#if showEffort}
-					<button class="pop-backdrop" aria-label="close" tabindex="-1" onclick={() => (showEffort = false)}></button>
-					<EffortPopover
-						anchor={effortButton}
-						efforts={chat.efforts}
-						effort={chat.effort}
-						model={chat.modelLabel || chat.model || backendLabel}
-						disabled={effortDisabled}
-						onEffort={setEffort}
-						onModel={bcaps.modelPicker || !backendLocked ? effortToModel : undefined}
-					/>
-				{/if}
-			{:else if bcaps.modelPicker || !backendLocked}
-				<button class="flatbtn model" bind:this={modelButton} onclick={toggleModelPopover} title={t('chat.switchModel')}>
-					<BackendIcon backend={chat.backendId} size={15} />
-					<span>{chat.modelLabel || chat.model || backendLabel}</span>
+					{#if chat.efforts.length}{#key chat.effort}<span class="e">{effortLabel(chat.effort) || t('chat.effortTitle')}</span>{/key}{/if}
 				</button>
 			{:else if chat.model}
 				<span class="flatbtn model static"><BackendIcon backend={chat.backendId} size={15} /><span>{chat.modelLabel || chat.model}</span></span>
 			{/if}
 			{#if modelPopoverVisible}
-				<AgentModelPopover
+				<ModelMenu
 					{chat}
-					title={modelTitle || t('shell.picker.model')}
-					rows={modelRows}
+					rows={bcaps.modelPicker ? modelRows : []}
 					showSearch={modelSearch}
 					{backendLocked}
-					anchor={modelButton ?? effortButton}
+					{effortDisabled}
+					anchor={modelButton}
 					bind:query={pickerQuery}
 					bind:selIdx={pickerSelIdx}
 					onClose={closeModelPopover}
 					onSelect={selectFromPopover}
+					onEffort={setEffort}
 					{onBackend}
 					onRefreshModels={() => onModel()}
 				/>
@@ -929,35 +893,24 @@
 	.flatbtn:active:not(.static) {
 		transform: scale(0.97);
 	}
+	/* Model · effort trigger: model name, effort dimmer beside it. */
+	.flatbtn.model {
+		min-width: 0;
+	}
 	.flatbtn.model span {
-		font-family: var(--font-mono);
-		font-size: var(--fs-xs);
 		min-width: 0;
 		max-width: 220px;
+		font-size: var(--fs-sm);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
-	/* Combined model · effort trigger: model in mono, effort dimmer beside it. */
-	.flatbtn.effort {
-		min-width: 0;
-	}
-	.flatbtn.effort .m {
-		font-family: var(--font-mono);
-		font-size: var(--fs-sm);
-		min-width: 0;
-		max-width: 200px;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	.flatbtn.effort .e {
-		animation: rise var(--t-fast) var(--ease-out);
-		font-size: var(--fs-sm);
-		color: var(--dim);
+	.flatbtn.model .e {
 		flex-shrink: 0;
+		color: var(--dim);
+		animation: rise var(--t-fast) var(--ease-out);
 	}
-	.flatbtn.effort.pending {
+	.flatbtn.model.pending {
 		opacity: 0.6;
 	}
 	/* Circular "+" opening the add menu. */
@@ -1000,17 +953,6 @@
 	.footsel {
 		position: relative;
 		display: inline-flex;
-	}
-	.flatbtn.model {
-		min-width: 0;
-	}
-	.pop-backdrop {
-		position: fixed;
-		inset: 0;
-		background: none;
-		border: none;
-		z-index: 20;
-		cursor: default;
 	}
 	.cspace {
 		flex: 1;

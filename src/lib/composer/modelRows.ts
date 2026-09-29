@@ -35,7 +35,12 @@ export interface ModelGroupLabels {
 	system: string;
 }
 
-const fmtTokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
+/** Context window as shown beside a model: 272K, 1M; empty when unknown. */
+export const fmtContext = (n?: number) =>
+	!n ? '' : n >= 1_000_000 ? `${+(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}K` : `${n}`;
+/** The group header already names jucode and the agent's own catalog; BYOK rows
+ *  from several providers share one group, so they keep the provider id. */
+const detailOf = (provider: string | null, ctx?: number) => [provider, fmtContext(ctx)].filter(Boolean).join(' · ');
 
 // Mirror the engine's jucode allow-list so we don't offer a model it rejects.
 const jucodeOk = (n: string) =>
@@ -91,7 +96,7 @@ export function buildModelRows(input: {
 		id: `${cur}::${m.model}`,
 		label: m.label || m.model,
 		vendor: m.vendor || m.model,
-		detail: m.context_window ? `${cur} · ${fmtTokens(m.context_window)}` : cur,
+		detail: detailOf(activeGroup === groups.byok ? cur : null, m.context_window),
 		active: m.active,
 		command: `/model ${m.model}`,
 		depth: undefined,
@@ -106,7 +111,7 @@ export function buildModelRows(input: {
 					id: `${pv.id}::${m.name}`,
 					label: m.name,
 					vendor: m.name,
-					detail: `${pv.id} · ${fmtTokens(m.context_window ?? 0)}`,
+					detail: detailOf(pv.id === 'jucode' ? null : pv.id, m.context_window),
 					active: false,
 					command: `@switch ${pv.id} ${m.name}`,
 					depth: undefined,
