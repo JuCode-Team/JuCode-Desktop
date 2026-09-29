@@ -2,7 +2,7 @@
 	import { onMount, untrack } from 'svelte';
 	import { listen } from '@tauri-apps/api/event';
 	import { getCurrentWebview } from '@tauri-apps/api/webview';
-	import { PanelLeft, SquareTerminal } from 'lucide-svelte';
+	import { SquareTerminal } from 'lucide-svelte';
 	import { open, ask, message } from '@tauri-apps/plugin-dialog';
 	import { cycleTheme } from '$lib/theme.svelte';
 	import {
@@ -864,9 +864,6 @@
 
 <div class="app">
 	<!-- Sits right of the macOS traffic lights, above everything: toggles the session list. -->
-	<button class="sb-toggle" class:on={showSidebar} onclick={toggleSidebar} aria-label="toggle sidebar" title={t('shell.toggleSidebar')}>
-		<PanelLeft size={16} />
-	</button>
 	<!-- FAR LEFT: the workspace rail (top-level context). -->
 	<WorkspaceRail
 		workspaces={workspaces.workspaces}
@@ -877,6 +874,8 @@
 		onRename={(id, name) => workspaces.rename(id, name)}
 		onChrome={(id, chrome) => workspaces.setChrome(id, chrome)}
 		onDelete={deleteWorkspace}
+		sidebarOpen={showSidebar}
+		onToggleSidebar={toggleSidebar}
 	/>
 	<!-- LEFT: the navigator — workspace / projects / sessions. Clicking a session
 	     opens or focuses its chat tile on the canvas. -->
@@ -1112,45 +1111,6 @@
 		overflow: hidden;
 		background: var(--sidebar);
 	}
-	/* Session-list toggle, pinned right of the macOS traffic lights. Centered on
-	 * their measured macOS 26 metrics: 13.5pt circles with centerline at
-	 * y≈15.75pt, green light's right edge at x≈68.5pt, 9.5pt gaps between
-	 * lights — so top + height/2 ≈ 15.75, and left continues the lights' gap. */
-	.sb-toggle {
-		position: fixed;
-		top: 2.75px;
-		left: 82px;
-		z-index: 30;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 26px;
-		height: 26px;
-		border: none;
-		border-radius: var(--r-sm);
-		background: none;
-		color: var(--dim);
-		cursor: pointer;
-		transition:
-			background var(--t-fast) var(--ease-out),
-			color var(--t-fast) var(--ease-out),
-			transform var(--t-fast) var(--ease-spring);
-	}
-	.sb-toggle:hover {
-		background: var(--surface2);
-		color: var(--text);
-	}
-	.sb-toggle:active {
-		transform: scale(0.9);
-	}
-	/* Windows/Linux have a native title bar and no traffic lights, so drop the
-	 * macOS traffic-light offsets: sit the toggle at the sidebar's content edge,
-	 * vertically level with the canvas header. */
-	:global(:root[data-os='windows']) .sb-toggle,
-	:global(:root[data-os='linux']) .sb-toggle {
-		top: 8px;
-		left: 14px;
-	}
 
 	/* ---------- the canvas ---------- */
 	/* The canvas is raised above the window chrome (rail + sidebar): the work
@@ -1160,7 +1120,7 @@
 		display: flex;
 		flex-direction: column;
 		min-width: 0;
-		margin: 8px 8px 8px 0;
+		margin: 8px;
 		border-radius: var(--r-lg);
 		background: var(--bg);
 		box-shadow: var(--shadow-canvas);

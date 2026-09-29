@@ -23,8 +23,9 @@
 	--accent-soft: rgba(255, 255, 255, 0.08);
 	--on-accent: #0c0c0e;
 
-	--bg: #131316;
-	--sidebar: #0a0a0c;
+	--bg: #141417;
+	--sidebar: #0e0e11;
+	--rail: #08080a;
 	--panel: #1b1b1f;
 	--surface: rgba(255, 255, 255, 0.028);
 	--surface2: rgba(255, 255, 255, 0.055);
@@ -99,7 +100,8 @@
 	--on-accent: #fafafa;
 
 	--bg: #ffffff;
-	--sidebar: #f1f1f3;
+	--sidebar: #f3f3f5;
+	--rail: #e9e9ec;
 	--panel: #ffffff;
 	--surface: rgba(24, 24, 27, 0.025);
 	--surface2: rgba(24, 24, 27, 0.05);

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { Plus, History, X, LoaderCircle, GitBranch, GitBranchPlus, Archive, ArchiveRestore, ChevronRight, Search, Settings, Inbox, IdCard, SquarePen, SquareTerminal, Bot, Folder, FolderOpen, MessagesSquare, CircleAlert } from 'lucide-svelte';
+	import { Plus, History, X, LoaderCircle, GitBranch, GitBranchPlus, Archive, ArchiveRestore, ChevronRight, Search, Settings, Inbox, IdCard, SquarePen, Bot, CircleUserRound, Folder, FolderOpen, MessagesSquare, CircleAlert } from 'lucide-svelte';
 	import { t } from '$lib/i18n';
 	import { BACKEND_LABELS } from '$lib/backends';
 	import BackendIcon from '$lib/BackendIcon.svelte';
@@ -125,24 +125,37 @@
 		}
 	}
 
-	// "New session" targets the active session's project (fallback: first project);
-	// with no project open it falls through to the new-project flow.
-	function newSessionHere() {
-		const p = projects.find((pr) => pr.sessions.some((s) => s.id === activeId)) ?? projects[0];
-		if (p) onNewSession(p);
-		else onNewProject();
+	// "New chat" starts where you are: in the project of the active session,
+	// or as a chat when the active session is a chat (or nothing is open).
+	function newHere() {
+		const p = projects.find((pr) => pr.sessions.some((s) => s.id === activeId));
+		if (p && !p.chats) onNewSession(p);
+		else onNewChat();
 	}
 </script>
 
 <aside class="sidebar" class:resizing style:width="{width}px">
+	<!-- Header: the wordmark, or the session filter in its place while searching. -->
 	<div class="brand" data-tauri-drag-region>
-		<span class="word">JuCode</span>
+		{#if searchOpen}
+			<Search size={16} strokeWidth={1.5} />
+			<input
+				class="filter"
+				bind:this={searchEl}
+				bind:value={searchQuery}
+				placeholder={t('shell.searchSessions')}
+				onkeydown={searchKey}
+				onblur={() => !searchQuery && toggleSearch()}
+			/>
+			<button class="head-act" onclick={toggleSearch} aria-label={t('shell.closeSearch')} title={t('shell.closeSearch')}><X size={16} strokeWidth={1.5} /></button>
+		{:else}
+			<span class="word">JuCode</span>
+			<button class="head-act" onclick={toggleSearch} aria-label={t('shell.searchSessions')} title={t('shell.searchSessions')}><Search size={16} strokeWidth={1.5} /></button>
+		{/if}
 	</div>
 
 	<nav class="primary">
-		<button class="row" onclick={onNewChat}><SquarePen size={16} strokeWidth={1.5} /><span>{t('shell.newChat')}</span></button>
-		<button class="row" onclick={newSessionHere}><SquareTerminal size={16} strokeWidth={1.5} /><span>{t('shell.agentSession')}</span></button>
-		<button class="row" class:on={searchOpen} onclick={toggleSearch}><Search size={16} strokeWidth={1.5} /><span>{t('shell.searchSessions')}</span></button>
+		<button class="row" onclick={newHere}><SquarePen size={16} strokeWidth={1.5} /><span>{t('shell.newChat')}</span></button>
 		{#if agentsStatus !== 'off'}
 			<button class="row" onclick={onDesk}>
 				<Inbox size={16} strokeWidth={1.5} /><span>{t('shell.desk.title')}</span>
@@ -151,11 +164,6 @@
 		{/if}
 	</nav>
 
-	{#if searchOpen}
-		<div class="search">
-			<input bind:this={searchEl} bind:value={searchQuery} placeholder={t('shell.searchSessions')} onkeydown={searchKey} />
-		</div>
-	{/if}
 
 	{#snippet sessRow(s: Project['sessions'][number], nested = false)}
 		<button
@@ -337,11 +345,14 @@
 		</section>
 	</div>
 
-	<button class="account" onclick={onSettings} title={t('shell.accountSettings')}>
-		<span class="acc-name">{loggedIn ? providerName : t('shell.notLoggedIn')}</span>
-		{#if updateAvailable}<span class="tag">{t('shell.updateShort')}</span>{/if}
-		<Settings size={16} strokeWidth={1.5} />
-	</button>
+	<div class="foot">
+		<button class="row account" onclick={onSettings} title={t('shell.accountSettings')}>
+			<CircleUserRound size={16} strokeWidth={1.5} />
+			<span class="acc-name">{loggedIn ? providerName : t('shell.notLoggedIn')}</span>
+			{#if updateAvailable}<span class="tag">{t('shell.updateShort')}</span>{/if}
+			<Settings size={16} strokeWidth={1.5} />
+		</button>
+	</div>
 </aside>
 
 <style>
@@ -362,14 +373,38 @@
 	:global(:root[data-vibrancy='on']) .sidebar {
 		background: var(--vibrancy-tint);
 	}
+	/* Level with the macOS traffic lights in the rail (centerline ≈ 16px). */
 	.brand {
 		display: flex;
-		align-items: flex-end;
-		height: 56px;
-		padding: 0 20px 10px;
+		align-items: center;
+		gap: 8px;
+		height: 32px;
+		margin: 0 10px 12px;
+		padding: 0 4px 0 10px;
 		flex-shrink: 0;
 	}
+	:global(:root[data-os='windows']) .brand,
+	:global(:root[data-os='linux']) .brand {
+		margin-top: 10px;
+	}
+	.brand > :global(svg) {
+		color: var(--dim);
+		flex-shrink: 0;
+	}
+	.filter {
+		flex: 1;
+		min-width: 0;
+		height: 28px;
+		padding: 0;
+		border: none;
+		background: none;
+		color: var(--text);
+		font: inherit;
+		font-size: var(--fs-sm);
+		outline: none;
+	}
 	.word {
+		flex: 1;
 		font-family: var(--font-serif);
 		font-size: var(--fs-lg);
 		font-weight: 500;
@@ -416,9 +451,6 @@
 	.folder-row:hover {
 		background: var(--surface2);
 	}
-	.row.on {
-		background: var(--surface2);
-	}
 	.row span:first-of-type {
 		flex: 1;
 	}
@@ -432,24 +464,6 @@
 		font-size: var(--fs-2xs);
 		font-weight: 600;
 		text-align: center;
-	}
-	.search {
-		padding: 0 12px 8px;
-	}
-	.search input {
-		width: 100%;
-		height: 32px;
-		padding: 0 10px;
-		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
-		background: var(--bg);
-		color: var(--text);
-		font: inherit;
-		font-size: var(--fs-sm);
-		outline: none;
-	}
-	.search input:focus {
-		border-color: var(--border-strong);
 	}
 
 	.list {
@@ -626,26 +640,9 @@
 		transform: rotate(90deg);
 	}
 
-	.account {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		margin: 6px 10px 10px;
-		min-height: 38px;
-		padding: 0 12px;
-		border: none;
-		border-radius: var(--r-md);
-		background: none;
-		color: var(--text);
-		font: inherit;
-		font-size: var(--fs-sm);
-		cursor: pointer;
-	}
-	.account:hover {
-		background: var(--surface2);
-	}
-	.account :global(svg) {
-		color: var(--dim);
+	.foot {
+		padding: 6px 10px 10px;
+		border-top: 1px solid var(--hairline);
 	}
 	.acc-name {
 		flex: 1;
