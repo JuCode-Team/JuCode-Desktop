@@ -347,7 +347,11 @@ body {
 .pop-row.two {
 	padding: 8px 12px;
 }
-.pop-row:hover,
+.pop-row:disabled {
+	opacity: 0.4;
+	cursor: default;
+}
+.pop-row:hover:not(:disabled),
 .pop-row.sel {
 	background: var(--surface2);
 }
@@ -368,6 +372,11 @@ body {
 	color: var(--text);
 }
 .pop-desc {
+	color: var(--dim2);
+	font-size: var(--fs-xs);
+}
+.pop-hint {
+	flex-shrink: 0;
 	color: var(--dim2);
 	font-size: var(--fs-xs);
 }
@@ -408,4 +417,15 @@ body {
 		transition-duration: 0.01ms !important;
 		scroll-behavior: auto !important;
 	}
+}
+
+/* Number fields: no native spinner arrows (values are typed). */
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+	-webkit-appearance: none;
+	margin: 0;
+}
+input[type='number'] {
+	-moz-appearance: textfield;
+	appearance: textfield;
 }

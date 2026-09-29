@@ -115,6 +115,7 @@
 
 	const lineCls = (line: string) =>
 		line.startsWith('+') ? 'add' : line.startsWith('-') ? 'del' : 'ctx';
+	import Checkbox from '$lib/ui/Checkbox.svelte';
 </script>
 
 <div class="approval" class:ask={!!questions} class:plan={isPlan}>
@@ -195,11 +196,7 @@
 				<div class="hunk" class:off={!selected.includes(h.id)}>
 					<div class="hunk-row">
 						<label class="hunk-pick">
-							<input
-								type="checkbox"
-								checked={selected.includes(h.id)}
-								onchange={() => (selected = toggleHunk(selected, h.id))}
-							/>
+							<Checkbox checked={selected.includes(h.id)} onchange={() => (selected = toggleHunk(selected, h.id))} />
 							<span class="hunk-file">{h.file}</span>
 							<span class="hunk-header">{h.header}</span>
 						</label>
@@ -470,11 +467,6 @@
 		min-width: 0;
 		cursor: pointer;
 		font-size: var(--fs-xs);
-	}
-	.hunk-pick input {
-		accent-color: var(--accent);
-		margin: 0;
-		flex-shrink: 0;
 	}
 	.hunk-file {
 		font-family: var(--font-mono);

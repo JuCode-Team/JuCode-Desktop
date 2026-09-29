@@ -2,18 +2,21 @@
 	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
 	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
 	import type { Snippet } from 'svelte';
+	import { t } from '$lib/i18n';
 
 	type Opt = { value: string; label?: string; group?: string } & Record<string, unknown>;
 	let {
 		value = $bindable(),
 		options,
-		placeholder = '选择…',
+		placeholder = '',
+		disabled = false,
 		item,
 		onChange
 	}: {
 		value: string;
 		options: Opt[];
 		placeholder?: string;
+		disabled?: boolean;
 		item?: Snippet<[Opt]>;
 		onChange?: (value: string) => void;
 	} = $props();
@@ -28,12 +31,12 @@
 </script>
 
 <div class="select">
-	<button class="trigger" class:open onclick={() => (open = !open)}>
+	<button class="trigger" class:open {disabled} onclick={() => (open = !open)}>
 		<span class="cur">
 			{#if sel}
 				{#if item}{@render item(sel)}{:else}{sel.label ?? sel.value}{/if}
 			{:else}
-				<span class="ph">{placeholder}</span>
+				<span class="ph">{placeholder || t('common.select')}</span>
 			{/if}
 		</span>
 		<span class="chev" class:up={open}><CaretDownIcon size={15} /></span>
@@ -50,7 +53,7 @@
 					{#if o.value === value}<CheckIcon size={14} class="opt-chk" />{/if}
 				</button>
 			{/each}
-			{#if options.length === 0}<div class="opt-empty">无可选项</div>{/if}
+			{#if options.length === 0}<div class="opt-empty">{t('shell.noOptions')}</div>{/if}
 		</div>
 	{/if}
 </div>
@@ -74,6 +77,10 @@
 		cursor: pointer;
 		text-align: left;
 		transition: border-color var(--t-fast) var(--ease-out);
+	}
+	.trigger:disabled {
+		opacity: 0.5;
+		cursor: default;
 	}
 	.trigger:hover,
 	.trigger.open {

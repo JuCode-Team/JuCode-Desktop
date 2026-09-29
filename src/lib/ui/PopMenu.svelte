@@ -8,6 +8,9 @@
 		desc?: string;
 		icon?: typeof IconType;
 		checked?: boolean;
+		/** Keyboard shortcut shown at the right, e.g. ⌘C. */
+		hint?: string;
+		disabled?: boolean;
 		/** Risky choice (e.g. full access): label, icon and check in the warning colour. */
 		tone?: 'warn';
 	};
@@ -42,12 +45,13 @@
 <div class="pop pm {placement}" role="menu">
 	{#if title}<div class="pop-head">{title}</div>{/if}
 	{#each items as it (it.key)}
-		<button class="pop-row" class:warn={it.tone === 'warn'} class:two={!!it.desc} role="menuitemradio" aria-checked={!!it.checked} onclick={() => onSelect(it.key)}>
+		<button class="pop-row" class:warn={it.tone === 'warn'} class:two={!!it.desc} role={it.checked === undefined ? 'menuitem' : 'menuitemradio'} aria-checked={it.checked} disabled={it.disabled} onmousedown={(e) => e.preventDefault()} onclick={() => onSelect(it.key)}>
 			{#if it.icon}<span class="pop-ico"><it.icon size={18} /></span>{:else if hasIcons}<span class="pop-ico"></span>{/if}
 			<span class="pop-txt">
 				<span class="pop-label">{it.label}</span>
 				{#if it.desc}<span class="pop-desc">{it.desc}</span>{/if}
 			</span>
+			{#if it.hint}<span class="pop-hint">{it.hint}</span>{/if}
 			{#if it.checked}<span class="pop-check"><CheckIcon size={16} /></span>{/if}
 		</button>
 	{/each}

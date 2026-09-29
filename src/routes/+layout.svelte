@@ -6,6 +6,8 @@
 	import { prefs, applyPlatformClass } from '$lib/prefs.svelte';
 	import { getLocale, setLocale } from '$lib/i18n';
 	import IconContext from 'phosphor-svelte/lib/IconContext';
+	import ContextMenuHost from '$lib/ui/ContextMenuHost.svelte';
+	import TooltipHost from '$lib/ui/TooltipHost.svelte';
 
 	// Tag the root with the host OS before first paint so platform-specific window
 	// chrome (macOS traffic-light insets vs a native Windows/Linux title bar) is
@@ -27,4 +29,7 @@
      to weight="fill". -->
 <IconContext values={{ size: 24, weight: 'regular', 'aria-hidden': 'true' }}>
 	{@render children()}
+	<!-- App-drawn replacements for the WebView's context menu and title tooltips. -->
+	<ContextMenuHost />
+	<TooltipHost />
 </IconContext>

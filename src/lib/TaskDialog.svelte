@@ -69,6 +69,7 @@
 			create();
 		}
 	}
+	import Select from '$lib/ui/Select.svelte';
 </script>
 
 <svelte:window onkeydown={onKey} />
@@ -98,10 +99,7 @@
 	</div>
 	<label class="field">
 		<span>{t('shell.task.baseLabel')}</span>
-		<select bind:value={base}>
-			{#each branches as b (b)}<option value={b}>{b}</option>{/each}
-			{#if base && !branches.includes(base)}<option value={base}>{base}</option>{/if}
-		</select>
+		<Select bind:value={base} options={[...branches, ...(base && !branches.includes(base) ? [base] : [])].map((b) => ({ value: b }))} />
 	</label>
 	<label class="field">
 		<span>{t('shell.task.descLabel')}</span>
@@ -133,8 +131,7 @@
 		color: var(--dim);
 	}
 	.field input,
-	.field textarea,
-	.field select {
+	.field textarea {
 		border: 1px solid var(--border);
 		border-radius: var(--r-sm);
 		background: var(--surface2);
@@ -146,8 +143,7 @@
 		resize: vertical;
 	}
 	.field input:focus,
-	.field textarea:focus,
-	.field select:focus {
+	.field textarea:focus {
 		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
 	}
 	.preview {

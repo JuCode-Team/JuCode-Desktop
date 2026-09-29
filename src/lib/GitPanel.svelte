@@ -360,6 +360,8 @@
 			if (copied === cmd) copied = '';
 		}, 1500);
 	}
+	import Select from '$lib/ui/Select.svelte';
+	import Checkbox from '$lib/ui/Checkbox.svelte';
 </script>
 
 <div class="git">
@@ -456,9 +458,7 @@
 			{#if compareOpen}
 				<div class="rvbar">
 					<span class="rvlabel">{t('dock.git.reviewBase')}</span>
-					<select class="rvbase" value={compareBaseRef()} onchange={(e) => pickCompareBase(e.currentTarget.value)} disabled={compareBusy}>
-						{#each branches.filter((b) => b !== branch) as b (b)}<option value={b}>{b}</option>{/each}
-					</select>
+					<span class="rvbase"><Select value={compareBaseRef()} options={branches.filter((b) => b !== branch).map((b) => ({ value: b }))} disabled={compareBusy} onChange={pickCompareBase} /></span>
 					<span class="rvhead">…HEAD</span>
 					<IconButton size="sm" onclick={loadCompare} label="refresh-review" title={t('dock.git.refresh')}><ArrowsClockwiseIcon size={12} /></IconButton>
 				</div>
@@ -566,11 +566,9 @@
 		<div class="prow">
 			<label class="pfield base">
 				<span>{t('dock.git.prBaseLabel')}</span>
-				<select bind:value={prBase}>
-					{#each branches.filter((b) => b !== branch) as b (b)}<option value={b}>{b}</option>{/each}
-				</select>
+				<Select bind:value={prBase} options={branches.filter((b) => b !== branch).map((b) => ({ value: b }))} />
 			</label>
-			<label class="pcheck"><input type="checkbox" bind:checked={prDraft} /> {t('dock.git.prDraft')}</label>
+			<span class="pcheck"><Checkbox bind:checked={prDraft}>{t('dock.git.prDraft')}</Checkbox></span>
 		</div>
 		{#if prError}
 			<Notice mono onDismiss={() => (prError = '')}>{prError}</Notice>
@@ -798,8 +796,7 @@
 		color: var(--dim);
 	}
 	.pfield input,
-	.pfield textarea,
-	.pfield select {
+	.pfield textarea {
 		border: 1px solid var(--border);
 		border-radius: var(--r-sm);
 		background: var(--surface2);
@@ -811,8 +808,7 @@
 		resize: vertical;
 	}
 	.pfield input:focus,
-	.pfield textarea:focus,
-	.pfield select:focus {
+	.pfield textarea:focus {
 		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
 	}
 	.prow {
@@ -909,17 +905,6 @@
 	.rvbase {
 		flex: 1;
 		min-width: 0;
-		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
-		background: var(--surface2);
-		color: var(--text);
-		font-family: var(--font-mono);
-		font-size: var(--fs-xs);
-		padding: 3px 6px;
-		outline: none;
-	}
-	.rvbase:focus {
-		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
 	}
 	.rvhead {
 		font-family: var(--font-mono);
