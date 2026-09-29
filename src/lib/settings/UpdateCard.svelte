@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import ArrowsClockwiseIcon from 'phosphor-svelte/lib/ArrowsClockwiseIcon';
 	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
 	import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon';
 	import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon';
@@ -9,6 +8,8 @@
 	import Notice from '$lib/ui/Notice.svelte';
 	import { updater } from '$lib/updater.svelte';
 	import { t } from '$lib/i18n';
+	import SettingsSection from './SettingsSection.svelte';
+	import SettingsRow from './SettingsRow.svelte';
 
 	let current = $state('');
 	onMount(async () => {
@@ -16,104 +17,58 @@
 	});
 </script>
 
-<div class="group">
-	<div class="glabel"><ArrowsClockwiseIcon size={12} /> {t('settings.update.groupLabel')}</div>
-	<div class="card">
-		<div class="row">
-			<span class="txt">
-				<span class="title">{t('settings.update.currentVersion')}</span>
-				<span class="ver mono">{current ? `v${current}` : '…'}</span>
-			</span>
-			{#if updater.phase === 'checking'}
-				<Button variant="secondary" size="sm" disabled>{t('settings.update.checking')}</Button>
-			{:else if updater.phase === 'available'}
-				<Button variant="primary" size="sm" onclick={() => updater.download()}><DownloadSimpleIcon size={14} /> {t('settings.update.download')}</Button>
-			{:else if updater.phase === 'downloading'}
-				<Button variant="primary" size="sm" disabled>{t('settings.update.downloading', { pct: updater.progress })}</Button>
-			{:else if updater.phase === 'ready'}
-				<Button variant="primary" size="sm" onclick={() => updater.restart()}><ArrowClockwiseIcon size={14} /> {t('settings.update.restart')}</Button>
-			{:else}
-				<Button variant="secondary" size="sm" onclick={() => updater.check()}>{t('settings.update.check')}</Button>
+<SettingsSection title={t('settings.update.groupLabel')}>
+	<SettingsRow id="app-version" title={t('settings.update.currentVersion')} description={current ? `v${current}` : '…'}>
+		{#snippet detail()}
+			{#if updater.phase === 'latest'}
+				<p class="status ok"><CheckCircleIcon size={13} /> {t('settings.update.latest')}</p>
+			{:else if updater.available}
+				<p class="status accent">{t('settings.update.found', { version: updater.version })}</p>
+			{:else if updater.phase === 'error'}
+				<div class="err"><Notice>{t('settings.update.error', { msg: updater.error })}</Notice></div>
 			{/if}
-		</div>
-		{#if updater.phase === 'latest'}
-			<p class="status ok"><CheckCircleIcon size={13} /> {t('settings.update.latest')}</p>
-		{:else if updater.available}
-			<p class="status accent">{t('settings.update.found', { version: updater.version })}</p>
-		{:else if updater.phase === 'error'}
-			<div class="err"><Notice>{t('settings.update.error', { msg: updater.error })}</Notice></div>
+			{#if updater.phase === 'downloading'}
+				<div class="bar"><div class="fill" style:width="{updater.progress}%"></div></div>
+			{/if}
+			{#if updater.phase === 'ready'}
+				<p class="status ok"><CheckCircleIcon size={13} /> {t('settings.update.readyHint')}</p>
+			{/if}
+		{/snippet}
+		{#if updater.phase === 'checking'}
+			<Button variant="secondary" size="sm" disabled>{t('settings.update.checking')}</Button>
+		{:else if updater.phase === 'available'}
+			<Button variant="primary" size="sm" onclick={() => updater.download()}><DownloadSimpleIcon size={14} /> {t('settings.update.download')}</Button>
+		{:else if updater.phase === 'downloading'}
+			<Button variant="primary" size="sm" disabled>{t('settings.update.downloading', { pct: updater.progress })}</Button>
+		{:else if updater.phase === 'ready'}
+			<Button variant="primary" size="sm" onclick={() => updater.restart()}><ArrowClockwiseIcon size={14} /> {t('settings.update.restart')}</Button>
+		{:else}
+			<Button variant="secondary" size="sm" onclick={() => updater.check()}>{t('settings.update.check')}</Button>
 		{/if}
-		{#if updater.phase === 'downloading'}
-			<div class="bar"><div class="fill" style:width="{updater.progress}%"></div></div>
-		{/if}
-		{#if updater.phase === 'ready'}
-			<p class="status ok"><CheckCircleIcon size={13} /> {t('settings.update.readyHint')}</p>
-		{/if}
-	</div>
-</div>
+	</SettingsRow>
+</SettingsSection>
 
 <style>
-	.group {
-		margin-top: 22px;
-	}
-	.glabel {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		font-size: var(--fs-2xs);
-		font-weight: 600;
-		letter-spacing: 0.05em;
-		text-transform: uppercase;
-		color: var(--dim2);
-		margin-bottom: 10px;
-	}
-	.card {
-		border: 1px solid var(--hairline);
-		border-radius: var(--r-md);
-		background: var(--surface);
-		padding: 12px 14px;
-	}
-	.row {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 16px;
-	}
-	.txt {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		min-width: 0;
-	}
-	.title {
-		font-size: var(--fs-sm);
-	}
-	.ver {
-		font-size: var(--fs-xs);
-		color: var(--dim);
-	}
-	.mono {
-		font-family: var(--font-mono);
-	}
 	.status {
 		display: flex;
 		align-items: center;
 		gap: 5px;
-		margin: 10px 0 0;
+		margin: 4px 0 0;
 		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
 	.status.ok {
 		color: var(--ok);
 	}
-	.err {
-		margin-top: 10px;
-	}
 	.status.accent {
 		color: var(--accent-bright);
 	}
+	.err {
+		margin-top: 6px;
+	}
 	.bar {
-		margin-top: 10px;
+		margin-top: 8px;
+		max-width: 320px;
 		height: 5px;
 		border-radius: var(--r-full);
 		background: var(--surface2);

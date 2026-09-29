@@ -1,8 +1,7 @@
 <script lang="ts">
-	// Settings → 行为 → 引擎后端: per-backend availability (check_backend), a
+	// Settings → 编程智能体 → 智能体: per-backend availability (check_backend), a
 	// binary-path override, and the default backend for new sessions. All
-	// preferences persist to localStorage immediately (independent of the
-	// engine config's save button).
+	// preferences persist to localStorage immediately.
 	import { onMount } from 'svelte';
 	import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon';
 	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
@@ -31,6 +30,8 @@
 	import { t } from '$lib/i18n';
 	import { agentDirectory } from '$lib/agents.svelte';
 	import DevicePairing from './DevicePairing.svelte';
+	import SettingsSection from './SettingsSection.svelte';
+	import SettingsRow from './SettingsRow.svelte';
 
 	let settings = $state<BackendSettings>(loadBackendSettings());
 	let status = $state<Partial<Record<BackendId, BackendStatus | 'checking'>>>({});
@@ -117,16 +118,23 @@
 	const defaultOpts = $derived(NATIVE_BACKEND_IDS.map((id) => ({ value: id, label: BACKEND_LABELS[id] })));
 </script>
 
-<div class="group">
-	<div class="glabel">{t('settings.backend.groupLabel')}</div>
-	<p class="hint">{t('settings.backend.hint')}</p>
+<SettingsSection id="backend-list" title={t('settings.backend.groupLabel')} description={t('settings.backend.hint')}>
+	<SettingsRow id="default-backend" title={t('settings.backend.defaultLabel')} description={t('settings.backend.defaultHint')}>
+		<div class="selw">
+			<Select value={settings.default} onChange={setDefault} options={defaultOpts}>
+				{#snippet item(o)}
+					<span class="opt-ico"><BackendIcon backend={o.value as BackendId} size={14} /></span>
+					<span>{o.label}</span>
+				{/snippet}
+			</Select>
+		</div>
+	</SettingsRow>
 
 	{#if shellEnv?.supported}
-		<div class="shellenv">
-			<div class="semain">
-				<span class="sename">{t('settings.backend.shellEnvLabel')}</span>
-				<span class="sestate" class:dim={!shellEnv.captured}>
-					{#if shellEnv.captured}
+		<SettingsRow id="shell-env" title={t('settings.backend.shellEnvLabel')} description={t('settings.backend.shellEnvHint')}>
+			{#snippet detail()}
+				<span class="sestate" class:dim={!shellEnv?.captured}>
+					{#if shellEnv?.captured}
 						{t('settings.backend.shellEnvCaptured', {
 							count: String(shellEnv.count),
 							shell: shellEnv.shell?.split('/').pop() ?? ''
@@ -135,7 +143,7 @@
 						{t('settings.backend.shellEnvNotCaptured')}
 					{/if}
 				</span>
-			</div>
+			{/snippet}
 			<IconButton
 				onclick={refreshSnapshot}
 				label="refresh shell env"
@@ -144,127 +152,83 @@
 				<ArrowClockwiseIcon size={14} class={refreshing ? 'spin' : ''} />
 			</IconButton>
 			<Switch bind:checked={settings.useShellEnv} label={t('settings.backend.shellEnvToggle')} />
-		</div>
-		<p class="hint">{t('settings.backend.shellEnvHint')}</p>
+		</SettingsRow>
 	{/if}
 
-	<div class="blist">
-		{#each NATIVE_BACKEND_IDS as id (id)}
-			{@const st = status[id]}
-			<div class="brow">
-				<span class="btile"><BackendIcon backend={id} size={16} /></span>
-				<div class="bmain">
-					<div class="bhead">
-						<span class="bname">{BACKEND_LABELS[id]}</span>
-						{#if st === 'checking'}
-							<span class="bstate dim">{t('settings.backend.checking')}</span>
-						{:else if st?.found}
-							<span class="bstate ok"><CheckCircleIcon size={12} /> {versionLabel(st) || t('settings.backend.found')}</span>
-						{:else if st}
-							<span class="bstate warn"><WarningCircleIcon size={12} /> {t('settings.backend.notFound')}</span>
-						{/if}
-					</div>
-					{#if st && st !== 'checking' && st.found && st.path}
-						<span class="bpath" title={st.path}>{st.path}</span>
-					{/if}
-					<div class="boverride">
-						<!-- persisted on change (blur / Enter), then re-probed -->
-						<input
-							class="tf"
-							bind:value={settings.paths[id]}
-							placeholder={t('settings.backend.pathPlaceholder', { bin: id })}
-							onchange={() => onPathChange(id)}
-						/>
-					</div>
-					<button class="envhead" onclick={() => (envOpen[id] = !envOpen[id])}>
-						<span class="chev" class:open={envOpen[id]}><CaretRightIcon size={12} /></span>
-						{t('settings.backend.envLabel')}
-						{#if envCount(id)}<span class="envcount">{envCount(id)}</span>{/if}
-					</button>
-					{#if envOpen[id]}
-						<div class="envbox">
-							<textarea
-								class="tf envta"
-								rows="3"
-								bind:value={envText[id]}
-								placeholder={t('settings.backend.envPlaceholder')}
-								onchange={() => onEnvChange(id)}
-							></textarea>
-							{#if envInvalid[id]?.length}
-								<span class="envwarn">{t('settings.backend.envInvalid', { lines: envInvalid[id]!.join(', ') })}</span>
-							{/if}
-						</div>
+	{#each NATIVE_BACKEND_IDS as id (id)}
+		{@const st = status[id]}
+		<div class="brow">
+			<span class="btile"><BackendIcon backend={id} size={16} /></span>
+			<div class="bmain">
+				<div class="bhead">
+					<span class="bname">{BACKEND_LABELS[id]}</span>
+					{#if st === 'checking'}
+						<span class="bstate dim">{t('settings.backend.checking')}</span>
+					{:else if st?.found}
+						<span class="bstate ok"><CheckCircleIcon size={12} /> {versionLabel(st) || t('settings.backend.found')}</span>
+					{:else if st}
+						<span class="bstate warn"><WarningCircleIcon size={12} /> {t('settings.backend.notFound')}</span>
 					{/if}
 				</div>
-				<IconButton onclick={() => check(id)} label="re-check backend" title={t('settings.backend.recheck')}>
-					<ArrowClockwiseIcon size={14} />
-				</IconButton>
+				{#if st && st !== 'checking' && st.found && st.path}
+					<span class="bpath" title={st.path}>{st.path}</span>
+				{/if}
+				<div class="boverride">
+					<!-- persisted on change (blur / Enter), then re-probed -->
+					<input
+						class="tf"
+						bind:value={settings.paths[id]}
+						placeholder={t('settings.backend.pathPlaceholder', { bin: id })}
+						onchange={() => onPathChange(id)}
+					/>
+				</div>
+				<button class="envhead" onclick={() => (envOpen[id] = !envOpen[id])}>
+					<span class="chev" class:open={envOpen[id]}><CaretRightIcon size={12} /></span>
+					{t('settings.backend.envLabel')}
+					{#if envCount(id)}<span class="envcount">{envCount(id)}</span>{/if}
+				</button>
+				{#if envOpen[id]}
+					<div class="envbox">
+						<textarea
+							class="tf envta"
+							rows="3"
+							bind:value={envText[id]}
+							placeholder={t('settings.backend.envPlaceholder')}
+							onchange={() => onEnvChange(id)}
+						></textarea>
+						{#if envInvalid[id]?.length}
+							<span class="envwarn">{t('settings.backend.envInvalid', { lines: envInvalid[id]!.join(', ') })}</span>
+						{/if}
+					</div>
+				{/if}
 			</div>
-		{/each}
-	</div>
-</div>
-
-<div class="group">
-	<div class="glabel">{t('settings.backend.defaultLabel')}</div>
-	<p class="hint">{t('settings.backend.defaultHint')}</p>
-	<Select value={settings.default} onChange={setDefault} options={defaultOpts}>
-		{#snippet item(o)}
-			<span class="opt-ico"><BackendIcon backend={o.value as BackendId} size={14} /></span>
-			<span>{o.label}</span>
-		{/snippet}
-	</Select>
-</div>
-
-<div class="group">
-	<div class="glabel">{t('settings.backend.daemonLabel')}</div>
-	<div class="shellenv">
-		<div class="semain">
-			<span class="sename">{t('settings.backend.daemonToggle')}</span>
+			<IconButton onclick={() => check(id)} label="re-check backend" title={t('settings.backend.recheck')}>
+				<ArrowClockwiseIcon size={14} />
+			</IconButton>
 		</div>
+	{/each}
+</SettingsSection>
+
+<SettingsSection title={t('settings.backend.daemonLabel')}>
+	<SettingsRow id="daemon" title={t('settings.backend.daemonToggle')} description={t('settings.backend.daemonHint')}>
 		<Switch bind:checked={settings.daemon} label={t('settings.backend.daemonToggle')} />
-	</div>
-	<p class="hint">{t('settings.backend.daemonHint')}</p>
+	</SettingsRow>
 	{#if settings.daemon}
-		<DevicePairing bind:address={settings.remoteAddress} onAddressChange={persist} />
+		<SettingsRow stacked>
+			<DevicePairing bind:address={settings.remoteAddress} onAddressChange={persist} />
+		</SettingsRow>
 	{/if}
-</div>
+</SettingsSection>
 
 <style>
-	.group {
-		margin-top: 22px;
-	}
-	.glabel {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		font-size: var(--fs-2xs);
-		font-weight: 600;
-		letter-spacing: 0.05em;
-		text-transform: uppercase;
-		color: var(--dim2);
-		margin-bottom: 10px;
-	}
-	.hint {
-		margin: 0 0 10px;
-		font-size: var(--fs-xs);
-		color: var(--dim);
-	}
-	.blist {
-		display: flex;
-		flex-direction: column;
-		border: 1px solid var(--hairline);
-		border-radius: var(--r-md);
-		background: var(--surface);
-		overflow: hidden;
-	}
 	.brow {
 		display: flex;
 		align-items: flex-start;
 		gap: 12px;
-		padding: 12px 14px;
+		padding: 14px 18px;
 	}
-	.brow + .brow {
-		border-top: 1px solid var(--hairline);
+	.selw {
+		width: 220px;
 	}
 	.btile {
 		display: inline-flex;
@@ -341,27 +305,6 @@
 	}
 	.tf:focus {
 		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
-	}
-	.shellenv {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		padding: 11px 14px;
-		border: 1px solid var(--hairline);
-		border-radius: var(--r-md);
-		background: var(--surface);
-		margin-bottom: 8px;
-	}
-	.semain {
-		flex: 1;
-		min-width: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-	}
-	.sename {
-		font-size: var(--fs-sm);
-		font-weight: 500;
 	}
 	.sestate {
 		font-size: var(--fs-2xs);

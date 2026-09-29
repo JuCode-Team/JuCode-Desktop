@@ -68,11 +68,7 @@
 
 <style>
 	.catalog {
-		margin-top: 8px;
-		padding: 14px;
-		border: 1px solid var(--border);
-		border-radius: var(--r-md);
-		background: var(--surface);
+		padding: 16px 18px;
 		display: flex;
 		flex-direction: column;
 		gap: 12px;

@@ -1,6 +1,4 @@
 <script lang="ts">
-	import CalendarDotsIcon from 'phosphor-svelte/lib/CalendarDotsIcon';
-	import PulseIcon from 'phosphor-svelte/lib/PulseIcon';
 	import UsageHeatmap from '$lib/UsageHeatmap.svelte';
 	import Segmented from '$lib/ui/Segmented.svelte';
 	import {
@@ -11,6 +9,8 @@
 		type UsageDimension
 	} from '$lib/usageStats';
 	import { t } from '$lib/i18n';
+	import SettingsSection from '$lib/settings/SettingsSection.svelte';
+	import SettingsRow from '$lib/settings/SettingsRow.svelte';
 
 	const DETAIL_DAYS = 15;
 
@@ -54,103 +54,66 @@
 	const windowMax = $derived(windowRows.length ? windowRows[0][1].in + windowRows[0][1].out : 0);
 </script>
 
-<div class="group">
-	<div class="glabel"><CalendarDotsIcon size={13} /> {t('settings.overview.dailyTitle')}</div>
-	<p class="hint">{t('settings.overview.dailyHint')}</p>
-	<UsageHeatmap />
+<SettingsSection id="usage-daily" title={t('settings.overview.dailyTitle')} description={t('settings.overview.dailyHint')}>
+	<SettingsRow stacked>
+		<UsageHeatmap />
+	</SettingsRow>
+</SettingsSection>
 
-	<div class="detail">
-		<div class="dhead">
-			<div class="glabel"><PulseIcon size={13} /> {t('settings.overview.detail')}</div>
-			<Segmented
-				value={dim}
-				options={[
-					{ value: 'prov', label: t('settings.overview.dimProvider') },
-					{ value: 'models', label: t('settings.overview.dimModel') },
-					{ value: 'agents', label: t('settings.overview.dimAgent') }
-				]}
-				onChange={(v) => (dim = v as UsageDimension)}
-			/>
-		</div>
-		{#if days.length === 0}
-			<p class="hint">{t('settings.overview.noData')}</p>
-		{:else}
-			{#if windowRows.length > 0}
-				<div class="win">
-					<div class="wtitle">{t('settings.overview.windowTotal', { n: DETAIL_DAYS })}</div>
-					{#each windowRows as [k, v] (k)}
-						<div class="wrow">
-							<span class="wname" title={k}>{keyName(k)}</span>
-							<span class="wbar">
-								<span
-									class="wfill"
-									style:width={`${windowMax ? Math.max(1, ((v.in + v.out) / windowMax) * 100) : 0}%`}
-								></span>
-							</span>
-							<span class="wval mono">↑{fmtTokens(v.in)} ↓{fmtTokens(v.out)} · {fmtTokens(v.in + v.out)}</span>
-						</div>
-					{/each}
-				</div>
-			{/if}
-			{#each days as [date, d] (date)}
-				{@const rows = sumDimension([d], dim)}
-				<div class="drow">
-					<span class="dd mono">{date}</span>
-					<span class="dt mono">↑{fmtTokens(d.in)} ↓{fmtTokens(d.out)} · {t('settings.overview.total')} {fmtTokens(d.in + d.out)}</span>
-					<span class="dp">
-						{#if rows.length > 0}
-							{#each rows as [k, v] (k)}
-								<span class="chip" title={k}>{keyName(k)} <b class="mono">↑{fmtTokens(v.in)} ↓{fmtTokens(v.out)}</b></span>
-							{/each}
-						{:else}
-							<span class="chip dimmed">{t(emptyKey)}</span>
-						{/if}
-					</span>
-				</div>
-			{/each}
+<SettingsSection title={t('settings.overview.detail')}>
+	{#snippet action()}
+		<Segmented
+			value={dim}
+			options={[
+				{ value: 'prov', label: t('settings.overview.dimProvider') },
+				{ value: 'models', label: t('settings.overview.dimModel') },
+				{ value: 'agents', label: t('settings.overview.dimAgent') }
+			]}
+			onChange={(v) => (dim = v as UsageDimension)}
+		/>
+	{/snippet}
+	{#if days.length === 0}
+		<SettingsRow description={t('settings.overview.noData')} />
+	{:else}
+		{#if windowRows.length > 0}
+			<div class="win">
+				<div class="wtitle">{t('settings.overview.windowTotal', { n: DETAIL_DAYS })}</div>
+				{#each windowRows as [k, v] (k)}
+					<div class="wrow">
+						<span class="wname" title={k}>{keyName(k)}</span>
+						<span class="wbar">
+							<span
+								class="wfill"
+								style:width={`${windowMax ? Math.max(1, ((v.in + v.out) / windowMax) * 100) : 0}%`}
+							></span>
+						</span>
+						<span class="wval mono">↑{fmtTokens(v.in)} ↓{fmtTokens(v.out)} · {fmtTokens(v.in + v.out)}</span>
+					</div>
+				{/each}
+			</div>
 		{/if}
-	</div>
-</div>
+		{#each days as [date, d] (date)}
+			{@const rows = sumDimension([d], dim)}
+			<div class="drow">
+				<span class="dd mono">{date}</span>
+				<span class="dt mono">↑{fmtTokens(d.in)} ↓{fmtTokens(d.out)} · {t('settings.overview.total')} {fmtTokens(d.in + d.out)}</span>
+				<span class="dp">
+					{#if rows.length > 0}
+						{#each rows as [k, v] (k)}
+							<span class="chip" title={k}>{keyName(k)} <b class="mono">↑{fmtTokens(v.in)} ↓{fmtTokens(v.out)}</b></span>
+						{/each}
+					{:else}
+						<span class="chip dimmed">{t(emptyKey)}</span>
+					{/if}
+				</span>
+			</div>
+		{/each}
+	{/if}
+</SettingsSection>
 
 <style>
-	.group {
-		margin-top: 22px;
-	}
-	.glabel {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		font-size: var(--fs-2xs);
-		font-weight: 600;
-		letter-spacing: 0.05em;
-		text-transform: uppercase;
-		color: var(--dim2);
-		margin-bottom: 10px;
-	}
-	.hint {
-		margin: 0 0 10px;
-		font-size: var(--fs-xs);
-		color: var(--dim);
-	}
-	.detail {
-		margin-top: 20px;
-	}
-	.dhead {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 12px;
-		margin-bottom: 10px;
-	}
-	.dhead .glabel {
-		margin-bottom: 0;
-	}
 	.win {
-		margin-bottom: 14px;
-		padding: 10px 12px;
-		border: 1px solid var(--border);
-		border-radius: var(--r-md);
-		background: var(--surface);
+		padding: 14px 18px;
 	}
 	.wtitle {
 		font-size: var(--fs-2xs);
@@ -195,8 +158,7 @@
 		grid-template-columns: 1fr auto;
 		gap: 4px 10px;
 		align-items: baseline;
-		padding: 8px 0;
-		border-top: 1px solid var(--border);
+		padding: 12px 18px;
 	}
 	.dd {
 		color: var(--text);

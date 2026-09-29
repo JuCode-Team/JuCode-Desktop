@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Settings → 扩展: MCP server management + read-only extensions info.
+	// Settings → 扩展 → MCP 服务器: server management + read-only extensions info.
 	// List/mutations go through the active session's engine (the MCP config is
 	// global, so any live engine is authoritative); with no live session the
 	// config.json entries render read-only.
@@ -9,8 +9,6 @@
 	import TrashIcon from 'phosphor-svelte/lib/TrashIcon';
 	import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon';
 	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
-	import HardDrivesIcon from 'phosphor-svelte/lib/HardDrivesIcon';
-	import CubeIcon from 'phosphor-svelte/lib/CubeIcon';
 	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
 	import XCircleIcon from 'phosphor-svelte/lib/XCircleIcon';
 	import CircleDashedIcon from 'phosphor-svelte/lib/CircleDashedIcon';
@@ -39,6 +37,8 @@
 	import Segmented from '$lib/ui/Segmented.svelte';
 	import Switch from '$lib/ui/Switch.svelte';
 	import { t } from '$lib/i18n';
+	import SettingsSection from './SettingsSection.svelte';
+	import SettingsRow from './SettingsRow.svelte';
 
 	let { sessionId, chat }: { sessionId: string; chat?: ChatState } = $props();
 
@@ -126,14 +126,12 @@
 	const stateOf = (row: McpRow) => row.view?.state ?? 'unknown';
 </script>
 
-<div class="group">
-	<div class="glabel"><HardDrivesIcon size={12} /> {t('settings.mcp.groupLabel')}</div>
-	<p class="hint">{t('settings.mcp.hint')}</p>
+<SettingsSection id="mcp-servers" title={t('settings.mcp.groupLabel')} description={t('settings.mcp.hint')}>
 	{#if !live}
-		<div class="notice"><Notice tone="info">{t('settings.mcp.noSession')}</Notice></div>
+		<div class="pad"><Notice tone="info">{t('settings.mcp.noSession')}</Notice></div>
 	{/if}
 	{#if opError}
-		<div class="notice"><Notice>{opError}</Notice></div>
+		<div class="pad"><Notice>{opError}</Notice></div>
 	{/if}
 
 	{#if rows.length === 0 && editing !== '__new__'}
@@ -144,85 +142,83 @@
 			</Button>
 		</div>
 	{:else if rows.length > 0}
-		<div class="slist">
-			{#each rows as row (row.name)}
-				<div class="srow" class:open={expanded === row.name}>
-					<div class="shead">
-						<button
-							class="smain"
-							onclick={() => (expanded = expanded === row.name ? null : row.name)}
-							aria-expanded={expanded === row.name}
-						>
-							<span
-								class="state {stateOf(row)}"
-								title={row.view?.error ?? t(`settings.mcp.state.${stateOf(row)}`)}
-							>{#if stateOf(row) === 'connected'}<CheckCircleIcon size={14} />{:else if stateOf(row) === 'failed'}<XCircleIcon size={14} />{:else}<CircleDashedIcon size={14} />{/if}</span>
-							<span class="sname">{row.name}</span>
-							<span class="tchip">{row.transport}</span>
-							<span class="scount">
-								{#if row.view}
-									{row.view.tools.length
-										? t('settings.mcp.tools', { n: row.view.tools.length })
-										: t(`settings.mcp.state.${stateOf(row)}`)}
-								{:else}
-									{t('settings.mcp.state.unknown')}
-								{/if}
-							</span>
-							<span class="chev" class:up={expanded === row.name}><CaretDownIcon size={14} /></span>
-						</button>
-						<span class="sacts">
-							{#if live && stateOf(row) === 'failed' && row.entry}
-								<IconButton size="sm" title={t('settings.mcp.reconnect')} onclick={() => reconnect(row)}>
-									<ArrowClockwiseIcon size={14} />
-								</IconButton>
+		{#each rows as row (row.name)}
+			<div class="srow" class:open={expanded === row.name}>
+				<div class="shead">
+					<button
+						class="smain"
+						onclick={() => (expanded = expanded === row.name ? null : row.name)}
+						aria-expanded={expanded === row.name}
+					>
+						<span
+							class="state {stateOf(row)}"
+							title={row.view?.error ?? t(`settings.mcp.state.${stateOf(row)}`)}
+						>{#if stateOf(row) === 'connected'}<CheckCircleIcon size={14} />{:else if stateOf(row) === 'failed'}<XCircleIcon size={14} />{:else}<CircleDashedIcon size={14} />{/if}</span>
+						<span class="sname">{row.name}</span>
+						<span class="tchip">{row.transport}</span>
+						<span class="scount">
+							{#if row.view}
+								{row.view.tools.length
+									? t('settings.mcp.tools', { n: row.view.tools.length })
+									: t(`settings.mcp.state.${stateOf(row)}`)}
+							{:else}
+								{t('settings.mcp.state.unknown')}
 							{/if}
-							<span class="swwrap" class:off={!live}>
-								<Switch bind:checked={() => row.enabled, (v) => toggle(row, v)} label={row.name} />
-							</span>
-							<IconButton size="sm" title={t('settings.mcp.edit')} disabled={!live} onclick={() => openEdit(row)}>
-								<PencilSimpleIcon size={14} />
-							</IconButton>
-							<IconButton
-								size="sm"
-								title={t('common.delete')}
-								disabled={!live}
-								onclick={() => (confirmDelete = confirmDelete === row.name ? null : row.name)}
-							>
-								<TrashIcon size={14} />
-							</IconButton>
 						</span>
-					</div>
-					{#if confirmDelete === row.name}
-						<div class="sconfirm">
-							<span>{t('settings.mcp.deleteConfirm', { name: row.name })}</span>
-							<Button variant="danger" size="sm" onclick={() => remove(row.name)}>{t('common.delete')}</Button>
-							<Button variant="ghost" size="sm" onclick={() => (confirmDelete = null)}>{t('common.cancel')}</Button>
-						</div>
-					{/if}
-					{#if expanded === row.name}
-						<div class="sdetail">
-							{#if row.view?.error}
-								<div class="serr"><Notice mono>{row.view.error}</Notice></div>
-							{/if}
-							{#if row.view?.tools.length}
-								<ul class="tlist">
-									{#each row.view.tools as tool (tool.name)}
-										<li>
-											<span class="tname">{tool.name}</span>
-											{#if tool.description}<span class="tdesc">{tool.description}</span>{/if}
-										</li>
-									{/each}
-								</ul>
-							{:else if !row.view?.error}
-								<p class="tdesc">
-									{row.view ? t('settings.mcp.noTools') : t('settings.mcp.state.unknown')}
-								</p>
-							{/if}
-						</div>
-					{/if}
+						<span class="chev" class:up={expanded === row.name}><CaretDownIcon size={14} /></span>
+					</button>
+					<span class="sacts">
+						{#if live && stateOf(row) === 'failed' && row.entry}
+							<IconButton size="sm" title={t('settings.mcp.reconnect')} onclick={() => reconnect(row)}>
+								<ArrowClockwiseIcon size={14} />
+							</IconButton>
+						{/if}
+						<span class="swwrap" class:off={!live}>
+							<Switch bind:checked={() => row.enabled, (v) => toggle(row, v)} label={row.name} />
+						</span>
+						<IconButton size="sm" title={t('settings.mcp.edit')} disabled={!live} onclick={() => openEdit(row)}>
+							<PencilSimpleIcon size={14} />
+						</IconButton>
+						<IconButton
+							size="sm"
+							title={t('common.delete')}
+							disabled={!live}
+							onclick={() => (confirmDelete = confirmDelete === row.name ? null : row.name)}
+						>
+							<TrashIcon size={14} />
+						</IconButton>
+					</span>
 				</div>
-			{/each}
-		</div>
+				{#if confirmDelete === row.name}
+					<div class="sconfirm">
+						<span>{t('settings.mcp.deleteConfirm', { name: row.name })}</span>
+						<Button variant="danger" size="sm" onclick={() => remove(row.name)}>{t('common.delete')}</Button>
+						<Button variant="ghost" size="sm" onclick={() => (confirmDelete = null)}>{t('common.cancel')}</Button>
+					</div>
+				{/if}
+				{#if expanded === row.name}
+					<div class="sdetail">
+						{#if row.view?.error}
+							<div class="serr"><Notice mono>{row.view.error}</Notice></div>
+						{/if}
+						{#if row.view?.tools.length}
+							<ul class="tlist">
+								{#each row.view.tools as tool (tool.name)}
+									<li>
+										<span class="tname">{tool.name}</span>
+										{#if tool.description}<span class="tdesc">{tool.description}</span>{/if}
+									</li>
+								{/each}
+							</ul>
+						{:else if !row.view?.error}
+							<p class="tdesc">
+								{row.view ? t('settings.mcp.noTools') : t('settings.mcp.state.unknown')}
+							</p>
+						{/if}
+					</div>
+				{/if}
+			</div>
+		{/each}
 	{/if}
 
 	{#if editing !== null}
@@ -294,58 +290,33 @@
 			<PlusIcon size={15} /> {t('settings.mcp.addServer')}
 		</button>
 	{/if}
-</div>
+</SettingsSection>
 
-<div class="group">
-	<div class="glabel"><CubeIcon size={12} /> {t('settings.ext.groupLabel')}</div>
-	<p class="hint">{t('settings.ext.hint')}</p>
+<SettingsSection id="mcp-extensions" title={t('settings.ext.groupLabel')} description={t('settings.ext.hint')}>
 	{#if extensions.length === 0}
-		<p class="hint">{t('settings.ext.empty')}</p>
+		<SettingsRow description={t('settings.ext.empty')} />
 	{:else}
-		<div class="elist">
-			{#each extensions as ext (ext.name)}
-				<div class="erow">
-					<span class="ename">{ext.name}</span>
-					<span class="ecmd">{ext.command}</span>
-					{#if ext.lazy}<span class="tchip">{t('settings.ext.lazy')}</span>{/if}
-				</div>
-			{/each}
-		</div>
+		{#each extensions as ext (ext.name)}
+			<div class="erow">
+				<span class="ename">{ext.name}</span>
+				<span class="ecmd">{ext.command}</span>
+				{#if ext.lazy}<span class="tchip">{t('settings.ext.lazy')}</span>{/if}
+			</div>
+		{/each}
 	{/if}
-</div>
+</SettingsSection>
 
 <style>
-	.group {
-		margin-top: 22px;
-	}
-	.glabel {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		font-size: var(--fs-2xs);
-		font-weight: 600;
-		letter-spacing: 0.05em;
-		text-transform: uppercase;
-		color: var(--dim2);
-		margin-bottom: 10px;
-	}
-	.hint {
-		margin: 0 0 10px;
-		font-size: var(--fs-xs);
-		color: var(--dim);
-	}
-	.notice {
-		margin: 0 0 10px;
-	}
 
+	.pad {
+		padding: 14px 18px;
+	}
 	.mcp-empty {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
 		gap: 10px;
-		padding: 26px 16px;
-		border: 1px dashed var(--border);
-		border-radius: var(--r-md);
+		padding: 26px 18px;
 		text-align: center;
 	}
 	.mcp-empty p {
@@ -354,22 +325,11 @@
 		color: var(--dim);
 	}
 
-	.slist {
-		display: flex;
-		flex-direction: column;
-		border: 1px solid var(--hairline);
-		border-radius: var(--r-md);
-		background: var(--surface);
-		overflow: hidden;
-	}
-	.srow + .srow {
-		border-top: 1px solid var(--hairline);
-	}
 	.shead {
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		padding: 4px 10px 4px 0;
+		padding: 6px 14px 6px 0;
 	}
 	.smain {
 		flex: 1;
@@ -377,7 +337,7 @@
 		display: flex;
 		align-items: center;
 		gap: 9px;
-		padding: 10px 12px;
+		padding: 10px 12px 10px 18px;
 		border: none;
 		background: none;
 		color: var(--text);
@@ -453,7 +413,7 @@
 		margin-right: auto;
 	}
 	.sdetail {
-		padding: 4px 14px 12px 29px;
+		padding: 4px 18px 12px 41px;
 		border-top: 1px dashed var(--hairline);
 	}
 	.serr {
@@ -489,13 +449,10 @@
 	.addsrv {
 		display: flex;
 		align-items: center;
-		justify-content: center;
 		gap: 7px;
 		width: 100%;
-		margin-top: 8px;
-		padding: 10px;
-		border: 1px dashed var(--border);
-		border-radius: var(--r-md);
+		padding: 14px 18px;
+		border: none;
 		background: none;
 		color: var(--dim);
 		font-size: var(--fs-sm);
@@ -504,20 +461,15 @@
 	.addsrv:hover:not(:disabled) {
 		background: var(--surface2);
 		color: var(--text);
-		border-color: color-mix(in oklab, var(--accent) 40%, var(--border));
 	}
 	.addsrv:disabled {
 		opacity: 0.5;
 		cursor: default;
 	}
 
-	/* add/edit form (mirrors the custom-provider form card) */
+	/* add/edit form (mirrors the custom-provider form) */
 	.newsrv {
-		margin-top: 8px;
-		padding: 14px;
-		border: 1px solid var(--border);
-		border-radius: var(--r-md);
-		background: var(--surface);
+		padding: 16px 18px;
 		display: flex;
 		flex-direction: column;
 		gap: 11px;
@@ -582,23 +534,12 @@
 	}
 
 	/* extensions (read-only) */
-	.elist {
-		display: flex;
-		flex-direction: column;
-		border: 1px solid var(--hairline);
-		border-radius: var(--r-md);
-		background: var(--surface);
-		overflow: hidden;
-	}
 	.erow {
 		display: flex;
 		align-items: center;
 		gap: 10px;
-		padding: 10px 14px;
+		padding: 14px 18px;
 		min-width: 0;
-	}
-	.erow + .erow {
-		border-top: 1px solid var(--hairline);
 	}
 	.ename {
 		font-size: var(--fs-sm);

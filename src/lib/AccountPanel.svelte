@@ -125,6 +125,11 @@
 </div>
 
 <style>
+	.glabel {
+		font-size: var(--fs-sm);
+		font-weight: 500;
+		color: var(--text);
+	}
 	.glabel-row {
 		display: flex;
 		align-items: center;

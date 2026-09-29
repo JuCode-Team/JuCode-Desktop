@@ -68,7 +68,7 @@
 	import { modelSetup } from '$lib/modelSetupState.svelte';
 </script>
 
-<div class="pcard" class:def={isDefault}>
+<div class="pcard">
 	<button class="pcard-main" onclick={() => onCardClick(provider, authed)}>
 		<span class="tile"><Vendor provider={provider.id} size={18} /></span>
 		<span class="pcard-txt">
@@ -116,33 +116,31 @@
 					<TextField bind:value={keyInput} type="password" placeholder={t('settings.account.keyPlaceholder', { id: provider.id })} mono />
 					<Button variant="primary" size="sm" onclick={() => onSaveKey(provider.id)}>{authed ? t('settings.account.updateKey') : t('settings.account.saveKey')}</Button>
 				</div>
+				{#if authed || !provider.builtin}
 				<div class="erow end">
 					{#if authed && !isDefault}<Button variant="secondary" size="sm" onclick={() => onSetDefault(provider)}>{t('settings.account.setDefault')}</Button>{/if}
 					{#if authed}<Button variant="ghost" size="sm" onclick={() => onLogout(provider.id)}><SignOutIcon size={13} /> {t('settings.account.clearKey')}</Button>{/if}
 					{#if !provider.builtin}<Button variant="danger" size="sm" onclick={() => onDelete(provider.id)}><TrashIcon size={13} /> {t('common.delete')}</Button>{/if}
 				</div>
+				{/if}
 			{/if}
 		</div>
 	{/if}
 </div>
 
 <style>
+	/* A row of the Providers card (SettingsSection draws the frame and the
+	   hairlines between rows); the clip keeps the hover fill in its corners. */
 	.pcard {
-		border: 1px solid var(--hairline);
-		border-radius: var(--r-md);
-		background: var(--surface);
 		overflow: hidden;
-		transition: border-color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out);
-	}
-	.pcard.def {
-		border-color: color-mix(in oklab, var(--accent) 45%, transparent);
 	}
 	.pcard-main {
 		width: 100%;
 		display: flex;
 		align-items: center;
 		gap: 12px;
-		padding: 11px 12px;
+		min-height: 60px;
+		padding: 12px 18px;
 		border: none;
 		background: none;
 		color: var(--text);
@@ -151,7 +149,7 @@
 		min-width: 0;
 	}
 	.pcard-main:hover {
-		background: var(--surface2);
+		background: var(--surface);
 	}
 	.tile {
 		display: inline-flex;
@@ -249,7 +247,7 @@
 		color: var(--dim2);
 	}
 	.pcard-body {
-		padding: 12px;
+		padding: 14px 18px;
 		border-top: 1px solid var(--hairline);
 		display: flex;
 		flex-direction: column;

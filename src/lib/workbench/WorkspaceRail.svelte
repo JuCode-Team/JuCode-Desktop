@@ -25,8 +25,10 @@
 		onDelete,
 		accountLabel,
 		updateAvailable = false,
+		settingsOpen = false,
 		onAccount,
-		onSettings
+		onSettings,
+		onUpdate
 	}: {
 		workspaces: WorkspaceEntry[];
 		activeId: string;
@@ -40,8 +42,12 @@
 		/** Signed-in account (or the not-signed-in text), shown on hover. */
 		accountLabel: string;
 		updateAvailable?: boolean;
+		/** The settings page is in front: the gear shows as selected. */
+		settingsOpen?: boolean;
 		onAccount: () => void;
 		onSettings: () => void;
+		/** Open settings at the update section. */
+		onUpdate: () => void;
 	} = $props();
 
 	let menuFor = $state<{ id: string; x: number; y: number } | null>(null);
@@ -81,15 +87,15 @@
 	<!-- Bottom: the person and the app, as in Codex — out of the session list. -->
 	<div class="foot">
 		{#if updateAvailable}
-			<button class="ws" title={t('shell.updateAvailable')} aria-label={t('shell.updateAvailable')} onclick={onSettings}>
+			<button class="ws" title={t('shell.updateAvailable')} aria-label={t('shell.updateAvailable')} onclick={onUpdate}>
 				<span class="tile"><ArrowCircleDownIcon size={20} /></span>
 			</button>
 		{/if}
 		<button class="ws" title={accountLabel} aria-label={accountLabel} onclick={onAccount}>
 			<span class="tile"><UserCircleIcon size={20} /></span>
 		</button>
-		<button class="ws" title={t('shell.settings')} aria-label={t('shell.settings')} onclick={onSettings}>
-			<span class="tile"><GearIcon size={20} /></span>
+		<button class="ws" class:on={settingsOpen} title={t('shell.settings')} aria-label={t('shell.settings')} aria-pressed={settingsOpen} onclick={onSettings}>
+			<span class="tile"><GearIcon size={20} weight={settingsOpen ? 'fill' : 'regular'} /></span>
 		</button>
 	</div>
 </nav>

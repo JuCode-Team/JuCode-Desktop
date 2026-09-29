@@ -63,7 +63,8 @@
 	import TitleBar from '$lib/shell/TitleBar.svelte';
 	import TabChromePopover from '$lib/workbench/TabChromePopover.svelte';
 	import ChatPane, { type ChatPaneApi, type ProviderOption } from '$lib/ChatPane.svelte';
-	import Settings from '$lib/Settings.svelte';
+	import SettingsPage from '$lib/settings/SettingsPage.svelte';
+	import type { SectionKey } from '$lib/settings/nav';
 	import Setup from '$lib/Setup.svelte';
 	import Marketplace from '$lib/Marketplace.svelte';
 	import Sidebar from '$lib/Sidebar.svelte';
@@ -115,7 +116,15 @@
 		}
 	}
 	let showSettings = $state(false);
-	let settingsInitial = $state<'overview' | 'account' | 'behavior'>('overview');
+	let settingsSection = $state<SectionKey>('general');
+	function openSettings(section: SectionKey = 'general') {
+		settingsSection = section;
+		showSettings = true;
+	}
+	function closeSettings() {
+		showSettings = false;
+		loadProviders();
+	}
 	let showMarket = $state(false);
 	let showSetup = $state(false);
 	let showPalette = $state(false);
@@ -722,7 +731,7 @@
 			if (activeProject) store.addSession(activeProject);
 		} else if (e.key === ',') {
 			e.preventDefault();
-			showSettings = true;
+			if (!showSettings) openSettings();
 		} else if (e.key === 'b') {
 			e.preventDefault();
 			toggleSidebar();
@@ -883,16 +892,16 @@
 	<!-- TOP: one title bar across the window (traffic lights, sidebar toggle,
 	     the title of what is in front aligned with the canvas, panel actions). -->
 	<TitleBar
-		leftWidth={RAIL_WIDTH + (showSidebar ? sidebarWidth : 0)}
+		leftWidth={RAIL_WIDTH + (showSettings || showSidebar ? sidebarWidth : 0)}
 		sidebarOpen={showSidebar}
 		onToggleSidebar={toggleSidebar}
-		title={active?.chat.title ?? ''}
-		subtitle={activeProject?.name ?? ''}
-		{addOptions}
+		title={showSettings ? t('settings.title') : (active?.chat.title ?? '')}
+		subtitle={showSettings ? '' : (activeProject?.name ?? '')}
+		addOptions={showSettings ? [] : addOptions}
 		onAdd={(key) => mosaicAdd(focusedLeaf, key)}
 	>
 		{#snippet actions()}
-			{#if active && active.surface !== 'tui' && canHandOffToTui(active.backendId)}
+			{#if !showSettings && active && active.surface !== 'tui' && canHandOffToTui(active.backendId)}
 				<button
 					class="tile-action"
 					disabled={!tuiReady(active.id)}
@@ -918,15 +927,16 @@
 			onDelete={deleteWorkspace}
 			accountLabel={loggedIn ? chat?.provider || 'JuCode' : t('shell.notLoggedIn')}
 			updateAvailable={updater.available}
-			onAccount={() => {
-				settingsInitial = 'account';
-				showSettings = true;
-			}}
-			onSettings={() => (showSettings = true)}
+			settingsOpen={showSettings}
+			onAccount={() => openSettings('account')}
+			onSettings={() => (showSettings ? closeSettings() : openSettings())}
+			onUpdate={() => openSettings('updates')}
 		/>
 		<!-- The content panel: session list + canvas, inset in the window chrome
-		     with a rounded top-left corner. -->
-		<div class="panel">
+		     with a rounded top-left corner. Settings covers it as a page; the
+		     session list and canvas stay mounted (hidden) underneath so chats,
+		     terminals and TUI tiles keep their state. -->
+		<div class="panel" class:covered={showSettings}>
 			<!-- LEFT: the navigator — workspace / projects / sessions. Clicking a session
 			     opens or focuses its chat tile on the canvas. -->
 			<Sidebar
@@ -1015,7 +1025,7 @@
 												args={tuiResumeArgs(sess.backendId, sess.chat.sessionId)}
 												resumeCommand={tuiResumeCommand(sess.backendId, sess.chat.sessionId)}
 												onBackToGui={() => store.returnToGui(sid)}
-												onOpenSettings={() => { settingsInitial = 'behavior'; showSettings = true; }}
+												onOpenSettings={() => openSettings('agents')}
 											/>
 										{:else}
 											<ChatPane
@@ -1041,19 +1051,29 @@
 								{:else if tab.panel === 'browser'}<BrowserPanel />
 								{:else if tab.panel === 'diag'}<DiagnosticsPanel chat={chat ?? null} />
 								{:else if tab.panel === 'audit'}<EditorPane onAiSend={sendAiEdit} />
-								{:else if tui}<TuiPanel backend={tui} cwd={activeProject?.path ?? ''} onOpenSettings={() => { settingsInitial = 'behavior'; showSettings = true; }} />
+								{:else if tui}<TuiPanel backend={tui} cwd={activeProject?.path ?? ''} onOpenSettings={() => openSettings('agents')} />
 								{/if}
 							{/snippet}
 						</Mosaic>
 					{/if}
 				</div>
 			</div>
+			{#if showSettings}
+				<SettingsPage
+					sessionId={activeId}
+					{chat}
+					bind:section={settingsSection}
+					navWidth={sidebarWidth}
+					onAuthChange={refreshAuth}
+					onMarket={() => {
+						closeSettings();
+						showMarket = true;
+					}}
+					onClose={closeSettings}
+				/>
+			{/if}
 		</div>
 	</div>
-
-	{#if showSettings}
-		<Settings sessionId={activeId} {chat} initialSection={settingsInitial} onAuthChange={refreshAuth} onMarket={() => { showSettings = false; showMarket = true; }} onClose={() => { showSettings = false; settingsInitial = 'overview'; loadProviders(); }} />
-	{/if}
 
 	{#if showMarket}
 		<Marketplace backend={active?.backendId ?? 'jucode'} onClose={() => (showMarket = false)} />
@@ -1068,8 +1088,7 @@
 			onOpenSettings={() => {
 				localStorage.setItem('jucode-setup-done', '1');
 				showSetup = false;
-				settingsInitial = 'account';
-				showSettings = true;
+				openSettings('account');
 			}}
 			onClose={() => (showSetup = false)}
 		/>
@@ -1153,7 +1172,7 @@
 			onNewSession={() => activeProject && store.addSession(activeProject)}
 			onNewProject={addProject}
 			onNewTask={() => newTask(activeProject)}
-			onSettings={() => (showSettings = true)}
+			onSettings={() => openSettings()}
 			onMarket={() => (showMarket = true)}
 			onOpenPanel={openPanelTile}
 			onToggleSidebar={toggleSidebar}
@@ -1190,8 +1209,14 @@
 		min-width: 0;
 		border-top-left-radius: var(--r-lg);
 		overflow: hidden;
+		position: relative;
 		/* No fill of its own: the sidebar (frosted under vibrancy) and the
 		   canvas paint their parts. */
+	}
+	/* Under the settings page: hidden but mounted. The frosted settings nav is
+	   translucent, so the session list must not show through it. */
+	.panel.covered > :global(:not(.settings)) {
+		visibility: hidden;
 	}
 
 	/* ---------- the canvas ---------- */

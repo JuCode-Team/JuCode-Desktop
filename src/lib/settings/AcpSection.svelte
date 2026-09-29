@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Settings → 行为 → ACP agents: manage the registry of Agent Client
+	// Settings → 编程智能体 → ACP: manage the registry of Agent Client
 	// Protocol agents the desktop may launch (id, name, command, args, env).
 	// The registry itself is owned and validated by the Rust side
 	// (acp_registry.rs) — this UI only reads it and submits whole entries.
@@ -26,6 +26,7 @@
 	import Notice from '$lib/ui/Notice.svelte';
 	import TextField from '$lib/ui/TextField.svelte';
 	import { t } from '$lib/i18n';
+	import SettingsSection from './SettingsSection.svelte';
 
 	let agents = $state<AcpAgent[]>([]);
 	let status = $state<Record<string, BackendStatus | 'checking'>>({});
@@ -124,68 +125,63 @@
 	onMount(load);
 </script>
 
-<div class="group">
-	<div class="glabel">{t('settings.acp.groupLabel')}</div>
-	<p class="hint">{t('settings.acp.hint')}</p>
+<SettingsSection id="acp-agents" title={t('settings.acp.groupLabel')} description={t('settings.acp.hint')}>
 	{#if listError}
-		<div class="listerr"><Notice>{listError}</Notice></div>
+		<div class="pad"><Notice>{listError}</Notice></div>
 	{/if}
-
-	<div class="alist">
-		{#each agents as agent (agent.id)}
-			{@const st = status[agent.id]}
-			<div class="arow">
-				<span class="atile"><BackendIcon backend="acp" size={16} /></span>
-				<div class="amain">
-					<div class="ahead">
-						<span class="aname">{agent.name}</span>
-						{#if st === 'checking'}
-							<span class="astate dim">{t('settings.acp.checking')}</span>
-						{:else if st && st.found}
-							<span class="astate ok"><CheckCircleIcon size={12} /> {versionLabel(st) || t('settings.acp.found')}</span>
-						{:else if st}
-							<span class="astate warn"><WarningCircleIcon size={12} /> {t('settings.acp.notFound')}</span>
-						{/if}
-					</div>
-					<span class="acmd" title="{agent.command} {formatArgs(agent.args)}">
-						{agent.command} {formatArgs(agent.args)}
-					</span>
-					<button class="edithead" onclick={() => (open[agent.id] = !open[agent.id])}>
-						<span class="chev" class:open={open[agent.id]}><CaretRightIcon size={12} /></span>
-						{t('settings.acp.edit')}
-					</button>
-					{#if open[agent.id]}
-						<div class="editbox">
-							<label class="fl">
-								<span>{t('settings.acp.command')}</span>
-								<input class="tf" bind:value={agent.command} onchange={() => onFieldChange(agent)} placeholder={t('settings.acp.commandPlaceholder')} />
-							</label>
-							<label class="fl">
-								<span>{t('settings.acp.args')}</span>
-								<input class="tf" bind:value={argsText[agent.id]} onchange={() => onFieldChange(agent)} placeholder={t('settings.acp.argsPlaceholder')} />
-							</label>
-							<label class="fl">
-								<span>{t('settings.acp.env')}</span>
-								<textarea class="tf envta" rows="2" bind:value={envText[agent.id]} onchange={() => onFieldChange(agent)} placeholder={t('settings.acp.envPlaceholder')}></textarea>
-							</label>
-							{#if rowError[agent.id]}
-								<Notice>{rowError[agent.id]}</Notice>
-							{/if}
-						</div>
+	{#each agents as agent (agent.id)}
+		{@const st = status[agent.id]}
+		<div class="arow">
+			<span class="atile"><BackendIcon backend="acp" size={16} /></span>
+			<div class="amain">
+				<div class="ahead">
+					<span class="aname">{agent.name}</span>
+					{#if st === 'checking'}
+						<span class="astate dim">{t('settings.acp.checking')}</span>
+					{:else if st && st.found}
+						<span class="astate ok"><CheckCircleIcon size={12} /> {versionLabel(st) || t('settings.acp.found')}</span>
+					{:else if st}
+						<span class="astate warn"><WarningCircleIcon size={12} /> {t('settings.acp.notFound')}</span>
 					{/if}
 				</div>
-				<IconButton onclick={() => check(agent.id)} label="re-check agent" title={t('settings.acp.recheck')}>
-					<ArrowClockwiseIcon size={14} />
-				</IconButton>
-				<IconButton onclick={() => remove(agent.id)} label="remove agent" title={t('settings.acp.remove')}>
-					<TrashIcon size={14} />
-				</IconButton>
+				<span class="acmd" title="{agent.command} {formatArgs(agent.args)}">
+					{agent.command} {formatArgs(agent.args)}
+				</span>
+				<button class="edithead" onclick={() => (open[agent.id] = !open[agent.id])}>
+					<span class="chev" class:open={open[agent.id]}><CaretRightIcon size={12} /></span>
+					{t('settings.acp.edit')}
+				</button>
+				{#if open[agent.id]}
+					<div class="editbox">
+						<label class="fl">
+							<span>{t('settings.acp.command')}</span>
+							<input class="tf" bind:value={agent.command} onchange={() => onFieldChange(agent)} placeholder={t('settings.acp.commandPlaceholder')} />
+						</label>
+						<label class="fl">
+							<span>{t('settings.acp.args')}</span>
+							<input class="tf" bind:value={argsText[agent.id]} onchange={() => onFieldChange(agent)} placeholder={t('settings.acp.argsPlaceholder')} />
+						</label>
+						<label class="fl">
+							<span>{t('settings.acp.env')}</span>
+							<textarea class="tf envta" rows="2" bind:value={envText[agent.id]} onchange={() => onFieldChange(agent)} placeholder={t('settings.acp.envPlaceholder')}></textarea>
+						</label>
+						{#if rowError[agent.id]}
+							<Notice>{rowError[agent.id]}</Notice>
+						{/if}
+					</div>
+				{/if}
 			</div>
-		{/each}
-		{#if !agents.length && !listError}
-			<p class="empty">{t('settings.acp.empty')}</p>
-		{/if}
-	</div>
+			<IconButton onclick={() => check(agent.id)} label="re-check agent" title={t('settings.acp.recheck')}>
+				<ArrowClockwiseIcon size={14} />
+			</IconButton>
+			<IconButton onclick={() => remove(agent.id)} label="remove agent" title={t('settings.acp.remove')}>
+				<TrashIcon size={14} />
+			</IconButton>
+		</div>
+	{/each}
+	{#if !agents.length && !listError}
+		<p class="empty">{t('settings.acp.empty')}</p>
+	{/if}
 
 	{#if adding}
 		<div class="draft">
@@ -214,50 +210,24 @@
 			</div>
 		</div>
 	{:else}
-		<Button variant="secondary" size="sm" onclick={() => (adding = true)}>
-			<PlusIcon size={14} />
-			{t('settings.acp.add')}
-		</Button>
+		<div class="pad">
+			<Button variant="secondary" size="sm" onclick={() => (adding = true)}>
+				<PlusIcon size={14} />
+				{t('settings.acp.add')}
+			</Button>
+		</div>
 	{/if}
-</div>
+</SettingsSection>
 
 <style>
-	.group {
-		margin-top: 22px;
-	}
-	.glabel {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		font-size: var(--fs-2xs);
-		font-weight: 600;
-		letter-spacing: 0.05em;
-		text-transform: uppercase;
-		color: var(--dim2);
-		margin-bottom: 10px;
-	}
-	.hint {
-		margin: 0 0 10px;
-		font-size: var(--fs-xs);
-		color: var(--dim);
-	}
-	.alist {
-		display: flex;
-		flex-direction: column;
-		border: 1px solid var(--hairline);
-		border-radius: var(--r-md);
-		background: var(--surface);
-		overflow: hidden;
-		margin-bottom: 10px;
-	}
 	.arow {
 		display: flex;
 		align-items: flex-start;
 		gap: 12px;
-		padding: 12px 14px;
+		padding: 14px 18px;
 	}
-	.arow + .arow {
-		border-top: 1px solid var(--hairline);
+	.pad {
+		padding: 14px 18px;
 	}
 	.atile {
 		display: inline-flex;
@@ -342,11 +312,7 @@
 		max-width: 420px;
 	}
 	.draft {
-		border: 1px solid var(--hairline);
-		border-radius: var(--r-md);
-		background: var(--surface);
-		padding: 12px 14px;
-		margin-bottom: 10px;
+		padding: 14px 18px;
 	}
 	.fl {
 		display: flex;
@@ -382,12 +348,9 @@
 		min-height: 44px;
 		line-height: 1.5;
 	}
-	.listerr {
-		margin-bottom: 10px;
-	}
 	.empty {
 		margin: 0;
-		padding: 12px 14px;
+		padding: 14px 18px;
 		font-size: var(--fs-xs);
 		color: var(--dim2);
 	}
