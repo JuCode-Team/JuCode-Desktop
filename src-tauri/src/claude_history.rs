@@ -52,8 +52,14 @@ const MAX_ROW_CHARS: usize = 20_000;
 const MAX_TRANSCRIPT_SCAN: u64 = 64 * 1024 * 1024;
 
 /// Claude Code's cwd → project-directory-name munging (see module docs).
+/// Claude names the directory after its real cwd, so a symlinked path
+/// (macOS `/tmp` → `/private/tmp`) is resolved first.
 fn munge_cwd(cwd: &str) -> String {
-    cwd.chars()
+    let real = Path::new(cwd)
+        .canonicalize()
+        .map(|path| path.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| cwd.to_string());
+    real.chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
         .collect()
 }
@@ -287,6 +293,20 @@ mod tests {
         assert_eq!(munge_cwd("/tmp/a.b_c"), "-tmp-a-b-c");
         // Non-ASCII collapses to '-' too (one dash per character).
         assert_eq!(munge_cwd("/中文/路径 x"), "-------x");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn munges_the_real_path_behind_a_symlink() {
+        let home = fixture("symlink");
+        let real = home.join("real-dir");
+        fs::create_dir_all(&real).unwrap();
+        let link = home.join("link-dir");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        assert_eq!(
+            munge_cwd(&link.to_string_lossy()),
+            munge_cwd(&real.canonicalize().unwrap().to_string_lossy())
+        );
     }
 
     #[test]
