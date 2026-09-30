@@ -140,6 +140,8 @@ export function createAcpAdapter(): EngineAdapter {
 	let busyAnnounced = false;
 	/** Prompts submitted while busy / before the session opened. */
 	let queued: AcpContentBlock[][] = [];
+	/** session/new failed in this process; the next message retries it. */
+	let sessionFailed = false;
 	/** Synthetic approval call_id → the server request awaiting our response. */
 	let approvals = new Map<string, { requestId: RequestId; options: AcpPermissionOption[] }>();
 	let approvalSeq = 0;
@@ -297,8 +299,16 @@ export function createAcpAdapter(): EngineAdapter {
 			const events: NormalizedEvent[] = [{ type: 'error', message: `[acp] ${message}` }];
 			// A failed prompt must unstick the busy indicator (and run the queue).
 			if (method === 'session/prompt') events.push(...settleTurn());
-			if (method === 'session/new' || method === 'initialize')
+			if (method === 'session/new' || method === 'initialize') {
+				// No session: what waited for it can't go out. Say so, and let the
+				// next message try to open one again (after a login, say).
+				if (queued.length) {
+					queued = [];
+					events.push({ type: 'error', message: t('shell.backend.acpQueuedDropped') });
+				}
+				sessionFailed = method === 'session/new';
 				events.push({ type: 'status', message: 'ready' });
+			}
 			return events;
 		}
 		switch (method) {
@@ -399,6 +409,7 @@ export function createAcpAdapter(): EngineAdapter {
 			promptInFlight = false;
 			busyAnnounced = false;
 			queued = [];
+			sessionFailed = false;
 			approvals = new Map();
 			approvalSeq = 0;
 			tools = new Map();
@@ -461,6 +472,10 @@ export function createAcpAdapter(): EngineAdapter {
 						// Handshake still running or a turn is active: queue; flushed by
 						// session/new (handshake) or settleTurn (turn end).
 						queued.push(blocks);
+						if (!agentSessionId && sessionFailed) {
+							sessionFailed = false;
+							return [request('session/new', { cwd: ctx?.cwd || '', mcpServers: [] })];
+						}
 						return [];
 					}
 					return [promptFrame(blocks)];

@@ -117,6 +117,22 @@ describe('acp adapter: handshake', () => {
 	});
 });
 
+describe('acp adapter: session/new failure', () => {
+	it('reports messages that waited for a failed session and retries on the next one', () => {
+		const { adapter, lines } = makeAdapter();
+		adapter.translate({ jsonrpc: '2.0', id: 1, result: { protocolVersion: 1, agentCapabilities: {} } });
+		expect(adapter.encodeOp({ op: 'user_message', content: 'early' })).toEqual([]);
+		const events = adapter.translate({ jsonrpc: '2.0', id: 2, error: { code: -32000, message: 'auth required' } });
+		expect(events.some((e) => e.type === 'error' && !String(e.message).startsWith('[acp]'))).toBe(true);
+		lines.length = 0;
+		const frames = adapter.encodeOp({ op: 'user_message', content: 'again' });
+		expect(JSON.parse(frames![0]!)).toMatchObject({ method: 'session/new' });
+		// Opening it now sends the waiting message.
+		adapter.translate({ jsonrpc: '2.0', id: 3, result: { sessionId: 'agent-sess-2' } });
+		expect(lines.some((l) => l.includes('session/prompt') && l.includes('again'))).toBe(true);
+	});
+});
+
 describe('acp adapter: prompt turns', () => {
 	it('user_message becomes one session/prompt with a text block', () => {
 		const { adapter } = makeAdapter();

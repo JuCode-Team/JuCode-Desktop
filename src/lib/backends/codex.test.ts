@@ -51,6 +51,34 @@ describe('codex adapter: caps', () => {
 	});
 });
 
+describe('codex adapter: resume failure', () => {
+	it('opens a fresh thread in the same process and still sends what waited', () => {
+		const { lines } = makeIo();
+		const adapter = createCodexAdapter();
+		adapter.onStart({ sendLine: (l: string) => lines.push(l) }, { ...CTX, resume: 'gone-thread' });
+		adapter.translate({ id: 1, result: { userAgent: 'x', codexHome: '/h', platformFamily: 'unix', platformOs: 'macos' } });
+		expect(adapter.encodeOp({ op: 'user_message', content: 'hi' })).toEqual([]);
+		lines.length = 0;
+		const events = adapter.translate({ id: 2, error: { code: -32600, message: 'no rollout found' } });
+		expect(events[0]).toEqual({ type: 'resume_failed' });
+		const start = lines.map(parse).find((f) => f.method === 'thread/start');
+		expect(start).toBeTruthy();
+		lines.length = 0;
+		adapter.translate({ id: start!.id, result: { thread: { id: 'thread-2', status: { type: 'idle' } }, model: 'm', cwd: '/proj' } });
+		expect(lines.map(parse).some((f) => f.method === 'turn/start' && JSON.stringify(f).includes('hi'))).toBe(true);
+	});
+
+	it('reports waiting messages when no thread can be opened', () => {
+		const { lines } = makeIo();
+		const adapter = createCodexAdapter();
+		adapter.onStart({ sendLine: (l: string) => lines.push(l) }, CTX);
+		adapter.translate({ id: 1, result: { userAgent: 'x', codexHome: '/h', platformFamily: 'unix', platformOs: 'macos' } });
+		adapter.encodeOp({ op: 'user_message', content: 'hi' });
+		const events = adapter.translate({ id: 2, error: { code: -32600, message: 'not logged in' } });
+		expect(events.filter((e) => e.type === 'error')).toHaveLength(2);
+	});
+});
+
 describe('codex adapter: rewind', () => {
 	it('rewinds the conversation with thread/rollback by turn count', () => {
 		const { lines } = makeIo();

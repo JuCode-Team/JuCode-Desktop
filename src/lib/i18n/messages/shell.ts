@@ -396,6 +396,8 @@ const shell = {
 			claudeAuthHint:
 				'Claude Code 认证已失效：请在终端运行 `claude` 并执行 /login 重新登录（或运行 `claude setup-token`）后重试。',
 			claudeUnsupportedRequest: '已拒绝引擎的一个不支持的请求：{subtype}',
+			codexQueuedDropped: 'Codex 没能开启会话，等待发送的消息没有发出',
+			acpQueuedDropped: 'ACP 智能体没能开启会话，等待发送的消息没有发出',
 			claudeHistoryFail: '读取 Claude Code 历史会话失败：{msg}'
 		},
 
@@ -803,6 +805,8 @@ const shell = {
 			claudeAuthHint:
 				'Claude Code authentication is invalid: run `claude` in a terminal and sign in with /login (or run `claude setup-token`), then retry.',
 			claudeUnsupportedRequest: 'Declined an unsupported engine request: {subtype}',
+			codexQueuedDropped: 'Codex could not open a thread; the messages waiting for it were not sent',
+			acpQueuedDropped: 'The ACP agent could not open a session; the messages waiting for it were not sent',
 			claudeHistoryFail: 'Failed to read Claude Code session history: {msg}'
 		},
 

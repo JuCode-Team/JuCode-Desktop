@@ -569,6 +569,9 @@ export class ChatState {
 		this.booting = false;
 		switch (ev.type) {
 			case 'startup':
+				// An engine that recovered from a failed resume in-process (codex
+				// opens a fresh thread) is fine: its new id is resumable.
+				this.resumeBroken = false;
 				this.model = str(ev.model);
 				this.cwd = str(ev.cwd);
 				if (str(ev.session_id)) this.sessionId = str(ev.session_id);

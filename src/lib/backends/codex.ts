@@ -190,6 +190,8 @@ export function createCodexAdapter(): EngineAdapter {
 	let activeTurnId: string | null = null;
 	/** Turns requested before the thread/start response arrived. */
 	let queuedInput: UserInput[] = [];
+	/** thread/start params of this process, for the fallback when a resume fails. */
+	let openParams: Record<string, unknown> | null = null;
 	/** Synthetic approval call_id → the server request awaiting our response. */
 	let approvals = new Map<string, { requestId: RequestId }>();
 	let approvalSeq = 0;
@@ -552,7 +554,21 @@ export function createCodexAdapter(): EngineAdapter {
 		if (error) {
 			const message = str(error.message) || `JSON-RPC error ${error.code}`;
 			if (method === 'thread/compact/start') return [{ type: 'compaction_failed', error: message }];
+			// The saved thread can't be resumed (rollout gone, …): open a fresh one
+			// in this process so the session stays usable and whatever the user
+			// sent meanwhile still goes out. resume_failed keeps later restarts
+			// from resuming it again.
+			if (method === 'thread/resume' && openParams) {
+				send(request('thread/start', openParams));
+				return [{ type: 'resume_failed' }, errorEvent(message)];
+			}
 			const events: NormalizedEvent[] = [errorEvent(message)];
+			// No thread: messages waiting for one can never be sent. Say so rather
+			// than hold them silently.
+			if (method === 'thread/start' && queuedInput.length) {
+				queuedInput = [];
+				events.push(errorEvent(t('shell.backend.codexQueuedDropped')));
+			}
 			// A failed thread/turn bootstrap must unstick the busy indicator.
 			if (method === 'thread/start' || method === 'thread/resume' || method === 'turn/start') {
 				events.push({ type: 'status', message: 'ready' });
@@ -569,6 +585,7 @@ export function createCodexAdapter(): EngineAdapter {
 					approvalPolicy,
 					sandbox: sandboxMode(sandbox)
 				};
+				openParams = open;
 				send(frame({ method: 'initialized' }));
 				send(
 					resumeId
@@ -829,6 +846,7 @@ export function createCodexAdapter(): EngineAdapter {
 			threadId = null;
 			activeTurnId = null;
 			queuedInput = [];
+			openParams = null;
 			approvals = new Map();
 			approvalSeq = 0;
 			items = new Map();
