@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { importIfEmpty } from '$lib/remote/importWorkspaces';
+	import { DaemonSync } from '$lib/daemonSync.svelte';
 	import { onMount, untrack } from 'svelte';
 	import { listen } from '@tauri-apps/api/event';
 	import { getCurrentWebview } from '@tauri-apps/api/webview';
@@ -485,6 +485,28 @@
 		untrack(() => workspaces.updateProjects(saved));
 	});
 
+	// One list of projects and sessions with the daemon (and so with paired
+	// devices): the desktop's edits go to it, other clients' come back.
+	const sync = new DaemonSync(store, workspaces);
+	$effect(() => {
+		if (!store.loaded || wsBusy) return;
+		void sync.local();
+		// Coalesce bursts of edits (a restore, a drag) into one save.
+		const timer = setTimeout(() => sync.push(), 600);
+		return () => clearTimeout(timer);
+	});
+	$effect(() => {
+		const list = agentDirectory.sessions;
+		void workspaces.activeId;
+		if (!store.loaded || wsBusy) return;
+		untrack(() => sync.reconcile(list));
+	});
+	// A session listed from the daemon opens when it is first shown.
+	$effect(() => {
+		const s = store.active;
+		if (s?.dormant) untrack(() => store.wake(s.id));
+	});
+
 	const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
 
 	// The engine announced its startup approval mode and it diverges from the
@@ -815,7 +837,7 @@
 			daemon.onExit = (id) => store.handleExit(id);
 			daemon.onEvent = (frame) => {
 				agentDirectory.handle(frame);
-				importIfEmpty(frame, () => workspaces.workspaces);
+				sync.handle(frame);
 			};
 			daemon.onDisconnect = () => agentDirectory.disconnected();
 			if (loadBackendSettings().daemon) agentDirectory.start();

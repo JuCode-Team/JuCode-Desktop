@@ -901,7 +901,7 @@ describe('sessions hosted by jucode daemon', () => {
 		vi.unstubAllGlobals();
 	});
 
-	it('serialize keeps the daemon session and restore reopens it hosted', async () => {
+	it('serialize keeps the daemon session and restore lists it until shown', async () => {
 		withDaemonSetting(true);
 		const store = new SessionStore();
 		const p = proj();
@@ -918,6 +918,11 @@ describe('sessions hosted by jucode daemon', () => {
 		await restored.restore(saved);
 		const s = restored.projects[0].sessions[0];
 		expect(s.hosted).toBe(true);
+		// Listed, not opened: the daemon keeps it until it is shown.
+		expect(s.dormant).toBe(true);
+		expect(hostSession).not.toHaveBeenCalled();
+		restored.wake(s.id);
+		expect(s.dormant).toBe(false);
 		expect(hostSession).toHaveBeenCalledWith(s.id, p.path, 'daemon-sess', undefined, false, undefined);
 		expect(sendLine).not.toHaveBeenCalledWith(s.id, expect.stringContaining('/resume'));
 		vi.unstubAllGlobals();

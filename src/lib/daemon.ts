@@ -82,6 +82,11 @@ export class DaemonClient {
 		return this.#toDaemon.has(desktopId);
 	}
 
+	/** The desktop session showing a daemon session, if any. */
+	desktopOf(session: string): string | undefined {
+		return this.#toDesktop.get(session);
+	}
+
 	/** The daemon session backing a desktop session, if any. */
 	sessionOf(desktopId: string): string | undefined {
 		return this.#toDaemon.get(desktopId);

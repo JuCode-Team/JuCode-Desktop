@@ -1,5 +1,5 @@
 import { ChatState } from './chat.svelte';
-import { acpAgentsList, createSession, closeSession, daemon, hostSession, projectRoot, chatsDir, writeConfig, git, claudeSessionTranscript, switchToolProfile, jucodeSessions } from './protocol';
+import { acpAgentsList, createSession, closeSession, daemon, hostSession, sessionMeta, projectRoot, chatsDir, writeConfig, git, claudeSessionTranscript, switchToolProfile, jucodeSessions } from './protocol';
 import type { EngineSpec } from './daemon';
 import { canHandOffToTui, isValidResumeSessionId } from './tuiHandoff';
 import { createAdapter, normalizeBackendId, type BackendId } from './backends';
@@ -357,6 +357,7 @@ export class SessionStore {
 		const s = this.allSessions.find((x) => x.id === id);
 		if (!s) return;
 		s.archived = true;
+		this.#share(s, { archived: true });
 		if (this.activeId === id) {
 			const next =
 				this.activeProject?.sessions.find((x) => x.id !== id && !x.archived) ??
@@ -368,7 +369,80 @@ export class SessionStore {
 	/** Restore an archived thread to the normal list. */
 	unarchiveSession(id: string) {
 		const s = this.allSessions.find((x) => x.id === id);
-		if (s) s.archived = false;
+		if (!s) return;
+		s.archived = false;
+		this.#share(s, { archived: false });
+	}
+
+	/** A hosted session's title, archive state or removal goes to the daemon,
+	 *  which every other client follows. */
+	#share(s: Session, changes: { title?: string; archived?: boolean; hidden?: boolean }) {
+		if (s.hosted && s.chat.sessionId) sessionMeta(s.chat.sessionId, changes).catch(() => {});
+	}
+
+	/** Lists a daemon session in `project` without opening it here; it opens
+	 *  when it is first shown. Returns the desktop id. */
+	listDormant(
+		project: Project,
+		rec: { session: string; title?: string | null; archived?: boolean; engine?: string },
+		reuseId?: string
+	): string {
+		const s = this.#newSession(normalizeBackendId(rec.engine), undefined, reuseId);
+		s.hosted = true;
+		s.dormant = true;
+		s.restored = true;
+		s.archived = !!rec.archived;
+		s.chat.sessionId = rec.session;
+		if (rec.title) s.chat.title = rec.title;
+		s.chat.engineState = 'ready';
+		project.sessions.push(s);
+		return s.id;
+	}
+
+	#restoreDormant(
+		project: Project,
+		sid: string,
+		title: string,
+		backend: BackendId,
+		archived: boolean,
+		chrome: SavedTabChrome,
+		reuseId?: string
+	): string {
+		const id = this.listDormant(project, { session: sid, title, archived, engine: backend }, reuseId);
+		const s = project.sessions[project.sessions.length - 1];
+		if (chrome.color) s.color = chrome.color;
+		if (chrome.icon) s.icon = chrome.icon;
+		if (chrome.titleLocked) s.chat.titleLocked = true;
+		return id;
+	}
+
+	/** Opens a dormant session's engine (through the daemon). */
+	wake(id: string) {
+		const s = this.allSessions.find((x) => x.id === id);
+		const path = this.projectPathOf(id);
+		if (!s?.dormant || !path) return;
+		s.dormant = false;
+		this.#spawn(s, path, undefined, undefined, s.chat.sessionId).catch((e) => this.#engineFailed(s.chat, e));
+	}
+
+	/** Drops a session another client removed, without telling the daemon. */
+	forget(id: string) {
+		const s = this.allSessions.find((x) => x.id === id);
+		if (!s) return;
+		if (!s.dormant) closeSession(id).catch(() => {});
+		unregisterAdapter(id);
+		dropHeldOps(id);
+		const p = this.projects.find((pr) => pr.sessions.includes(s));
+		if (p) p.sessions = p.sessions.filter((x) => x !== s);
+		if (this.activeId === id) this.activeId = this.allSessions.find((x) => !x.archived)?.id ?? '';
+	}
+
+	/** Adds a project another client created, with no sessions of its own. */
+	addProjectShell(project: { id: string; name: string; path: string; chats?: boolean; worktree?: WorktreeMeta }) {
+		const p: Project = { id: project.id, name: project.name, path: project.path, sessions: [] };
+		if (project.chats) p.chats = true;
+		if (project.worktree) p.worktree = project.worktree;
+		this.projects.push(p);
 	}
 
 	/** Explicit rename: sets the title and locks out auto-titling. */
@@ -378,6 +452,7 @@ export class SessionStore {
 		if (!s || !trimmed) return;
 		s.chat.title = trimmed;
 		s.chat.titleLocked = true;
+		this.#share(s, { title: trimmed });
 	}
 
 	/** Set or clear a session's tag color / tab icon (null clears). */
@@ -807,7 +882,10 @@ export class SessionStore {
 	}
 
 	removeSession(id: string) {
-		closeSession(id).catch(() => {});
+		const s = this.allSessions.find((x) => x.id === id);
+		// Closing a hosted session's tab removes it from every client's list.
+		if (s) this.#share(s, { hidden: true });
+		if (!s?.dormant) closeSession(id).catch(() => {});
 		unregisterAdapter(id);
 		dropHeldOps(id);
 		const p = this.projects.find((pr) => pr.sessions.some((s) => s.id === id));
@@ -1042,7 +1120,12 @@ export class SessionStore {
 					// fresh. Both keep the saved desktop id (pre-id files mint anew).
 					// A tab handed to the TUI restores as a TUI surface (no engine).
 					const surface = t.surface === 'tui' && sid ? ('tui' as const) : undefined;
-					const id = sid
+					// A hosted conversation waits in the daemon: list it now and open
+					// it when it is shown (ACP needs its agent spawn path below).
+					const dormant = sid && t.hosted === true && !surface && backend !== 'acp';
+					const id = dormant
+						? this.#restoreDormant(proj, sid, t.title, backend, !!t.archived, chrome, t.id)
+						: sid
 						? this.restoreSession(
 								proj,
 								sid,

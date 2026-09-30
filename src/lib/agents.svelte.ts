@@ -40,6 +40,8 @@ export interface DaemonSessionView {
 	archived?: boolean;
 	updated_at?: number;
 	chat?: boolean;
+	/** `jucode`, `claude`, `codex` or `acp` (newer daemons). */
+	engine?: string;
 }
 
 export interface QuestionView {

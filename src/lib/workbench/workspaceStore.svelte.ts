@@ -89,6 +89,22 @@ export class WorkspaceStore {
 		this.#schedule();
 	}
 
+	/** Replace an inactive workspace's saved projects (another client changed
+	 *  them). */
+	setProjects(id: string, projects: SavedProject[]) {
+		const ws = this.workspaces.find((w) => w.id === id);
+		if (!ws) return;
+		ws.projects = projects;
+		this.#schedule();
+	}
+
+	/** Add a workspace another client created. */
+	adopt(entry: WorkspaceEntry) {
+		if (!this.file || this.file.workspaces.some((w) => w.id === entry.id)) return;
+		this.file.workspaces.push(entry);
+		this.#schedule();
+	}
+
 	/** Replace the active workspace's dock tile layout. */
 	updateLayout(layout: SerializedLayout | null) {
 		const ws = this.active;

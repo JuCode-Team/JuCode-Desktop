@@ -24,6 +24,14 @@ export const daemon = new DaemonClient(() => daemonEndpoint(), (url) => openSock
 
 /** Starts (or, with `resume`, reopens) a session hosted by the daemon;
  *  `agent` starts it as that long-lived agent, `chat` as a chat. */
+/** Renames, (un)archives or hides a daemon session for every client. */
+export function sessionMeta(
+	session: string,
+	changes: { title?: string; archived?: boolean; hidden?: boolean }
+): Promise<void> {
+	return daemon.post({ op: 'session_meta', session, ...changes });
+}
+
 export function hostSession(
 	session: string,
 	cwd: string,

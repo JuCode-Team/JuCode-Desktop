@@ -33,6 +33,9 @@ export interface Session {
 	/** A JuCode session hosted by the local `jucode daemon` instead of a
 	 *  child process: it keeps running when the desktop closes (persisted). */
 	hosted?: boolean;
+	/** A hosted session listed from the daemon without an engine open here
+	 *  yet; it opens when it is first shown (`SessionStore.wake`). */
+	dormant?: boolean;
 }
 
 /** 并行任务（git worktree）项目的元数据，随项目布局持久化。 */
