@@ -995,6 +995,23 @@ fn unix_now() -> u64 {
         .unwrap_or(0)
 }
 
+/// Cross-process lock around a token refresh, shared with the `jucode`
+/// engine processes; released when the file closes.
+fn lock_auth_refresh() -> Result<std::fs::File, String> {
+    let dir = jucode_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join("auth.lock");
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&path)
+        .map_err(|e| format!("failed to open {}: {e}", path.display()))?;
+    file.lock()
+        .map_err(|e| format!("failed to lock {}: {e}", path.display()))?;
+    Ok(file)
+}
+
 /// Returns a valid JuCode access token, transparently refreshing (and
 /// rewriting auth.json) via the rotating refresh token when the stored
 /// access token is missing or near expiry. The CLI engine owns login; this
@@ -1033,7 +1050,11 @@ fn jucode_access_token() -> Result<String, String> {
         .get_or_init(|| Mutex::new(()))
         .lock()
         .map_err(|e| format!("lock poisoned: {e}"))?;
-    // Re-read after acquiring the lock: another thread may have just refreshed.
+    // The engine processes refresh the same token (agent-core
+    // oauth::lock_auth_refresh); the gateway revokes it on first use.
+    let _file_guard = lock_auth_refresh()?;
+    // Re-read after acquiring the lock: another thread or process may have
+    // just refreshed.
     let fresh = read_auth();
     let fresh_jucode = fresh
         .get("jucode")
