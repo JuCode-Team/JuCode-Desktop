@@ -8,6 +8,8 @@
 	import SquareIcon from 'phosphor-svelte/lib/SquareIcon';
 	import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon';
 	import FilesIcon from 'phosphor-svelte/lib/FilesIcon';
+	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
+	import ModelPicker from '$lib/remote/ModelPicker.svelte';
 	import GitDiffIcon from 'phosphor-svelte/lib/GitDiffIcon';
 	import MessageList from '$lib/MessageList.svelte';
 	import ApprovalCard from '$lib/ApprovalCard.svelte';
@@ -134,6 +136,13 @@
 		text = '';
 	}
 
+	const modelName = $derived(chat.modelLabel || chat.model);
+
+	function pickModel(model: string, effort: string) {
+		chat.closePicker();
+		send({ op: 'command', input: effort ? `/model ${model} ${effort}` : `/model ${model}` });
+	}
+
 	function respond(op: ApproveOp) {
 		send(op);
 		chat.pendingApproval = null;
@@ -145,6 +154,12 @@
 		<button class="back" onclick={onBack} aria-label={t('shell.remote.back')}><ArrowLeftIcon size={18} /></button>
 		<span class="title">{title}</span>
 		{#if chat.busy}<span class="busy pulse"></span>{/if}
+		{#if modelName}
+			<button class="model" disabled={!connected} onclick={() => send({ op: 'command', input: '/model' })}>
+				<span>{modelName}{chat.effort ? ` · ${chat.effort}` : ''}</span>
+				<CaretDownIcon size={12} />
+			</button>
+		{/if}
 		{#if onFiles}<button class="back" onclick={onFiles} aria-label={t('shell.remote.files')}><FilesIcon size={18} /></button>{/if}
 		{#if onChanges}<button class="back" onclick={onChanges} aria-label={t('shell.remote.changes')}><GitDiffIcon size={18} /></button>{/if}
 	</header>
@@ -160,6 +175,15 @@
 			onRewind={() => {}}
 		/>
 	</div>
+
+	{#if chat.picker?.kind === 'model'}
+		<ModelPicker
+			models={chat.picker.models}
+			activeEffort={chat.picker.activeEffort || chat.effort}
+			onPick={pickModel}
+			onClose={() => chat.closePicker()}
+		/>
+	{/if}
 
 	{#if chat.pendingApproval}
 		<div class="approval">
@@ -226,6 +250,26 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
+	.model {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		max-width: 45%;
+		padding: 5px 9px;
+		border: 1px solid var(--border);
+		border-radius: var(--r-full);
+		background: var(--surface);
+		color: var(--dim);
+		font-size: var(--fs-xs);
+		white-space: nowrap;
+	}
+	.model span {
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.model:disabled {
+		opacity: 0.5;
+	}
 	.busy {
 		width: 8px;
 		height: 8px;
@@ -236,6 +280,13 @@
 		flex: 1;
 		overflow-y: auto;
 		padding: 12px 12px 4px;
+	}
+	/* Wide panes keep the conversation at a readable width. */
+	.scroll,
+	.approval,
+	.exit,
+	.composer {
+		padding-inline: max(12px, calc((100% - 860px) / 2));
 	}
 	.approval {
 		padding: 8px 12px;

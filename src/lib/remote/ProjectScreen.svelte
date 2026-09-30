@@ -24,7 +24,7 @@
 		project: ProjectView;
 		onBack: () => void;
 		onOpenSession: (session: string, cwd: string, title: string, engine?: string) => void;
-		onNewSession: (engine?: string) => void;
+		onNewSession: () => void;
 		onFiles: () => void;
 		onChanges: () => void;
 	} = $props();
@@ -91,10 +91,8 @@
 
 <RemoteScreen {title} subtitle={project.chats ? undefined : shortPath(project.path)} {onBack}>
 	<div class="tools">
-		<Button variant="primary" onclick={() => onNewSession()}><PlusIcon size={14} /> {t('shell.remote.newSession')}</Button>
+		<Button variant="primary" onclick={onNewSession}><PlusIcon size={14} /> {t('shell.remote.newSession')}</Button>
 		{#if !project.chats}
-			<Button onclick={() => onNewSession('claude')}><PlusIcon size={14} /> Claude Code</Button>
-			<Button onclick={() => onNewSession('codex')}><PlusIcon size={14} /> Codex</Button>
 			<Button onclick={onFiles}><FilesIcon size={14} /> {t('shell.remote.files')}</Button>
 			<Button onclick={onChanges}><GitDiffIcon size={14} /> {t('shell.remote.changes')}</Button>
 		{/if}

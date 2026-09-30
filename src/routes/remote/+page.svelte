@@ -15,6 +15,7 @@
 	import DeskContent from '$lib/DeskContent.svelte';
 	import RemoteSession from '$lib/RemoteSession.svelte';
 	import Projects from '$lib/remote/Projects.svelte';
+	import NewSessionDialog from '$lib/remote/NewSessionDialog.svelte';
 	import ProjectScreen from '$lib/remote/ProjectScreen.svelte';
 	import AddProjectScreen from '$lib/remote/AddProjectScreen.svelte';
 	import FilesScreen from '$lib/remote/FilesScreen.svelte';
@@ -94,6 +95,37 @@
 	}
 	function pop() {
 		stack = stack.slice(0, -1);
+	}
+	/** Wide screens: the list on the left, the open page on the right. */
+	let wide = $state(false);
+	$effect(() => {
+		const query = matchMedia('(min-width: 960px)');
+		wide = query.matches;
+		const change = () => (wide = query.matches);
+		query.addEventListener('change', change);
+		return () => query.removeEventListener('change', change);
+	});
+	/** Opens a page from the list: on a wide screen it replaces the right
+	 *  pane's pages; on a phone it goes on top. */
+	function open(screen: NewScreen) {
+		if (wide) stack = [];
+		push(screen);
+	}
+	/** The new-session dialog, for a given project or a choice of them. */
+	let creating = $state<{ project?: ProjectView; replace: boolean } | null>(null);
+	const ENGINE_TITLES: Record<string, string> = { claude: 'Claude Code', codex: 'Codex' };
+	function create(project: ProjectView, engine: string) {
+		const replace = creating?.replace ?? true;
+		creating = null;
+		const screen: NewScreen = {
+			kind: 'session',
+			cwd: project.path,
+			chat: project.chats,
+			engine: engine === 'jucode' ? undefined : engine,
+			title: ENGINE_TITLES[engine] ?? t('shell.remote.newSession')
+		};
+		if (replace) open(screen);
+		else push(screen);
 	}
 	/** Relay mode: why the last connection failed, and whether it ever worked. */
 	let relayError = $state<RelayError | null>(null);
@@ -220,6 +252,14 @@
 		mode = 'scan';
 	}
 
+	/** Past pairing and connected once: the lists and pages are showing. */
+	const inApp = $derived(
+		!!mode &&
+			mode !== 'scan' &&
+			mode !== 'install' &&
+			!(mode === 'lan' && !token) &&
+			!(mode === 'relay' && (!everConnected || relayError?.fatal))
+	);
 	const relayStatus = $derived.by(() => {
 		if (agentDirectory.status === 'on') return { tone: 'ok', text: t('shell.remote.relayConnected') };
 		const kind = relayError?.kind;
@@ -232,12 +272,12 @@
 	function openSession(session: string) {
 		const agent = agentDirectory.agentOfSession(session);
 		const known = agentDirectory.sessions.find((s) => s.session === session);
-		push({ kind: 'session', session, cwd: known?.cwd, title: agent?.name ?? known?.title ?? session });
+		open({ kind: 'session', session, cwd: known?.cwd, title: agent?.name ?? known?.title ?? session });
 	}
 
 	function openAgent(agent: AgentView) {
 		const latest = agentDirectory.latestSession(agent.id);
-		push(
+		open(
 			latest
 				? { kind: 'session', session: latest.session, title: agent.name }
 				: { kind: 'session', agent: agent.id, title: agent.name }
@@ -272,7 +312,7 @@
 
 {#if scanning}<QrScanner onResult={acceptLink} onClose={() => (scanning = false)} />{/if}
 
-<div class="remote">
+<div class="remote" class:wide>
 	{#if mode === 'install'}
 		<div class="pair">
 			<span class="hero"><DeviceMobileIcon size={28} /></span>
@@ -339,9 +379,10 @@
 			{#if tab === 'projects'}
 				<h1>{t('shell.remote.projects')}</h1>
 				<Projects
-					onOpenProject={(project) => push({ kind: 'project', project })}
-					onAddProject={() => push({ kind: 'add' })}
-					onOpenSession={(session, cwd, title) => push({ kind: 'session', session, cwd, title })}
+					onOpenProject={(project) => open({ kind: 'project', project })}
+					onAddProject={() => open({ kind: 'add' })}
+					onOpenSession={(session, cwd, title) => open({ kind: 'session', session, cwd, title })}
+					onNewSession={() => (creating = { replace: true })}
 				/>
 			{:else if tab === 'desk'}
 				<h1>{t('shell.desk.title')}</h1>
@@ -378,7 +419,11 @@
 			</button>
 		</nav>
 	{/if}
-	{#if mode && !relayError?.fatal}
+	{#if inApp}
+		<section class="pane">
+		{#if wide && stack.length === 0}
+			<p class="pane-empty">{t('shell.remote.pickSomething')}</p>
+		{/if}
 		{#each stack as screen, i (screen.key)}
 			<div class="layer" style:z-index={20 + i}>
 				{#if screen.kind === 'session'}
@@ -402,14 +447,7 @@
 						onBack={pop}
 						onOpenSession={(session, cwd, title, engine) =>
 							push({ kind: 'session', session, cwd, chat: project.chats, engine, title })}
-						onNewSession={(engine) =>
-							push({
-								kind: 'session',
-								cwd: project.path,
-								chat: project.chats,
-								engine,
-								title: engine === 'claude' ? 'Claude Code' : engine === 'codex' ? 'Codex' : t('shell.remote.newSession')
-							})}
+						onNewSession={() => (creating = { project, replace: false })}
 						onFiles={() => push({ kind: 'files', root: project.path, title: project.name })}
 						onChanges={() => push({ kind: 'changes', root: project.path, title: project.name })}
 					/>
@@ -422,6 +460,10 @@
 				{/if}
 			</div>
 		{/each}
+		</section>
+	{/if}
+	{#if creating}
+		<NewSessionDialog project={creating.project} onCreate={create} onClose={() => (creating = null)} />
 	{/if}
 </div>
 
@@ -437,6 +479,64 @@
 	.layer {
 		position: fixed;
 		inset: 0;
+	}
+	/* On a phone the pages cover the screen; the pane itself adds no box. */
+	.pane {
+		display: contents;
+	}
+	.pane-empty {
+		margin: auto;
+		color: var(--dim2);
+		font-size: var(--fs-md);
+	}
+	/* Wide screens: lists in a left column, pages in the right one. The pane
+	   is the containing block of its fixed-position pages (transform), so
+	   they fill it instead of the window. */
+	.remote.wide {
+		display: grid;
+		grid-template-columns: minmax(300px, 360px) 1fr;
+		grid-template-rows: auto 1fr;
+		height: 100dvh;
+		overflow: hidden;
+	}
+	.wide nav {
+		position: static;
+		grid-column: 1;
+		grid-row: 1;
+		gap: 4px;
+		padding: calc(env(safe-area-inset-top) + 8px) 12px 8px;
+		border-top: none;
+		border-right: 1px solid var(--hairline);
+		border-bottom: 1px solid var(--hairline);
+	}
+	.wide nav button {
+		flex-direction: row;
+		justify-content: center;
+		gap: 6px;
+		border-radius: var(--r-md);
+		font-size: var(--fs-sm);
+	}
+	.wide nav button.on {
+		background: var(--surface2);
+	}
+	.wide .badge {
+		position: static;
+	}
+	.wide main {
+		grid-column: 1;
+		grid-row: 2;
+		overflow-y: auto;
+		padding: 12px 16px 24px;
+		border-right: 1px solid var(--hairline);
+		background: var(--panel);
+	}
+	.wide .pane {
+		display: flex;
+		grid-column: 2;
+		grid-row: 1 / 3;
+		position: relative;
+		transform: translateZ(0);
+		overflow: hidden;
 	}
 	main {
 		padding: calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 76px);

@@ -5,6 +5,7 @@
 	import ChatsCircleIcon from 'phosphor-svelte/lib/ChatsCircleIcon';
 	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
+	import FolderPlusIcon from 'phosphor-svelte/lib/FolderPlusIcon';
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import { agentDirectory } from '$lib/agents.svelte';
@@ -15,11 +16,13 @@
 	let {
 		onOpenProject,
 		onAddProject,
-		onOpenSession
+		onOpenSession,
+		onNewSession
 	}: {
 		onOpenProject: (project: ProjectView) => void;
 		onAddProject: () => void;
 		onOpenSession: (session: string, cwd: string, title: string) => void;
+		onNewSession: () => void;
 	} = $props();
 
 	const allProjects = $derived(remoteProjects.workspaces.flatMap((w) => w.projects));
@@ -67,7 +70,12 @@
 		<p class="empty">{t('shell.remote.noProjects')}</p>
 	{/each}
 
-	<div class="add"><Button onclick={onAddProject}><PlusIcon size={14} /> {t('shell.remote.addProject')}</Button></div>
+	<div class="add">
+		{#if remoteProjects.active?.projects.length}
+			<Button variant="primary" onclick={onNewSession}><PlusIcon size={14} /> {t('shell.remote.newSession')}</Button>
+		{/if}
+		<Button onclick={onAddProject}><FolderPlusIcon size={14} /> {t('shell.remote.addProject')}</Button>
+	</div>
 
 	{#if loose.length > 0}
 		<h2>{t('shell.remote.otherSessions')}</h2>
@@ -140,6 +148,9 @@
 		color: var(--accent-bright);
 	}
 	.add {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
 		margin: 16px 0 8px;
 	}
 	h2 {
