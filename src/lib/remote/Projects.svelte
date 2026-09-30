@@ -22,7 +22,7 @@
 	import Notice from '$lib/ui/Notice.svelte';
 	import BackendIcon from '$lib/BackendIcon.svelte';
 	import { agentDirectory, type AgentView, type DaemonSessionView } from '$lib/agents.svelte';
-	import { remoteProjects, type ProjectView } from './store.svelte';
+	import { baseName, remoteProjects, type ProjectView } from './store.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
 	import { t } from '$lib/i18n';
 
@@ -71,7 +71,8 @@
 	const waiting = (s: DaemonSessionView) =>
 		agentDirectory.questions.some((q) => q.session === s.session) ||
 		agentDirectory.actions.some((a) => a.session_id === s.session);
-	const title = (s: DaemonSessionView) => s.title || t('shell.remote.untitled');
+	/** The daemon labels a session with no title yet by its id. */
+	const title = (s: DaemonSessionView) => (s.title && s.title !== s.session ? s.title : t('shell.untitled'));
 
 	// A current daemon sends its workspaces right after connecting; only
 	// call it outdated when none arrived in a while.
@@ -136,6 +137,8 @@
 	<div class="sess" class:nested class:on={s.session === current} class:arch={s.archived}>
 		<button class="sess-main" onclick={() => onOpenSession(s, p)}>
 			<span class="sess-title">{title(s)}</span>
+			<!-- A session outside the projects names its folder. -->
+			{#if !p}<span class="where" title={s.cwd}>{baseName(s.cwd)}</span>{/if}
 			{#if s.engine && s.engine !== 'jucode'}
 				<span class="chip"><BackendIcon backend={s.engine as 'claude'} size={12} /></span>
 			{/if}
@@ -417,6 +420,16 @@
 	}
 	.sess.arch .sess-title {
 		color: var(--dim2);
+	}
+	.where {
+		flex-shrink: 0;
+		max-width: 40%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: var(--dim2);
+		font-family: var(--font-mono);
+		font-size: var(--fs-xs);
 	}
 	.chip {
 		display: inline-flex;
