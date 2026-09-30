@@ -39,8 +39,52 @@ pub(crate) fn no_window(cmd: &mut Command) {
 
 /// One `jucode serve` child process backing a single GUI session.
 struct Session {
-    stdin: Mutex<ChildStdin>,
+    /// Lines for the child's stdin, written in order by the session's writer
+    /// thread: a child that stops reading must not block the caller (the send
+    /// commands run on the UI thread).
+    /// None once the session is retired (stdin closed).
+    stdin: Mutex<Option<std::sync::mpsc::Sender<String>>>,
     child: Mutex<Child>,
+}
+
+/// Ends a session's child off the calling thread: close its stdin so it can
+/// exit on its own (releasing its session lock and cleaning up), and kill it
+/// only if it is still running after a grace period.
+fn retire(session: Arc<Session>) {
+    if let Ok(mut stdin) = session.stdin.lock() {
+        stdin.take();
+    }
+    std::thread::spawn(move || {
+        let Ok(mut child) = session.child.lock() else {
+            return;
+        };
+        for _ in 0..15 {
+            if matches!(child.try_wait(), Ok(Some(_))) {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        let _ = child.kill();
+        let _ = child.wait();
+    });
+}
+
+/// Writes queued lines to `stdin` until the session is dropped or the child
+/// stops accepting input.
+fn spawn_stdin_writer(mut stdin: ChildStdin) -> std::sync::mpsc::Sender<String> {
+    let (tx, rx) = std::sync::mpsc::channel::<String>();
+    std::thread::spawn(move || {
+        for line in rx {
+            let written = stdin
+                .write_all(line.as_bytes())
+                .and_then(|_| stdin.write_all(b"\n"))
+                .and_then(|_| stdin.flush());
+            if written.is_err() {
+                break;
+            }
+        }
+    });
+    tx
 }
 
 /// All live sessions, keyed by the frontend-generated session id.
@@ -212,7 +256,7 @@ fn create_session(
     // engine's buffered lines and its exit must not land on the new engine
     // (a late `agent-exit` read as a crash would restart the fresh child).
     let entry = Arc::new(Session {
-        stdin: Mutex::new(stdin),
+        stdin: Mutex::new(Some(spawn_stdin_writer(stdin))),
         child: Mutex::new(child),
     });
     let replaced = engines
@@ -221,10 +265,7 @@ fn create_session(
         .map_err(|e| format!("lock poisoned: {e}"))?
         .insert(session.clone(), entry.clone());
     if let Some(old) = replaced {
-        if let Ok(mut child) = old.child.lock() {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
+        retire(old);
     }
     let mine = Arc::downgrade(&entry);
     let is_current = move |handle: &AppHandle, id: &str| {
@@ -334,7 +375,7 @@ fn engine_exit_reason(handle: &AppHandle, id: &str) -> String {
     String::new()
 }
 
-/// Writes one raw line (a single protocol frame) to a session child's stdin.
+/// Queues one raw line (a single protocol frame) for a session child's stdin.
 fn write_line(engines: &Engines, session: &str, line: &str) -> Result<(), String> {
     let target = engines
         .sessions
@@ -343,12 +384,11 @@ fn write_line(engines: &Engines, session: &str, line: &str) -> Result<(), String
         .get(session)
         .cloned()
         .ok_or_else(|| format!("unknown session: {session}"))?;
-    let mut stdin = target.stdin.lock().map_err(|error| error.to_string())?;
+    let stdin = target.stdin.lock().map_err(|error| error.to_string())?;
     stdin
-        .write_all(line.as_bytes())
-        .and_then(|_| stdin.write_all(b"\n"))
-        .and_then(|_| stdin.flush())
-        .map_err(|error| error.to_string())
+        .as_ref()
+        .and_then(|tx| tx.send(line.to_string()).ok())
+        .ok_or_else(|| format!("session {session} no longer accepts input"))
 }
 
 #[tauri::command]
@@ -444,7 +484,15 @@ fn daemon_listening() -> bool {
 /// address yet, and waits (up to ~8 s) until it accepts connections and has
 /// written its token. The daemon outlives Desktop on purpose: it keeps
 /// sessions and agents running.
+/// Serializes daemon starts: two windows or calls racing here would
+/// otherwise both spawn one.
+static DAEMON_START: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 fn ensure_daemon() -> Result<(), String> {
+    if daemon_listening() {
+        return Ok(());
+    }
+    let _starting = DAEMON_START.lock().unwrap_or_else(|e| e.into_inner());
     if daemon_listening() {
         return Ok(());
     }
@@ -461,6 +509,10 @@ fn ensure_daemon() -> Result<(), String> {
         .stdin(std::process::Stdio::null())
         .stdout(log.try_clone().map_err(|e| e.to_string())?)
         .stderr(log);
+    // The terminal's environment, as for engines Desktop spawns itself: a GUI
+    // launch has a bare PATH, so an npm-installed jucode could not find node
+    // and hosted sessions' tools could not find git, cargo and the like.
+    shell_env::apply_to_command(&mut cmd, true, &[], &[]);
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
@@ -474,6 +526,10 @@ fn ensure_daemon() -> Result<(), String> {
     for _ in 0..40 {
         std::thread::sleep(std::time::Duration::from_millis(200));
         if daemon_listening() {
+            // Reap it whenever it exits, so it never lingers as a zombie.
+            std::thread::spawn(move || {
+                let _ = child.wait();
+            });
             return Ok(());
         }
         if let Ok(Some(status)) = child.try_wait() {
@@ -483,6 +539,9 @@ fn ensure_daemon() -> Result<(), String> {
             ));
         }
     }
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
     Err("jucode daemon did not start in time".to_string())
 }
 
@@ -1461,11 +1520,7 @@ fn close_session(session: String, engines: tauri::State<Engines>) -> Result<(), 
         .map_err(|e| format!("lock poisoned: {e}"))?
         .remove(&session);
     if let Some(target) = removed {
-        if let Ok(mut child) = target.child.lock() {
-            let _ = child.kill();
-            // Reap the process so it doesn't linger as a zombie.
-            let _ = child.wait();
-        }
+        retire(target);
     }
     Ok(())
 }
