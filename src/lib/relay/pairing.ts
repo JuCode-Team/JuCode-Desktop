@@ -19,11 +19,26 @@ export interface PairLink {
 	code: string;
 }
 
-/** Parses `#pair=<host_id>.<host_static_pub>.<code>`; null when absent or malformed. */
-export function parsePairFragment(hash: string): PairLink | null {
-	const match = /^#?pair=([A-Za-z0-9_-]{22})\.([A-Za-z0-9_-]{43})\.([A-Za-z0-9]+)$/.exec(hash);
+/**
+ * Parses a pairing link `<origin>/remote#pair=<host_id>.<host_static_pub>.<code>`
+ * or its bare fragment; null when absent or malformed. The daemon puts the
+ * page on the relay's own origin, so a full link names its relay; a bare
+ * fragment falls back to the default relay.
+ */
+export function parsePairLink(text: string): PairLink | null {
+	const hashAt = text.indexOf('#');
+	const match = /^#?pair=([A-Za-z0-9_-]{22})\.([A-Za-z0-9_-]{43})\.([A-Za-z0-9]+)$/.exec(
+		hashAt < 0 ? text : text.slice(hashAt)
+	);
 	if (!match) return null;
-	return { host: { host_id: match[1], host_static_pub: match[2], relay: RELAY_URL }, code: match[3] };
+	return { host: { host_id: match[1], host_static_pub: match[2], relay: relayOf(text.slice(0, Math.max(hashAt, 0))) }, code: match[3] };
+}
+
+/** `https://host[:port]/…` → `wss://host[:port]/relay/v1` (the daemon's `app_origin` inverse). */
+function relayOf(page: string): string {
+	const url = /^(https?):\/\/([^/?#]+)/.exec(page);
+	if (!url) return RELAY_URL;
+	return `${url[1] === 'http' ? 'ws' : 'wss'}://${url[2]}/relay/v1`;
 }
 
 function read<T>(key: string): T | null {

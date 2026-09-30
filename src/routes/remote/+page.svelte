@@ -36,7 +36,7 @@
 		forgetHost,
 		hostStaticKey,
 		loadHost,
-		parsePairFragment,
+		parsePairLink,
 		saveHost,
 		type RelayHost
 	} from '$lib/relay/pairing';
@@ -66,7 +66,7 @@
 	// iPhone/iPad Safari: a home-screen app has its own storage, so pairing in
 	// the browser would not carry over. Offer to add it first; the code is only
 	// used if the user chooses to stay in the browser.
-	let pendingLink = $state<ReturnType<typeof parsePairFragment>>(null);
+	let pendingLink = $state<ReturnType<typeof parsePairLink>>(null);
 	const isIos = () =>
 		/iPhone|iPad|iPod/.test(navigator.userAgent) ||
 		(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -83,8 +83,7 @@
 	}
 	function acceptLink(text: string) {
 		scanning = false;
-		const hash = text.includes('#') ? text.slice(text.indexOf('#')) : text;
-		const link = parsePairFragment(hash.trim());
+		const link = parsePairLink(text.trim());
 		if (!link) {
 			linkError = t('shell.remote.badLink');
 			return;
@@ -268,7 +267,7 @@
 	}
 
 	onMount(() => {
-		const link = parsePairFragment(location.hash);
+		const link = parsePairLink(location.href);
 		const fromQr = new URLSearchParams(location.search).get('pair');
 		if (link || fromQr || location.hash) {
 			// Keep the one-time code out of history and bookmarks.
