@@ -436,7 +436,9 @@ const shell = {
 			acpRefusal: '智能体拒绝了这个请求，本轮已结束。',
 			acpTurnLimit: '本轮达到上限（{reason}），已提前结束。',
 			acpUnsupportedRequest: '已拒绝智能体的一个不支持的请求：{method}',
-			codexCmdGoal: '设置或查看会话目标（/goal <目标>，/goal clear 清除）',
+			codexCmdGoal: '设置或查看会话目标',
+			codexCmdReview: '审查未提交的改动，或按说明审查',
+			codexCmdReviewArgs: '[说明]',
 			claudeAuthHint:
 				'Claude Code 认证已失效：请在终端运行 `claude` 并执行 /login 重新登录（或运行 `claude setup-token`）后重试。',
 			claudeUnsupportedRequest: '已拒绝引擎的一个不支持的请求：{subtype}',
@@ -890,7 +892,9 @@ const shell = {
 			acpRefusal: 'The agent declined this request and ended the turn.',
 			acpTurnLimit: 'The turn hit a limit ({reason}) and stopped early.',
 			acpUnsupportedRequest: 'Declined an unsupported agent request: {method}',
-			codexCmdGoal: 'Set or view the session goal (/goal <objective>, /goal clear)',
+			codexCmdGoal: 'Set or view the session goal',
+			codexCmdReview: 'Review uncommitted changes, or what the instructions ask for',
+			codexCmdReviewArgs: '[instructions]',
 			claudeAuthHint:
 				'Claude Code authentication is invalid: run `claude` in a terminal and sign in with /login (or run `claude setup-token`), then retry.',
 			claudeUnsupportedRequest: 'Declined an unsupported engine request: {subtype}',

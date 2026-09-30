@@ -331,10 +331,15 @@
 
 	const fmtTokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
 
+	// Every command the engine reported (the tray scrolls): names starting
+	// with what was typed first, then names containing it.
 	const slashMatches = $derived.by(() => {
-		const t = input.trim();
+		const t = input.trim().toLowerCase();
 		if (!t.startsWith('/') || t.includes(' ')) return [];
-		return chat.commands.filter((c) => c.command.startsWith(t) && c.command !== t).slice(0, 8);
+		const all = chat.commands.filter((c) => c.command.toLowerCase() !== t);
+		const head = all.filter((c) => c.command.toLowerCase().startsWith(t));
+		const q = t.slice(1);
+		return q ? [...head, ...all.filter((c) => !head.includes(c) && c.command.toLowerCase().includes(q))] : head;
 	});
 
 	// --- composer tray -------------------------------------------------------
@@ -786,6 +791,7 @@
 			{#if modelPopoverVisible}
 				<ModelMenu
 					{chat}
+					canPickModel={bcaps.modelPicker}
 					rows={bcaps.modelPicker ? modelRows : []}
 					showSearch={modelSearch}
 					{backendLocked}

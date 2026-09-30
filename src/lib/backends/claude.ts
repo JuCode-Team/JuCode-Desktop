@@ -66,6 +66,28 @@ import { toEngineMode } from '$lib/approval';
 import { t } from '$lib/i18n';
 import type { AdapterIO, BackendCaps, EngineAdapter, NormalizedEvent, SessionCtx } from './types';
 import { isStderrPayload } from './types';
+
+interface CommandEntry {
+	command: string;
+	marker: null;
+	args: string;
+	description: string;
+}
+
+/** One entry of the CLI's `initialize` reply. */
+interface ClaudeCommandInfo {
+	name: string;
+	description?: string;
+	argumentHint?: string;
+	builtin?: boolean;
+}
+
+const commandEntry = (name: string, args = '', description = ''): CommandEntry => ({
+	command: `/${name}`,
+	marker: null,
+	args,
+	description
+});
 import type {
 	ApiUsage,
 	AssistantFrame,
@@ -483,6 +505,8 @@ export function createClaudeAdapter(): EngineAdapter {
 	let lastContext = 0;
 	let activeTurn = false;
 	let interrupting = false;
+	/** Slash commands the CLI reported (see commandList). */
+	let commands: CommandEntry[] = [];
 
 	const send = (line: string) => io?.sendLine(line);
 	const userText = (text: string): string =>
@@ -507,36 +531,24 @@ export function createClaudeAdapter(): EngineAdapter {
 		context_limit: 0
 	});
 
-	// Descriptions for the slash commands we have i18n for; the rest (custom
-	// commands, less-common built-ins) show with no description.
-	const CLAUDE_CMD_DESC: Record<string, string> = {
-		model: t('shell.cmd.model'),
-		resume: t('shell.cmd.resume'),
-		compact: t('shell.cmd.compact')
-	};
-
-	/** The composer's slash autocomplete (command_list event) for claude, built
-	 *  from the CLI's own `slash_commands` (init frame) so custom + built-in
-	 *  commands like /context, /doctor all show. /model and /resume are
-	 *  desktop-driven, so ensure they're present even if the CLI omits them. */
-	const commandList = (cmds: string[]): NormalizedEvent => {
-		const names: string[] = [];
-		const seen = new Set<string>();
-		for (const raw of ['model', 'resume', ...cmds]) {
-			const n = raw.replace(/^\//, '').trim();
-			if (n && !seen.has(n)) {
-				seen.add(n);
-				names.push(n);
-			}
+	/** The composer's slash autocomplete (command_list event) for claude: the
+	 *  CLI's own commands from its `initialize` reply (descriptions and argument
+	 *  hints), plus names only `system/init` lists. /model and /resume are the
+	 *  desktop's own pickers, so they lead even when the CLI omits them. */
+	const commandList = (): NormalizedEvent => {
+		const out: CommandEntry[] = [];
+		for (const name of ['model', 'resume']) {
+			out.push(commands.find((c) => c.command === `/${name}`) ?? commandEntry(name));
 		}
-		return {
-			type: 'command_list',
-			commands: names.map((n) => ({
-				command: `/${n}`,
-				marker: null,
-				description: CLAUDE_CMD_DESC[n] ?? ''
-			}))
-		};
+		for (const c of commands) if (!out.some((o) => o.command === c.command)) out.push(c);
+		return { type: 'command_list', commands: out };
+	};
+	/** Names from the init frame that the `initialize` reply did not have. */
+	const mergeInitCommands = (names: string[]) => {
+		for (const raw of names) {
+			const name = raw.replace(/^\//, '').trim();
+			if (name && !commands.some((c) => c.command === `/${name}`)) commands.push(commandEntry(name));
+		}
 	};
 
 	/** list_models response → picker rows (jucode model_view shape). Row ids are
@@ -754,7 +766,7 @@ export function createClaudeAdapter(): EngineAdapter {
 				context_window: contextWindow
 			},
 			modelStatus(),
-			commandList(Array.isArray(frame.slash_commands) ? frame.slash_commands : []),
+			(mergeInitCommands(Array.isArray(frame.slash_commands) ? frame.slash_commands : []), commandList()),
 			{ type: 'approval_mode', mode: fromClaudeMode(engineMode) }
 		];
 		// Surface the CLI's MCP servers (init frame carries name + status) so the MCP
@@ -1059,7 +1071,7 @@ export function createClaudeAdapter(): EngineAdapter {
 					{ type: 'approval_mode', mode: fromClaudeMode(engineMode) },
 					// The real slash_commands arrive with the first system/init, which
 					// re-emits command_list; here we only know the desktop-native ones.
-					commandList([]),
+					commandList(),
 					{ type: 'status', message: 'ready' }
 				];
 			}
@@ -1090,11 +1102,19 @@ export function createClaudeAdapter(): EngineAdapter {
 					lastEngineMode = 'bypassPermissions';
 					events.push(
 						{ type: 'approval_mode', mode: 'full-auto' },
-						commandList([]),
+						commandList(),
 						{ type: 'status', message: 'ready' }
 					);
 				}
 				return events;
+			}
+			case 'initialize': {
+				const reply = (resp as { response?: { commands?: ClaudeCommandInfo[] } }).response?.commands ?? [];
+				const named = reply.filter((c) => typeof c?.name === 'string' && c.name);
+				commands = [...named.filter((c) => c.builtin), ...named.filter((c) => !c.builtin)].map((c) =>
+					commandEntry(c.name, str(c.argumentHint), str(c.description))
+				);
+				return [commandList()];
 			}
 			case 'set_model': {
 				// Ack of a /model pick: the switch happened in place (verified live —
@@ -1162,6 +1182,7 @@ export function createClaudeAdapter(): EngineAdapter {
 			lastContext = 0;
 			activeTurn = false;
 			interrupting = false;
+			commands = [];
 			// No handshake required (stdin input is accepted immediately). Push the
 			// desktop's persisted mode; the ack doubles as the readiness signal.
 			// Prefetch the model catalog for the picker (works before the first
@@ -1176,6 +1197,8 @@ export function createClaudeAdapter(): EngineAdapter {
 				send(controlRequest({ subtype: 'set_permission_mode', mode: claudeMode }));
 				send(controlRequest({ subtype: 'list_models' }));
 			}
+			// The command list with descriptions, before the first turn.
+			send(controlRequest({ subtype: 'initialize' }));
 		},
 		translate(raw: unknown): NormalizedEvent[] {
 			if (isStderrPayload(raw)) {

@@ -67,7 +67,8 @@ describe('SessionStore × backends', () => {
 		const lines = vi.mocked(sendLine).mock.calls.map(([, l]) => JSON.parse(l));
 		expect(lines[0]).toMatchObject({ type: 'control_request', request: { subtype: 'set_permission_mode' } });
 		expect(lines[1]).toMatchObject({ type: 'control_request', request: { subtype: 'list_models' } });
-		expect(lines[2]).toEqual({
+		expect(lines[2]).toMatchObject({ type: 'control_request', request: { subtype: 'initialize' } });
+		expect(lines[3]).toEqual({
 			type: 'user',
 			message: { role: 'user', content: [{ type: 'text', text: '你好' }] }
 		});

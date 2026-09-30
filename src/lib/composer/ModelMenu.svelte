@@ -3,6 +3,8 @@
 	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
 	import ArrowCounterClockwiseIcon from 'phosphor-svelte/lib/ArrowCounterClockwiseIcon';
 	import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon';
+	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
+	import CaretLeftIcon from 'phosphor-svelte/lib/CaretLeftIcon';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Vendor from '$lib/Vendor.svelte';
 	import BackendIcon from '$lib/BackendIcon.svelte';
@@ -18,11 +20,13 @@
 	import { modelColor, isTopEffort } from '$lib/modelColor';
 
 	// The composer's model menu, opened from the model button: everything about
-	// "who answers and how hard it thinks" in one place, top to bottom —
-	// the coding agent (only while the session can still switch), the thinking
-	// effort, and the models, searchable when the list is long.
+	// "who answers and how hard it thinks" in one place. The first page shows
+	// the current model (a row that opens the model list), the thinking effort,
+	// the gateway group and, while the session can still switch, the coding
+	// agent. The second page is the model list, searchable when it is long.
 	let {
 		chat,
+		canPickModel = false,
 		rows = [],
 		showSearch = false,
 		backendLocked = true,
@@ -37,6 +41,8 @@
 		onRefreshModels
 	}: {
 		chat: ChatState;
+		/** The engine has a model catalog (not ACP agents). */
+		canPickModel?: boolean;
 		rows?: ModelRow[];
 		showSearch?: boolean;
 		/** Locked sessions (restored / first user turn sent) can't change agent. */
@@ -119,6 +125,20 @@
 		}
 	}
 
+	let page = $state<'main' | 'models'>('main');
+	const activeRow = $derived(rows.find((r) => r.active));
+	const modelName = $derived(chat.modelLabel || chat.model || BACKEND_LABELS[chat.backendId]);
+	// On the first page the list's keys (arrows, Enter) open the list instead
+	// of picking a row nobody can see. Capture phase, ahead of the pane.
+	function onKeyCapture(e: KeyboardEvent) {
+		if (page !== 'main' || !canPickModel) return;
+		if (['ArrowDown', 'ArrowUp', 'ArrowRight', 'Enter'].includes(e.key)) {
+			e.preventDefault();
+			e.stopPropagation();
+			page = 'models';
+		}
+	}
+
 	let shownEffort = $state('');
 	const accent = $derived(modelColor(chat.model));
 	const top = $derived(isTopEffort(shownEffort, chat.efforts));
@@ -127,62 +147,85 @@
 	const grouped = $derived(new Set(rows.map((r) => r.group)).size > 1);
 </script>
 
+<svelte:window onkeydowncapture={onKeyCapture} />
 <button class="mm-backdrop" aria-label="close" tabindex="-1" onclick={onClose}></button>
 <div class="pop mm" role="dialog" aria-label={t('chat.switchModel')} bind:this={popEl} style:left="{popLeft}px" style:top="{popTop}px">
-	{#if !backendLocked}
-		<section class="agents" role="group" aria-label={t('chat.switchBackend')}>
-			{#each NATIVE_BACKEND_IDS as id (id)}
-				<button
-					class="agent"
-					class:on={chat.backendId === id}
-					class:miss={probe[id] ? !probe[id]!.found : false}
-					disabled={switching}
-					title={agentTitle(id)}
-					onclick={() => pickNative(id)}
-				>
-					<BackendIcon backend={id} size={15} /><span>{BACKEND_LABELS[id]}</span>
+	{#if page === 'main'}
+		<section class="current">
+			{#if canPickModel}
+				<button class="pop-row" onclick={() => (page = 'models')} title={t('chat.pickModel')}>
+					<span class="pop-ico"><Vendor model={chat.model || modelName} size={16} /></span>
+					<span class="pop-txt"><span class="pop-label">{modelName}</span></span>
+					{#if activeRow?.detail}<span class="ctx">{activeRow.detail}</span>{/if}
+					<span class="pop-ico caret"><CaretRightIcon size={14} /></span>
 				</button>
-			{/each}
-			{#each acpAgents as agent (agent.id)}
-				<button
-					class="agent"
-					class:on={chat.backendId === 'acp' && chat.acpAgentId === agent.id}
-					disabled={switching}
-					title={agent.name}
-					onclick={() => pickAcp(agent)}
-				>
-					<BackendIcon backend="acp" size={15} /><span>{agent.name}</span>
-				</button>
-			{/each}
+			{:else}
+				<div class="pop-row static">
+					<span class="pop-ico"><BackendIcon backend={chat.backendId} size={15} /></span>
+					<span class="pop-txt"><span class="pop-label">{modelName}</span></span>
+				</div>
+			{/if}
 		</section>
-	{/if}
 
-	{#if chat.efforts.length}
-		<section class="effort">
-			<div class="ehead">
-				<span class="elabel">{t('chat.effortTitle')}</span>
-				{#key shownEffort}<span class="evalue" class:effort-max={top} style:--effort-accent={accent || 'var(--text)'}>{effortLabel(shownEffort)}</span>{/key}
-				<span class="grow"></span>
-				<IconButton
-					size="sm"
-					label={t('chat.effortReset')}
-					title={t('chat.effortReset')}
-					disabled={effortDisabled || !def || shownEffort === def}
-					onclick={() => onEffort(def)}
-				>
-					<ArrowCounterClockwiseIcon size={14} />
-				</IconButton>
-			</div>
-			<EffortSlider efforts={chat.efforts} effort={chat.effort} disabled={effortDisabled} {onEffort} {accent} bind:current={shownEffort} />
-		</section>
-	{/if}
+		{#if chat.efforts.length}
+			<section class="effort">
+				<div class="ehead">
+					<span class="elabel">{t('chat.effortTitle')}</span>
+					{#key shownEffort}<span class="evalue" class:effort-max={top} style:--effort-accent={accent || 'var(--text)'}>{effortLabel(shownEffort)}</span>{/key}
+					<span class="grow"></span>
+					<IconButton
+						size="sm"
+						label={t('chat.effortReset')}
+						title={t('chat.effortReset')}
+						disabled={effortDisabled || !def || shownEffort === def}
+						onclick={() => onEffort(def)}
+					>
+						<ArrowCounterClockwiseIcon size={14} />
+					</IconButton>
+				</div>
+				<EffortSlider efforts={chat.efforts} effort={chat.effort} disabled={effortDisabled} {onEffort} {accent} bind:current={shownEffort} />
+			</section>
+		{/if}
 
-	{#if chat.backendId === 'jucode' && chat.provider === 'jucode' && chat.model}
-		{#key chat.model}<GroupPicker model={chat.model} />{/key}
-	{/if}
+		{#if chat.backendId === 'jucode' && chat.provider === 'jucode' && chat.model}
+			{#key chat.model}<GroupPicker model={chat.model} />{/key}
+		{/if}
 
-	{#if rows.length || query || showSearch}
+		{#if !backendLocked}
+			<section class="agents" role="group" aria-label={t('chat.switchBackend')}>
+				{#each NATIVE_BACKEND_IDS as id (id)}
+					<button
+						class="agent"
+						class:on={chat.backendId === id}
+						class:miss={probe[id] ? !probe[id]!.found : false}
+						disabled={switching}
+						title={agentTitle(id)}
+						onclick={() => pickNative(id)}
+					>
+						<BackendIcon backend={id} size={15} /><span>{BACKEND_LABELS[id]}</span>
+					</button>
+				{/each}
+				{#each acpAgents as agent (agent.id)}
+					<button
+						class="agent"
+						class:on={chat.backendId === 'acp' && chat.acpAgentId === agent.id}
+						disabled={switching}
+						title={agent.name}
+						onclick={() => pickAcp(agent)}
+					>
+						<BackendIcon backend="acp" size={15} /><span>{agent.name}</span>
+					</button>
+				{/each}
+			</section>
+		{/if}
+	{:else}
 		<section class="models">
+			<div class="mhead">
+				<IconButton size="sm" label={t('shell.remote.back')} title={t('shell.remote.back')} onclick={() => (page = 'main')}>
+					<CaretLeftIcon size={14} />
+				</IconButton>
+				<span class="mtitle">{t('chat.pickModel')}</span>
+			</div>
 			{#if showSearch}
 				<label class="search">
 					<MagnifyingGlassIcon size={15} />
@@ -243,6 +286,27 @@
 		margin-top: 6px;
 		padding-top: 8px;
 		border-top: 1px solid var(--hairline);
+	}
+	.current .pop-row {
+		font-weight: 500;
+	}
+	.pop-row.static {
+		cursor: default;
+	}
+	.caret {
+		width: auto;
+		color: var(--dim2);
+	}
+	.mhead {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		margin: 0 2px 6px;
+	}
+	.mtitle {
+		color: var(--dim);
+		font-size: var(--fs-sm);
+		font-weight: 500;
 	}
 	.agents {
 		display: flex;

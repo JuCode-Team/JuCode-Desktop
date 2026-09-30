@@ -118,7 +118,8 @@
 		];
 		const known = new Set(['/model', '/rewind', '/undo', '/resume', '/tree', '/compact', '/context', '/stats', '/doctor', '/new']);
 		const gated = curated.filter((a) => !a.cap || bcaps[a.cap]);
-		const slash: Action[] = (bcaps.slashCommands ? (chat?.commands ?? []) : [])
+		// The engine's own command list (Claude and Codex report theirs too).
+		const slash: Action[] = (chat?.commands ?? [])
 			.filter((c) => !known.has(c.command))
 			.map((c) => ({
 				id: `cmd${c.command}`,

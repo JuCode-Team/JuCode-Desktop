@@ -111,7 +111,8 @@ export interface ThreadRollbackParams {
 
 export type UserInput =
 	| { type: 'text'; text: string; text_elements: unknown[] }
-	| { type: 'localImage'; path: string };
+	| { type: 'localImage'; path: string }
+	| { type: 'skill'; name: string; path: string };
 
 export interface TurnStartParams {
 	threadId: string;
@@ -160,6 +161,7 @@ export type ThreadItem =
 	| { type: 'agentMessage'; id: string; text: string }
 	| { type: 'reasoning'; id: string; summary: string[]; content: string[] }
 	| { type: 'userMessage'; id: string; content: UserInput[] }
+	| { type: 'enteredReviewMode' | 'exitedReviewMode'; id: string; review: string }
 	| {
 			type: 'commandExecution';
 			id: string;

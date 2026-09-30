@@ -148,7 +148,7 @@ describe('codex adapter: handshake', () => {
 		adapter.onStart(io, CTX); // 'ask' → read-only
 		const events = adapter.translate({ id: 1, result: { userAgent: 'x' } });
 		expect(events).toEqual([]); // handshake is silent
-		expect(lines).toHaveLength(4);
+		expect(lines).toHaveLength(5);
 		expect(parse(lines[1])).toEqual({ jsonrpc: '2.0', method: 'initialized' });
 		expect(parse(lines[2])).toMatchObject({
 			id: 2,
@@ -156,6 +156,7 @@ describe('codex adapter: handshake', () => {
 			params: { cwd: '/proj', approvalPolicy: 'on-request', sandbox: 'read-only' }
 		});
 		expect(parse(lines[3])).toMatchObject({ id: 3, method: 'model/list' });
+		expect(parse(lines[4])).toMatchObject({ id: 4, method: 'skills/list', params: { cwds: ['/proj'] } });
 	});
 
 	it('resumes via thread/resume when SessionCtx carries a resume id', () => {
@@ -210,10 +211,54 @@ describe('codex adapter: handshake', () => {
 			'/model',
 			'/resume',
 			'/compact',
+			'/review',
 			'/goal'
 		]);
 		expect(events[3]).toEqual({ type: 'approval_mode', mode: 'read-only' });
 		expect(events[4]).toEqual({ type: 'status', message: 'ready' });
+	});
+
+	it('lists skills as commands; skills and /review run through the app-server', () => {
+		const lines: string[] = [];
+		const adapter = createCodexAdapter();
+		handshake(adapter, lines);
+		const [list] = adapter.translate({
+			id: 4,
+			result: {
+				data: [
+					{
+						cwd: '/proj',
+						errors: [],
+						skills: [
+							{ name: 'lint', path: '/s/lint/SKILL.md', description: 'Long', shortDescription: 'Run the linters', enabled: true },
+							{ name: 'off', path: '/s/off/SKILL.md', description: 'x', enabled: false }
+						]
+					}
+				]
+			}
+		});
+		const commands = list.commands as { command: string; description: string; marker: string | null }[];
+		expect(commands.map((c) => c.command)).toEqual(['/model', '/resume', '/compact', '/review', '/goal', '/lint']);
+		expect(commands[5]).toMatchObject({ description: 'Run the linters', marker: 'SKILL' });
+
+		const skill = parse(adapter.encodeOp({ op: 'command', input: '/lint src' })![0]);
+		expect(skill).toMatchObject({ method: 'turn/start' });
+		expect(skill.params.input).toEqual([
+			{ type: 'skill', name: 'lint', path: '/s/lint/SKILL.md' },
+			{ type: 'text', text: '$lint src', text_elements: [] }
+		]);
+		expect(parse(adapter.encodeOp({ op: 'command', input: '/review' })![0])).toMatchObject({
+			method: 'review/start',
+			params: { threadId: 'thread-1', target: { type: 'uncommittedChanges' } }
+		});
+		expect(parse(adapter.encodeOp({ op: 'command', input: '/review the SQL' })![0]).params.target).toEqual({
+			type: 'custom',
+			instructions: 'the SQL'
+		});
+		expect(
+			adapter.translate({ method: 'item/completed', params: { item: { id: 'r', type: 'exitedReviewMode', review: 'No issues' } } })
+		).toEqual([{ type: 'assistant_start' }, { type: 'assistant_delta', delta: 'No issues' }]);
+		expect(adapter.encodeOp({ op: 'command', input: '/nope' })).toBeNull();
 	});
 });
 
@@ -225,7 +270,7 @@ describe('codex adapter: turns', () => {
 		const frames = adapter.encodeOp({ op: 'user_message', content: 'say hi' });
 		expect(frames).toHaveLength(1);
 		expect(parse(frames![0])).toMatchObject({
-			id: 4, // 1 initialize · 2 thread/start · 3 model/list
+			id: 5, // 1 initialize · 2 thread/start · 3 model/list · 4 skills/list · 4 skills/list
 			method: 'turn/start',
 			params: {
 				threadId: 'thread-1',
@@ -272,7 +317,7 @@ describe('codex adapter: turns', () => {
 		const tid = 'thread-1';
 		const turn = { id: 'turn-1', status: 'inProgress', error: null };
 
-		expect(adapter.translate({ id: 4, result: { turn } })).toEqual([]);
+		expect(adapter.translate({ id: 5, result: { turn } })).toEqual([]);
 		expect(adapter.translate({ method: 'thread/status/changed', params: { threadId: tid, status: { type: 'active' } } })).toEqual([]);
 		expect(adapter.translate({ method: 'turn/started', params: { threadId: tid, turn } })).toEqual([
 			{ type: 'connecting' }
@@ -681,8 +726,8 @@ describe('codex adapter: model picker', () => {
 		handshakeWithCatalog(adapter, lines);
 		const frames = adapter.encodeOp({ op: 'command', input: '/model' });
 		expect(frames).toHaveLength(1);
-		expect(parse(frames![0])).toMatchObject({ id: 4, method: 'model/list' });
-		const events = adapter.translate({ id: 4, result: CATALOG });
+		expect(parse(frames![0])).toMatchObject({ id: 5, method: 'model/list' });
+		const events = adapter.translate({ id: 5, result: CATALOG });
 		expect(events).toEqual([
 			{
 				type: 'model_view',
@@ -712,8 +757,8 @@ describe('codex adapter: model picker', () => {
 		const adapter = createCodexAdapter();
 		handshakeWithCatalog(adapter, lines);
 		const frames = adapter.encodeOp({ op: 'command', input: '/model gpt-5.6-terra high' });
-		expect(parse(frames![0])).toMatchObject({ id: 4, method: 'model/list' });
-		const events = adapter.translate({ id: 4, result: CATALOG });
+		expect(parse(frames![0])).toMatchObject({ id: 5, method: 'model/list' });
+		const events = adapter.translate({ id: 5, result: CATALOG });
 		expect(events).toEqual([
 			{
 				type: 'model_status',
@@ -735,7 +780,7 @@ describe('codex adapter: model picker', () => {
 		const adapter = createCodexAdapter();
 		handshakeWithCatalog(adapter, lines);
 		adapter.encodeOp({ op: 'command', input: '/model gpt-5.6-terra' });
-		const events = adapter.translate({ id: 4, result: CATALOG });
+		const events = adapter.translate({ id: 5, result: CATALOG });
 		expect(events[0]).toMatchObject({ type: 'model_status', model: 'gpt-5.6-terra', reasoning_effort: 'medium' });
 		expect(parse(adapter.encodeOp({ op: 'user_message', content: 'go' })![0]).params).toMatchObject({
 			model: 'gpt-5.6-terra',
@@ -807,12 +852,12 @@ describe('codex adapter: resume', () => {
 		handshake(adapter, lines);
 		const frames = adapter.encodeOp({ op: 'command', input: '/resume' });
 		expect(parse(frames![0])).toMatchObject({
-			id: 4,
+			id: 5,
 			method: 'thread/list',
 			params: { cwd: '/proj', limit: 50 }
 		});
 		const events = adapter.translate({
-			id: 4,
+			id: 5,
 			result: {
 				data: [
 					{ id: 'thread-1', preview: 'current convo', name: null, updatedAt: 1784012113, cwd: '/proj' },
@@ -835,11 +880,11 @@ describe('codex adapter: resume', () => {
 		handshake(adapter, lines);
 		const frames = adapter.encodeOp({ op: 'command', input: '/resume thread-9' });
 		expect(parse(frames![0])).toMatchObject({
-			id: 4,
+			id: 5,
 			method: 'thread/resume',
 			params: { threadId: 'thread-9', cwd: '/proj', approvalPolicy: 'on-request', sandbox: 'read-only' }
 		});
-		const events = adapter.translate({ id: 4, result: RESUME_RESULT });
+		const events = adapter.translate({ id: 5, result: RESUME_RESULT });
 		expect(events[0].type).toBe('transcript');
 		expect(parse(adapter.encodeOp({ op: 'user_message', content: 'hi' })![0]).params.threadId).toBe('thread-9');
 	});
@@ -852,11 +897,11 @@ describe('codex adapter: compaction', () => {
 		handshake(adapter, lines);
 		const frames = adapter.encodeOp({ op: 'command', input: '/compact' });
 		expect(parse(frames![0])).toMatchObject({
-			id: 4,
+			id: 5,
 			method: 'thread/compact/start',
 			params: { threadId: 'thread-1' }
 		});
-		expect(adapter.translate({ id: 4, result: {} })).toEqual([]); // bare ack
+		expect(adapter.translate({ id: 5, result: {} })).toEqual([]); // bare ack
 		// Compaction runs as its own turn wrapping a contextCompaction item.
 		expect(
 			adapter.translate({
@@ -879,7 +924,7 @@ describe('codex adapter: compaction', () => {
 		const adapter = createCodexAdapter();
 		handshake(adapter, lines);
 		adapter.encodeOp({ op: 'command', input: '/compact' });
-		expect(adapter.translate({ id: 4, error: { code: -32000, message: 'nothing to compact' } })).toEqual([
+		expect(adapter.translate({ id: 5, error: { code: -32000, message: 'nothing to compact' } })).toEqual([
 			{ type: 'compaction_failed', error: 'nothing to compact' }
 		]);
 	});
@@ -901,7 +946,7 @@ describe('codex adapter: goals', () => {
 		handshake(adapter, lines);
 		const setFrames = adapter.encodeOp({ op: 'command', input: '/goal ship the feature' });
 		expect(parse(setFrames![0])).toMatchObject({
-			id: 4,
+			id: 5,
 			method: 'thread/goal/set',
 			params: { threadId: 'thread-1', objective: 'ship the feature' }
 		});
@@ -922,9 +967,9 @@ describe('codex adapter: goals', () => {
 				goal: { objective: 'ship the feature', status: 'active', token_budget: 50000, tokens_used: 120, time_used_seconds: 3 }
 			}
 		]);
-		expect(adapter.translate({ id: 4, result: { goal } })).toEqual([]); // set response: notification already acked
+		expect(adapter.translate({ id: 5, result: { goal } })).toEqual([]); // set response: notification already acked
 		const clearFrames = adapter.encodeOp({ op: 'command', input: '/goal clear' });
-		expect(parse(clearFrames![0])).toMatchObject({ id: 5, method: 'thread/goal/clear', params: { threadId: 'thread-1' } });
+		expect(parse(clearFrames![0])).toMatchObject({ id: 6, method: 'thread/goal/clear', params: { threadId: 'thread-1' } });
 		expect(adapter.translate({ method: 'thread/goal/cleared', params: { threadId: 'thread-1' } })).toEqual([
 			{ type: 'goal', goal: null }
 		]);
@@ -935,9 +980,9 @@ describe('codex adapter: goals', () => {
 		const adapter = createCodexAdapter();
 		handshake(adapter, lines);
 		const frames = adapter.encodeOp({ op: 'command', input: '/goal' });
-		expect(parse(frames![0])).toMatchObject({ id: 4, method: 'thread/goal/get' });
+		expect(parse(frames![0])).toMatchObject({ id: 5, method: 'thread/goal/get' });
 		const events = adapter.translate({
-			id: 4,
+			id: 5,
 			result: {
 				goal: { threadId: 'thread-1', objective: 'x', status: 'budgetLimited', tokenBudget: 10, tokensUsed: 11, timeUsedSeconds: 2, createdAt: 1, updatedAt: 1 }
 			}
@@ -947,7 +992,7 @@ describe('codex adapter: goals', () => {
 		]);
 		// And a null get → goal cleared.
 		adapter.encodeOp({ op: 'command', input: '/goal' });
-		expect(adapter.translate({ id: 5, result: { goal: null } })).toEqual([{ type: 'goal', goal: null }]);
+		expect(adapter.translate({ id: 6, result: { goal: null } })).toEqual([{ type: 'goal', goal: null }]);
 	});
 
 	it('/goal pause and /goal resume patch the status', () => {
@@ -1034,7 +1079,7 @@ describe('codex adapter: restarts and robustness', () => {
 		const adapter = createCodexAdapter();
 		handshake(adapter, lines);
 		adapter.encodeOp({ op: 'user_message', content: 'x' }); // id 4
-		expect(adapter.translate({ id: 4, error: { code: -32000, message: 'no rollout' } })).toEqual([
+		expect(adapter.translate({ id: 5, error: { code: -32000, message: 'no rollout' } })).toEqual([
 			{ type: 'error', message: 'no rollout' },
 			{ type: 'status', message: 'ready' }
 		]);

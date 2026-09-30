@@ -217,6 +217,8 @@ export function createCodexAdapter(): EngineAdapter {
 	/** 0.144.x signals compaction via contextCompaction items; when seen, the
 	 *  (deprecated, version-dependent) thread/compacted notification is a dupe. */
 	let sawCompactionItem = false;
+	/** Enabled skills from skills/list, offered as `/name` commands. */
+	let skills: { name: string; path: string; description: string }[] = [];
 
 	const frame = (msg: Record<string, unknown>) => JSON.stringify({ jsonrpc: '2.0', ...msg });
 	const request = (method: string, params?: unknown, tag?: string): string => {
@@ -258,14 +260,18 @@ export function createCodexAdapter(): EngineAdapter {
 		context_limit: 0
 	});
 
-	/** The composer's slash autocomplete (command_list event) for codex. */
+	/** The composer's slash autocomplete (command_list event) for codex: the
+	 *  commands that run through the app-server (its other slash commands
+	 *  belong to its TUI), then its skills. */
 	const commandList = (): NormalizedEvent => ({
 		type: 'command_list',
 		commands: [
 			{ command: '/model', marker: null, description: t('shell.cmd.model') },
 			{ command: '/resume', marker: null, description: t('shell.cmd.resume') },
 			{ command: '/compact', marker: null, description: t('shell.cmd.compact') },
-			{ command: '/goal', marker: null, description: t('shell.backend.codexCmdGoal') }
+			{ command: '/review', marker: null, args: t('shell.backend.codexCmdReviewArgs'), description: t('shell.backend.codexCmdReview') },
+			{ command: '/goal', marker: null, args: '[objective | clear | pause | resume]', description: t('shell.backend.codexCmdGoal') },
+			...skills.map((s) => ({ command: `/${s.name}`, marker: 'SKILL', description: s.description }))
 		]
 	});
 
@@ -426,6 +432,11 @@ export function createCodexAdapter(): EngineAdapter {
 				];
 			case 'contextCompaction':
 				return [{ type: 'compaction_end' }];
+			// A review's findings arrive whole when the review ends.
+			case 'exitedReviewMode':
+				return item.review
+					? [{ type: 'assistant_start' }, { type: 'assistant_delta', delta: item.review }]
+					: [];
 			default:
 				return [];
 		}
@@ -593,7 +604,28 @@ export function createCodexAdapter(): EngineAdapter {
 						: request('thread/start', open)
 				);
 				send(request('model/list', {}));
+				send(request('skills/list', { cwds: ctx?.cwd ? [ctx.cwd] : [] }));
 				return [];
+			}
+			case 'skills/list': {
+				type Skill = {
+					name?: string;
+					path?: string;
+					description?: string;
+					shortDescription?: string | null;
+					enabled?: boolean;
+					interface?: { shortDescription?: string | null } | null;
+				};
+				const entries = (rec(result)?.data ?? []) as { skills?: Skill[] }[];
+				skills = entries
+					.flatMap((e) => e.skills ?? [])
+					.filter((s) => s.enabled !== false && s.name)
+					.map((s) => ({
+						name: str(s.name),
+						path: str(s.path),
+						description: s.interface?.shortDescription || s.shortDescription || str(s.description)
+					}));
+				return [commandList()];
 			}
 			case 'thread/start':
 				return threadOpened(result as ThreadStartResponse, false);
@@ -858,6 +890,7 @@ export function createCodexAdapter(): EngineAdapter {
 			pendingPick = null;
 			resumeId = ctx_.resume || null;
 			sawCompactionItem = false;
+			skills = [];
 			send(request('initialize', { clientInfo: CLIENT_INFO, capabilities: null }));
 		},
 		translate(raw: unknown): NormalizedEvent[] {
@@ -970,8 +1003,25 @@ export function createCodexAdapter(): EngineAdapter {
 								? [request('thread/rollback', { threadId, numTurns: n } satisfies ThreadRollbackParams)]
 								: [];
 						}
-						default:
-							return null; // /tree, … — unsupported, UI notifies
+						case '/review': {
+							if (!threadId) return [];
+							const target = arg ? { type: 'custom', instructions: arg } : { type: 'uncommittedChanges' };
+							return [request('review/start', { threadId, target })];
+						}
+						default: {
+							// A skill: the skill item plus `$name …` text, as Codex's own UI sends it.
+							const skill = skills.find((s) => `/${s.name}` === cmd);
+							if (!skill) return null; // /tree, … — unsupported, UI notifies
+							const input: UserInput[] = [
+								{ type: 'skill', name: skill.name, path: skill.path },
+								{ type: 'text', text: arg ? `$${skill.name} ${arg}` : `$${skill.name}`, text_elements: [] }
+							];
+							if (!threadId) {
+								queuedInput.push(...input);
+								return [];
+							}
+							return [turnStartFrame(input)];
+						}
 					}
 				}
 				case 'shutdown':

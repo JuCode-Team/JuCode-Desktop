@@ -118,12 +118,41 @@ describe('claude adapter: startup', () => {
 			const { lines, io } = makeIo();
 			const adapter = createClaudeAdapter();
 			adapter.onStart(io, { ...CTX, approvalMode });
-			expect(lines).toHaveLength(2);
+			expect(lines).toHaveLength(3);
 			const frame = parse(lines[0]);
 			expect(frame.type).toBe('control_request');
 			expect(frame.request).toEqual({ subtype: 'set_permission_mode', mode: claudeMode });
 			expect(parse(lines[1]).request).toEqual({ subtype: 'list_models' });
+			expect(parse(lines[2]).request).toEqual({ subtype: 'initialize' });
 		}
+	});
+
+	it('the initialize reply lists the CLI commands with descriptions and hints', () => {
+		const { lines, io } = makeIo();
+		const adapter = createClaudeAdapter();
+		adapter.onStart(io, CTX);
+		const [list] = adapter.translate({
+			type: 'control_response',
+			response: {
+				subtype: 'success',
+				request_id: parse(lines[2]).request_id,
+				response: {
+					commands: [
+						{ name: 'review', description: 'Review a diff (user)', argumentHint: '' },
+						{ name: 'compact', description: 'Free up context', argumentHint: '<instructions>', builtin: true }
+					]
+				}
+			}
+		});
+		expect(list).toEqual({
+			type: 'command_list',
+			commands: [
+				{ command: '/model', marker: null, args: '', description: '' },
+				{ command: '/resume', marker: null, args: '', description: '' },
+				{ command: '/compact', marker: null, args: '<instructions>', description: 'Free up context' },
+				{ command: '/review', marker: null, args: '', description: 'Review a diff (user)' }
+			]
+		});
 	});
 
 	it('onStart skips the live set for yolo (bypassPermissions is rejected unless launched with the flag)', () => {
@@ -132,7 +161,7 @@ describe('claude adapter: startup', () => {
 		adapter.onStart(io, { ...CTX, approvalMode: 'all' });
 		// Only the list_models prefetch — no set_permission_mode (it would error;
 		// the --dangerously-skip-permissions spawn flag already set yolo mode).
-		expect(lines).toHaveLength(1);
+		expect(lines).toHaveLength(2);
 		expect(parse(lines[0]).request).toEqual({ subtype: 'list_models' });
 	});
 
