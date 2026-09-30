@@ -1,7 +1,8 @@
 <script lang="ts">
-	// Engine-backend mark: monochrome vendor SVGs for codex (OpenAI) / claude
-	// and a generic plug for ACP agents. The native JuCode engine has no mark —
-	// the brand is a wordmark only (brand-docs/DESIGN-SPEC.md).
+	// Engine-backend mark: the app icon's "Ju" + cursor for the native engine
+	// (design/icon/make-mark.py), monochrome vendor SVGs for codex (OpenAI) /
+	// claude and a generic plug for ACP agents.
+	import jucode from '$lib/jucode-mark.svg?raw';
 	import openai from '@lobehub/icons-static-svg/icons/openai.svg?raw';
 	import claude from '@lobehub/icons-static-svg/icons/claude.svg?raw';
 	import PlugIcon from 'phosphor-svelte/lib/PlugIcon';
@@ -10,7 +11,9 @@
 	let { backend, size = 14 }: { backend: BackendId; size?: number } = $props();
 </script>
 
-{#if backend === 'codex'}
+{#if backend === 'jucode'}
+	<span class="mark" style:font-size="{size}px" aria-hidden="true">{@html jucode}</span>
+{:else if backend === 'codex'}
 	<span class="mark" style:font-size="{size}px" aria-hidden="true">{@html openai}</span>
 {:else if backend === 'claude'}
 	<span class="mark claude" style:font-size="{size}px" aria-hidden="true">{@html claude}</span>
