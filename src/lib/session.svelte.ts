@@ -102,9 +102,17 @@ export class SessionStore {
 		return this.projects.find((p) => p.sessions.some((s) => s.id === id))?.path;
 	}
 
+	/** An engine that failed to start retries like one that crashed (see
+	 *  handleExit): up to 3 times, a little later each time, since the usual
+	 *  causes (daemon still starting, a network blip) clear up on their own. */
 	#engineFailed(chat: ChatState, e: unknown) {
 		chat.engineState = 'exited';
 		chat.messages.push({ kind: 'error', text: t('shell.startFail', { msg: String(e) }) });
+		const s = this.allSessions.find((x) => x.chat === chat);
+		if (!s || s.surface === 'tui' || chat.restarts >= 3) return;
+		setTimeout(() => {
+			if (chat.engineState === 'exited') this.restartSession(s.id);
+		}, 1500 * (chat.restarts + 1));
 	}
 
 	/** Builds a session record (chat + per-session adapter) and registers the

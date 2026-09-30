@@ -394,21 +394,73 @@ struct DaemonEndpoint {
     token: String,
 }
 
-#[tauri::command]
+const DAEMON_ADDR: &str = "127.0.0.1:7788";
+
+fn daemon_listening() -> bool {
+    std::net::TcpStream::connect_timeout(
+        &DAEMON_ADDR.parse().expect("valid address"),
+        std::time::Duration::from_millis(300),
+    )
+    .is_ok()
+}
+
+/// Starts `jucode daemon` in the background when nothing listens on its
+/// address yet, and waits (up to ~8 s) until it accepts connections and has
+/// written its token. The daemon outlives Desktop on purpose: it keeps
+/// sessions and agents running.
+fn ensure_daemon() -> Result<(), String> {
+    if daemon_listening() {
+        return Ok(());
+    }
+    let log = jucode_dir().join("daemon");
+    std::fs::create_dir_all(&log).map_err(|e| e.to_string())?;
+    let log = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log.join("daemon.log"))
+        .map_err(|e| e.to_string())?;
+    let mut cmd = Command::new(resolve_bin());
+    no_window(&mut cmd);
+    cmd.args(["daemon", "--listen", DAEMON_ADDR])
+        .stdin(std::process::Stdio::null())
+        .stdout(log.try_clone().map_err(|e| e.to_string())?)
+        .stderr(log);
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        // Own process group: quitting Desktop (or a Ctrl+C in `tauri dev`)
+        // must not take the daemon down with it.
+        cmd.process_group(0);
+    }
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("could not start jucode daemon: {e}"))?;
+    for _ in 0..40 {
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        if daemon_listening() {
+            return Ok(());
+        }
+        if let Ok(Some(status)) = child.try_wait() {
+            return Err(format!(
+                "jucode daemon exited ({status}); see {}",
+                jucode_dir().join("daemon").join("daemon.log").display()
+            ));
+        }
+    }
+    Err("jucode daemon did not start in time".to_string())
+}
+
+#[tauri::command(async)]
 fn daemon_endpoint() -> Result<DaemonEndpoint, String> {
+    ensure_daemon()?;
     let path = jucode_dir().join("daemon").join("token");
     let token = std::fs::read_to_string(&path)
         .map(|token| token.trim().to_string())
         .ok()
         .filter(|token| !token.is_empty())
-        .ok_or_else(|| {
-            format!(
-                "jucode daemon has not been started (no token at {}); run `jucode daemon`",
-                path.display()
-            )
-        })?;
+        .ok_or_else(|| format!("jucode daemon wrote no token at {}", path.display()))?;
     Ok(DaemonEndpoint {
-        url: "ws://127.0.0.1:7788".to_string(),
+        url: format!("ws://{DAEMON_ADDR}"),
         token,
     })
 }
