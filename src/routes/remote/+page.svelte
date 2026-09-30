@@ -408,7 +408,7 @@
 								cwd: project.path,
 								chat: project.chats,
 								engine,
-								title: engine === 'claude' ? 'Claude Code' : t('shell.remote.newSession')
+								title: engine === 'claude' ? 'Claude Code' : engine === 'codex' ? 'Codex' : t('shell.remote.newSession')
 							})}
 						onFiles={() => push({ kind: 'files', root: project.path, title: project.name })}
 						onChanges={() => push({ kind: 'changes', root: project.path, title: project.name })}

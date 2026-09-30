@@ -54,7 +54,7 @@ export interface SavedProject {
 const DAEMON_RETRY_DELAYS = [1000, 2000, 4000, 8000, 15000, 30000, 30000, 30000, 30000, 30000, 30000, 30000];
 
 /** Backends the daemon can run. */
-const DAEMON_BACKENDS: BackendId[] = ['jucode', 'claude'];
+const DAEMON_BACKENDS: BackendId[] = ['jucode', 'claude', 'codex'];
 
 /** New sessions of those backends run in the daemon when the setting is on. */
 function hostsNewSessions(backend: BackendId): boolean {
@@ -204,8 +204,9 @@ export class SessionStore {
 			registerAdapter(s.id, s.adapter);
 		}
 		const optsRec = (opts ?? {}) as Record<string, unknown>;
-		const engine =
-			s.hosted && s.backendId === 'claude'
+		const engine = !s.hosted
+			? undefined
+			: s.backendId === 'claude'
 				? {
 						engine: 'claude',
 						options: {
@@ -214,10 +215,13 @@ export class SessionStore {
 							...(optsRec.resume_session_at ? { resume_at: optsRec.resume_session_at } : {})
 						}
 					}
-				: undefined;
+				: s.backendId === 'codex'
+					? { engine: 'codex', options: { approval_mode: toEngineMode(s.chat.approvalMode) } }
+					: undefined;
 		const spawned = s.hosted
 			? hostSession(s.id, cwd ?? '', resume ?? (s.chat.sessionId || undefined), agent, chat, engine).then(() => {
-					// A new claude session is named by the daemon (its conversation id).
+					// A new claude or codex session is named by the daemon (the engine's
+					// conversation id).
 					if (engine && !s.chat.sessionId) s.chat.sessionId = daemon.sessionOf(s.id) ?? '';
 				})
 			: s.backendId === 'jucode' && !opts
@@ -397,9 +401,10 @@ export class SessionStore {
 		hosted = false
 	) {
 		const s = this.#newSession(backend, backend === 'acp' ? acpAgent : undefined, reuseId);
-		// A claude conversation moves into the daemon whenever it can run there,
-		// even one saved or started outside it (the daemon resumes it by id).
-		s.hosted = (hosted && DAEMON_BACKENDS.includes(backend)) || (backend === 'claude' && hostsNewSessions(backend));
+		// A claude or codex conversation moves into the daemon whenever it can
+		// run there, even one saved or started outside it (the daemon resumes it
+		// by id).
+		s.hosted = (hosted && DAEMON_BACKENDS.includes(backend)) || (backend !== 'jucode' && hostsNewSessions(backend));
 		if (title) s.chat.title = title;
 		s.archived = archived;
 		if (chrome?.color) s.color = chrome.color;

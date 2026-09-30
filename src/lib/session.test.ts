@@ -839,8 +839,8 @@ describe('sessions hosted by jucode daemon', () => {
 		expect(p.sessions[0].hosted).toBe(true);
 		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined, undefined, false, undefined);
 		expect(createSession).not.toHaveBeenCalled();
-		// Other engines never go through the daemon.
-		store.addSession(p, undefined, 'codex');
+		// ACP agents still run as the desktop's own children.
+		store.addSession(p, undefined, 'acp', { id: 'gemini', name: 'Gemini' });
 		expect(p.sessions[1].hosted).toBe(false);
 		vi.unstubAllGlobals();
 	});
@@ -863,6 +863,12 @@ describe('sessions hosted by jucode daemon', () => {
 		expect(s.chat.backendId).toBe('claude');
 		expect(s.adapter.id).toBe('jucode');
 		expect(createSession).not.toHaveBeenCalled();
+
+		const codex = store.addSession(p, undefined, 'codex');
+		expect(hostSession).toHaveBeenCalledWith(codex, p.path, undefined, undefined, false, {
+			engine: 'codex',
+			options: { approval_mode: 'read-only' }
+		});
 
 		// A claude conversation picked from history also moves into the daemon.
 		vi.mocked(hostSession).mockClear();
