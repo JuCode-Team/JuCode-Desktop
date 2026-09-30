@@ -67,8 +67,7 @@
 	}
 	.md :global(h1),
 	.md :global(h2) {
-		font-family: var(--font-serif);
-		font-weight: 500;
+		font-weight: 600;
 		letter-spacing: -0.005em;
 	}
 	.md :global(h1) {

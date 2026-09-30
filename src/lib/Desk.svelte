@@ -47,9 +47,9 @@
 	}
 	h2 {
 		margin: 0;
-		font-family: var(--font-serif);
+		font-family: var(--font-sans);
 		font-size: var(--fs-xl);
-		font-weight: 500;
+		font-weight: 600;
 	}
 	.head p {
 		margin: 4px 0 0;

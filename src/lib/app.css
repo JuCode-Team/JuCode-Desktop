@@ -1,5 +1,4 @@
 @import '@fontsource-variable/inter';
-@import '@fontsource/instrument-serif';
 @import '@fontsource-variable/geist-mono';
 
 /* JuCode design system — follows brand-docs/DESIGN-SPEC.md, tuned for a desktop
@@ -45,8 +44,6 @@
 	--err: #f7a39a;
 	--warn: #e5bd5c;
 
-	--font-serif: 'Instrument Serif', 'Songti SC', 'Noto Serif SC', serif;
-	--font-display: var(--font-serif);
 	--font-sans: 'Inter Variable', Inter, -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif;
 	--font-mono: 'Geist Mono Variable', 'Geist Mono', 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 
@@ -55,8 +52,8 @@
 	--fs-sm: 15px; /* UI controls, lists */
 	--fs-md: 16px; /* chat body, inputs */
 	--fs-lg: 18px; /* section titles */
-	--fs-xl: 24px; /* page titles (serif) */
-	--fs-2xl: 36px; /* welcome wordmark (serif) */
+	--fs-xl: 24px; /* page titles */
+	--fs-2xl: 36px; /* welcome wordmark */
 
 	--r-xs: 5px;
 	--r-sm: 8px;

@@ -468,9 +468,8 @@
 	}
 	.word {
 		flex: 1;
-		font-family: var(--font-serif);
+		font-family: var(--font-sans);
 		font-size: var(--fs-xl);
-		/* Instrument Serif ships one weight; the wordmark is emboldened. */
 		font-weight: 700;
 		letter-spacing: -0.005em;
 		color: var(--text);

@@ -103,7 +103,7 @@
 	}
 	h1 {
 		margin: 0 0 4px;
-		font-family: var(--font-serif);
+		font-family: var(--font-sans);
 		font-size: var(--fs-lg);
 	}
 	header p {

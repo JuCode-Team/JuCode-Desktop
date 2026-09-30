@@ -282,8 +282,8 @@
 		color: var(--text);
 	}
 	.brand {
-		font-family: var(--font-serif);
-		font-weight: 500;
+		font-family: var(--font-sans);
+		font-weight: 600;
 		font-size: var(--fs-xl);
 		letter-spacing: -0.005em;
 		padding: 22px 24px 0;
@@ -346,9 +346,9 @@
 	}
 	h2 {
 		margin: 0;
-		font-family: var(--font-serif);
+		font-family: var(--font-sans);
 		font-size: var(--fs-xl);
-		font-weight: 500;
+		font-weight: 600;
 	}
 	.sub {
 		margin: 6px 0 16px;

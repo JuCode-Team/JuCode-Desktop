@@ -4,7 +4,7 @@
 
 	// Brand mark for a model (by name) or a provider (by id), from brandIcons.
 	// A model with no known brand shows a sparkle; a provider shows its initial,
-	// and JuCode its own serif monogram (the brand is a wordmark, no logo).
+	// and JuCode its own monogram (the brand is a wordmark, no logo).
 	let { model, provider, size = 14 }: { model?: string; provider?: string; size?: number } = $props();
 
 	const svg = $derived(provider ? providerBrand(provider) : model ? modelBrand(model) : undefined);
@@ -42,7 +42,7 @@
 		line-height: 1;
 	}
 	.mono.ju {
-		font-family: var(--font-serif);
+		font-family: var(--font-sans);
 		font-weight: 700;
 		letter-spacing: -0.04em;
 	}

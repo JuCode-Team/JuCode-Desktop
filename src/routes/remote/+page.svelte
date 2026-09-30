@@ -543,9 +543,9 @@
 	}
 	h1 {
 		margin: 4px 0 8px;
-		font-family: var(--font-serif);
+		font-family: var(--font-sans);
 		font-size: var(--fs-xl);
-		font-weight: 500;
+		font-weight: 600;
 	}
 	.pair {
 		max-width: 420px;

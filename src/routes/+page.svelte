@@ -1288,8 +1288,8 @@
 		gap: 12px;
 	}
 	.welcome-mark {
-		font-family: var(--font-serif);
-		font-weight: 500;
+		font-family: var(--font-sans);
+		font-weight: 600;
 		font-size: var(--fs-2xl);
 		letter-spacing: -0.005em;
 		color: var(--text);
