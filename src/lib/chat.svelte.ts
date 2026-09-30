@@ -836,6 +836,11 @@ export class ChatState {
 				// entries carry no call_id, so the fast-lookup map is now stale — clear
 				// it and let #tool() fall back to scanning.
 				this.#toolsByCallId.clear();
+				// A message sent just before the snapshot arrived (a session that
+				// opens with its first message) is not in it yet: keep its bubble.
+				// If the snapshot already has it, its echo came with it.
+				const pending = this.#pendingUserEcho;
+				const sent = pending === null ? undefined : this.messages.findLast((m) => m.kind === 'user' && m.text === pending);
 				this.messages = items
 					.map((it): Msg | null => {
 						const role = str(it.role);
@@ -854,6 +859,11 @@ export class ChatState {
 						return null;
 					})
 					.filter((m): m is Msg => m !== null);
+				if (pending !== null) {
+					const last = this.messages.findLast((m) => m.kind === 'user');
+					if (last?.kind === 'user' && last.text === pending) this.#pendingUserEcho = null;
+					else if (sent) this.messages.push(sent);
+				}
 				if (this.title === 'New session' && !this.titleLocked) {
 					const firstUser = this.messages.find((m) => m.kind === 'user');
 					if (firstUser && firstUser.kind === 'user' && firstUser.text.trim())

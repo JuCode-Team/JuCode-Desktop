@@ -15,6 +15,25 @@ describe('countDiffLines', () => {
 });
 
 describe('ChatState.handle', () => {
+	it('keeps a just-sent message that the arriving snapshot does not have yet', () => {
+		const c = new ChatState();
+		c.optimisticUser('first');
+		c.handle({ type: 'transcript', items: [] });
+		expect(userTexts(c)).toEqual(['first']);
+		// Its echo arrives next and is not shown twice.
+		c.handle({ type: 'user_message', content: 'first' });
+		expect(userTexts(c)).toEqual(['first']);
+	});
+
+	it('takes the snapshot copy of a just-sent message when it already has it', () => {
+		const c = new ChatState();
+		c.optimisticUser('first');
+		c.handle({ type: 'transcript', items: [{ role: 'user', content: 'first' }] });
+		expect(userTexts(c)).toEqual(['first']);
+		c.handle({ type: 'user_message', content: 'second' });
+		expect(userTexts(c)).toEqual(['first', 'second']);
+	});
+
 	it('notes deferred and decided actions of a hosted session in the chat', () => {
 		setLocale('en');
 		const c = new ChatState();
