@@ -19,7 +19,6 @@ mod shell_env;
 mod skills;
 mod tool_switch;
 
-
 use backend::BackendKind;
 
 /// On Windows, suppress the console window that a GUI-subsystem app would
@@ -198,7 +197,7 @@ fn create_session(
     let opts = backend::validate_opts(kind, backend_opts.as_ref())?;
     // ACP sessions spawn a registered agent: the command line is looked up in
     // the validated registry by id — never composed from request data.
-    let (bin, args, agent_env) = if kind == BackendKind::Acp {
+    let (bin, mut args, mut agent_env) = if kind == BackendKind::Acp {
         let agent_id = opts
             .agent
             .as_deref()
@@ -221,6 +220,17 @@ fn create_session(
             Vec::new(),
         )
     };
+    // This one session talks to the JuCode gateway; the user's own Claude
+    // Code / Codex config (and every other session using it) is untouched.
+    if opts.jucode_gateway {
+        let (extra_args, extra_env) = tool_switch::gateway_spawn(
+            kind.bin_name(),
+            &jucode_api_url(),
+            &jucode_access_token()?,
+        )?;
+        args.extend(extra_args);
+        agent_env.extend(extra_env);
+    }
     let dir = cwd
         .map(PathBuf::from)
         .filter(|p| p.is_dir())
@@ -1188,35 +1198,6 @@ fn fetch_usage() -> Result<serde_json::Value, String> {
 fn fetch_usage_logs() -> Result<serde_json::Value, String> {
     jucode_get("/v1/oauth/usage-logs?limit=10")
 }
-
-/// Current overlay for Claude Code / Codex: `"system"` or `"jucode"`.
-#[tauri::command]
-fn tool_profile(backend: String) -> Result<String, String> {
-    tool_switch::current_mode(&backend)
-}
-
-/// Write (or restore) Claude Code / Codex live config. Caller restarts the
-/// session so the child re-reads the files.
-#[tauri::command]
-fn switch_tool_profile(
-    backend: String,
-    mode: String,
-    model: Option<String>,
-) -> Result<(), String> {
-    match mode.as_str() {
-        "system" => tool_switch::switch_to_system(&backend),
-        "jucode" => {
-            let api = jucode_api_url();
-            if !api.starts_with("https://") {
-                return Err("refusing to write JuCode endpoint over non-https".into());
-            }
-            let token = jucode_access_token()?;
-            tool_switch::switch_to_jucode(&backend, &api, &token, model.as_deref())
-        }
-        _ => Err(format!("unknown tool profile mode: {mode}")),
-    }
-}
-
 
 /// DeepSeek account balance (https://api.deepseek.com/user/balance), using the
 /// API key stored under providers.deepseek in auth.json.
@@ -3289,6 +3270,8 @@ pub fn run() {
             set_dev_dock_icon();
             // 异步捕获登录 shell 环境快照（不阻塞启动；见 shell_env.rs）。
             shell_env::init_async();
+            // Claude Code / Codex files an earlier version overwrote go back.
+            tool_switch::restore_leftovers();
             // macOS：给主窗口铺一层原生磨砂（NSVisualEffectView）。前端把主区域画成
             // 不透明、只让侧栏半透明，于是磨砂只在侧栏透出（见 app.css 的 [data-vibrancy]）。
             #[cfg(target_os = "macos")]
@@ -3354,8 +3337,6 @@ pub fn run() {
             fetch_marketplace,
             install_marketplace_skill,
             fetch_account_info,
-            tool_profile,
-            switch_tool_profile,
             fetch_usage,
             fetch_usage_logs,
             fetch_jucode_models,

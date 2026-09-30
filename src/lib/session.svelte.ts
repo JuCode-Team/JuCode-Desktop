@@ -1,5 +1,5 @@
 import { ChatState } from './chat.svelte';
-import { acpAgentsList, createSession, closeSession, daemon, hostSession, sessionMeta, projectRoot, chatsDir, writeConfig, git, claudeSessionTranscript, switchToolProfile, jucodeSessions } from './protocol';
+import { acpAgentsList, createSession, closeSession, daemon, hostSession, sessionMeta, projectRoot, chatsDir, writeConfig, git, claudeSessionTranscript, jucodeSessions } from './protocol';
 import type { EngineSpec } from './daemon';
 import { canHandOffToTui, isValidResumeSessionId } from './tuiHandoff';
 import { createAdapter, normalizeBackendId, type BackendId } from './backends';
@@ -40,6 +40,8 @@ export interface SavedProject {
 		surface?: 'tui';
 		/** Hosted by the local `jucode daemon`; `sid` is its daemon session. */
 		hosted?: boolean;
+		/** Claude Code / Codex through the JuCode gateway (Session.gateway). */
+		gateway?: boolean;
 	} & SavedTabChrome)[];
 	/** 并行任务 worktree 项目的元数据（isWorktree/mainRepoPath/branch/baseBranch/slug）。 */
 	worktree?: WorktreeMeta;
@@ -188,9 +190,21 @@ export class SessionStore {
 		// saved yet. Spawn it in the desktop's mode from the start.
 		const modeOpt =
 			s.backendId === 'claude' ? { permission_mode: toClaudeMode(toEngineMode(s.chat.approvalMode)) } : undefined;
+		// This session alone talks to the JuCode gateway (see Session.gateway).
+		const gatewayOpt =
+			(s.backendId === 'claude' || s.backendId === 'codex') && s.gateway !== undefined
+				? { jucode_gateway: s.gateway }
+				: undefined;
 		const opts =
-			agentOpt || extraOpts || chatOpt || modeOpt
-				? { ...(base ?? {}), ...(agentOpt ?? {}), ...(chatOpt ?? {}), ...(modeOpt ?? {}), ...(extraOpts ?? {}) }
+			agentOpt || extraOpts || chatOpt || modeOpt || gatewayOpt
+				? {
+						...(base ?? {}),
+						...(agentOpt ?? {}),
+						...(chatOpt ?? {}),
+						...(modeOpt ?? {}),
+						...(gatewayOpt ?? {}),
+						...(extraOpts ?? {})
+					}
 				: base;
 		if (s.backendId === 'claude') s.spawnedMode = String((opts as Record<string, unknown>)?.permission_mode ?? '');
 		// Ops sent until the new engine is up wait for it instead of reaching no
@@ -212,12 +226,13 @@ export class SessionStore {
 						engine: 'claude',
 						options: {
 							approval_mode: optsRec.permission_mode,
+							...(gatewayOpt ?? {}),
 							...(optsRec.model ? { model: optsRec.model } : {}),
 							...(optsRec.resume_session_at ? { resume_at: optsRec.resume_session_at } : {})
 						}
 					}
 				: s.backendId === 'codex'
-					? { engine: 'codex', options: { approval_mode: toEngineMode(s.chat.approvalMode) } }
+					? { engine: 'codex', options: { approval_mode: toEngineMode(s.chat.approvalMode), ...(gatewayOpt ?? {}) } }
 					: undefined;
 		// An ACP agent runs the command its registry entry names.
 		const acpEngine = () =>
@@ -541,9 +556,11 @@ export class SessionStore {
 		reuseId?: string,
 		acpAgent?: { id: string; name: string },
 		surface?: 'tui',
-		hosted = false
+		hosted = false,
+		gateway?: boolean
 	) {
 		const s = this.#newSession(backend, backend === 'acp' ? acpAgent : undefined, reuseId);
+		if (gateway) s.gateway = true;
 		// A claude or codex conversation moves into the daemon whenever it can
 		// run there, even one saved or started outside it (the daemon resumes it
 		// by id).
@@ -838,19 +855,26 @@ export class SessionStore {
 		}
 	}
 
-	/** Rewrite Claude Code / Codex live config (JuCode overlay or restore) and
-	 *  respawn this session so the child re-reads the files. */
+	/** Run this Claude Code / Codex session through the JuCode gateway
+	 *  (`jucode`, optionally on `model`) or the provider in the user's own
+	 *  config (`system`). Only this session's process changes; other Claude
+	 *  Code / Codex sessions on the machine keep their config. */
 	async applyToolProfile(id: string, mode: 'system' | 'jucode', model?: string) {
 		const s = this.allSessions.find((x) => x.id === id);
 		if (!s) return;
 		if (s.backendId !== 'claude' && s.backendId !== 'codex') return;
-		// A draft's engine reads the rewritten config when it starts.
+		s.gateway = mode === 'jucode';
+		// A draft starts that way with its first message.
 		if (s.draft) {
-			await switchToolProfile(s.backendId, mode, model).catch((e) =>
-				s.chat.messages.push({ kind: 'error', text: String(e) })
-			);
+			if (model) {
+				s.draftPick = { model };
+				s.chat.model = model;
+				s.chat.modelLabel = '';
+			}
 			return;
 		}
+		// The TUI surface picks it up when the conversation returns here.
+		if (s.surface === 'tui') return;
 		s.chat.switching = true;
 		s.chat.engineState = 'connecting';
 		s.chat.messages.push({
@@ -860,26 +884,18 @@ export class SessionStore {
 		const sid = s.chat.sessionId;
 		const canResume = s.chat.resumable || (!!sid && !!s.restored);
 		try {
-			await switchToolProfile(s.backendId, mode, model);
-			if (this.#gone(s)) return;
-			if (s.surface === 'tui') {
-				s.chat.switching = false;
-				s.chat.engineState = 'ready';
-				return;
-			}
 			await closeSession(id);
 			if (this.#gone(s)) return;
 			s.chat.resumeBroken = false;
 			const mayResume = !!(sid && canResume);
 			const extra: Record<string, unknown> = {};
-			if (s.backendId === 'claude' && mayResume) extra.resume = sid;
-			if (s.backendId === 'claude') extra.permission_mode = toClaudeMode(toEngineMode(s.chat.approvalMode));
+			if (s.backendId === 'claude' && mayResume && !s.hosted) extra.resume = sid;
 			await this.#spawn(
 				s,
 				this.projectPathOf(id),
-				undefined,
+				model ? () => dispatch(id, { op: 'command', input: `/model ${model}` }) : undefined,
 				Object.keys(extra).length ? extra : undefined,
-				s.backendId === 'codex' && mayResume ? sid : undefined
+				(s.backendId === 'codex' || s.hosted) && mayResume ? sid : undefined
 			);
 			s.chat.switching = false;
 		} catch (e) {
@@ -1119,6 +1135,7 @@ export class SessionStore {
 						? { sid: s.chat.sessionId }
 						: {}),
 					...(s.hosted ? { hosted: true } : {}),
+					...(s.gateway ? { gateway: true } : {}),
 					title: s.chat.title,
 					...(s.backendId !== 'jucode' ? { backend: s.backendId } : {}),
 					...(s.backendId === 'acp' && s.acpAgent ? { acpAgent: s.acpAgent } : {}),
@@ -1208,7 +1225,8 @@ export class SessionStore {
 								t.id,
 								acpAgent,
 								surface,
-								t.hosted === true
+								t.hosted === true,
+								t.gateway === true
 							)
 						: this.#draftSaved(proj, t.id!, t.title, backend, !!t.archived, chrome, acpAgent);
 					if (!first && !t.archived) first = id;

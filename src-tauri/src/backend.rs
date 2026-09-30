@@ -63,7 +63,7 @@ impl BackendKind {
             Self::Jucode => &["bin_override", "use_shell_env", "env", "chat"],
             // Codex app-server takes per-conversation config over JSON-RPC,
             // not argv — only the binary path is configurable at spawn time.
-            Self::Codex => &["bin_override", "use_shell_env", "env"],
+            Self::Codex => &["bin_override", "use_shell_env", "env", "jucode_gateway"],
             Self::Claude => &[
                 "bin_override",
                 "permission_mode",
@@ -73,6 +73,7 @@ impl BackendKind {
                 "model",
                 "use_shell_env",
                 "env",
+                "jucode_gateway",
             ],
             // ACP sessions select a registry entry — never a binary path or
             // argv. Everything else about the spawn is fixed by the registry.
@@ -102,6 +103,9 @@ pub struct BackendOpts {
     pub agent: Option<String>,
     /// jucode: `serve --chat`, a chat session in `~/.jucode/chats`.
     pub chat: bool,
+    /// claude / codex: talk to the JuCode gateway (`tool_switch::gateway_spawn`)
+    /// instead of the provider in the user's own config.
+    pub jucode_gateway: bool,
     /// Build the child env from the login-shell snapshot (default true; see
     /// `shell_env`). Off = inherit the GUI environment as before.
     pub use_shell_env: bool,
@@ -120,6 +124,7 @@ impl Default for BackendOpts {
             model: None,
             agent: None,
             chat: false,
+            jucode_gateway: false,
             use_shell_env: true,
             env: Vec::new(),
         }
@@ -222,6 +227,12 @@ pub fn validate_opts(
                 opts.chat = value
                     .as_bool()
                     .ok_or_else(|| "chat must be a boolean".to_string())?;
+                continue;
+            }
+            "jucode_gateway" => {
+                opts.jucode_gateway = value
+                    .as_bool()
+                    .ok_or_else(|| "jucode_gateway must be a boolean".to_string())?;
                 continue;
             }
             "env" => {

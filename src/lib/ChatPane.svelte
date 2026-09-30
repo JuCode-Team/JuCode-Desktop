@@ -35,7 +35,6 @@
 		git,
 		gitCheckpointCapture,
 		gitCheckpointRestore,
-		toolProfile,
 		type Op
 	} from '$lib/protocol';
 	import { buildModelRows } from '$lib/composer/modelRows';
@@ -125,17 +124,8 @@
 	let pickerQuery = $state('');
 	let selIdx = $state(0);
 	let pendingModel = $state('');
-	let toolMode = $state<'system' | 'jucode'>('system');
-	$effect(() => {
-		const id = chat.backendId;
-		if (chat.picker?.kind !== 'model') return;
-		if (id !== 'claude' && id !== 'codex') return;
-		toolProfile(id)
-			.then((m) => {
-				toolMode = m === 'jucode' ? 'jucode' : 'system';
-			})
-			.catch(() => {});
-	});
+	// Whether this Claude Code / Codex session runs through the JuCode gateway.
+	const toolMode = $derived<'system' | 'jucode'>(session.gateway ? 'jucode' : 'system');
 
 	// Ops flow through this session's backend adapter; an unsupported op
 	// (non-jucode stub backends) surfaces as an inline system notice.

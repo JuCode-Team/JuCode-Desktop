@@ -41,6 +41,10 @@ export interface Session {
 	draft?: boolean;
 	/** Model and effort picked while a draft, applied when it starts. */
 	draftPick?: { model?: string; effort?: string };
+	/** Claude Code / Codex: runs through the JuCode gateway on the user's
+	 *  JuCode login (only this session's process; their own config is left
+	 *  alone). Unset: as it last ran (the daemon remembers it). */
+	gateway?: boolean;
 }
 
 /** 并行任务（git worktree）项目的元数据，随项目布局持久化。 */

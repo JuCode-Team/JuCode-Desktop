@@ -74,6 +74,37 @@ describe('SessionStore lifecycle', () => {
 		expect(message).toBeGreaterThan(pick);
 	});
 
+	it('the JuCode gateway goes to this session\'s process only, and is kept', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p, undefined, 'claude');
+		begin(id);
+		await Promise.resolve();
+		vi.mocked(createSession).mockClear();
+		await store.applyToolProfile(id, 'jucode', 'claude-sonnet-5-5');
+		const call = vi.mocked(createSession).mock.calls.at(-1)!;
+		expect(call[2]).toBe('claude');
+		expect((call[3] as { jucode_gateway?: boolean }).jucode_gateway).toBe(true);
+		expect(writeConfig).not.toHaveBeenCalled();
+		const tab = store.serialize()[0].tabs![0];
+		expect(tab.gateway).toBe(true);
+		await store.applyToolProfile(id, 'system');
+		expect((vi.mocked(createSession).mock.calls.at(-1)![3] as { jucode_gateway?: boolean }).jucode_gateway).toBe(false);
+		expect(store.serialize()[0].tabs![0].gateway).toBeUndefined();
+	});
+
+	it('a draft switched to the gateway starts on it', () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p, undefined, 'codex');
+		void store.applyToolProfile(id, 'jucode', 'gpt-5.5');
+		expect(createSession).not.toHaveBeenCalled();
+		begin(id);
+		expect((vi.mocked(createSession).mock.calls.at(-1)![3] as { jucode_gateway?: boolean }).jucode_gateway).toBe(true);
+	});
+
 	it('removing a draft closes no engine', () => {
 		const store = new SessionStore();
 		const p = proj();

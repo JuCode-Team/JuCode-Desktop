@@ -1,11 +1,11 @@
-//! Switch Claude Code / Codex live config between the user's original
-//! provider and JuCode. Pattern lifted from CC Switch (backup live files,
-//! write overlay, restore on revert) without the rest of that app.
+//! Run a Claude Code / Codex session through the JuCode gateway without
+//! touching the user's own config: the endpoint and token go to that one
+//! process (Claude: `--settings <file>`; Codex: `-c` overrides plus an env
+//! var for the key), so other Claude Code / Codex sessions on the machine
+//! keep their own provider.
 //!
-//! Claude: merge `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` into
-//! `~/.claude/settings.json` (Claude Code posts `{base}/v1/messages`).
-//! Codex: replace `~/.codex/auth.json` with the JuCode token and set
-//! `model_provider = "jucode"` in `config.toml` (`{api}/v1` + Responses).
+//! Earlier versions rewrote `~/.claude/settings.json` and `~/.codex/*`
+//! (with backups here); `restore_leftovers` puts those files back once.
 
 use serde_json::{json, Value};
 use std::fs;
@@ -26,7 +26,9 @@ impl Tool {
         match s {
             "claude" => Ok(Self::Claude),
             "codex" => Ok(Self::Codex),
-            _ => Err(format!("tool profile switch only supports claude/codex, not {s}")),
+            _ => Err(format!(
+                "tool profile switch only supports claude/codex, not {s}"
+            )),
         }
     }
 
@@ -85,29 +87,76 @@ impl Paths {
     }
 }
 
-pub fn current_mode(backend: &str) -> Result<String, String> {
-    let tool = Tool::parse(backend)?;
-    Ok(read_mode(&Paths::live(), tool))
+/// Where Claude Code's per-session gateway settings live (owner-only).
+const CLAUDE_GATEWAY_FILE: &str = "claude-gateway.json";
+/// The env var a Codex gateway session reads its key from.
+const CODEX_KEY_ENV: &str = "JUCODE_GATEWAY_TOKEN";
+
+/// Extra argv and env vars for a spawned child.
+pub type SpawnExtras = (Vec<String>, Vec<(String, String)>);
+
+/// Extra argv and env for a Claude Code / Codex child that should talk to
+/// the JuCode gateway at `api` with `token`.
+pub fn gateway_spawn(backend: &str, api: &str, token: &str) -> Result<SpawnExtras, String> {
+    gateway_spawn_in(&Paths::live(), Tool::parse(backend)?, api, token)
 }
 
-pub fn switch_to_system(backend: &str) -> Result<(), String> {
-    restore(&Paths::live(), Tool::parse(backend)?)
-}
-
-pub fn switch_to_jucode(
-    backend: &str,
-    api_url: &str,
+fn gateway_spawn_in(
+    paths: &Paths,
+    tool: Tool,
+    api: &str,
     token: &str,
-    model: Option<&str>,
-) -> Result<(), String> {
+) -> Result<SpawnExtras, String> {
     if token.trim().is_empty() {
         return Err("not logged in to JuCode".to_string());
     }
-    if let Some(m) = model {
-        validate_model(m)?;
+    let api = api.trim().trim_end_matches('/');
+    if !api.starts_with("https://") || api.contains('"') || api.contains('\n') {
+        return Err("invalid JuCode API URL".to_string());
     }
-    let api = api_url.trim().trim_end_matches('/');
-    apply_jucode(&Paths::live(), Tool::parse(backend)?, api, token, model)
+    match tool {
+        Tool::Claude => {
+            // An empty ANTHROPIC_API_KEY masks one the user's settings set.
+            let settings = json!({ "env": {
+                "ANTHROPIC_BASE_URL": api,
+                "ANTHROPIC_AUTH_TOKEN": token,
+                "ANTHROPIC_API_KEY": "",
+            } });
+            let path = paths.dir().join(CLAUDE_GATEWAY_FILE);
+            write_private_json(&path, &settings)?;
+            Ok((
+                vec!["--settings".to_string(), path.to_string_lossy().into_owned()],
+                Vec::new(),
+            ))
+        }
+        Tool::Codex => Ok((
+            vec![
+                "-c".to_string(),
+                "model_provider=\"jucode_gateway\"".to_string(),
+                "-c".to_string(),
+                format!(
+                    "model_providers.jucode_gateway={{name=\"JuCode\",base_url=\"{api}/v1\",env_key=\"{CODEX_KEY_ENV}\",wire_api=\"responses\"}}"
+                ),
+            ],
+            vec![(CODEX_KEY_ENV.to_string(), token.to_string())],
+        )),
+    }
+}
+
+/// Puts back the Claude Code / Codex files an earlier version overwrote
+/// (a tool still marked `jucode` in the state file). Run once at startup.
+pub fn restore_leftovers() {
+    let paths = Paths::live();
+    for tool in [Tool::Claude, Tool::Codex] {
+        if read_mode(&paths, tool) == "jucode" {
+            if let Err(error) = restore(&paths, tool) {
+                eprintln!(
+                    "[tool-switch] restoring {} config failed: {error}",
+                    tool.as_str()
+                );
+            }
+        }
+    }
 }
 
 fn read_mode(paths: &Paths, tool: Tool) -> String {
@@ -128,23 +177,6 @@ fn write_mode(paths: &Paths, tool: Tool, mode: &str) -> Result<(), String> {
     write_json(&paths.state(), &v)
 }
 
-fn apply_jucode(
-    paths: &Paths,
-    tool: Tool,
-    api: &str,
-    token: &str,
-    model: Option<&str>,
-) -> Result<(), String> {
-    if read_mode(paths, tool) != "jucode" {
-        backup(paths, tool)?;
-    }
-    match tool {
-        Tool::Claude => apply_claude(paths, api, token, model)?,
-        Tool::Codex => apply_codex(paths, api, token, model)?,
-    }
-    write_mode(paths, tool, "jucode")
-}
-
 fn restore(paths: &Paths, tool: Tool) -> Result<(), String> {
     match tool {
         Tool::Claude => restore_file(&paths.bak("claude.settings.bak"), &paths.claude_settings())?,
@@ -154,34 +186,6 @@ fn restore(paths: &Paths, tool: Tool) -> Result<(), String> {
         }
     }
     write_mode(paths, tool, "system")
-}
-
-fn backup(paths: &Paths, tool: Tool) -> Result<(), String> {
-    fs::create_dir_all(paths.dir()).map_err(|e| e.to_string())?;
-    match tool {
-        Tool::Claude => snapshot(&paths.claude_settings(), &paths.bak("claude.settings.bak")),
-        Tool::Codex => {
-            snapshot(&paths.codex_auth(), &paths.bak("codex.auth.bak"))?;
-            snapshot(&paths.codex_config(), &paths.bak("codex.config.bak"))
-        }
-    }
-}
-
-/// Copy `src` → `dst`. If `src` is missing, write a `.missing` sibling so
-/// restore can delete the live file we created.
-fn snapshot(src: &Path, dst: &Path) -> Result<(), String> {
-    let missing = missing_marker(dst);
-    let _ = fs::remove_file(&missing);
-    if src.exists() {
-        if let Some(parent) = dst.parent() {
-            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-        }
-        fs::copy(src, dst).map_err(|e| format!("backup {} failed: {e}", src.display()))?;
-    } else {
-        fs::write(&missing, b"").map_err(|e| e.to_string())?;
-        let _ = fs::remove_file(dst);
-    }
-    Ok(())
 }
 
 fn restore_file(bak: &Path, live: &Path) -> Result<(), String> {
@@ -202,134 +206,6 @@ fn restore_file(bak: &Path, live: &Path) -> Result<(), String> {
 
 fn missing_marker(bak: &Path) -> PathBuf {
     bak.with_extension("missing")
-}
-
-fn apply_claude(paths: &Paths, api: &str, token: &str, model: Option<&str>) -> Result<(), String> {
-    let path = paths.claude_settings();
-    let mut settings = read_json_strict(&path)?;
-    overlay_claude(&mut settings, api, token, model);
-    write_json(&path, &settings)?;
-    secrets::restrict_to_owner(&path);
-    Ok(())
-}
-
-pub(crate) fn overlay_claude(settings: &mut Value, api: &str, token: &str, model: Option<&str>) {
-    let env = settings
-        .as_object_mut()
-        .map(|o| o.entry("env").or_insert_with(|| json!({})));
-    let Some(env) = env.and_then(Value::as_object_mut) else {
-        return;
-    };
-    env.insert("ANTHROPIC_BASE_URL".into(), json!(api));
-    env.insert("ANTHROPIC_AUTH_TOKEN".into(), json!(token));
-    env.remove("ANTHROPIC_API_KEY");
-    if let Some(m) = model.filter(|m| !m.is_empty()) {
-        env.insert("ANTHROPIC_MODEL".into(), json!(m));
-    }
-}
-
-fn apply_codex(paths: &Paths, api: &str, token: &str, model: Option<&str>) -> Result<(), String> {
-    let auth_path = paths.codex_auth();
-    let cfg_path = paths.codex_config();
-    if let Some(parent) = auth_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    write_json(&auth_path, &json!({ "OPENAI_API_KEY": token }))?;
-    secrets::restrict_to_owner(&auth_path);
-
-    let original = if cfg_path.exists() {
-        fs::read_to_string(&cfg_path).map_err(|e| e.to_string())?
-    } else {
-        String::new()
-    };
-    let next = overlay_codex_config(&original, &format!("{api}/v1"), model)?;
-    fs::write(&cfg_path, next).map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-/// Upsert top-level `model_provider` / `model` and ensure `[model_providers.jucode]`.
-pub(crate) fn overlay_codex_config(
-    original: &str,
-    base_url: &str,
-    model: Option<&str>,
-) -> Result<String, String> {
-    if base_url.contains('"') || base_url.contains('\n') {
-        return Err("invalid JuCode API URL".into());
-    }
-    let mut text = upsert_top_level(original, "model_provider", "jucode");
-    if let Some(m) = model.filter(|m| !m.is_empty()) {
-        text = upsert_top_level(&text, "model", m);
-    }
-    if !has_jucode_provider_table(&text) {
-        if !text.is_empty() && !text.ends_with('\n') {
-            text.push('\n');
-        }
-        text.push_str(&format!(
-            "\n[model_providers.jucode]\nname = \"JuCode\"\nbase_url = \"{base_url}\"\nwire_api = \"responses\"\n"
-        ));
-    }
-    Ok(text)
-}
-
-fn has_jucode_provider_table(text: &str) -> bool {
-    text.lines().any(|l| {
-        let t = l.trim();
-        t == "[model_providers.jucode]" || t.eq_ignore_ascii_case("[model_providers.jucode]")
-    })
-}
-
-/// Replace or insert `key = "value"` in the top-level TOML table (before the
-/// first `[section]`). Quoted values only — callers already validate.
-fn upsert_top_level(text: &str, key: &str, value: &str) -> String {
-    let line = format!("{key} = \"{value}\"");
-    let mut out = String::new();
-    let mut found = false;
-    let mut at_table = false;
-    for raw in text.lines() {
-        let trimmed = raw.trim();
-        if trimmed.starts_with('[') {
-            if !found {
-                out.push_str(&line);
-                out.push('\n');
-                found = true;
-            }
-            at_table = true;
-        }
-        if !at_table && is_toml_key_line(trimmed, key) {
-            out.push_str(&line);
-            out.push('\n');
-            found = true;
-            continue;
-        }
-        out.push_str(raw);
-        out.push('\n');
-    }
-    if !found {
-        out.push_str(&line);
-        out.push('\n');
-    }
-    out
-}
-
-fn is_toml_key_line(trimmed: &str, key: &str) -> bool {
-    let rest = match trimmed.strip_prefix(key) {
-        Some(r) => r,
-        None => return false,
-    };
-    rest.trim_start().starts_with('=')
-}
-
-fn validate_model(model: &str) -> Result<(), String> {
-    if model.is_empty() || model.len() > 80 {
-        return Err("invalid model id".into());
-    }
-    if !model
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
-    {
-        return Err("invalid model id".into());
-    }
-    Ok(())
 }
 
 fn read_json(path: &Path) -> Value {
@@ -357,6 +233,14 @@ fn write_json(path: &Path, value: &Value) -> Result<(), String> {
     fs::write(path, format!("{text}\n")).map_err(|e| e.to_string())
 }
 
+/// Written whole to a temporary file then renamed, readable by the owner only.
+fn write_private_json(path: &Path, value: &Value) -> Result<(), String> {
+    let tmp = path.with_extension("tmp");
+    write_json(&tmp, value)?;
+    secrets::restrict_to_owner(&tmp);
+    fs::rename(&tmp, path).map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -378,65 +262,75 @@ mod tests {
     }
 
     #[test]
-    fn overlay_claude_sets_auth_token_and_drops_api_key() {
-        let mut v = json!({
-            "env": { "ANTHROPIC_API_KEY": "sk-old", "KEEP": "1" },
-            "permissions": { "allow": [] }
-        });
-        overlay_claude(&mut v, "https://api.jucode.net", "tok", Some("claude-sonnet"));
-        assert_eq!(v["env"]["ANTHROPIC_BASE_URL"], "https://api.jucode.net");
-        assert_eq!(v["env"]["ANTHROPIC_AUTH_TOKEN"], "tok");
-        assert_eq!(v["env"]["ANTHROPIC_MODEL"], "claude-sonnet");
-        assert!(v["env"].get("ANTHROPIC_API_KEY").is_none());
-        assert_eq!(v["env"]["KEEP"], "1");
-        assert_eq!(v["permissions"]["allow"], json!([]));
-    }
-
-    #[test]
-    fn overlay_codex_config_inserts_provider_and_keeps_other_keys() {
-        let original = "model = \"gpt-5.3-codex\"\nmodel_provider = \"openai\"\napproval_policy = \"on-request\"\n";
-        let out = overlay_codex_config(original, "https://api.jucode.net/v1", Some("gpt-5.5")).unwrap();
-        assert!(out.contains("model_provider = \"jucode\""));
-        assert!(out.contains("model = \"gpt-5.5\""));
-        assert!(out.contains("approval_policy = \"on-request\""));
-        assert!(out.contains("[model_providers.jucode]"));
-        assert!(out.contains("base_url = \"https://api.jucode.net/v1\""));
-        assert!(out.contains("wire_api = \"responses\""));
-        // Idempotent: don't duplicate the table.
-        let again = overlay_codex_config(&out, "https://api.jucode.net/v1", Some("gpt-5.5")).unwrap();
-        assert_eq!(
-            again.matches("[model_providers.jucode]").count(),
-            1
-        );
-    }
-
-    #[test]
-    fn overlay_codex_config_inserts_before_first_table() {
-        let original = "[mcp_servers.fs]\ncommand = \"npx\"\n";
-        let out = overlay_codex_config(original, "https://api.jucode.net/v1", None).unwrap();
-        let provider_at = out.find("model_provider = \"jucode\"").unwrap();
-        let table_at = out.find("[mcp_servers.fs]").unwrap();
-        assert!(provider_at < table_at);
-    }
-
-    #[test]
-    fn jucode_then_system_restores_claude_settings() {
+    fn claude_gateway_goes_to_a_private_settings_file_not_the_users() {
         let home = tmp_home("claude");
         let p = paths(home.clone());
         let live = p.claude_settings();
         fs::create_dir_all(live.parent().unwrap()).unwrap();
-        fs::write(&live, "{\n  \"env\": { \"ANTHROPIC_API_KEY\": \"sk-sys\" }\n}\n").unwrap();
+        fs::write(&live, "{\"env\":{\"ANTHROPIC_API_KEY\":\"sk-user\"}}\n").unwrap();
+        let (args, env) =
+            gateway_spawn_in(&p, Tool::Claude, "https://api.jucode.net/", "tok").unwrap();
+        assert_eq!(args[0], "--settings");
+        assert!(env.is_empty());
+        let written: Value = serde_json::from_str(&fs::read_to_string(&args[1]).unwrap()).unwrap();
+        assert_eq!(
+            written["env"]["ANTHROPIC_BASE_URL"],
+            "https://api.jucode.net"
+        );
+        assert_eq!(written["env"]["ANTHROPIC_AUTH_TOKEN"], "tok");
+        assert_eq!(written["env"]["ANTHROPIC_API_KEY"], "");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = fs::metadata(&args[1]).unwrap().permissions().mode();
+            assert_eq!(mode & 0o077, 0);
+        }
+        assert!(fs::read_to_string(&live).unwrap().contains("sk-user"));
+        let _ = fs::remove_dir_all(home);
+    }
 
-        apply_jucode(&p, Tool::Claude, "https://api.jucode.net", "tok", Some("claude-x")).unwrap();
-        let after = fs::read_to_string(&live).unwrap();
-        assert!(after.contains("ANTHROPIC_AUTH_TOKEN"));
-        assert!(!after.contains("sk-sys"));
-        assert_eq!(read_mode(&p, Tool::Claude), "jucode");
+    #[test]
+    fn codex_gateway_is_config_overrides_and_a_key_variable() {
+        let home = tmp_home("codex");
+        let p = paths(home.clone());
+        let (args, env) =
+            gateway_spawn_in(&p, Tool::Codex, "https://api.jucode.net", "tok").unwrap();
+        assert_eq!(args[1], "model_provider=\"jucode_gateway\"");
+        assert!(args[3].contains("base_url=\"https://api.jucode.net/v1\""));
+        assert!(args[3].contains("env_key=\"JUCODE_GATEWAY_TOKEN\""));
+        assert!(!args.concat().contains("tok\""));
+        assert_eq!(
+            env,
+            vec![("JUCODE_GATEWAY_TOKEN".to_string(), "tok".to_string())]
+        );
+        assert!(!p.codex_config().exists());
+        let _ = fs::remove_dir_all(home);
+    }
 
+    #[test]
+    fn gateway_needs_a_token_and_an_https_url() {
+        let p = paths(tmp_home("reject"));
+        assert!(gateway_spawn_in(&p, Tool::Codex, "https://api.jucode.net", " ").is_err());
+        assert!(gateway_spawn_in(&p, Tool::Codex, "http://api.jucode.net", "tok").is_err());
+        assert!(gateway_spawn_in(&p, Tool::Codex, "https://a\"b", "tok").is_err());
+    }
+
+    #[test]
+    fn leftover_overlays_are_restored() {
+        let home = tmp_home("leftover");
+        let p = paths(home.clone());
+        let live = p.claude_settings();
+        fs::create_dir_all(live.parent().unwrap()).unwrap();
+        fs::create_dir_all(p.dir()).unwrap();
+        fs::write(
+            p.bak("claude.settings.bak"),
+            "{\"env\":{\"ANTHROPIC_API_KEY\":\"sk-sys\"}}\n",
+        )
+        .unwrap();
+        fs::write(&live, "{\"env\":{\"ANTHROPIC_AUTH_TOKEN\":\"tok\"}}\n").unwrap();
+        write_mode(&p, Tool::Claude, "jucode").unwrap();
         restore(&p, Tool::Claude).unwrap();
-        let back = fs::read_to_string(&live).unwrap();
-        assert!(back.contains("sk-sys"));
-        assert!(!back.contains("ANTHROPIC_AUTH_TOKEN"));
+        assert!(fs::read_to_string(&live).unwrap().contains("sk-sys"));
         assert_eq!(read_mode(&p, Tool::Claude), "system");
         let _ = fs::remove_dir_all(home);
     }
@@ -445,33 +339,13 @@ mod tests {
     fn missing_original_is_deleted_on_restore() {
         let home = tmp_home("absent");
         let p = paths(home.clone());
-        apply_jucode(&p, Tool::Claude, "https://api.jucode.net", "tok", None).unwrap();
-        assert!(p.claude_settings().exists());
-        restore(&p, Tool::Claude).unwrap();
-        assert!(!p.claude_settings().exists());
-        let _ = fs::remove_dir_all(home);
-    }
-
-    #[test]
-    fn second_jucode_switch_does_not_clobber_system_backup() {
-        let home = tmp_home("keepbak");
-        let p = paths(home.clone());
+        fs::create_dir_all(p.dir()).unwrap();
+        fs::write(missing_marker(&p.bak("claude.settings.bak")), b"").unwrap();
         let live = p.claude_settings();
         fs::create_dir_all(live.parent().unwrap()).unwrap();
-        fs::write(&live, "{\"env\":{\"ANTHROPIC_API_KEY\":\"sk-sys\"}}\n").unwrap();
-        apply_jucode(&p, Tool::Claude, "https://api.jucode.net", "tok1", None).unwrap();
-        apply_jucode(&p, Tool::Claude, "https://api.jucode.net", "tok2", None).unwrap();
+        fs::write(&live, "{}").unwrap();
         restore(&p, Tool::Claude).unwrap();
-        let back = fs::read_to_string(&live).unwrap();
-        assert!(back.contains("sk-sys"));
+        assert!(!live.exists());
         let _ = fs::remove_dir_all(home);
-    }
-
-    #[test]
-    fn rejects_junk_model_ids() {
-        assert!(validate_model("claude-sonnet-4-5").is_ok());
-        assert!(validate_model("gpt-5.5").is_ok());
-        assert!(validate_model("bad model").is_err());
-        assert!(validate_model("x\"y").is_err());
     }
 }
