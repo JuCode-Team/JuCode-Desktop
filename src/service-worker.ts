@@ -2,22 +2,26 @@
 /// <reference no-default-lib="true"/>
 /// <reference lib="esnext" />
 /// <reference lib="webworker" />
-// The phone PWA's offline shell: the built app, static files and the /remote
-// page are cached at install, so the home-screen app opens without a network
-// (it then waits for the relay). Registered only by the /remote page outside
-// Tauri (svelte.config.js turns automatic registration off).
+// The phone PWA's offline shell. Install caches only the /remote page, the
+// manifest and icons; the build is shared with the desktop app, so its files
+// are cached as the phone first loads them (cache first, names are hashed)
+// instead of all ~5 MB up front. After one online visit the home-screen app
+// opens without a network (it then waits for the relay). Registered only by
+// the /remote page outside Tauri (svelte.config.js turns automatic
+// registration off).
 import { build, files, version } from '$service-worker';
 
 const sw = self as unknown as ServiceWorkerGlobalScope;
 const CACHE = `jucode-shell-${version}`;
 const SHELL = '/remote';
-const ASSETS = [...build, ...files, SHELL];
+const PRECACHE = [SHELL, ...files.filter((f) => /^\/(manifest\.webmanifest|icon-\d+\.png|apple-touch-icon\.png|favicon\.png)$/.test(f))];
+const BUILD = new Set(build);
 
 sw.addEventListener('install', (event) => {
 	event.waitUntil(
 		caches
 			.open(CACHE)
-			.then((cache) => cache.addAll(ASSETS))
+			.then((cache) => cache.addAll(PRECACHE))
 			.then(() => sw.skipWaiting())
 	);
 });
@@ -42,8 +46,20 @@ sw.addEventListener('fetch', (event) => {
 		event.respondWith(fetch(request).catch(async () => (await caches.match(SHELL)) ?? Response.error()));
 		return;
 	}
-	// Built and static files: cache first (build file names are hashed).
-	if (ASSETS.includes(url.pathname)) {
-		event.respondWith(caches.match(url.pathname).then((hit) => hit ?? fetch(request)));
+	// Build files: cache first, stored on first use (file names are hashed).
+	if (BUILD.has(url.pathname) || PRECACHE.includes(url.pathname)) {
+		event.respondWith(
+			caches.match(url.pathname).then(
+				(hit) =>
+					hit ??
+					fetch(request).then((res) => {
+						if (res.ok) {
+							const copy = res.clone();
+							event.waitUntil(caches.open(CACHE).then((cache) => cache.put(url.pathname, copy)));
+						}
+						return res;
+					})
+			)
+		);
 	}
 });

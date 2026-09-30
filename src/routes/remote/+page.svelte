@@ -31,7 +31,42 @@
 	import { t } from '$lib/i18n';
 
 	/** `scan`: the relay PWA with no computer paired yet. */
-	let mode = $state<'lan' | 'relay' | 'scan' | null>(null);
+	let mode = $state<'lan' | 'relay' | 'scan' | 'install' | null>(null);
+	// iPhone/iPad Safari: a home-screen app has its own storage, so pairing in
+	// the browser would not carry over. Offer to add it first; the code is only
+	// used if the user chooses to stay in the browser.
+	let pendingLink = $state<ReturnType<typeof parsePairFragment>>(null);
+	const isIos = () =>
+		/iPhone|iPad|iPod/.test(navigator.userAgent) ||
+		(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+	const isStandalone = () =>
+		matchMedia('(display-mode: standalone)').matches ||
+		(navigator as Navigator & { standalone?: boolean }).standalone === true;
+	// Pairing from inside the app: the in-app scanner or a pasted link.
+	let scanning = $state(false);
+	let pasted = $state('');
+	let linkError = $state('');
+	function acceptLink(text: string) {
+		scanning = false;
+		const hash = text.includes('#') ? text.slice(text.indexOf('#')) : text;
+		const link = parsePairFragment(hash.trim());
+		if (!link) {
+			linkError = t('shell.remote.badLink');
+			return;
+		}
+		linkError = '';
+		pasted = '';
+		relayError = null;
+		saveHost(link.host);
+		startRelay(link.host, link.code);
+	}
+	function continueInBrowser() {
+		const link = pendingLink;
+		pendingLink = null;
+		if (!link) return;
+		saveHost(link.host);
+		startRelay(link.host, link.code);
+	}
 	let token = $state<string | null>(null);
 	let code = $state('');
 	let pairing = $state(false);
@@ -104,7 +139,10 @@
 		}
 		const host = loadHost();
 		const saved = remoteToken();
-		if (link) {
+		if (link && isIos() && !isStandalone()) {
+			pendingLink = link;
+			mode = 'install';
+		} else if (link) {
 			saveHost(link.host);
 			startRelay(link.host, link.code);
 		} else if (fromQr) {
@@ -174,6 +212,8 @@
 			? { session: latest.session, title: agent.name }
 			: { agent: agent.id, title: agent.name };
 	}
+	import DeviceMobileIcon from 'phosphor-svelte/lib/DeviceMobileIcon';
+	import QrScanner from '$lib/relay/QrScanner.svelte';
 </script>
 
 <svelte:head>
@@ -188,12 +228,37 @@
 	</div>
 {/snippet}
 
+{#snippet linkEntry()}
+	<div class="entry">
+		<Button variant="primary" onclick={() => (scanning = true)}><QrCodeIcon size={16} /> {t('shell.remote.scanQr')}</Button>
+		<form class="paste" onsubmit={(e) => (e.preventDefault(), acceptLink(pasted))}>
+			<input bind:value={pasted} placeholder={t('shell.remote.pastePlaceholder')} autocomplete="off" autocapitalize="off" spellcheck="false" />
+			<Button type="submit" disabled={!pasted.trim()}>{t('shell.remote.connect')}</Button>
+		</form>
+		{#if linkError}<Notice>{linkError}</Notice>{/if}
+	</div>
+{/snippet}
+
+{#if scanning}<QrScanner onResult={acceptLink} onClose={() => (scanning = false)} />{/if}
+
 <div class="remote">
-	{#if mode === 'scan'}
+	{#if mode === 'install'}
+		<div class="pair">
+			<span class="hero"><DeviceMobileIcon size={28} /></span>
+			<h1>{t('shell.remote.installTitle')}</h1>
+			<ol class="steps">
+				<li>{t('shell.remote.installStep1')}</li>
+				<li>{t('shell.remote.installStep2')}</li>
+				<li>{t('shell.remote.installStep3')}</li>
+			</ol>
+			<Button variant="ghost" onclick={continueInBrowser}>{t('shell.remote.installSkip')}</Button>
+		</div>
+	{:else if mode === 'scan'}
 		<div class="pair">
 			<span class="hero"><QrCodeIcon size={28} /></span>
 			<h1>{t('shell.remote.scanTitle')}</h1>
 			<p>{t('shell.remote.scanHint')}</p>
+			{@render linkEntry()}
 		</div>
 	{:else if mode === 'relay' && relayError?.fatal}
 		<div class="pair">
@@ -476,5 +541,35 @@
 		color: #000;
 		font-size: var(--fs-2xs);
 		line-height: 16px;
+	}
+	.entry {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		width: 100%;
+		margin-top: 8px;
+	}
+	.paste {
+		display: flex;
+		gap: 8px;
+	}
+	.paste input {
+		flex: 1;
+		min-width: 0;
+		height: 40px;
+		padding: 0 12px;
+		border: 1px solid var(--border);
+		border-radius: var(--r-md);
+		background: var(--surface2);
+		color: var(--text);
+		font: inherit;
+		font-size: var(--fs-md);
+	}
+	.steps {
+		margin: 0;
+		padding-left: 20px;
+		color: var(--dim);
+		font-size: var(--fs-md);
+		line-height: 1.7;
 	}
 </style>
