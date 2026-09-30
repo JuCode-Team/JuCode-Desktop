@@ -7,11 +7,10 @@
 	import { onMount } from 'svelte';
 	import { dev } from '$app/environment';
 	import TrayIcon from 'phosphor-svelte/lib/TrayIcon';
-	import RobotIcon from 'phosphor-svelte/lib/RobotIcon';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import QrCodeIcon from 'phosphor-svelte/lib/QrCodeIcon';
 	import DesktopIcon from 'phosphor-svelte/lib/DesktopIcon';
-	import FolderIcon from 'phosphor-svelte/lib/FolderIcon';
+	import ListIcon from 'phosphor-svelte/lib/ListIcon';
 	import DeskContent from '$lib/DeskContent.svelte';
 	import RemoteSession from '$lib/RemoteSession.svelte';
 	import Projects from '$lib/remote/Projects.svelte';
@@ -79,7 +78,7 @@
 	let code = $state('');
 	let pairing = $state(false);
 	let pairError = $state('');
-	let tab = $state<'projects' | 'desk' | 'agents'>('projects');
+	let tab = $state<'projects' | 'desk'>('projects');
 	/** Pages opened over the tabs, last on top. */
 	type Screen = { key: number } & (
 		| { kind: 'session'; session?: string; agent?: string; cwd?: string; chat?: boolean; engine?: string; title: string }
@@ -269,6 +268,12 @@
 		return { tone: 'off', text: t('shell.remote.relayNetwork') };
 	});
 
+	/** The session on top of the pages, highlighted in the list. */
+	const currentSession = $derived.by(() => {
+		const top = stack.at(-1);
+		return top?.kind === 'session' ? top.session : undefined;
+	});
+
 	function openSession(session: string) {
 		const agent = agentDirectory.agentOfSession(session);
 		const known = agentDirectory.sessions.find((s) => s.session === session);
@@ -377,45 +382,39 @@
 				</div>
 			{/if}
 			{#if tab === 'projects'}
-				<h1>{t('shell.remote.projects')}</h1>
+				<h1>{t('shell.remote.sessions')}</h1>
 				<Projects
-					onOpenProject={(project) => open({ kind: 'project', project })}
+					current={currentSession}
+					onOpenSession={(s, project) =>
+						open({
+							kind: 'session',
+							session: s.session,
+							cwd: s.cwd,
+							chat: project?.chats,
+							engine: s.engine && s.engine !== 'jucode' ? s.engine : undefined,
+							title: s.title || t('shell.remote.untitled')
+						})}
+					onNewSession={(project) => (creating = { project, replace: true })}
 					onAddProject={() => open({ kind: 'add' })}
-					onOpenSession={(session, cwd, title) => open({ kind: 'session', session, cwd, title })}
-					onNewSession={() => (creating = { replace: true })}
+					onHistory={(project) => open({ kind: 'project', project })}
+					onFiles={(project) => open({ kind: 'files', root: project.path, title: project.name })}
+					onChanges={(project) => open({ kind: 'changes', root: project.path, title: project.name })}
+					onOpenAgent={openAgent}
 				/>
-			{:else if tab === 'desk'}
+			{:else}
 				<h1>{t('shell.desk.title')}</h1>
 				<DeskContent onOpenSession={openSession} />
-			{:else}
-				<h1>{t('shell.remote.agents')}</h1>
-				{#if agentDirectory.agents.length === 0}
-					<p class="empty">{t('shell.agents.empty')}</p>
-				{/if}
-				{#each agentDirectory.agents as agent (agent.id)}
-					<button class="agent" onclick={() => openAgent(agent)}>
-						{#if agent.busy}<CircleNotchIcon size={14} class="spin" />{:else}<RobotIcon size={14} />{/if}
-						<span class="text">
-							<span class="name">{agent.name}</span>
-							{#if agent.summary}<span class="summary">{agent.summary}</span>{/if}
-						</span>
-					</button>
-				{/each}
 			{/if}
 		</main>
 		<nav>
 			<button class:on={tab === 'projects'} onclick={() => (tab = 'projects')}>
-				<FolderIcon size={18} />
-				<span>{t('shell.remote.projects')}</span>
+				<ListIcon size={18} />
+				<span>{t('shell.remote.sessions')}</span>
 			</button>
 			<button class:on={tab === 'desk'} onclick={() => (tab = 'desk')}>
 				<TrayIcon size={18} />
 				<span>{t('shell.desk.title')}</span>
 				{#if agentDirectory.pending > 0}<span class="badge">{agentDirectory.pending}</span>{/if}
-			</button>
-			<button class:on={tab === 'agents'} onclick={() => (tab = 'agents')}>
-				<RobotIcon size={18} />
-				<span>{t('shell.remote.agents')}</span>
 			</button>
 		</nav>
 	{/if}
@@ -653,36 +652,6 @@
 	.refused-msg {
 		flex: 1;
 		min-width: 0;
-	}
-	.empty {
-		color: var(--dim2);
-		font-size: var(--fs-md);
-	}
-	.agent {
-		display: flex;
-		align-items: flex-start;
-		gap: 12px;
-		width: 100%;
-		padding: 14px 4px;
-		border: none;
-		border-bottom: 1px solid var(--hairline);
-		background: none;
-		color: var(--text);
-		text-align: left;
-	}
-	.text {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		min-width: 0;
-	}
-	.name {
-		font-size: var(--fs-lg);
-		font-weight: 600;
-	}
-	.summary {
-		font-size: var(--fs-sm);
-		color: var(--dim);
 	}
 	nav {
 		position: fixed;

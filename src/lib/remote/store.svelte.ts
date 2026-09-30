@@ -94,7 +94,8 @@ export class RemoteProjects {
 		return (reply.sessions as HistoryItem[]) ?? [];
 	}
 
-	async setMeta(session: string, meta: { title?: string; archived?: boolean }) {
+	/** No reply on success; the daemon broadcasts the new session list. */
+	async setMeta(session: string, meta: { title?: string; archived?: boolean; hidden?: boolean }) {
 		await daemon.post({ op: 'session_meta', session, ...meta });
 	}
 
