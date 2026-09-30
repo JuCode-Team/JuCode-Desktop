@@ -12,9 +12,63 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>JuCode</title>
+    <script>
+      // Before any script loads: the saved theme (theme.svelte.ts applies the
+      // same rule later), and on the phone app a centered boot screen that the
+      // page replaces once it renders.
+      (function () {
+        var root = document.documentElement;
+        try {
+          var pref = localStorage.getItem('jucode-theme');
+          var light = pref === 'light' || (pref !== 'dark' && matchMedia('(prefers-color-scheme: light)').matches);
+          root.setAttribute('data-theme', light ? 'light' : 'dark');
+        } catch (e) {}
+        if (location.pathname.indexOf('/remote') === 0) root.classList.add('remote-boot');
+      })();
+    </script>
+    <style>
+      #boot {
+        display: none;
+      }
+      .remote-boot #boot {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        background: #1a1a1a;
+        color: #ececec;
+        font: 600 24px/1 -apple-system, system-ui, sans-serif;
+        letter-spacing: -0.01em;
+      }
+      .remote-boot[data-theme='light'] #boot {
+        background: #ffffff;
+        color: #1f1f1f;
+      }
+      .remote-boot #boot i {
+        width: 18px;
+        height: 18px;
+        border: 2px solid currentColor;
+        border-right-color: transparent;
+        border-radius: 50%;
+        opacity: 0.45;
+        animation: boot-spin 0.8s linear infinite;
+      }
+      @keyframes boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .remote-boot body:has(.remote) #boot {
+        display: none;
+      }
+    </style>
     %sveltekit.head%
   </head>
   <body data-sveltekit-preload-data="hover">
+    <div id="boot" aria-hidden="true">JuCode<i></i></div>
     <div style="display: contents">%sveltekit.body%</div>
   </body>
 </html>

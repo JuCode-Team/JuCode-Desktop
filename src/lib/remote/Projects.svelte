@@ -23,6 +23,7 @@
 	import BackendIcon from '$lib/BackendIcon.svelte';
 	import { agentDirectory, type AgentView, type DaemonSessionView } from '$lib/agents.svelte';
 	import { remoteProjects, type ProjectView } from './store.svelte';
+	import { toast } from '$lib/ui/toast.svelte';
 	import { t } from '$lib/i18n';
 
 	let {
@@ -86,14 +87,14 @@
 	let menu = $state<{ session: DaemonSessionView } | { project: ProjectView } | null>(null);
 	let renaming = $state(false);
 	let name = $state('');
-	let error = $state('');
+	const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
+	/** The store shows the change at once and puts it back on failure. */
 	async function setMeta(s: DaemonSessionView, changes: { title?: string; archived?: boolean; hidden?: boolean }) {
 		try {
 			await remoteProjects.setMeta(s.session, changes);
-			error = '';
 		} catch (e) {
-			error = e instanceof Error ? e.message : String(e);
+			toast.error(message(e));
 		}
 	}
 
@@ -110,7 +111,8 @@
 
 	async function rename(s: DaemonSessionView) {
 		menu = null;
-		await setMeta(s, { title: name.trim() });
+		const next = name.trim();
+		if (next && next !== s.title) await setMeta(s, { title: next });
 	}
 
 	async function remove(s: DaemonSessionView) {
@@ -125,7 +127,7 @@
 		try {
 			await remoteProjects.removeProject(p.id);
 		} catch (e) {
-			error = e instanceof Error ? e.message : String(e);
+			toast.error(message(e));
 		}
 	}
 </script>
@@ -187,7 +189,6 @@
 			{/each}
 		</div>
 	{/if}
-	{#if error}<Notice tone="error">{error}</Notice>{/if}
 
 	{#if agentDirectory.agents.length}
 		<section>
@@ -346,6 +347,38 @@
 		gap: 2px;
 		padding-right: 4px;
 		border-radius: var(--r-md);
+		transition: background var(--t-fast) var(--ease-out);
+		animation: fade var(--t-med) var(--ease-out);
+	}
+	/* Press feedback on every tappable row and button. */
+	.folder-row,
+	.sess-main,
+	.act,
+	.more,
+	.menu button,
+	.workspaces button {
+		cursor: pointer;
+		-webkit-tap-highlight-color: transparent;
+		transition:
+			background var(--t-fast) var(--ease-out),
+			color var(--t-fast) var(--ease-out),
+			transform var(--t-fast) var(--ease-out);
+	}
+	.folder:has(.folder-row:active),
+	.sess:has(.sess-main:active) {
+		background: var(--surface2);
+	}
+	.folder-row:active,
+	.sess-main:active,
+	.menu button:active {
+		transform: scale(0.985);
+	}
+	.act:active,
+	.workspaces button:active {
+		transform: scale(0.9);
+	}
+	.more:hover {
+		color: var(--text);
 	}
 	.folder-row,
 	.sess-main {

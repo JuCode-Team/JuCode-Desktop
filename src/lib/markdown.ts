@@ -1,6 +1,6 @@
 import { Marked } from 'marked';
 import { markedHighlight } from 'marked-highlight';
-import hljs from 'highlight.js';
+import hljs from '$lib/hljs';
 import { t } from '$lib/i18n';
 
 // One configured instance for the whole app. Configuring the shared `marked`

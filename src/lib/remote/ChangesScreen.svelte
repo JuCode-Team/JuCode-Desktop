@@ -15,6 +15,8 @@
 	let diff = $state<{ diff: string; truncated: boolean } | null>(null);
 	let error = $state('');
 	let loading = $state(false);
+	/** The file tapped last, marked while its diff loads. */
+	let pending = $state<string | null>(null);
 
 	async function refresh() {
 		loading = true;
@@ -31,6 +33,7 @@
 
 	async function show(next: GitFile) {
 		loading = true;
+		pending = next.path;
 		error = '';
 		try {
 			diff = await remoteProjects.gitDiff(root, next.path);
@@ -39,6 +42,7 @@
 			error = e instanceof Error ? e.message : String(e);
 		} finally {
 			loading = false;
+			pending = null;
 		}
 	}
 
@@ -60,33 +64,41 @@
 </script>
 
 {#snippet refreshAction()}
-	{#if !file}<button class="act" onclick={refresh} aria-label={t('shell.remote.refresh')}><ArrowClockwiseIcon size={16} /></button>{/if}
+	{#if !file}
+		<button class="act" onclick={refresh} disabled={loading} aria-label={t('shell.remote.refresh')}>
+			<span class="refresh" class:spin={loading && !pending}><ArrowClockwiseIcon size={16} /></span>
+		</button>
+	{/if}
 {/snippet}
 
 <RemoteScreen {title} subtitle={file ? file.path : status?.branch} onBack={back} actions={refreshAction}>
 	{#if error}<Notice tone="error">{error}</Notice>{/if}
 	{#if file && diff}
 		{#if diff.truncated}<Notice tone="warn">{t('shell.remote.truncated')}</Notice>{/if}
+		<div class="view">
 		{#if !diff.diff.trim()}
 			<p class="empty">{t('shell.remote.noDiff')}</p>
 		{:else}
 			<pre class="diff">{#each diff.diff.split('\n') as line, i (i)}<span class={kind(line)}>{line || ' '}</span>{/each}</pre>
 		{/if}
+		</div>
 	{:else if status}
 		{#if !status.repo}
 			<p class="empty">{t('shell.remote.notRepo')}</p>
 		{:else}
+			<div class="view">
 			{#each status.files as f (f.path)}
-				<button class="row" onclick={() => show(f)}>
-					<span class="code">{f.status.trim() || '·'}</span>
+				<button class="row" class:pending={pending === f.path} disabled={loading} onclick={() => show(f)}>
+					<span class="code">{#if pending === f.path}<CircleNotchIcon size={13} class="spin" />{:else}{f.status.trim() || '·'}{/if}</span>
 					<span class="path">{f.path}</span>
 				</button>
 			{:else}
 				<p class="empty">{t('shell.remote.clean')}</p>
 			{/each}
+			</div>
 		{/if}
 	{/if}
-	{#if loading}<p class="empty"><CircleNotchIcon size={14} class="spin" /></p>{/if}
+	{#if loading && !status}<p class="empty"><CircleNotchIcon size={14} class="spin" /></p>{/if}
 </RemoteScreen>
 
 <style>
@@ -101,6 +113,24 @@
 		background: none;
 		color: var(--text);
 		text-align: left;
+		cursor: pointer;
+		transition: background var(--t-fast) var(--ease-out);
+	}
+	.row:disabled {
+		cursor: default;
+	}
+	.row:not(:disabled):active {
+		background: var(--surface2);
+	}
+	.row.pending {
+		background: var(--surface);
+	}
+	.refresh {
+		display: inline-flex;
+	}
+	/* The file list or a diff replacing it fades in. */
+	.view {
+		animation: pane-in var(--t-med) var(--ease-out);
 	}
 	.code {
 		width: 22px;

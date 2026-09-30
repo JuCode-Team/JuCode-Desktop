@@ -4,6 +4,7 @@
 // `workspaces` broadcasts.
 
 import { daemon } from '$lib/protocol';
+import { agentDirectory } from '$lib/agents.svelte';
 
 export interface ProjectView {
 	id: string;
@@ -94,9 +95,21 @@ export class RemoteProjects {
 		return (reply.sessions as HistoryItem[]) ?? [];
 	}
 
-	/** No reply on success; the daemon broadcasts the new session list. */
+	/** No reply on success; the daemon broadcasts the new session list. The
+	 *  list changes here first so the row moves at once; a failed send puts
+	 *  it back and throws. */
 	async setMeta(session: string, meta: { title?: string; archived?: boolean; hidden?: boolean }) {
-		await daemon.post({ op: 'session_meta', session, ...meta });
+		const before = agentDirectory.sessions;
+		const { hidden, ...fields } = meta;
+		agentDirectory.sessions = hidden
+			? before.filter((s) => s.session !== session)
+			: before.map((s) => (s.session === session ? { ...s, ...fields } : s));
+		try {
+			await daemon.post({ op: 'session_meta', session, ...meta });
+		} catch (e) {
+			agentDirectory.sessions = before;
+			throw e;
+		}
 	}
 
 	/** The reply is the new list (also broadcast). */
@@ -117,9 +130,18 @@ export class RemoteProjects {
 		);
 	}
 
+	/** Leaves the list at once; put back if the daemon refuses. */
 	async removeProject(project: string) {
-		if (!this.active) return;
-		this.handle(await daemon.request({ op: 'project_remove', workspace: this.active.id, project }));
+		const workspace = this.active;
+		if (!workspace) return;
+		const before = this.workspaces;
+		this.workspaces = before.map((w) => (w.id === workspace.id ? { ...w, projects: w.projects.filter((p) => p.id !== project) } : w));
+		try {
+			this.handle(await daemon.request({ op: 'project_remove', workspace: workspace.id, project }));
+		} catch (e) {
+			this.workspaces = before;
+			throw e;
+		}
 	}
 
 	async list(path: string, dirsOnly = false): Promise<DirListing> {

@@ -4,24 +4,30 @@
 	// - LAN: the daemon served this page; pair with a code for a device token.
 	// - Relay: the PWA at app.jucode.net; a `#pair=` link names the computer
 	//   and the connection runs end-to-end encrypted through the relay.
-	import { onMount } from 'svelte';
+	import { onMount, type Component } from 'svelte';
+	import { cubicOut } from 'svelte/easing';
 	import { dev } from '$app/environment';
 	import TrayIcon from 'phosphor-svelte/lib/TrayIcon';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import QrCodeIcon from 'phosphor-svelte/lib/QrCodeIcon';
 	import DesktopIcon from 'phosphor-svelte/lib/DesktopIcon';
 	import ListIcon from 'phosphor-svelte/lib/ListIcon';
+	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
+	import SignOutIcon from 'phosphor-svelte/lib/SignOutIcon';
+	import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon';
+	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
+	import ChatsCircleIcon from 'phosphor-svelte/lib/ChatsCircleIcon';
+	import DeviceMobileIcon from 'phosphor-svelte/lib/DeviceMobileIcon';
 	import DeskContent from '$lib/DeskContent.svelte';
-	import RemoteSession from '$lib/RemoteSession.svelte';
 	import Projects from '$lib/remote/Projects.svelte';
 	import NewSessionDialog from '$lib/remote/NewSessionDialog.svelte';
 	import ProjectScreen from '$lib/remote/ProjectScreen.svelte';
 	import AddProjectScreen from '$lib/remote/AddProjectScreen.svelte';
-	import FilesScreen from '$lib/remote/FilesScreen.svelte';
-	import ChangesScreen from '$lib/remote/ChangesScreen.svelte';
 	import { remoteProjects, baseName, type ProjectView } from '$lib/remote/store.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
+	import PopMenu from '$lib/ui/PopMenu.svelte';
+	import Toaster from '$lib/ui/Toaster.svelte';
 	import { agentDirectory, type AgentView } from '$lib/agents.svelte';
 	import { daemon, setDaemonEndpoint } from '$lib/protocol';
 	import { deviceName, forgetRemoteToken, pairDevice, remoteEndpoint, remoteToken } from '$lib/remote';
@@ -36,6 +42,24 @@
 	} from '$lib/relay/pairing';
 	import { RelayError, RelaySocket } from '$lib/relay/socket';
 	import { t } from '$lib/i18n';
+
+	// The heavy pages (a conversation with markdown and highlighting, the file
+	// viewer, the QR scanner) load after the list is up, so the first screen
+	// only waits for what it shows.
+	/* eslint-disable @typescript-eslint/no-explicit-any -- lazily loaded components */
+	let RemoteSession = $state<Component<any> | null>(null);
+	let FilesScreen = $state<Component<any> | null>(null);
+	let ChangesScreen = $state<Component<any> | null>(null);
+	let QrScanner = $state<Component<any> | null>(null);
+	/* eslint-enable @typescript-eslint/no-explicit-any */
+	function loadScreens() {
+		import('$lib/RemoteSession.svelte').then((m) => (RemoteSession = m.default));
+		import('$lib/remote/FilesScreen.svelte').then((m) => (FilesScreen = m.default));
+		import('$lib/remote/ChangesScreen.svelte').then((m) => (ChangesScreen = m.default));
+	}
+	function loadScanner() {
+		import('$lib/relay/QrScanner.svelte').then((m) => (QrScanner = m.default));
+	}
 
 	/** `scan`: the relay PWA with no computer paired yet. */
 	let mode = $state<'lan' | 'relay' | 'scan' | 'install' | null>(null);
@@ -53,6 +77,10 @@
 	let scanning = $state(false);
 	let pasted = $state('');
 	let linkError = $state('');
+	function openScanner() {
+		scanning = true;
+		loadScanner();
+	}
 	function acceptLink(text: string) {
 		scanning = false;
 		const hash = text.includes('#') ? text.slice(text.indexOf('#')) : text;
@@ -110,6 +138,56 @@
 		if (wide) stack = [];
 		push(screen);
 	}
+
+	// Pages slide in from the right on a phone and fade in on a wide pane
+	// (CSS, .layer); a page closed with back slides out the same way. On a wide
+	// pane the old page is replaced at once, not cross-faded.
+	const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+	function layerOut(_node: Element) {
+		if (wide || reducedMotion()) return { duration: 0 };
+		return { duration: 200, easing: cubicOut, css: (t: number, u: number) => `transform: translateX(${u * 40}%); opacity: ${t}` };
+	}
+
+	// Wide screens: the list column is resizable, like the desktop sidebar.
+	const SIDE_MIN = 260;
+	const SIDE_MAX = 560;
+	const SIDE_DEFAULT = 340;
+	const SIDE_KEY = 'jucode-remote-sidebar-width';
+	let sideWidth = $state(SIDE_DEFAULT);
+	let resizing = $state(false);
+	function startResize(e: PointerEvent) {
+		if (e.button !== 0) return;
+		e.preventDefault();
+		const handle = e.currentTarget as HTMLElement;
+		handle.setPointerCapture(e.pointerId);
+		const startX = e.clientX;
+		const startW = sideWidth;
+		resizing = true;
+		const move = (ev: PointerEvent) => {
+			sideWidth = Math.min(SIDE_MAX, Math.max(SIDE_MIN, startW + ev.clientX - startX));
+		};
+		const up = () => {
+			resizing = false;
+			handle.removeEventListener('pointermove', move);
+			handle.removeEventListener('pointerup', up);
+			handle.removeEventListener('pointercancel', up);
+			try {
+				localStorage.setItem(SIDE_KEY, String(Math.round(sideWidth)));
+			} catch {
+				/* private mode: the width lasts for this visit */
+			}
+		};
+		handle.addEventListener('pointermove', move);
+		handle.addEventListener('pointerup', up);
+		handle.addEventListener('pointercancel', up);
+	}
+	function resizeByKey(e: KeyboardEvent) {
+		const step = e.key === 'ArrowLeft' ? -16 : e.key === 'ArrowRight' ? 16 : 0;
+		if (!step) return;
+		e.preventDefault();
+		sideWidth = Math.min(SIDE_MAX, Math.max(SIDE_MIN, sideWidth + step));
+	}
+
 	/** The new-session dialog, for a given project or a choice of them. */
 	let creating = $state<{ project?: ProjectView; replace: boolean } | null>(null);
 	const ENGINE_TITLES: Record<string, string> = { claude: 'Claude Code', codex: 'Codex' };
@@ -212,6 +290,16 @@
 		else if (saved) start(saved);
 		else mode = location.hostname === 'app.jucode.net' ? 'scan' : 'lan';
 
+		try {
+			const w = Number(localStorage.getItem(SIDE_KEY));
+			if (w >= SIDE_MIN && w <= SIDE_MAX) sideWidth = w;
+		} catch {
+			/* storage blocked: the default width */
+		}
+		// While the connection comes up, fetch the pages it will open.
+		if (mode === 'scan') loadScanner();
+		else loadScreens();
+
 		// The PWA's offline shell; never inside the desktop app.
 		if ('serviceWorker' in navigator && !('__TAURI_INTERNALS__' in window)) {
 			navigator.serviceWorker
@@ -249,6 +337,7 @@
 		everConnected = false;
 		stack = [];
 		mode = 'scan';
+		loadScanner();
 	}
 
 	/** Past pairing and connected once: the lists and pages are showing. */
@@ -261,12 +350,30 @@
 	);
 	const relayStatus = $derived.by(() => {
 		if (agentDirectory.status === 'on') return { tone: 'ok', text: t('shell.remote.relayConnected') };
+		if (mode === 'lan')
+			return agentDirectory.status === 'unreachable'
+				? { tone: 'off', text: t('shell.remote.disconnected') }
+				: { tone: 'wait', text: t('shell.remote.connecting') };
 		const kind = relayError?.kind;
 		if (!kind) return { tone: 'wait', text: t('shell.remote.relayConnecting') };
 		if (kind === 'offline') return { tone: 'off', text: t('shell.remote.relayOffline') };
 		if (kind === 'busy') return { tone: 'off', text: t('shell.remote.relayBusy') };
 		return { tone: 'off', text: t('shell.remote.relayNetwork') };
 	});
+	/** The connection chip's short label; the menu shows the full status. */
+	const connLabel = $derived(
+		relayStatus.tone === 'ok'
+			? t('shell.remote.relayConnected')
+			: relayStatus.tone === 'wait'
+				? t('shell.remote.connecting')
+				: t('shell.remote.disconnected')
+	);
+	let connMenu = $state(false);
+	function connAction(key: string) {
+		connMenu = false;
+		if (key === 'forget') forget();
+		else if (key === 'repair') repair();
+	}
 
 	/** The session on top of the pages, highlighted in the list. */
 	const currentSession = $derived.by(() => {
@@ -288,8 +395,6 @@
 				: { kind: 'session', agent: agent.id, title: agent.name }
 		);
 	}
-	import DeviceMobileIcon from 'phosphor-svelte/lib/DeviceMobileIcon';
-	import QrScanner from '$lib/relay/QrScanner.svelte';
 </script>
 
 <svelte:head>
@@ -297,16 +402,39 @@
 </svelte:head>
 
 {#snippet connection()}
-	<div class="conn {relayStatus.tone}">
-		<span class="dot" class:pulse={relayStatus.tone === 'wait'}></span>
-		<span class="conn-text">{relayStatus.text}</span>
-		<button class="link" onclick={() => forget()}>{t('shell.remote.forget')}</button>
+	<div class="conn-wrap">
+		<button
+			class="conn {relayStatus.tone}"
+			class:on={connMenu}
+			onclick={() => (connMenu = !connMenu)}
+			aria-haspopup="menu"
+			aria-expanded={connMenu}
+			title={relayStatus.text}
+		>
+			<span class="dot" class:pulse={relayStatus.tone === 'wait'}></span>
+			<span class="conn-text">{connLabel}</span>
+			<CaretDownIcon size={12} />
+		</button>
+		{#if connMenu}
+			<PopMenu
+				title={relayStatus.text}
+				placement="down-right"
+				items={mode === 'relay'
+					? [{ key: 'forget', label: t('shell.remote.forget'), icon: SignOutIcon, tone: 'warn' }]
+					: [{ key: 'repair', label: t('shell.remote.repair'), icon: ArrowClockwiseIcon, tone: 'warn' }]}
+				onSelect={connAction}
+				onClose={() => (connMenu = false)}
+			/>
+		{/if}
 	</div>
 {/snippet}
 
 {#snippet linkEntry()}
 	<div class="entry">
-		<Button variant="primary" onclick={() => (scanning = true)}><QrCodeIcon size={16} /> {t('shell.remote.scanQr')}</Button>
+		<Button variant="primary" disabled={scanning} onclick={openScanner}>
+			{#if scanning}<CircleNotchIcon size={16} class="spin" />{:else}<QrCodeIcon size={16} />{/if}
+			{t('shell.remote.scanQr')}
+		</Button>
 		<form class="paste" onsubmit={(e) => (e.preventDefault(), acceptLink(pasted))}>
 			<input bind:value={pasted} placeholder={t('shell.remote.pastePlaceholder')} autocomplete="off" autocapitalize="off" spellcheck="false" />
 			<Button type="submit" disabled={!pasted.trim()}>{t('shell.remote.connect')}</Button>
@@ -315,9 +443,9 @@
 	</div>
 {/snippet}
 
-{#if scanning}<QrScanner onResult={acceptLink} onClose={() => (scanning = false)} />{/if}
+{#if scanning && QrScanner}<QrScanner onResult={acceptLink} onClose={() => (scanning = false)} />{/if}
 
-<div class="remote" class:wide>
+<div class="remote" class:wide class:resizing style:--side-w="{sideWidth}px">
 	{#if mode === 'install'}
 		<div class="pair">
 			<span class="hero"><DeviceMobileIcon size={28} /></span>
@@ -327,7 +455,7 @@
 				<li>{t('shell.remote.installStep2')}</li>
 				<li>{t('shell.remote.installStep3')}</li>
 			</ol>
-			<Button variant="ghost" onclick={continueInBrowser}>{t('shell.remote.installSkip')}</Button>
+			<div class="actions"><Button variant="ghost" onclick={continueInBrowser}>{t('shell.remote.installSkip')}</Button></div>
 		</div>
 	{:else if mode === 'scan'}
 		<div class="pair">
@@ -351,17 +479,18 @@
 				{#if relayStatus.tone === 'wait'}<CircleNotchIcon size={28} class="spin" />{:else}<DesktopIcon size={28} />{/if}
 			</span>
 			<h1>JuCode</h1>
-			<p>{relayStatus.text}</p>
-			<div class="actions"><button class="link" onclick={() => forget()}>{t('shell.remote.forget')}</button></div>
+			{#key relayStatus.text}<p class="status">{relayStatus.text}</p>{/key}
+			<div class="actions"><Button variant="ghost" size="sm" onclick={() => forget()}>{t('shell.remote.forget')}</Button></div>
 		</div>
 	{:else if mode === 'lan' && !token}
 		<div class="pair">
+			<span class="hero"><DesktopIcon size={28} /></span>
 			<h1>{t('shell.remote.pairTitle')}</h1>
 			<p>{t('shell.remote.pairHint')}</p>
 			<form onsubmit={(e) => (e.preventDefault(), pair())}>
 				<label>
 					<span>{t('shell.remote.codeLabel')}</span>
-					<input bind:value={code} autocapitalize="characters" autocomplete="one-time-code" />
+					<input class="code" bind:value={code} autocapitalize="characters" autocomplete="one-time-code" />
 				</label>
 				<Button variant="primary" disabled={!code.trim() || pairing}>
 					{#if pairing}<CircleNotchIcon size={14} class="spin" /> {t('shell.remote.pairing')}{:else}{t('shell.remote.pair')}{/if}
@@ -370,101 +499,146 @@
 			{#if pairError}<div class="err"><Notice>{pairError}</Notice></div>{/if}
 		</div>
 	{:else if mode}
-		<main>
-			{#if mode === 'relay'}
-				{@render connection()}
-			{:else if agentDirectory.status === 'unreachable'}
-				<!-- The daemon served this page, so a failing connection most likely
-				     means this device's token was revoked; offer to pair again. -->
-				<div class="refused">
-					<div class="refused-msg"><Notice tone="warn">{t('shell.remote.refused')}</Notice></div>
-					<Button size="sm" onclick={repair}>{t('shell.remote.repair')}</Button>
+		<aside class="side">
+			<nav>
+				<button class:on={tab === 'projects'} onclick={() => (tab = 'projects')}>
+					<ListIcon size={18} weight={tab === 'projects' ? 'fill' : 'regular'} />
+					<span>{t('shell.remote.sessions')}</span>
+				</button>
+				<button class:on={tab === 'desk'} onclick={() => (tab = 'desk')}>
+					<TrayIcon size={18} weight={tab === 'desk' ? 'fill' : 'regular'} />
+					<span>{t('shell.desk.title')}</span>
+					{#if agentDirectory.pending > 0}<span class="badge">{agentDirectory.pending}</span>{/if}
+				</button>
+			</nav>
+			<main>
+				<div class="top">
+					<h1>{tab === 'projects' ? t('shell.remote.sessions') : t('shell.desk.title')}</h1>
+					{@render connection()}
 				</div>
+				{#if mode === 'lan' && agentDirectory.status === 'unreachable'}
+					<!-- The daemon served this page, so a failing connection most likely
+					     means this device's token was revoked; offer to pair again. -->
+					<div class="refused">
+						<div class="refused-msg"><Notice tone="warn">{t('shell.remote.refused')}</Notice></div>
+						<Button size="sm" onclick={repair}>{t('shell.remote.repair')}</Button>
+					</div>
+				{/if}
+				<!-- Both tabs stay mounted so a switch keeps their scroll and
+				     folded state; the shown one fades in. -->
+				<div class="tabbody" hidden={tab !== 'projects'}>
+					<Projects
+						current={currentSession}
+						onOpenSession={(s, project) =>
+							open({
+								kind: 'session',
+								session: s.session,
+								cwd: s.cwd,
+								chat: project?.chats,
+								engine: s.engine && s.engine !== 'jucode' ? s.engine : undefined,
+								title: s.title || t('shell.remote.untitled')
+							})}
+						onNewSession={(project) => (creating = { project, replace: true })}
+						onAddProject={() => open({ kind: 'add' })}
+						onHistory={(project) => open({ kind: 'project', project })}
+						onFiles={(project) => open({ kind: 'files', root: project.path, title: project.name })}
+						onChanges={(project) => open({ kind: 'changes', root: project.path, title: project.name })}
+						onOpenAgent={openAgent}
+					/>
+				</div>
+				<div class="tabbody" hidden={tab !== 'desk'}>
+					<DeskContent onOpenSession={openSession} />
+				</div>
+			</main>
+			{#if wide}
+				<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+				<div
+					class="resizer"
+					role="separator"
+					aria-orientation="vertical"
+					aria-label={t('shell.remote.resizeSidebar')}
+					aria-valuemin={SIDE_MIN}
+					aria-valuemax={SIDE_MAX}
+					aria-valuenow={Math.round(sideWidth)}
+					tabindex="0"
+					onpointerdown={startResize}
+					onkeydown={resizeByKey}
+					ondblclick={() => (sideWidth = SIDE_DEFAULT)}
+				></div>
 			{/if}
-			{#if tab === 'projects'}
-				<h1>{t('shell.remote.sessions')}</h1>
-				<Projects
-					current={currentSession}
-					onOpenSession={(s, project) =>
-						open({
-							kind: 'session',
-							session: s.session,
-							cwd: s.cwd,
-							chat: project?.chats,
-							engine: s.engine && s.engine !== 'jucode' ? s.engine : undefined,
-							title: s.title || t('shell.remote.untitled')
-						})}
-					onNewSession={(project) => (creating = { project, replace: true })}
-					onAddProject={() => open({ kind: 'add' })}
-					onHistory={(project) => open({ kind: 'project', project })}
-					onFiles={(project) => open({ kind: 'files', root: project.path, title: project.name })}
-					onChanges={(project) => open({ kind: 'changes', root: project.path, title: project.name })}
-					onOpenAgent={openAgent}
-				/>
-			{:else}
-				<h1>{t('shell.desk.title')}</h1>
-				<DeskContent onOpenSession={openSession} />
-			{/if}
-		</main>
-		<nav>
-			<button class:on={tab === 'projects'} onclick={() => (tab = 'projects')}>
-				<ListIcon size={18} />
-				<span>{t('shell.remote.sessions')}</span>
-			</button>
-			<button class:on={tab === 'desk'} onclick={() => (tab = 'desk')}>
-				<TrayIcon size={18} />
-				<span>{t('shell.desk.title')}</span>
-				{#if agentDirectory.pending > 0}<span class="badge">{agentDirectory.pending}</span>{/if}
-			</button>
-		</nav>
+		</aside>
 	{/if}
 	{#if inApp}
 		<section class="pane">
-		{#if wide && stack.length === 0}
-			<p class="pane-empty">{t('shell.remote.pickSomething')}</p>
-		{/if}
-		{#each stack as screen, i (screen.key)}
-			<div class="layer" style:z-index={20 + i}>
-				{#if screen.kind === 'session'}
-					{@const root = screen.cwd && !screen.chat && !screen.agent ? screen.cwd : null}
-					<RemoteSession
-						session={screen.session}
-						agent={screen.agent}
-						cwd={screen.cwd}
-						chat={screen.chat}
-						engine={screen.engine}
-						title={screen.title}
-						{register}
-						onBack={pop}
-						onFiles={root ? () => push({ kind: 'files', root, title: baseName(root) }) : undefined}
-						onChanges={root ? () => push({ kind: 'changes', root, title: baseName(root) }) : undefined}
-					/>
-				{:else if screen.kind === 'project'}
-					{@const project = screen.project}
-					<ProjectScreen
-						{project}
-						onBack={pop}
-						onOpenSession={(session, cwd, title, engine) =>
-							push({ kind: 'session', session, cwd, chat: project.chats, engine, title })}
-						onNewSession={() => (creating = { project, replace: false })}
-						onFiles={() => push({ kind: 'files', root: project.path, title: project.name })}
-						onChanges={() => push({ kind: 'changes', root: project.path, title: project.name })}
-					/>
-				{:else if screen.kind === 'add'}
-					<AddProjectScreen onBack={pop} onAdded={pop} />
-				{:else if screen.kind === 'files'}
-					<FilesScreen root={screen.root} title={screen.title} onBack={pop} />
-				{:else}
-					<ChangesScreen root={screen.root} title={screen.title} onBack={pop} />
-				{/if}
-			</div>
-		{/each}
+			{#if wide && stack.length === 0}
+				<div class="pane-empty">
+					<ChatsCircleIcon size={32} />
+					<p>{t('shell.remote.pickSomething')}</p>
+				</div>
+			{/if}
+			{#each stack as screen, i (screen.key)}
+				<div class="layer" style:z-index={20 + i} out:layerOut>
+					{#if screen.kind === 'session'}
+						{@const root = screen.cwd && !screen.chat && !screen.agent ? screen.cwd : null}
+						{#if RemoteSession}
+							<RemoteSession
+								session={screen.session}
+								agent={screen.agent}
+								cwd={screen.cwd}
+								chat={screen.chat}
+								engine={screen.engine}
+								title={screen.title}
+								{register}
+								onBack={pop}
+								onFiles={root ? () => push({ kind: 'files', root, title: baseName(root) }) : undefined}
+								onChanges={root ? () => push({ kind: 'changes', root, title: baseName(root) }) : undefined}
+							/>
+						{:else}
+							{@render loadingPage(screen.title)}
+						{/if}
+					{:else if screen.kind === 'project'}
+						{@const project = screen.project}
+						<ProjectScreen
+							{project}
+							onBack={pop}
+							onOpenSession={(session, cwd, title, engine) =>
+								push({ kind: 'session', session, cwd, chat: project.chats, engine, title })}
+							onNewSession={() => (creating = { project, replace: false })}
+							onFiles={() => push({ kind: 'files', root: project.path, title: project.name })}
+							onChanges={() => push({ kind: 'changes', root: project.path, title: project.name })}
+						/>
+					{:else if screen.kind === 'add'}
+						<AddProjectScreen onBack={pop} onAdded={pop} />
+					{:else if screen.kind === 'files'}
+						{#if FilesScreen}
+							<FilesScreen root={screen.root} title={screen.title} onBack={pop} />
+						{:else}
+							{@render loadingPage(screen.title)}
+						{/if}
+					{:else if ChangesScreen}
+						<ChangesScreen root={screen.root} title={screen.title} onBack={pop} />
+					{:else}
+						{@render loadingPage(screen.title)}
+					{/if}
+				</div>
+			{/each}
 		</section>
 	{/if}
 	{#if creating}
 		<NewSessionDialog project={creating.project} onCreate={create} onClose={() => (creating = null)} />
 	{/if}
 </div>
+<Toaster />
+
+{#snippet loadingPage(title: string)}
+	<div class="loading-page">
+		<header>
+			<button class="back" onclick={pop} aria-label={t('shell.remote.back')}><ArrowLeftIcon size={18} /></button>
+			<span class="title">{title}</span>
+		</header>
+		<div class="loading-body"><CircleNotchIcon size={22} class="spin" /></div>
+	</div>
+{/snippet}
 
 <style>
 	.remote {
@@ -478,6 +652,14 @@
 	.layer {
 		position: fixed;
 		inset: 0;
+		animation: layer-in var(--t-med) var(--ease-out);
+	}
+	/* A page pushed on a phone slides in from the right. */
+	@keyframes layer-in {
+		from {
+			transform: translateX(32%);
+			opacity: 0;
+		}
 	}
 	/* On a phone the pages cover the screen; the pane itself adds no box. */
 	.pane {
@@ -485,33 +667,51 @@
 	}
 	.pane-empty {
 		margin: auto;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 10px;
 		color: var(--dim2);
+		animation: fade var(--t-slow) var(--ease-out);
+	}
+	.pane-empty p {
+		margin: 0;
 		font-size: var(--fs-md);
 	}
-	/* Wide screens: lists in a left column, pages in the right one. The pane
-	   is the containing block of its fixed-position pages (transform), so
-	   they fill it instead of the window. */
+	/* Wide screens: the list in a resizable left column, pages in the right
+	   one. The pane is the containing block of its fixed-position pages
+	   (transform), so they fill it instead of the window. */
 	.remote.wide {
 		display: grid;
-		grid-template-columns: minmax(300px, 360px) 1fr;
-		grid-template-rows: auto 1fr;
+		grid-template-columns: var(--side-w) 1fr;
 		height: 100dvh;
 		overflow: hidden;
 	}
+	.remote.resizing {
+		cursor: col-resize;
+		user-select: none;
+	}
+	.wide .side {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		border-right: 1px solid var(--hairline);
+		background: var(--sidebar);
+	}
 	.wide nav {
 		position: static;
-		grid-column: 1;
-		grid-row: 1;
 		gap: 4px;
-		padding: calc(env(safe-area-inset-top) + 8px) 12px 8px;
+		padding: calc(env(safe-area-inset-top) + 10px) 12px 6px;
 		border-top: none;
-		border-right: 1px solid var(--hairline);
-		border-bottom: 1px solid var(--hairline);
+		background: none;
 	}
 	.wide nav button {
 		flex-direction: row;
 		justify-content: center;
 		gap: 6px;
+		height: 34px;
+		padding: 0;
 		border-radius: var(--r-md);
 		font-size: var(--fs-sm);
 	}
@@ -522,23 +722,59 @@
 		position: static;
 	}
 	.wide main {
-		grid-column: 1;
-		grid-row: 2;
+		flex: 1;
+		min-height: 0;
 		overflow-y: auto;
-		padding: 12px 16px 24px;
-		border-right: 1px solid var(--hairline);
-		background: var(--panel);
+		padding: 8px 12px 24px;
 	}
 	.wide .pane {
 		display: flex;
-		grid-column: 2;
-		grid-row: 1 / 3;
 		position: relative;
+		min-width: 0;
 		transform: translateZ(0);
 		overflow: hidden;
 	}
+	/* Pages on a wide pane replace each other: a quick fade, no slide. */
+	.wide .layer {
+		animation-name: pane-in;
+	}
+	.resizer {
+		position: absolute;
+		top: 0;
+		right: -3px;
+		bottom: 0;
+		z-index: 5;
+		width: 6px;
+		cursor: col-resize;
+		touch-action: none;
+		transition: background var(--t-med) var(--ease-out);
+	}
+	.resizer:hover,
+	.resizer:focus-visible,
+	.resizing .resizer {
+		background: var(--accent-soft);
+		outline: none;
+	}
 	main {
 		padding: calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 76px);
+	}
+	.top {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin: 4px 0 10px;
+	}
+	.top h1 {
+		flex: 1;
+		min-width: 0;
+		margin: 0;
+	}
+	.wide .top h1 {
+		padding-left: 4px;
+		font-size: var(--fs-lg);
+	}
+	.tabbody:not([hidden]) {
+		animation: rise var(--t-med) var(--ease-out);
 	}
 	h1 {
 		margin: 4px 0 8px;
@@ -546,21 +782,41 @@
 		font-size: var(--fs-xl);
 		font-weight: 600;
 	}
+	/* Pairing, connecting and error screens: one centered column. */
 	.pair {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
 		max-width: 420px;
+		min-height: 100dvh;
 		margin: 0 auto;
-		padding: calc(env(safe-area-inset-top) + 48px) 20px 24px;
+		padding: calc(env(safe-area-inset-top) + 24px) 20px calc(env(safe-area-inset-bottom) + 24px);
+		text-align: center;
+		animation: rise var(--t-slow) var(--ease-out);
+	}
+	.pair h1 {
+		margin: 8px 0 4px;
 	}
 	.pair p {
+		margin: 6px 0 0;
 		font-size: var(--fs-md);
 		color: var(--dim);
 		line-height: 1.55;
+	}
+	.pair .status {
+		animation: fade var(--t-med) var(--ease-out);
+	}
+	.pair form,
+	.entry {
+		align-self: stretch;
+		text-align: left;
 	}
 	form {
 		display: flex;
 		flex-direction: column;
 		gap: 12px;
-		margin-top: 16px;
+		margin-top: 20px;
 	}
 	label {
 		display: flex;
@@ -569,7 +825,7 @@
 		font-size: var(--fs-sm);
 		color: var(--dim);
 	}
-	input {
+	input.code {
 		padding: 11px 12px;
 		border: 1px solid var(--border);
 		border-radius: var(--r-md);
@@ -578,10 +834,16 @@
 		font-family: var(--font-mono);
 		font-size: var(--fs-xl);
 		letter-spacing: 0.12em;
+		text-align: center;
 		text-transform: uppercase;
 		outline: none;
+		transition: border-color var(--t-fast) var(--ease-out);
+	}
+	input:focus {
+		border-color: var(--border-strong);
 	}
 	.err {
+		align-self: stretch;
 		margin-top: 12px;
 	}
 	.hero {
@@ -595,41 +857,58 @@
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
 		color: var(--accent-bright);
+		transition: color var(--t-med) var(--ease-out);
 	}
 	.hero.warn {
 		color: var(--warn);
 	}
 	.actions {
-		margin-top: 20px;
+		margin-top: 24px;
 	}
-	.link {
-		padding: 4px 0;
-		border: none;
-		background: none;
-		color: var(--dim);
-		font-size: var(--fs-sm);
-		text-decoration: underline;
-		text-underline-offset: 3px;
-		white-space: nowrap;
+	.conn-wrap {
+		position: relative;
+		flex-shrink: 0;
 	}
 	.conn {
-		display: flex;
+		display: inline-flex;
 		align-items: center;
-		gap: 8px;
-		margin-bottom: 8px;
-		font-size: var(--fs-sm);
+		gap: 6px;
+		height: 30px;
+		padding: 0 10px;
+		border: 1px solid var(--hairline);
+		border-radius: var(--r-full);
+		background: var(--surface);
 		color: var(--dim);
+		font: inherit;
+		font-size: var(--fs-xs);
+		cursor: pointer;
+		transition:
+			background var(--t-fast) var(--ease-out),
+			color var(--t-fast) var(--ease-out),
+			transform var(--t-fast) var(--ease-out);
 	}
-	.conn-text {
-		flex: 1;
-		min-width: 0;
+	.conn:hover,
+	.conn.on {
+		background: var(--surface2);
+		color: var(--text);
+	}
+	.conn:active {
+		transform: scale(0.96);
+	}
+	.conn :global(svg) {
+		color: var(--dim2);
+		transition: transform var(--t-fast) var(--ease-out);
+	}
+	.conn.on :global(svg) {
+		transform: rotate(180deg);
 	}
 	.dot {
-		width: 8px;
-		height: 8px;
+		width: 7px;
+		height: 7px;
 		border-radius: 50%;
 		flex-shrink: 0;
 		background: var(--dim2);
+		transition: background var(--t-med) var(--ease-out);
 	}
 	.conn.ok .dot {
 		background: var(--ok);
@@ -648,6 +927,7 @@
 		align-items: center;
 		gap: 10px;
 		margin-bottom: 12px;
+		animation: rise var(--t-med) var(--ease-out);
 	}
 	.refused-msg {
 		flex: 1;
@@ -658,6 +938,7 @@
 		left: 0;
 		right: 0;
 		bottom: 0;
+		z-index: 10;
 		display: flex;
 		padding: 6px 0 calc(env(safe-area-inset-bottom) + 6px);
 		border-top: 1px solid var(--hairline);
@@ -675,6 +956,18 @@
 		background: none;
 		color: var(--dim);
 		font-size: var(--fs-2xs);
+		cursor: pointer;
+		-webkit-tap-highlight-color: transparent;
+		transition:
+			background var(--t-fast) var(--ease-out),
+			color var(--t-fast) var(--ease-out),
+			transform var(--t-fast) var(--ease-out);
+	}
+	nav button:hover {
+		color: var(--text);
+	}
+	nav button:active {
+		transform: scale(0.94);
 	}
 	nav button.on {
 		color: var(--accent-bright);
@@ -690,17 +983,19 @@
 		color: #000;
 		font-size: var(--fs-2xs);
 		line-height: 16px;
+		animation: pop-in var(--t-med) var(--ease-spring);
 	}
 	.entry {
 		display: flex;
 		flex-direction: column;
 		gap: 10px;
 		width: 100%;
-		margin-top: 8px;
+		margin-top: 20px;
 	}
 	.paste {
-		display: flex;
+		flex-direction: row;
 		gap: 8px;
+		margin-top: 0;
 	}
 	.paste input {
 		flex: 1;
@@ -713,12 +1008,54 @@
 		color: var(--text);
 		font: inherit;
 		font-size: var(--fs-md);
+		outline: none;
+		transition: border-color var(--t-fast) var(--ease-out);
 	}
 	.steps {
-		margin: 0;
+		margin: 8px 0 0;
 		padding-left: 20px;
 		color: var(--dim);
 		font-size: var(--fs-md);
 		line-height: 1.7;
+		text-align: left;
+	}
+	.loading-page {
+		position: fixed;
+		inset: 0;
+		display: flex;
+		flex-direction: column;
+		background: var(--bg);
+	}
+	.loading-page header {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: calc(env(safe-area-inset-top) + 8px) 12px 8px;
+		border-bottom: 1px solid var(--hairline);
+		background: var(--panel);
+	}
+	.loading-page .back {
+		display: inline-flex;
+		padding: 6px;
+		border: none;
+		border-radius: var(--r-sm);
+		background: none;
+		color: var(--text);
+	}
+	.loading-page .title {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		font-size: var(--fs-lg);
+		font-weight: 600;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.loading-body {
+		flex: 1;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: var(--dim);
 	}
 </style>

@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Browse a project's files read-only: folders (git-ignored entries
 	// hidden) and a highlighted view of one file.
-	import hljs from 'highlight.js';
+	import hljs from '$lib/hljs';
 	import ArrowUpIcon from 'phosphor-svelte/lib/ArrowUpIcon';
 	import FolderIcon from 'phosphor-svelte/lib/FolderIcon';
 	import FileIcon from 'phosphor-svelte/lib/FileIcon';
@@ -17,9 +17,12 @@
 	let file = $state<FileContent | null>(null);
 	let error = $state('');
 	let loading = $state(false);
+	/** The row tapped last, marked while its folder or file loads. */
+	let pending = $state<string | null>(null);
 
-	async function load<T>(work: () => Promise<T>): Promise<T | null> {
+	async function load<T>(work: () => Promise<T>, path: string): Promise<T | null> {
 		loading = true;
+		pending = path;
 		error = '';
 		try {
 			return await work();
@@ -28,11 +31,12 @@
 			return null;
 		} finally {
 			loading = false;
+			pending = null;
 		}
 	}
 
 	async function openDir(path: string) {
-		const next = await load(() => remoteProjects.list(path));
+		const next = await load(() => remoteProjects.list(path), path);
 		if (next) {
 			listing = next;
 			file = null;
@@ -40,7 +44,7 @@
 	}
 
 	async function openFile(path: string) {
-		const next = await load(() => remoteProjects.read(path));
+		const next = await load(() => remoteProjects.read(path), path);
 		if (next) file = next;
 	}
 
@@ -77,6 +81,7 @@
 <RemoteScreen {title} subtitle={file ? relative(file.path) : listing ? relative(listing.path) : undefined} onBack={back}>
 	{#if error}<Notice tone="error">{error}</Notice>{/if}
 	{#if file}
+		<div class="view">
 		{#if file.binary}
 			<p class="empty">{t('shell.remote.binaryFile', { size: size(file.size) })}</p>
 		{:else}
@@ -87,13 +92,20 @@
 				<pre class="src hljs">{@html highlighted}</pre>
 			</div>
 		{/if}
+		</div>
 	{:else if listing}
+		{#key listing.path}
+		<div class="view">
 		{#if parent}
-			<button class="row" onclick={() => openDir(parent!)}><ArrowUpIcon size={16} /> <span class="name">..</span></button>
+			<button class="row" class:pending={pending === parent} disabled={loading} onclick={() => openDir(parent!)}>
+				{#if pending === parent}<CircleNotchIcon size={16} class="spin" />{:else}<ArrowUpIcon size={16} />{/if}
+				<span class="name">..</span>
+			</button>
 		{/if}
 		{#each listing.entries as entry (entry.name)}
-			<button class="row" onclick={() => (entry.dir ? openDir(`${listing!.path}/${entry.name}`) : openFile(`${listing!.path}/${entry.name}`))}>
-				{#if entry.dir}<FolderIcon size={16} />{:else}<FileIcon size={16} />{/if}
+			{@const path = `${listing.path}/${entry.name}`}
+			<button class="row" class:pending={pending === path} disabled={loading} onclick={() => (entry.dir ? openDir(path) : openFile(path))}>
+				{#if pending === path}<CircleNotchIcon size={16} class="spin" />{:else if entry.dir}<FolderIcon size={16} />{:else}<FileIcon size={16} />{/if}
 				<span class="name">{entry.name}</span>
 				{#if !entry.dir}<span class="size">{size(entry.size)}</span>{/if}
 			</button>
@@ -101,8 +113,10 @@
 			<p class="empty">{t('shell.remote.emptyFolder')}</p>
 		{/each}
 		{#if listing.truncated}<p class="empty">{t('shell.remote.truncated')}</p>{/if}
+		</div>
+		{/key}
 	{/if}
-	{#if loading}<p class="empty"><CircleNotchIcon size={14} class="spin" /></p>{/if}
+	{#if loading && !listing}<p class="empty"><CircleNotchIcon size={14} class="spin" /></p>{/if}
 </RemoteScreen>
 
 <style>
@@ -118,6 +132,26 @@
 		color: var(--text);
 		font-size: var(--fs-md);
 		text-align: left;
+		cursor: pointer;
+		transition: background var(--t-fast) var(--ease-out);
+	}
+	.row:disabled {
+		cursor: default;
+	}
+	.row:not(:disabled):active {
+		background: var(--surface2);
+	}
+	.row.pending {
+		color: var(--text);
+		background: var(--surface);
+	}
+	.row :global(svg) {
+		flex-shrink: 0;
+		color: var(--dim);
+	}
+	/* A folder or file replacing the last one fades in. */
+	.view {
+		animation: pane-in var(--t-med) var(--ease-out);
 	}
 	.name {
 		flex: 1;

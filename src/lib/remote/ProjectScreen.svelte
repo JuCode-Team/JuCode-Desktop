@@ -11,6 +11,7 @@
 	import RemoteScreen from './RemoteScreen.svelte';
 	import SessionRow from './SessionRow.svelte';
 	import { remoteProjects, shortPath, type HistoryItem, type ProjectView } from './store.svelte';
+	import { toast } from '$lib/ui/toast.svelte';
 	import { t } from '$lib/i18n';
 
 	let {
@@ -34,8 +35,13 @@
 	let error = $state('');
 	let showArchived = $state(false);
 
-	const active = $derived(items.filter((s) => !s.archived && !s.agent));
-	const archived = $derived(items.filter((s) => s.archived && !s.agent));
+	/** Changes made here, shown over the loaded list until a reload after
+	 *  saving them has the daemon's version (the list also reloads as soon as
+	 *  the session list changes, which can be before the save lands). */
+	let overrides = $state<Record<string, { title?: string; archived?: boolean }>>({});
+	const shown = $derived(items.map((s) => (overrides[s.session] ? { ...s, ...overrides[s.session] } : s)));
+	const active = $derived(shown.filter((s) => !s.archived && !s.agent));
+	const archived = $derived(shown.filter((s) => s.archived && !s.agent));
 	const ENGINE_LABELS: Record<string, string> = { claude: 'Claude Code', codex: 'Codex' };
 	const title = $derived(project.chats ? t('shell.remote.chats') : project.name);
 	/** A session with no messages yet is labelled with its id. */
@@ -62,29 +68,36 @@
 	async function rename(item: HistoryItem) {
 		const next = prompt(t('shell.remote.renamePrompt'), item.title);
 		if (next === null) return;
-		await act(() => remoteProjects.setMeta(item.session, { title: next.trim() }));
+		if (!next.trim() || next.trim() === item.title) return;
+		await change(item, { title: next.trim() });
 	}
 
 	async function archive(item: HistoryItem, value: boolean) {
-		await act(() => remoteProjects.setMeta(item.session, { archived: value }));
+		await change(item, { archived: value });
 	}
 
-	async function act(work: () => Promise<void>) {
+	async function change(item: HistoryItem, meta: { title?: string; archived?: boolean }) {
+		overrides[item.session] = { ...overrides[item.session], ...meta };
 		try {
-			await work();
+			await remoteProjects.setMeta(item.session, meta);
 			await load();
 		} catch (e) {
-			error = e instanceof Error ? e.message : String(e);
+			toast.error(e instanceof Error ? e.message : String(e));
+		} finally {
+			delete overrides[item.session];
 		}
 	}
 
 	async function remove() {
 		if (!confirm(t('shell.remote.removeProjectConfirm', { name: project.name }))) return;
+		// The project leaves the list at once (the store puts it back and
+		// throws if the daemon refuses), so this page closes right away.
+		const removing = remoteProjects.removeProject(project.id);
+		onBack();
 		try {
-			await remoteProjects.removeProject(project.id);
-			onBack();
+			await removing;
 		} catch (e) {
-			error = e instanceof Error ? e.message : String(e);
+			toast.error(e instanceof Error ? e.message : String(e));
 		}
 	}
 </script>

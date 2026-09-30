@@ -52,8 +52,21 @@
 		display: inline-flex;
 		padding: 6px;
 		border: none;
+		border-radius: var(--r-sm);
 		background: none;
 		color: var(--text);
+		cursor: pointer;
+		transition:
+			background var(--t-fast) var(--ease-out),
+			transform var(--t-fast) var(--ease-out);
+	}
+	.back:hover,
+	header :global(.act:hover:not(:disabled)) {
+		background: var(--surface2);
+	}
+	.back:active,
+	header :global(.act:active:not(:disabled)) {
+		transform: scale(0.92);
 	}
 	.heading {
 		flex: 1;
@@ -91,5 +104,13 @@
 		border-radius: var(--r-md);
 		background: none;
 		color: var(--text);
+		cursor: pointer;
+		transition:
+			background var(--t-fast) var(--ease-out),
+			transform var(--t-fast) var(--ease-out);
+	}
+	header :global(.act:disabled) {
+		opacity: 0.5;
+		cursor: default;
 	}
 </style>
