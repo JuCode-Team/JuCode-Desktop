@@ -23,8 +23,8 @@
 	}: {
 		project: ProjectView;
 		onBack: () => void;
-		onOpenSession: (session: string, cwd: string, title: string) => void;
-		onNewSession: () => void;
+		onOpenSession: (session: string, cwd: string, title: string, engine?: string) => void;
+		onNewSession: (engine?: string) => void;
 		onFiles: () => void;
 		onChanges: () => void;
 	} = $props();
@@ -90,8 +90,9 @@
 
 <RemoteScreen {title} subtitle={project.chats ? undefined : shortPath(project.path)} {onBack}>
 	<div class="tools">
-		<Button variant="primary" onclick={onNewSession}><PlusIcon size={14} /> {t('shell.remote.newSession')}</Button>
+		<Button variant="primary" onclick={() => onNewSession()}><PlusIcon size={14} /> {t('shell.remote.newSession')}</Button>
 		{#if !project.chats}
+			<Button onclick={() => onNewSession('claude')}><PlusIcon size={14} /> Claude Code</Button>
 			<Button onclick={onFiles}><FilesIcon size={14} /> {t('shell.remote.files')}</Button>
 			<Button onclick={onChanges}><GitDiffIcon size={14} /> {t('shell.remote.changes')}</Button>
 		{/if}
@@ -103,10 +104,10 @@
 	{:else}
 		{#each active as item (item.session)}
 			<SessionRow
-				title={label(item)}
+				title={item.engine === 'claude' ? `${label(item)} · Claude Code` : label(item)}
 				at={item.updated_at}
 				open={item.open}
-				onOpen={() => onOpenSession(item.session, project.path, label(item))}
+				onOpen={() => onOpenSession(item.session, project.path, label(item), item.engine)}
 				archived={item.archived}
 				onRename={() => rename(item)}
 				onArchive={() => archive(item, !item.archived)}
@@ -122,10 +123,10 @@
 			{#if showArchived}
 				{#each archived as item (item.session)}
 					<SessionRow
-						title={label(item)}
+						title={item.engine === 'claude' ? `${label(item)} · Claude Code` : label(item)}
 						at={item.updated_at}
 						open={item.open}
-						onOpen={() => onOpenSession(item.session, project.path, label(item))}
+						onOpen={() => onOpenSession(item.session, project.path, label(item), item.engine)}
 						archived={item.archived}
 				onRename={() => rename(item)}
 				onArchive={() => archive(item, !item.archived)}

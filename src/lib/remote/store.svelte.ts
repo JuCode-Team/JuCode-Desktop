@@ -29,6 +29,8 @@ export interface HistoryItem {
 	agent: string | null;
 	/** Hosted by the daemon right now. */
 	open: boolean;
+	/** `jucode` or `claude` (newer daemons). */
+	engine?: string;
 }
 
 export interface DirEntry {

@@ -10,6 +10,13 @@
 
 export const DAEMON_PROTOCOL = 2;
 
+/** A session run by another engine under the daemon (`engine: "claude"`),
+ *  with its start options (`approval_mode`, `model`, `resume_at`). */
+export interface EngineSpec {
+	engine: string;
+	options: Record<string, unknown>;
+}
+
 export interface DaemonEndpoint {
 	url: string;
 	token: string;
@@ -85,16 +92,23 @@ export class DaemonClient {
 	 *  id; `cwd` lets the daemon find one saved there that it never hosted),
 	 *  then watches it. The watch snapshot (startup state and transcript)
 	 *  arrives through `onFrame`. */
-	async open(desktopId: string, cwd: string, resume?: string, agent?: string, chat = false): Promise<void> {
+	async open(
+		desktopId: string,
+		cwd: string,
+		resume?: string,
+		agent?: string,
+		chat = false,
+		engine?: EngineSpec
+	): Promise<void> {
 		await this.connect();
 		const reply = resume
-			? await this.request(cwd ? { op: 'session_open', session: resume, cwd } : { op: 'session_open', session: resume })
+			? await this.request({ op: 'session_open', session: resume, ...(cwd ? { cwd } : {}), ...(engine ?? {}) })
 			: await this.request(
 					agent
 						? { op: 'session_create', agent }
-						: chat
+						: chat && !engine
 							? { op: 'session_create', chat: true }
-							: { op: 'session_create', cwd }
+							: { op: 'session_create', cwd, ...(engine ?? {}) }
 				);
 		const session = String(reply.session);
 		this.#toDaemon.set(desktopId, session);

@@ -24,6 +24,7 @@
 		agent,
 		cwd,
 		chat: isChat = false,
+		engine,
 		title,
 		register,
 		onBack,
@@ -38,6 +39,8 @@
 		 *  saved there that it never hosted. */
 		cwd?: string;
 		chat?: boolean;
+		/** Another engine the daemon runs the session on (`claude`). */
+		engine?: string;
 		title: string;
 		/** Shows the project's files / changes. */
 		onFiles?: () => void;
@@ -89,7 +92,14 @@
 			// A new session gets its id from the snapshot; later reconnects
 			// reopen that same session.
 			const resume = session ?? (chat.sessionId || undefined);
-			await daemon.open(id, cwd ?? '', resume, resume ? undefined : agent, !resume && !agent && isChat);
+			await daemon.open(
+				id,
+				cwd ?? '',
+				resume,
+				resume ? undefined : agent,
+				!resume && !agent && isChat,
+				engine && engine !== 'jucode' ? { engine, options: {} } : undefined
+			);
 			connected = true;
 		} catch (e) {
 			error = e instanceof Error ? e.message : String(e);

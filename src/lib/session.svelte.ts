@@ -1,5 +1,5 @@
 import { ChatState } from './chat.svelte';
-import { createSession, closeSession, hostSession, projectRoot, chatsDir, writeConfig, git, claudeSessionTranscript, switchToolProfile, jucodeSessions } from './protocol';
+import { createSession, closeSession, daemon, hostSession, projectRoot, chatsDir, writeConfig, git, claudeSessionTranscript, switchToolProfile, jucodeSessions } from './protocol';
 import { canHandOffToTui, isValidResumeSessionId } from './tuiHandoff';
 import { createAdapter, normalizeBackendId, type BackendId } from './backends';
 import { dispatch, dropHeldOps, holdOps, ioFor, registerAdapter, unregisterAdapter } from './backends/router';
@@ -53,9 +53,12 @@ export interface SavedProject {
 /** Waits between attempts to reach an unreachable daemon, ms (~4.5 min). */
 const DAEMON_RETRY_DELAYS = [1000, 2000, 4000, 8000, 15000, 30000, 30000, 30000, 30000, 30000, 30000, 30000];
 
-/** New JuCode sessions run in the daemon when the setting is on. */
+/** Backends the daemon can run. */
+const DAEMON_BACKENDS: BackendId[] = ['jucode', 'claude'];
+
+/** New sessions of those backends run in the daemon when the setting is on. */
 function hostsNewSessions(backend: BackendId): boolean {
-	return backend === 'jucode' && loadBackendSettings().daemon;
+	return DAEMON_BACKENDS.includes(backend) && loadBackendSettings().daemon;
 }
 
 const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
@@ -195,8 +198,28 @@ export class SessionStore {
 		s.chat.restarting = true;
 		// A hosted session reopens its daemon session when it has one (restart,
 		// restore, provider switch) and creates one otherwise.
+		// The daemon translates other engines into jucode events itself.
+		if (s.hosted && s.adapter.id !== 'jucode') {
+			s.adapter = createAdapter('jucode');
+			registerAdapter(s.id, s.adapter);
+		}
+		const optsRec = (opts ?? {}) as Record<string, unknown>;
+		const engine =
+			s.hosted && s.backendId === 'claude'
+				? {
+						engine: 'claude',
+						options: {
+							approval_mode: optsRec.permission_mode,
+							...(optsRec.model ? { model: optsRec.model } : {}),
+							...(optsRec.resume_session_at ? { resume_at: optsRec.resume_session_at } : {})
+						}
+					}
+				: undefined;
 		const spawned = s.hosted
-			? hostSession(s.id, cwd ?? '', resume ?? (s.chat.sessionId || undefined), agent, chat)
+			? hostSession(s.id, cwd ?? '', resume ?? (s.chat.sessionId || undefined), agent, chat, engine).then(() => {
+					// A new claude session is named by the daemon (its conversation id).
+					if (engine && !s.chat.sessionId) s.chat.sessionId = daemon.sessionOf(s.id) ?? '';
+				})
 			: s.backendId === 'jucode' && !opts
 				? createSession(s.id, cwd)
 				: createSession(s.id, cwd, s.backendId, opts ?? {});
@@ -247,7 +270,7 @@ export class SessionStore {
 		// conversation persists under a known uuid and --resume can restore its
 		// context after a crash/restart — the CLI's own auto-generated id isn't
 		// reliably resumable in gateway setups ("No conversation found").
-		const extra = backendId === 'claude' ? { session_id: newUuid() } : undefined;
+		const extra = backendId === 'claude' && !s.hosted ? { session_id: newUuid() } : undefined;
 		if (extra) s.chat.sessionId = extra.session_id;
 		this.#spawn(s, project.path, () => {
 			if (firstMessage) {
@@ -302,7 +325,7 @@ export class SessionStore {
 		}
 		s.hosted = hostsNewSessions(backend);
 		// Same rationale as addSession: pin a resumable uuid for claude.
-		const extra = backend === 'claude' ? { session_id: newUuid() } : undefined;
+		const extra = backend === 'claude' && !s.hosted ? { session_id: newUuid() } : undefined;
 		if (extra) chat.sessionId = extra.session_id;
 		try {
 			await this.#spawn(s, project?.path, undefined, extra);
@@ -374,7 +397,9 @@ export class SessionStore {
 		hosted = false
 	) {
 		const s = this.#newSession(backend, backend === 'acp' ? acpAgent : undefined, reuseId);
-		s.hosted = hosted && backend === 'jucode';
+		// A claude conversation moves into the daemon whenever it can run there,
+		// even one saved or started outside it (the daemon resumes it by id).
+		s.hosted = (hosted && DAEMON_BACKENDS.includes(backend)) || (backend === 'claude' && hostsNewSessions(backend));
 		if (title) s.chat.title = title;
 		s.archived = archived;
 		if (chrome?.color) s.color = chrome.color;
@@ -398,7 +423,7 @@ export class SessionStore {
 			return s.id;
 		}
 		const spawned =
-			backend === 'claude'
+			backend === 'claude' && !s.hosted
 				? this.#spawn(s, project.path, () => this.#replayClaudeTranscript(s, project.path, sid), {
 						resume: sid
 					})
@@ -428,8 +453,9 @@ export class SessionStore {
 		if (chrome?.icon) s.icon = chrome.icon;
 		if (chrome?.titleLocked) s.chat.titleLocked = true;
 		project.sessions.push(s);
+		s.hosted = hostsNewSessions(backend);
 		// Same rationale as addSession: pin a resumable uuid for claude.
-		const extra = backend === 'claude' ? { session_id: newUuid() } : undefined;
+		const extra = backend === 'claude' && !s.hosted ? { session_id: newUuid() } : undefined;
 		if (extra) s.chat.sessionId = extra.session_id;
 		this.#spawn(s, project.path, undefined, extra).catch((e) => this.#engineFailed(s.chat, e));
 		return s.id;
@@ -557,11 +583,13 @@ export class SessionStore {
 		// A claude engine coming up fresh gets a new pinned id (as a new session
 		// does), not a leftover one it never used, which a later resume would
 		// fail on.
-		else if (s.backendId === 'claude') {
+		else if (s.backendId === 'claude' && !s.hosted) {
 			extra.session_id = newUuid();
 			s.chat.sessionId = extra.session_id as string;
 			s.chat.unsavedSid = true;
 		}
+		// A hosted claude session reopens by id; the daemon starts it again if
+		// Claude Code never saved it.
 		if (s.backendId === 'claude') extra.permission_mode = toClaudeMode(toEngineMode(s.chat.approvalMode));
 		this.#spawn(
 			s,
@@ -745,6 +773,9 @@ export class SessionStore {
 		s.chat.switching = true;
 		s.chat.engineState = 'connecting';
 		s.chat.truncateToUserTurn(userIndex);
+		// Back to before the first turn: a new conversation (a hosted session
+		// would otherwise reopen the old one by id).
+		if (!resumeAtUuid && s.hosted) s.chat.sessionId = '';
 		try {
 			await closeSession(id);
 			if (this.#gone(s)) return;

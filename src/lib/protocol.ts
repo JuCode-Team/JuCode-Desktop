@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { McpServerEntry } from './mcp';
-import { DaemonClient, type DaemonEndpoint, type SocketLike } from './daemon';
+import { DaemonClient, type DaemonEndpoint, type EngineSpec, type SocketLike } from './daemon';
 
 let daemonEndpoint = () => invoke<DaemonEndpoint>('daemon_endpoint');
 let openSocket = (url: string): SocketLike => new WebSocket(url) as unknown as SocketLike;
@@ -29,9 +29,10 @@ export function hostSession(
 	cwd: string,
 	resume?: string,
 	agent?: string,
-	chat = false
+	chat = false,
+	engine?: EngineSpec
 ): Promise<void> {
-	return daemon.open(session, cwd, resume, agent, chat);
+	return daemon.open(session, cwd, resume, agent, chat, engine);
 }
 
 // Commands the GUI sends to a session's `jucode serve` over stdin.

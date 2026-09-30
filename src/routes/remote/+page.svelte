@@ -81,7 +81,7 @@
 	let tab = $state<'projects' | 'desk' | 'agents'>('projects');
 	/** Pages opened over the tabs, last on top. */
 	type Screen = { key: number } & (
-		| { kind: 'session'; session?: string; agent?: string; cwd?: string; chat?: boolean; title: string }
+		| { kind: 'session'; session?: string; agent?: string; cwd?: string; chat?: boolean; engine?: string; title: string }
 		| { kind: 'project'; project: ProjectView }
 		| { kind: 'add' }
 		| { kind: 'files' | 'changes'; root: string; title: string }
@@ -388,6 +388,7 @@
 						agent={screen.agent}
 						cwd={screen.cwd}
 						chat={screen.chat}
+						engine={screen.engine}
 						title={screen.title}
 						{register}
 						onBack={pop}
@@ -399,9 +400,16 @@
 					<ProjectScreen
 						{project}
 						onBack={pop}
-						onOpenSession={(session, cwd, title) => push({ kind: 'session', session, cwd, chat: project.chats, title })}
-						onNewSession={() =>
-							push({ kind: 'session', cwd: project.path, chat: project.chats, title: t('shell.remote.newSession') })}
+						onOpenSession={(session, cwd, title, engine) =>
+							push({ kind: 'session', session, cwd, chat: project.chats, engine, title })}
+						onNewSession={(engine) =>
+							push({
+								kind: 'session',
+								cwd: project.path,
+								chat: project.chats,
+								engine,
+								title: engine === 'claude' ? 'Claude Code' : t('shell.remote.newSession')
+							})}
 						onFiles={() => push({ kind: 'files', root: project.path, title: project.name })}
 						onChanges={() => push({ kind: 'changes', root: project.path, title: project.name })}
 					/>

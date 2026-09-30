@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('./protocol', () => ({
 	createSession: vi.fn(() => Promise.resolve()),
 	hostSession: vi.fn(() => Promise.resolve()),
+	daemon: { sessionOf: vi.fn(() => 'claude-conv') },
 	closeSession: vi.fn(() => Promise.resolve()),
 	sendOp: vi.fn(() => Promise.resolve()),
 	sendLine: vi.fn(() => Promise.resolve()),
@@ -135,7 +136,7 @@ describe('SessionStore lifecycle', () => {
 		const p = proj();
 		store.projects.push(p);
 		store.openSaved(p, 's6old', 'old chat', 'jucode');
-		expect(hostSession).toHaveBeenCalledWith(store.activeId, p.path, 's6old', undefined, false);
+		expect(hostSession).toHaveBeenCalledWith(store.activeId, p.path, 's6old', undefined, false, undefined);
 		const first = store.activeId;
 		store.openSaved(p, 's6old', 'old chat', 'jucode');
 		expect(store.activeId).toBe(first);
@@ -836,11 +837,37 @@ describe('sessions hosted by jucode daemon', () => {
 		store.projects.push(p);
 		const id = store.addSession(p);
 		expect(p.sessions[0].hosted).toBe(true);
-		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined, undefined, false);
+		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined, undefined, false, undefined);
 		expect(createSession).not.toHaveBeenCalled();
 		// Other engines never go through the daemon.
 		store.addSession(p, undefined, 'codex');
 		expect(p.sessions[1].hosted).toBe(false);
+		vi.unstubAllGlobals();
+	});
+
+	it('claude sessions run in the daemon too, named by it and translated by it', async () => {
+		withDaemonSetting(true);
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p, undefined, 'claude');
+		const s = p.sessions[0];
+		expect(s.hosted).toBe(true);
+		// No pinned uuid: the daemon names the conversation.
+		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined, undefined, false, {
+			engine: 'claude',
+			options: { approval_mode: 'default' }
+		});
+		await flush();
+		expect(s.chat.sessionId).toBe('claude-conv');
+		expect(s.chat.backendId).toBe('claude');
+		expect(s.adapter.id).toBe('jucode');
+		expect(createSession).not.toHaveBeenCalled();
+
+		// A claude conversation picked from history also moves into the daemon.
+		vi.mocked(hostSession).mockClear();
+		const picked = store.restoreSession(p, 'conv-2', '', 'claude');
+		expect(hostSession).toHaveBeenCalledWith(picked, p.path, 'conv-2', undefined, false, expect.objectContaining({ engine: 'claude' }));
 		vi.unstubAllGlobals();
 	});
 
@@ -857,7 +884,7 @@ describe('sessions hosted by jucode daemon', () => {
 		vi.mocked(hostSession).mockClear();
 		store.handleExit(id);
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(id, p.path, 'daemon-sess', undefined, false);
+		expect(hostSession).toHaveBeenCalledWith(id, p.path, 'daemon-sess', undefined, false, undefined);
 		expect(sendLine).not.toHaveBeenCalledWith(id, expect.stringContaining('/resume'));
 		vi.unstubAllGlobals();
 	});
@@ -879,7 +906,7 @@ describe('sessions hosted by jucode daemon', () => {
 		await restored.restore(saved);
 		const s = restored.projects[0].sessions[0];
 		expect(s.hosted).toBe(true);
-		expect(hostSession).toHaveBeenCalledWith(s.id, p.path, 'daemon-sess', undefined, false);
+		expect(hostSession).toHaveBeenCalledWith(s.id, p.path, 'daemon-sess', undefined, false, undefined);
 		expect(sendLine).not.toHaveBeenCalledWith(s.id, expect.stringContaining('/resume'));
 		vi.unstubAllGlobals();
 	});
@@ -895,7 +922,7 @@ describe('agent sessions', () => {
 		expect(s.hosted).toBe(true);
 		expect(s.chat.title).toBe('Ops');
 		expect(store.activeId).toBe(id);
-		expect(hostSession).toHaveBeenCalledWith(id, '/srv/ops', undefined, 'ops', false);
+		expect(hostSession).toHaveBeenCalledWith(id, '/srv/ops', undefined, 'ops', false, undefined);
 	});
 
 	it("reuses the open tab of the agent's session, or reopens it by id", async () => {
@@ -904,7 +931,7 @@ describe('agent sessions', () => {
 		p.path = '/srv/ops';
 		store.projects.push(p);
 		const first = store.openAgentSession({ id: 'ops', name: 'Ops', cwd: '/srv/ops' }, 'daemon-1');
-		expect(hostSession).toHaveBeenCalledWith(first, '/srv/ops', 'daemon-1', undefined, false);
+		expect(hostSession).toHaveBeenCalledWith(first, '/srv/ops', 'daemon-1', undefined, false, undefined);
 		// The existing project is reused, and the same session is not opened twice.
 		expect(store.projects).toHaveLength(1);
 		vi.mocked(hostSession).mockClear();
