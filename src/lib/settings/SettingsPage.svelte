@@ -41,7 +41,7 @@
 	} from '$lib/protocol';
 	import { dispatch } from '$lib/backends/router';
 	import { caps } from '$lib/backends';
-	import { prefs, vibrancySupported } from '$lib/prefs.svelte';
+	import { prefs, TURN_STAT_KEYS, vibrancySupported } from '$lib/prefs.svelte';
 	import { themeState, setTheme, type ThemePref } from '$lib/theme.svelte';
 	import type { ChatState } from '$lib/chat.svelte';
 	import { modelSetup } from '$lib/modelSetupState.svelte';
@@ -58,6 +58,7 @@
 	import TextField from '$lib/ui/TextField.svelte';
 	import Select from '$lib/ui/Select.svelte';
 	import Switch from '$lib/ui/Switch.svelte';
+	import Checkbox from '$lib/ui/Checkbox.svelte';
 	import Segmented from '$lib/ui/Segmented.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
@@ -551,6 +552,17 @@
 							</SettingsRow>
 						{/if}
 					</SettingsSection>
+					<SettingsSection title={t('settings.page.conversation')}>
+						<SettingsRow id="turn-stats" title={t('settings.behavior.turnStats')} description={t('settings.behavior.turnStatsHint')}>
+							<div class="stat-picks">
+								{#each TURN_STAT_KEYS as key (key)}
+									<Checkbox checked={prefs.turnStats.includes(key)} onchange={(on) => prefs.setTurnStat(key, on)}>
+										{t(`settings.behavior.turnStat.${key}`)}
+									</Checkbox>
+								{/each}
+							</div>
+						</SettingsRow>
+					</SettingsSection>
 					<SettingsSection title={t('settings.page.files')}>
 						<SettingsRow id="html-open" title={t('settings.behavior.htmlOpen')} description={t('settings.behavior.htmlOpenHint')}>
 							<Segmented
@@ -783,6 +795,14 @@
 </div>
 
 <style>
+	.stat-picks {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: flex-end;
+		gap: 8px 16px;
+		max-width: 360px;
+	}
+
 	/* Covers the content panel; the rail and title bar stay around it. */
 	.settings {
 		position: absolute;

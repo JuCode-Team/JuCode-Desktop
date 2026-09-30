@@ -11,9 +11,18 @@ type PrefsShape = {
 	 *  effect layer is always present but stays invisible unless this opts the CSS
 	 *  in (the root `data-vibrancy` flag), so toggling needs no window round-trip. */
 	sidebarVibrancy: boolean;
+	/** Which per-turn figures the reply footer shows (see TurnStats). */
+	turnStats: TurnStatKey[];
 };
 
-const DEFAULTS: PrefsShape = { htmlOpenInBrowser: true, sidebarVibrancy: true };
+export const TURN_STAT_KEYS = ['elapsed', 'ttft', 'tokens', 'files', 'tools', 'cost', 'model'] as const;
+export type TurnStatKey = (typeof TURN_STAT_KEYS)[number];
+
+const DEFAULTS: PrefsShape = {
+	htmlOpenInBrowser: true,
+	sidebarVibrancy: true,
+	turnStats: ['elapsed', 'tokens', 'files']
+};
 
 function load(): PrefsShape {
 	try {
@@ -47,11 +56,15 @@ export const vibrancySupported = () =>
 class PrefsStore {
 	htmlOpenInBrowser = $state(DEFAULTS.htmlOpenInBrowser);
 	sidebarVibrancy = $state(DEFAULTS.sidebarVibrancy);
+	turnStats = $state<TurnStatKey[]>(DEFAULTS.turnStats);
 
 	init() {
 		const p = load();
 		this.htmlOpenInBrowser = p.htmlOpenInBrowser;
 		this.sidebarVibrancy = p.sidebarVibrancy;
+		this.turnStats = Array.isArray(p.turnStats)
+			? p.turnStats.filter((k): k is TurnStatKey => (TURN_STAT_KEYS as readonly string[]).includes(k))
+			: DEFAULTS.turnStats;
 		this.#applyVibrancy();
 	}
 
@@ -61,7 +74,8 @@ class PrefsStore {
 				KEY,
 				JSON.stringify({
 					htmlOpenInBrowser: this.htmlOpenInBrowser,
-					sidebarVibrancy: this.sidebarVibrancy
+					sidebarVibrancy: this.sidebarVibrancy,
+					turnStats: this.turnStats
 				})
 			);
 		} catch {
@@ -81,6 +95,13 @@ class PrefsStore {
 
 	setHtmlOpenInBrowser(v: boolean) {
 		this.htmlOpenInBrowser = v;
+		this.#save();
+	}
+
+	setTurnStat(key: TurnStatKey, on: boolean) {
+		const rest = this.turnStats.filter((k) => k !== key);
+		// Kept in TURN_STAT_KEYS order, the footer's order.
+		this.turnStats = on ? TURN_STAT_KEYS.filter((k) => k === key || rest.includes(k)) : rest;
 		this.#save();
 	}
 

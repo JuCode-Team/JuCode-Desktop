@@ -45,6 +45,7 @@ export const ROWS: SearchRow[] = [
 	{ section: 'general', id: 'language', titleKey: 'settings.language' },
 	{ section: 'general', id: 'theme', titleKey: 'settings.theme' },
 	{ section: 'general', id: 'vibrancy', titleKey: 'settings.behavior.vibrancy', descKey: 'settings.behavior.vibrancyHint' },
+	{ section: 'general', id: 'turn-stats', titleKey: 'settings.behavior.turnStats', descKey: 'settings.behavior.turnStatsHint' },
 	{ section: 'general', id: 'html-open', titleKey: 'settings.behavior.htmlOpen', descKey: 'settings.behavior.htmlOpenHint' },
 	{ section: 'account', id: 'account-login', titleKey: 'settings.page.jucodeAccount', descKey: 'settings.page.jucodeAccountDesc' },
 	{ section: 'account', id: 'account-models', titleKey: 'shell.modelSetup.manage', descKey: 'settings.page.manageModelsDesc' },

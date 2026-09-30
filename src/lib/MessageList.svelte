@@ -4,13 +4,16 @@
 	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
 	import ArrowCounterClockwiseIcon from 'phosphor-svelte/lib/ArrowCounterClockwiseIcon';
-	import { slide } from 'svelte/transition';
+	import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon';
+	import { fade, slide } from 'svelte/transition';
 	import Markdown from '$lib/Markdown.svelte';
 	import ToolCard from '$lib/ToolCard.svelte';
 	import Indicator from '$lib/Indicator.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import { t } from '$lib/i18n';
-	import type { Msg } from '$lib/chat.svelte';
+	import type { Msg, TurnStats } from '$lib/chat.svelte';
+	import { prefs } from '$lib/prefs.svelte';
+	import { fmtTokens } from '$lib/usageStats';
 
 	let {
 		messages,
@@ -164,6 +167,36 @@
 		}, 1500);
 	}
 
+	// A sent message's state shows on its bubble; the bottom indicator would
+	// say the same thing ("connecting"), so it stays quiet meanwhile.
+	const sendingShown = $derived.by(() => {
+		for (let i = messages.length - 1; i >= 0; i--) {
+			const m = messages[i]!;
+			if (m.kind === 'user') return !!m.state && m.state !== 'failed';
+		}
+		return false;
+	});
+	const shownPhase = $derived(sendingShown && (phase === 'connecting' || phase === 'waiting') ? null : phase);
+
+	/** The turn figures chosen in settings, in footer order. */
+	function turnParts(s: TurnStats): { text: string; title: string; mono?: boolean }[] {
+		const out: { text: string; title: string; mono?: boolean }[] = [];
+		for (const k of prefs.turnStats) {
+			if (k === 'elapsed') out.push({ text: fmtDur(s.elapsed), title: t('chat.stat.elapsed'), mono: true });
+			else if (k === 'ttft' && s.ttft !== undefined)
+				out.push({ text: t('chat.stat.ttftShort', { t: fmtDur(s.ttft) }), title: t('chat.stat.ttft') });
+			else if (k === 'tokens' && (s.inTokens || s.outTokens))
+				out.push({ text: `↑${fmtTokens(s.inTokens)} ↓${fmtTokens(s.outTokens)}`, title: t('chat.stat.tokens'), mono: true });
+			else if (k === 'files' && s.files)
+				out.push({ text: t('chat.stat.filesShort', { n: s.files, a: s.added, r: s.removed }), title: t('chat.stat.files') });
+			else if (k === 'tools' && s.tools) out.push({ text: t('chat.stat.toolsShort', { n: s.tools }), title: t('chat.stat.tools') });
+			else if (k === 'cost' && s.cost > 0)
+				out.push({ text: `$${s.cost < 0.01 ? s.cost.toFixed(4) : s.cost.toFixed(2)}`, title: t('chat.stat.cost'), mono: true });
+			else if (k === 'model' && s.model) out.push({ text: s.model, title: t('chat.stat.model') });
+		}
+		return out;
+	}
+
 	const fmtDur = (ms: number) =>
 		ms < 1000
 			? `${ms}ms`
@@ -264,7 +297,17 @@
 					<ArrowCounterClockwiseIcon size={12} />{#if drop > 1}<span class="rwn">{drop}</span>{/if}
 				</button>
 				<button class="uedit" onclick={() => onEdit(m.text)} aria-label="quote" title={t('chat.quoteTitle')}><PencilSimpleIcon size={12} /></button>
-				<div class="bubble">{m.text}</div>
+				<div class="ucol">
+					<div class="bubble" class:pending={m.state === 'sending'}>{m.text}</div>
+					{#if m.state}
+						{#key m.state}
+							<div class="sendstate {m.state}" in:fade={{ duration: 160 }}>
+								{#if m.state === 'failed'}<WarningCircleIcon size={13} />{:else}<span class="sdot"></span>{/if}
+								<span>{t(`chat.send.${m.state}`)}</span>
+							</div>
+						{/key}
+					{/if}
+				</div>
 			</div>
 		{:else if m.kind === 'assistant'}
 			<div class="answer">
@@ -276,8 +319,14 @@
 				{:else}
 					<Markdown text={m.text} {onFile} />
 					<div class="foot">
-						{#if m.elapsed}<span class="mono">{fmtDur(m.elapsed)}</span>{/if}
-						{#if m.tokens}<span class="mono">{t('chat.tokens', { n: m.tokens })}</span>{/if}
+						{#if m.turn}
+							{#each turnParts(m.turn) as part, j (j)}
+								<span class="stat" class:mono={part.mono} title={part.title}>{part.text}</span>
+							{/each}
+						{:else if m.elapsed}
+							<span class="mono">{fmtDur(m.elapsed)}</span>
+							{#if m.tokens}<span class="mono">{t('chat.tokens', { n: m.tokens })}</span>{/if}
+						{/if}
 						<button class="copy" onclick={() => copy(m.text, m)} aria-label="copy">
 							{#if copied === m}<CheckIcon size={13} /> {t('common.copied')}{:else}<CopyIcon size={13} /> {t('common.copy')}{/if}
 						</button>
@@ -310,7 +359,7 @@
 			</div>
 		{/if}
 	{/each}
-	<Indicator {phase} tokens={compactionTokens} />
+	<Indicator phase={shownPhase} tokens={compactionTokens} />
 </div>
 
 <style>
@@ -382,6 +431,87 @@
 		font-variant-numeric: tabular-nums;
 		line-height: 1;
 	}
+	.ucol {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		gap: 6px;
+		max-width: 78%;
+		min-width: 0;
+	}
+	.bubble.pending {
+		opacity: 0.7;
+	}
+	.sendstate {
+		display: inline-flex;
+		align-items: center;
+		gap: 7px;
+		padding-right: 6px;
+		color: var(--dim2);
+		font-size: var(--fs-2xs);
+	}
+	.sendstate.failed {
+		color: var(--err, var(--warn));
+	}
+	.sdot {
+		position: relative;
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: var(--dim);
+	}
+	/* sending: the dot breathes; connecting: it sends out rings (the handshake
+	   with the gateway); waiting: steady, connected. */
+	.sending .sdot {
+		animation: sbreathe 1.2s ease-in-out infinite;
+	}
+	.connecting .sdot {
+		background: var(--accent-bright);
+	}
+	.connecting .sdot::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		border-radius: 50%;
+		border: 1.5px solid var(--accent-bright);
+		animation: sring 1.3s ease-out infinite;
+	}
+	.waiting .sdot {
+		background: var(--accent-bright);
+	}
+	@keyframes sbreathe {
+		0%,
+		100% {
+			opacity: 0.35;
+		}
+		50% {
+			opacity: 1;
+		}
+	}
+	@keyframes sring {
+		0% {
+			transform: scale(1);
+			opacity: 0.7;
+		}
+		100% {
+			transform: scale(2.8);
+			opacity: 0;
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.sdot,
+		.sdot::after {
+			animation: none !important;
+		}
+	}
+	.stat + .stat::before {
+		content: '·';
+		margin-right: 10px;
+		opacity: 0.6;
+	}
+	.foot .stat + .stat {
+		margin-left: -2px;
+	}
 	.bubble {
 		background: var(--surface2);
 		border-radius: var(--r-xl);
@@ -389,7 +519,7 @@
 		line-height: 1.6;
 		white-space: pre-wrap;
 		word-break: break-word;
-		max-width: 78%;
+		max-width: 100%;
 	}
 	.answer {
 		line-height: 1.65;

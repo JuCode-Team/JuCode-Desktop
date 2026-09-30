@@ -16,9 +16,29 @@ import { t } from './i18n';
 import { costUsd } from './pricing';
 import { parseMcpServersEvent, type McpServerView } from './mcp';
 
+/** Where a sent message is before its reply starts: accepted locally, the
+ *  engine is connecting to the model gateway, connected and waiting for the
+ *  first token, or the turn failed first. Unset once the reply streams. */
+export type SendState = 'sending' | 'connecting' | 'waiting' | 'failed';
+
+/** One user turn's totals, stamped on its last assistant message. */
+export interface TurnStats {
+	elapsed: number;
+	/** Time to the first streamed output, ms. */
+	ttft?: number;
+	inTokens: number;
+	outTokens: number;
+	files: number;
+	added: number;
+	removed: number;
+	tools: number;
+	cost: number;
+	model: string;
+}
+
 export type Msg =
-	| { kind: 'user'; text: string }
-	| { kind: 'assistant'; text: string; tokens?: number; elapsed?: number; uuid?: string }
+	| { kind: 'user'; text: string; state?: SendState }
+	| { kind: 'assistant'; text: string; tokens?: number; elapsed?: number; uuid?: string; turn?: TurnStats }
 	| { kind: 'reasoning'; text: string; collapsed: boolean }
 	| { kind: 'tool'; callId: string; name: string; output: string; running: boolean; isError: boolean }
 	| { kind: 'system'; text: string }
@@ -236,6 +256,15 @@ export class ChatState {
 	#engineCost = false;
 	#turnStart: number | null = null;
 	#pendingUserEcho: string | null = null;
+	// This turn's running totals (see TurnStats), and the user message whose
+	// send state is still shown.
+	#sending: Extract<Msg, { kind: 'user' }> | null = null;
+	#firstOutput: number | null = null;
+	#turnIn = 0;
+	#turnOut = 0;
+	#turnTools = 0;
+	#turnCostStart = 0;
+	#lastTurn: TurnStats | null = null;
 	// Fast lookup for the tool message backing a call_id, so tool_update/tool_output
 	// don't scan the whole transcript. Populated on tool_start; invalidated when the
 	// message array is replaced wholesale (transcript). #tool() falls back to a scan
@@ -266,7 +295,7 @@ export class ChatState {
 	/** Show a just-sent user message immediately, before the engine echoes it.
 	 *  The echo is de-duplicated in the `user_message` handler. */
 	optimisticUser(content: string) {
-		this.messages.push({ kind: 'user', text: content });
+		this.#trackSend({ kind: 'user', text: content, state: 'sending' });
 		this.unsavedSid = false;
 		this.#pendingUserEcho = content;
 		if (this.title === 'New session' && !this.titleLocked && content.trim()) this.title = content.trim().slice(0, 40);
@@ -276,16 +305,67 @@ export class ChatState {
 	/** Stamp the turn's total elapsed onto its last assistant message. */
 	#endTurn() {
 		this.#collapseReasoning();
+		if (this.#sending?.state !== 'failed') this.#setSend(null);
 		if (this.#turnStart === null) return;
 		const elapsed = Date.now() - this.#turnStart;
+		const edits = Object.values(this.turnEdits[this.userTurns - 1] ?? {});
+		const turn: TurnStats = {
+			elapsed,
+			...(this.#firstOutput !== null ? { ttft: this.#firstOutput - this.#turnStart } : {}),
+			inTokens: this.#turnIn,
+			outTokens: this.#turnOut,
+			files: edits.length,
+			added: edits.reduce((n, e) => n + e.added, 0),
+			removed: edits.reduce((n, e) => n + e.removed, 0),
+			tools: this.#turnTools,
+			cost: this.cost - this.#turnCostStart,
+			model: this.model
+		};
 		this.#turnStart = null;
+		this.#firstOutput = null;
+		this.#turnIn = this.#turnOut = this.#turnTools = 0;
 		for (let i = this.messages.length - 1; i >= 0; i--) {
 			const m = this.messages[i];
 			if (m.kind === 'assistant') {
 				m.elapsed = elapsed;
+				m.turn = turn;
+				this.#lastTurn = m.turn;
 				break;
 			}
 		}
+	}
+
+	/** Start showing the send state of a user message being pushed. */
+	#trackSend(m: Extract<Msg, { kind: 'user' }>) {
+		this.messages.push(m);
+		// The proxied copy, so later state changes render.
+		const pushed = this.messages[this.messages.length - 1];
+		if (pushed?.kind === 'user') this.#sending = pushed;
+	}
+
+	#setSend(state: SendState | null) {
+		if (!this.#sending) return;
+		if (state) this.#sending.state = state;
+		else {
+			delete this.#sending.state;
+			this.#sending = null;
+		}
+	}
+
+	/** The reply started streaming: the sent message has arrived. */
+	#outputStarted() {
+		if (this.#firstOutput === null && this.#turnStart !== null) this.#firstOutput = Date.now();
+		this.#setSend(null);
+	}
+
+	/** A turn's timer and totals start (idempotent within the turn). */
+	#startTurn() {
+		if (this.#turnStart !== null) return;
+		this.#turnStart = Date.now();
+		this.#firstOutput = null;
+		this.#turnIn = this.#turnOut = this.#turnTools = 0;
+		this.#turnCostStart = this.cost;
+		this.#lastTurn = null;
 	}
 
 	get busy() {
@@ -539,6 +619,7 @@ export class ChatState {
 				// never shown optimistically) — clear any stale echo so it can't
 				// later swallow an identical message.
 				this.#pendingUserEcho = null;
+				// No send state: claude echoes after the reply, when it would stick.
 				this.messages.push({ kind: 'user', text });
 				if (this.title === 'New session' && !this.titleLocked && text.trim()) {
 					this.title = text.trim().slice(0, 40);
@@ -553,6 +634,7 @@ export class ChatState {
 				this.#assistantIdx = -1;
 				break;
 			case 'assistant_delta': {
+				this.#outputStarted();
 				if (this.#assistantIdx < 0) {
 					this.#collapseReasoning();
 					this.messages.push({ kind: 'assistant', text: '' });
@@ -563,8 +645,11 @@ export class ChatState {
 				break;
 			}
 			case 'thinking_start':
+				// jucode: the gateway answered; the first token is on its way.
+				if (this.#sending?.state === 'connecting' || this.#sending?.state === 'sending') this.#setSend('waiting');
 				break;
 			case 'reasoning_delta': {
+				this.#outputStarted();
 				if (this.#reasoningIdx < 0) {
 					this.messages.push({ kind: 'reasoning', text: '', collapsed: false });
 					this.#reasoningIdx = this.messages.length - 1;
@@ -574,6 +659,8 @@ export class ChatState {
 				break;
 			}
 			case 'tool_start':
+				this.#outputStarted();
+				this.#turnTools++;
 				// One reasoning block per round: collapse this round's reasoning once
 				// its tool call appears, so the next round starts a fresh block.
 				this.#collapseReasoning();
@@ -794,6 +881,15 @@ export class ChatState {
 				this.totalOut += out;
 				// Estimate cost from tokens when the engine doesn't report it itself.
 				if (!this.#engineCost) this.cost += costUsd(this.model, inn, out);
+				if (this.#turnStart !== null) {
+					this.#turnIn += inn;
+					this.#turnOut += out;
+				} else if (this.#lastTurn) {
+					// claude reports the turn's usage after the turn ended.
+					this.#lastTurn.inTokens += inn;
+					this.#lastTurn.outTokens += out;
+					this.#lastTurn.cost = this.cost - this.#turnCostStart;
+				}
 				recordUsage(inn, out, {
 					provider: this.provider,
 					model: this.model,
@@ -842,7 +938,8 @@ export class ChatState {
 			}
 			case 'connecting':
 				this.engineState = 'connecting';
-				if (this.#turnStart === null) this.#turnStart = Date.now();
+				this.#startTurn();
+				if (this.#sending?.state === 'sending') this.#setSend('connecting');
 				break;
 			case 'compaction_start':
 				this.engineState = 'compacting';
@@ -896,6 +993,8 @@ export class ChatState {
 				break;
 			case 'error':
 				this.pendingApproval = null;
+				this.#setSend('failed');
+				this.#sending = null;
 				this.messages.push({ kind: 'error', text: str(ev.message) });
 				this.#endTurn();
 				this.#resetCurrent();

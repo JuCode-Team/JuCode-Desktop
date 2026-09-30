@@ -41,6 +41,24 @@ const chat = {
 		acpAgents: 'ACP 智能体',
 		effortTitle: '思考强度',
 		effortReset: '恢复默认强度',
+		send: {
+			sending: '发送中',
+			connecting: '正在连接模型网关',
+			waiting: '已连接，等待回复',
+			failed: '未送达'
+		},
+		stat: {
+			elapsed: '本轮总耗时',
+			ttft: '首个输出的等待时间',
+			ttftShort: '首字 {t}',
+			tokens: '输入 / 输出 Token',
+			files: '本轮修改的文件（新增 / 删除行）',
+			filesShort: '{n} 个文件 +{a} −{r}',
+			tools: '工具调用次数',
+			toolsShort: '{n} 次工具调用',
+			cost: '本轮费用（估算）',
+			model: '模型'
+		},
 		groupTitle: '分组',
 		groupAuto: '自动',
 		groupAutoDesc: '优先走最低倍率，不可用时换组',
@@ -136,6 +154,24 @@ const chat = {
 		acpAgents: 'ACP agents',
 		effortTitle: 'Thinking effort',
 		effortReset: 'Reset to default effort',
+		send: {
+			sending: 'Sending',
+			connecting: 'Connecting to the model gateway',
+			waiting: 'Connected, waiting for the reply',
+			failed: 'Not delivered'
+		},
+		stat: {
+			elapsed: 'Total time of this turn',
+			ttft: 'Wait for the first output',
+			ttftShort: 'first token {t}',
+			tokens: 'Input / output tokens',
+			files: 'Files changed this turn (added / removed lines)',
+			filesShort: '{n} files +{a} −{r}',
+			tools: 'Tool calls',
+			toolsShort: '{n} tool calls',
+			cost: 'Cost of this turn (estimated)',
+			model: 'Model'
+		},
 		groupTitle: 'Group',
 		groupAuto: 'Auto',
 		groupAutoDesc: 'Lowest multiplier first, other groups as fallback',

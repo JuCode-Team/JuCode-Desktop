@@ -402,3 +402,44 @@ describe('approval flow (engine-enforced)', () => {
 		expect(c.approvalMode).toBe('edits');
 	});
 });
+
+describe('send state and turn stats', () => {
+	const user = (c: ChatState) => c.messages.find((m) => m.kind === 'user') as { state?: string };
+
+	it('walks a sent message through connecting and waiting until the reply streams', () => {
+		const c = new ChatState();
+		c.optimisticUser('hi');
+		expect(user(c).state).toBe('sending');
+		c.handle({ type: 'connecting' });
+		expect(user(c).state).toBe('connecting');
+		c.handle({ type: 'thinking_start' });
+		expect(user(c).state).toBe('waiting');
+		c.handle({ type: 'assistant_delta', delta: 'hello' });
+		expect(user(c).state).toBeUndefined();
+	});
+
+	it('marks a message whose turn fails before any output', () => {
+		const c = new ChatState();
+		c.optimisticUser('hi');
+		c.handle({ type: 'connecting' });
+		c.handle({ type: 'error', message: 'HTTP 400' });
+		expect(user(c).state).toBe('failed');
+	});
+
+	it('stamps the turn totals on the last reply, including late usage', () => {
+		const c = new ChatState();
+		c.optimisticUser('fix it');
+		c.handle({ type: 'connecting' });
+		c.handle({ type: 'assistant_delta', delta: 'looking' });
+		c.handle({ type: 'tool_start', call_id: 'c1', name: 'read_file' });
+		c.handle({ type: 'tool_output', call_id: 'c1', name: 'read_file', output: 'x' });
+		c.handle({ type: 'usage', input_tokens: 100, output_tokens: 20 });
+		c.handle({ type: 'assistant_delta', delta: 'done' });
+		c.handle({ type: 'status', message: 'ready' });
+		// claude: usage for the turn arrives after it ended
+		c.handle({ type: 'usage', input_tokens: 50, output_tokens: 5 });
+		const last = [...c.messages].reverse().find((m) => m.kind === 'assistant') as { turn?: Record<string, number> };
+		expect(last.turn).toMatchObject({ inTokens: 150, outTokens: 25, tools: 1, files: 0 });
+		expect(last.turn!.ttft).toBeGreaterThanOrEqual(0);
+	});
+});
