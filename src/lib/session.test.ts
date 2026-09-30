@@ -95,6 +95,28 @@ describe('SessionStore lifecycle', () => {
 		const call = (createSession as unknown as { mock: { calls: unknown[][] } }).mock.calls.at(-1);
 		expect((call?.[3] as { resume?: string } | undefined)?.resume).toBeUndefined();
 		expect(s.chat.resumeBroken).toBe(false);
+		// A second restart before the fresh engine reports its id must not go
+		// back to the failed one.
+		s.chat.engineState = 'exited';
+		store.restartSession(id);
+		const again = (createSession as unknown as { mock: { calls: unknown[][] } }).mock.calls.at(-1);
+		expect((again?.[3] as { resume?: string } | undefined)?.resume).toBeUndefined();
+	});
+
+	it('a new claude session is spawned in the desktop approval mode', () => {
+		vi.stubGlobal('localStorage', {
+			getItem: (k: string) => (k === 'jucode-approval-mode' ? 'all' : null),
+			setItem: () => {}
+		});
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		vi.clearAllMocks();
+		store.addSession(p, undefined, 'claude');
+		// Spawned yolo up front: no mid-turn respawn when claude's init reports it.
+		const call = (createSession as unknown as { mock: { calls: unknown[][] } }).mock.calls.at(-1);
+		expect((call?.[3] as { permission_mode?: string }).permission_mode).toBe('bypassPermissions');
+		vi.unstubAllGlobals();
 	});
 
 	it('switchBackend swaps a virgin session in place (same id, new engine)', async () => {

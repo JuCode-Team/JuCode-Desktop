@@ -44,14 +44,14 @@ describe('SessionStore × backends', () => {
 		store.projects.push(p);
 		const id = store.addSession(p, undefined, 'claude');
 		// claude sessions pin a --session-id (uuid) so the conversation is resumable.
-		expect(createSession).toHaveBeenCalledWith(id, p.path, 'claude', { session_id: expect.any(String) });
+		expect(createSession).toHaveBeenCalledWith(id, p.path, 'claude', { permission_mode: 'default', session_id: expect.any(String) });
 		expect(p.sessions[0].backendId).toBe('claude');
 		expect(adapterFor(id)?.id).toBe('claude');
 		expect(p.lastBackend).toBe('claude');
 		// The next plain addSession inherits the project's last-used backend.
 		const id2 = store.addSession(p);
 		expect(p.sessions[1].backendId).toBe('claude');
-		expect(createSession).toHaveBeenCalledWith(id2, p.path, 'claude', { session_id: expect.any(String) });
+		expect(createSession).toHaveBeenCalledWith(id2, p.path, 'claude', { permission_mode: 'default', session_id: expect.any(String) });
 	});
 
 	it('non-jucode ops route through the adapter as raw lines', async () => {
@@ -116,7 +116,7 @@ describe('SessionStore × backends', () => {
 		// --resume spawn option instead of a command.
 		expect(sendLine).toHaveBeenCalledWith(sessions[0].id, JSON.stringify({ op: 'command', input: '/resume s-a' }));
 		expect(sendLine).not.toHaveBeenCalledWith(sessions[1].id, expect.stringContaining('/resume'));
-		expect(createSession).toHaveBeenCalledWith(sessions[1].id, '/tmp/p1', 'claude', { resume: 's-b' });
+		expect(createSession).toHaveBeenCalledWith(sessions[1].id, '/tmp/p1', 'claude', { permission_mode: 'default', resume: 's-b' });
 		expect(sessions[1].chat.sessionId).toBe('s-b');
 		// The transcript is replayed from the session file (best-effort).
 		expect(claudeSessionTranscript).toHaveBeenCalledWith('/tmp/p1', 's-b');

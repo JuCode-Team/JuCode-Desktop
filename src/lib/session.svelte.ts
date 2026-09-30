@@ -158,9 +158,15 @@ export class SessionStore {
 		// Sessions of the chats group run as chats (engine-side chat prompt).
 		const chat = this.projects.some((p) => p.chats && p.sessions.some((x) => x.id === s.id));
 		const chatOpt = chat ? { chat: true } : undefined;
+		// claude reports its permission mode only when the first turn starts; an
+		// engine spawned in another mode than the desktop's would then be
+		// respawned mid-turn (yolo can't be set live), losing a turn it had not
+		// saved yet. Spawn it in the desktop's mode from the start.
+		const modeOpt =
+			s.backendId === 'claude' ? { permission_mode: toClaudeMode(toEngineMode(s.chat.approvalMode)) } : undefined;
 		const opts =
-			agentOpt || extraOpts || chatOpt
-				? { ...(base ?? {}), ...(agentOpt ?? {}), ...(chatOpt ?? {}), ...(extraOpts ?? {}) }
+			agentOpt || extraOpts || chatOpt || modeOpt
+				? { ...(base ?? {}), ...(agentOpt ?? {}), ...(chatOpt ?? {}), ...(modeOpt ?? {}), ...(extraOpts ?? {}) }
 				: base;
 		// A hosted session reopens its daemon session when it has one (restart,
 		// restore, provider switch) and creates one otherwise.
@@ -501,6 +507,10 @@ export class SessionStore {
 		// the adapter flagged a resume failure, come up fresh instead. One-shot: the
 		// fresh session gets a new id that CAN be resumed on a later crash.
 		const mayResume = sid && canResume && !s.chat.resumeBroken;
+		// The failed id names no saved conversation: forget it, or every later
+		// restart (the fresh engine has not reported its own id yet) would try it
+		// again and die the same way.
+		if (s.chat.resumeBroken) s.chat.sessionId = '';
 		s.chat.resumeBroken = false;
 		const resumeViaSpawn = s.backendId === 'claude' && mayResume;
 		const resumeViaCtx = s.backendId === 'codex' && mayResume;
