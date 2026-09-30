@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('./protocol', () => ({
 	createSession: vi.fn(() => Promise.resolve()),
 	hostSession: vi.fn(() => Promise.resolve()),
+	acpAgentsList: vi.fn(() => Promise.resolve([{ id: 'gemini', name: 'Gemini', command: 'gemini', args: ['--experimental-acp'], env: {} }])),
 	daemon: { sessionOf: vi.fn(() => 'claude-conv') },
 	closeSession: vi.fn(() => Promise.resolve()),
 	sendOp: vi.fn(() => Promise.resolve()),
@@ -839,9 +840,14 @@ describe('sessions hosted by jucode daemon', () => {
 		expect(p.sessions[0].hosted).toBe(true);
 		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined, undefined, false, undefined);
 		expect(createSession).not.toHaveBeenCalled();
-		// ACP agents still run as the desktop's own children.
-		store.addSession(p, undefined, 'acp', { id: 'gemini', name: 'Gemini' });
-		expect(p.sessions[1].hosted).toBe(false);
+		// ACP agents run in the daemon too, from their registry command.
+		const acp = store.addSession(p, undefined, 'acp', { id: 'gemini', name: 'Gemini' });
+		expect(p.sessions[1].hosted).toBe(true);
+		await flush();
+		expect(hostSession).toHaveBeenCalledWith(acp, p.path, undefined, undefined, false, {
+			engine: 'acp',
+			options: { command: 'gemini', args: ['--experimental-acp'], env: {} }
+		});
 		vi.unstubAllGlobals();
 	});
 

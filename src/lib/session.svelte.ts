@@ -1,5 +1,6 @@
 import { ChatState } from './chat.svelte';
-import { createSession, closeSession, daemon, hostSession, projectRoot, chatsDir, writeConfig, git, claudeSessionTranscript, switchToolProfile, jucodeSessions } from './protocol';
+import { acpAgentsList, createSession, closeSession, daemon, hostSession, projectRoot, chatsDir, writeConfig, git, claudeSessionTranscript, switchToolProfile, jucodeSessions } from './protocol';
+import type { EngineSpec } from './daemon';
 import { canHandOffToTui, isValidResumeSessionId } from './tuiHandoff';
 import { createAdapter, normalizeBackendId, type BackendId } from './backends';
 import { dispatch, dropHeldOps, holdOps, ioFor, registerAdapter, unregisterAdapter } from './backends/router';
@@ -54,7 +55,7 @@ export interface SavedProject {
 const DAEMON_RETRY_DELAYS = [1000, 2000, 4000, 8000, 15000, 30000, 30000, 30000, 30000, 30000, 30000, 30000];
 
 /** Backends the daemon can run. */
-const DAEMON_BACKENDS: BackendId[] = ['jucode', 'claude', 'codex'];
+const DAEMON_BACKENDS: BackendId[] = ['jucode', 'claude', 'codex', 'acp'];
 
 /** New sessions of those backends run in the daemon when the setting is on. */
 function hostsNewSessions(backend: BackendId): boolean {
@@ -218,11 +219,21 @@ export class SessionStore {
 				: s.backendId === 'codex'
 					? { engine: 'codex', options: { approval_mode: toEngineMode(s.chat.approvalMode) } }
 					: undefined;
+		// An ACP agent runs the command its registry entry names.
+		const acpEngine = () =>
+			acpAgentsList().then((agents) => {
+				const entry = agents.find((a) => a.id === s.acpAgent?.id);
+				if (!entry) throw new Error(`unknown ACP agent ${s.acpAgent?.id ?? ''}`);
+				return { engine: 'acp', options: { command: entry.command, args: entry.args, env: entry.env } };
+			});
+		const host = (spec: EngineSpec | undefined) =>
+			hostSession(s.id, cwd ?? '', resume ?? (s.chat.sessionId || undefined), agent, chat, spec).then(() => spec);
+		const hosted = () => (s.backendId === 'acp' ? acpEngine().then(host) : host(engine));
 		const spawned = s.hosted
-			? hostSession(s.id, cwd ?? '', resume ?? (s.chat.sessionId || undefined), agent, chat, engine).then(() => {
+			? hosted().then((spec) => {
 					// A new claude or codex session is named by the daemon (the engine's
 					// conversation id).
-					if (engine && !s.chat.sessionId) s.chat.sessionId = daemon.sessionOf(s.id) ?? '';
+					if (spec && !s.chat.sessionId) s.chat.sessionId = daemon.sessionOf(s.id) ?? '';
 				})
 			: s.backendId === 'jucode' && !opts
 				? createSession(s.id, cwd)
