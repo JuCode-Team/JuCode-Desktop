@@ -35,6 +35,11 @@ export interface DaemonSessionView {
 	agent?: string | null;
 	created_at: number;
 	open: boolean;
+	/** The daemon's title, or the engine's label (newer daemons). */
+	title?: string | null;
+	archived?: boolean;
+	updated_at?: number;
+	chat?: boolean;
 }
 
 export interface QuestionView {
@@ -87,6 +92,9 @@ export interface NewAgent {
 /** Reconnect backoff: 1 s, doubling to 30 s; reset by a good connection. */
 const RETRY_MIN_MS = 1000;
 const RETRY_MAX_MS = 30_000;
+/** Traffic at least this often keeps a relay stream from being closed as
+ *  idle (the relay drops streams after 10 minutes without any). */
+const KEEPALIVE_MS = 60_000;
 
 export class AgentDirectory {
 	agents = $state<AgentView[]>([]);
@@ -100,6 +108,7 @@ export class AgentDirectory {
 	status = $state<'off' | 'connecting' | 'on' | 'unreachable'>('off');
 	error = $state('');
 	#retry: ReturnType<typeof setInterval> | null = null;
+	#keepalive: ReturnType<typeof setInterval> | null = null;
 	#delay = RETRY_MIN_MS;
 	#nextAttempt = 0;
 
@@ -112,11 +121,17 @@ export class AgentDirectory {
 		this.#retry = setInterval(() => {
 			if (this.status === 'unreachable' && Date.now() >= this.#nextAttempt) void this.#connect();
 		}, RETRY_MIN_MS);
+		// An older daemon answers `ping` with an error, which is traffic too.
+		this.#keepalive = setInterval(() => {
+			if (this.status === 'on') daemon.request({ op: 'ping' }).catch(() => {});
+		}, KEEPALIVE_MS);
 	}
 
 	stop() {
 		if (this.#retry) clearInterval(this.#retry);
+		if (this.#keepalive) clearInterval(this.#keepalive);
 		this.#retry = null;
+		this.#keepalive = null;
 		this.status = 'off';
 	}
 

@@ -4,6 +4,7 @@
 	// alone; elsewhere the native menu is suppressed, and text fields or a text
 	// selection get Cut / Copy / Paste / Select all in the app's menu.
 	// Dev builds: Shift+right-click still opens the native menu (Inspect).
+	// Outside the app nothing is replaced.
 	import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
 	import PopMenu, { type PopMenuItem } from './PopMenu.svelte';
 	import { t } from '$lib/i18n';
@@ -33,8 +34,13 @@
 		return window.getSelection()?.toString() ?? '';
 	}
 
+	// In a plain browser (the remote page) the native menu, and on a phone
+	// the long-press selection menu, stay; the clipboard plugin only exists
+	// inside the app.
+	const inApp = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+
 	function onContextMenu(e: MouseEvent) {
-		if (e.defaultPrevented) return;
+		if (!inApp || e.defaultPrevented) return;
 		if (import.meta.env.DEV && e.shiftKey) return;
 		e.preventDefault();
 		const field = editableOf(e.target as Element);

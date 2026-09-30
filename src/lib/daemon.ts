@@ -40,7 +40,8 @@ const DAEMON_EVENTS = new Set([
 	'message_delivered',
 	'questions',
 	'actions',
-	'report_posted'
+	'report_posted',
+	'workspaces'
 ]);
 const CLOSE_TIMEOUT_MS = 10_000;
 
@@ -80,13 +81,14 @@ export class DaemonClient {
 	}
 
 	/** Creates a daemon session in `cwd` (as `agent`, when given; as a chat
-	 *  in the chats directory, when `chat`), or reopens `resume` (a daemon
-	 *  session id), then watches it. The watch snapshot (startup state and
-	 *  transcript) arrives through `onFrame`. */
+	 *  in the chats directory, when `chat`), or reopens `resume` (a session
+	 *  id; `cwd` lets the daemon find one saved there that it never hosted),
+	 *  then watches it. The watch snapshot (startup state and transcript)
+	 *  arrives through `onFrame`. */
 	async open(desktopId: string, cwd: string, resume?: string, agent?: string, chat = false): Promise<void> {
 		await this.connect();
 		const reply = resume
-			? await this.request({ op: 'session_open', session: resume })
+			? await this.request(cwd ? { op: 'session_open', session: resume, cwd } : { op: 'session_open', session: resume })
 			: await this.request(
 					agent
 						? { op: 'session_create', agent }

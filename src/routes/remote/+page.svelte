@@ -11,8 +11,15 @@
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import QrCodeIcon from 'phosphor-svelte/lib/QrCodeIcon';
 	import DesktopIcon from 'phosphor-svelte/lib/DesktopIcon';
+	import FolderIcon from 'phosphor-svelte/lib/FolderIcon';
 	import DeskContent from '$lib/DeskContent.svelte';
 	import RemoteSession from '$lib/RemoteSession.svelte';
+	import Projects from '$lib/remote/Projects.svelte';
+	import ProjectScreen from '$lib/remote/ProjectScreen.svelte';
+	import AddProjectScreen from '$lib/remote/AddProjectScreen.svelte';
+	import FilesScreen from '$lib/remote/FilesScreen.svelte';
+	import ChangesScreen from '$lib/remote/ChangesScreen.svelte';
+	import { remoteProjects, baseName, type ProjectView } from '$lib/remote/store.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import { agentDirectory, type AgentView } from '$lib/agents.svelte';
@@ -71,8 +78,23 @@
 	let code = $state('');
 	let pairing = $state(false);
 	let pairError = $state('');
-	let tab = $state<'desk' | 'agents'>('desk');
-	let open = $state<{ session?: string; agent?: string; title: string } | null>(null);
+	let tab = $state<'projects' | 'desk' | 'agents'>('projects');
+	/** Pages opened over the tabs, last on top. */
+	type Screen = { key: number } & (
+		| { kind: 'session'; session?: string; agent?: string; cwd?: string; chat?: boolean; title: string }
+		| { kind: 'project'; project: ProjectView }
+		| { kind: 'add' }
+		| { kind: 'files' | 'changes'; root: string; title: string }
+	);
+	let stack = $state<Screen[]>([]);
+	let nextKey = 0;
+	type NewScreen = Screen extends infer S ? (S extends Screen ? Omit<S, 'key'> : never) : never;
+	function push(screen: NewScreen) {
+		stack = [...stack, { ...screen, key: nextKey++ } as Screen];
+	}
+	function pop() {
+		stack = stack.slice(0, -1);
+	}
 	/** Relay mode: why the last connection failed, and whether it ever worked. */
 	let relayError = $state<RelayError | null>(null);
 	let everConnected = $state(false);
@@ -85,8 +107,14 @@
 	}
 
 	function run() {
-		daemon.onEvent = (frame) => agentDirectory.handle(frame);
-		daemon.onDisconnect = () => agentDirectory.disconnected();
+		daemon.onEvent = (frame) => {
+			agentDirectory.handle(frame);
+			remoteProjects.handle(frame);
+		};
+		daemon.onDisconnect = () => {
+			agentDirectory.disconnected();
+			remoteProjects.reset();
+		};
 		daemon.onFrame = (id, raw) => routes.get(id)?.onFrame(raw);
 		daemon.onExit = (id) => routes.get(id)?.onExit();
 		agentDirectory.start();
@@ -188,7 +216,7 @@
 		forgetHost();
 		relayError = null;
 		everConnected = false;
-		open = null;
+		stack = [];
 		mode = 'scan';
 	}
 
@@ -203,14 +231,17 @@
 
 	function openSession(session: string) {
 		const agent = agentDirectory.agentOfSession(session);
-		open = { session, title: agent?.name ?? session };
+		const known = agentDirectory.sessions.find((s) => s.session === session);
+		push({ kind: 'session', session, cwd: known?.cwd, title: agent?.name ?? known?.title ?? session });
 	}
 
 	function openAgent(agent: AgentView) {
 		const latest = agentDirectory.latestSession(agent.id);
-		open = latest
-			? { session: latest.session, title: agent.name }
-			: { agent: agent.id, title: agent.name };
+		push(
+			latest
+				? { kind: 'session', session: latest.session, title: agent.name }
+				: { kind: 'session', agent: agent.id, title: agent.name }
+		);
 	}
 	import DeviceMobileIcon from 'phosphor-svelte/lib/DeviceMobileIcon';
 	import QrScanner from '$lib/relay/QrScanner.svelte';
@@ -305,7 +336,14 @@
 					<Button size="sm" onclick={repair}>{t('shell.remote.repair')}</Button>
 				</div>
 			{/if}
-			{#if tab === 'desk'}
+			{#if tab === 'projects'}
+				<h1>{t('shell.remote.projects')}</h1>
+				<Projects
+					onOpenProject={(project) => push({ kind: 'project', project })}
+					onAddProject={() => push({ kind: 'add' })}
+					onOpenSession={(session, cwd, title) => push({ kind: 'session', session, cwd, title })}
+				/>
+			{:else if tab === 'desk'}
 				<h1>{t('shell.desk.title')}</h1>
 				<DeskContent onOpenSession={openSession} />
 			{:else}
@@ -325,6 +363,10 @@
 			{/if}
 		</main>
 		<nav>
+			<button class:on={tab === 'projects'} onclick={() => (tab = 'projects')}>
+				<FolderIcon size={18} />
+				<span>{t('shell.remote.projects')}</span>
+			</button>
 			<button class:on={tab === 'desk'} onclick={() => (tab = 'desk')}>
 				<TrayIcon size={18} />
 				<span>{t('shell.desk.title')}</span>
@@ -336,16 +378,42 @@
 			</button>
 		</nav>
 	{/if}
-	{#if open && mode && !relayError?.fatal}
-		{#key open}
-			<RemoteSession
-				session={open.session}
-				agent={open.agent}
-				title={open.title}
-				{register}
-				onBack={() => (open = null)}
-			/>
-		{/key}
+	{#if mode && !relayError?.fatal}
+		{#each stack as screen, i (screen.key)}
+			<div class="layer" style:z-index={20 + i}>
+				{#if screen.kind === 'session'}
+					{@const root = screen.cwd && !screen.chat && !screen.agent ? screen.cwd : null}
+					<RemoteSession
+						session={screen.session}
+						agent={screen.agent}
+						cwd={screen.cwd}
+						chat={screen.chat}
+						title={screen.title}
+						{register}
+						onBack={pop}
+						onFiles={root ? () => push({ kind: 'files', root, title: baseName(root) }) : undefined}
+						onChanges={root ? () => push({ kind: 'changes', root, title: baseName(root) }) : undefined}
+					/>
+				{:else if screen.kind === 'project'}
+					{@const project = screen.project}
+					<ProjectScreen
+						{project}
+						onBack={pop}
+						onOpenSession={(session, cwd, title) => push({ kind: 'session', session, cwd, chat: project.chats, title })}
+						onNewSession={() =>
+							push({ kind: 'session', cwd: project.path, chat: project.chats, title: t('shell.remote.newSession') })}
+						onFiles={() => push({ kind: 'files', root: project.path, title: project.name })}
+						onChanges={() => push({ kind: 'changes', root: project.path, title: project.name })}
+					/>
+				{:else if screen.kind === 'add'}
+					<AddProjectScreen onBack={pop} onAdded={pop} />
+				{:else if screen.kind === 'files'}
+					<FilesScreen root={screen.root} title={screen.title} onBack={pop} />
+				{:else}
+					<ChangesScreen root={screen.root} title={screen.title} onBack={pop} />
+				{/if}
+			</div>
+		{/each}
 	{/if}
 </div>
 
@@ -357,6 +425,10 @@
 		background: var(--bg);
 		color: var(--text);
 		font-family: var(--font-sans);
+	}
+	.layer {
+		position: fixed;
+		inset: 0;
 	}
 	main {
 		padding: calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 76px);

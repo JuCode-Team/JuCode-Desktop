@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { importIfEmpty } from '$lib/remote/importWorkspaces';
 	import { onMount, untrack } from 'svelte';
 	import { listen } from '@tauri-apps/api/event';
 	import { getCurrentWebview } from '@tauri-apps/api/webview';
@@ -812,7 +813,10 @@
 			const unlisten = await listen<EventPayload>('agent-event', (e) => deliver(e.payload.session, e.payload.data));
 			daemon.onFrame = deliver;
 			daemon.onExit = (id) => store.handleExit(id);
-			daemon.onEvent = (frame) => agentDirectory.handle(frame);
+			daemon.onEvent = (frame) => {
+				agentDirectory.handle(frame);
+				importIfEmpty(frame, () => workspaces.workspaces);
+			};
 			daemon.onDisconnect = () => agentDirectory.disconnected();
 			if (loadBackendSettings().daemon) agentDirectory.start();
 			const unexit = await listen<{ session: string; reason: string }>('agent-exit', (e) =>

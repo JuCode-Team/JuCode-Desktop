@@ -7,6 +7,8 @@
 	import PaperPlaneTiltIcon from 'phosphor-svelte/lib/PaperPlaneTiltIcon';
 	import SquareIcon from 'phosphor-svelte/lib/SquareIcon';
 	import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon';
+	import FilesIcon from 'phosphor-svelte/lib/FilesIcon';
+	import GitDiffIcon from 'phosphor-svelte/lib/GitDiffIcon';
 	import MessageList from '$lib/MessageList.svelte';
 	import ApprovalCard from '$lib/ApprovalCard.svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -20,14 +22,26 @@
 	let {
 		session,
 		agent,
+		cwd,
+		chat: isChat = false,
 		title,
 		register,
-		onBack
+		onBack,
+		onFiles,
+		onChanges
 	}: {
-		/** An existing daemon session; omit to start a new one as `agent`. */
+		/** An existing session; omit to start a new one as `agent`, in `cwd`,
+		 *  or as a chat. */
 		session?: string;
 		agent?: string;
+		/** The session's directory; also lets the daemon reopen a session
+		 *  saved there that it never hosted. */
+		cwd?: string;
+		chat?: boolean;
 		title: string;
+		/** Shows the project's files / changes. */
+		onFiles?: () => void;
+		onChanges?: () => void;
 		/** Routes daemon frames and exits for `id` here; returns an unregister. */
 		register: (id: string, onFrame: (raw: string) => void, onExit: () => void) => () => void;
 		onBack: () => void;
@@ -75,7 +89,7 @@
 			// A new session gets its id from the snapshot; later reconnects
 			// reopen that same session.
 			const resume = session ?? (chat.sessionId || undefined);
-			await daemon.open(id, '', resume, resume ? undefined : agent);
+			await daemon.open(id, cwd ?? '', resume, resume ? undefined : agent, !resume && !agent && isChat);
 			connected = true;
 		} catch (e) {
 			error = e instanceof Error ? e.message : String(e);
@@ -121,6 +135,8 @@
 		<button class="back" onclick={onBack} aria-label={t('shell.remote.back')}><ArrowLeftIcon size={18} /></button>
 		<span class="title">{title}</span>
 		{#if chat.busy}<span class="busy pulse"></span>{/if}
+		{#if onFiles}<button class="back" onclick={onFiles} aria-label={t('shell.remote.files')}><FilesIcon size={18} /></button>{/if}
+		{#if onChanges}<button class="back" onclick={onChanges} aria-label={t('shell.remote.changes')}><GitDiffIcon size={18} /></button>{/if}
 	</header>
 
 	<div class="scroll" bind:this={scroller}>
