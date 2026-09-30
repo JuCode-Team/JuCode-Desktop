@@ -545,8 +545,86 @@ fn ensure_daemon() -> Result<(), String> {
     Err("jucode daemon did not start in time".to_string())
 }
 
+/// Whether this app run already checked the daemon for staleness.
+static DAEMON_CHECKED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Why the daemon listening now should be replaced, if it should: its program
+/// was removed (an uninstall or package upgrade) or rewritten after it started
+/// (a reinstall at the same path). Either way it keeps running old code
+/// indefinitely. Unix only; `None` whenever something can't be determined.
+#[cfg(unix)]
+fn stale_daemon() -> Option<(i32, String)> {
+    let run = |program: &str, args: &[&str]| -> Option<String> {
+        let out = Command::new(program).args(args).output().ok()?;
+        out.status.success().then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
+    };
+    let port = DAEMON_ADDR.rsplit(':').next()?;
+    let pid: i32 = run("lsof", &["-nP", "-t", &format!("-iTCP:{port}"), "-sTCP:LISTEN"])?
+        .lines()
+        .next()?
+        .trim()
+        .parse()
+        .ok()?;
+    let exe = if cfg!(target_os = "linux") {
+        std::fs::read_link(format!("/proc/{pid}/exe"))
+            .ok()?
+            .to_string_lossy()
+            .trim_end_matches(" (deleted)")
+            .to_string()
+    } else {
+        run("ps", &["-o", "comm=", "-p", &pid.to_string()])?
+    };
+    let exe = PathBuf::from(exe);
+    if exe.file_name()?.to_string_lossy() != "jucode" {
+        return None; // not a jucode daemon: leave it alone
+    }
+    let Ok(meta) = std::fs::metadata(&exe) else {
+        return Some((pid, format!("{} was removed", exe.display())));
+    };
+    let age = parse_etime(&run("ps", &["-o", "etime=", "-p", &pid.to_string()])?)?;
+    let started = std::time::SystemTime::now().checked_sub(age)?;
+    let modified = meta.modified().ok()?;
+    // A little slack for ps' one-second resolution.
+    (modified > started + std::time::Duration::from_secs(2))
+        .then(|| (pid, format!("{} was updated after it started", exe.display())))
+}
+
+/// `ps -o etime` ("[[dd-]hh:]mm:ss") as a duration.
+fn parse_etime(text: &str) -> Option<std::time::Duration> {
+    let (days, clock) = match text.trim().split_once('-') {
+        Some((d, rest)) => (d.parse::<u64>().ok()?, rest),
+        None => (0, text.trim()),
+    };
+    let mut secs = 0u64;
+    for part in clock.split(':') {
+        secs = secs * 60 + part.parse::<u64>().ok()?;
+    }
+    Some(std::time::Duration::from_secs(days * 86_400 + secs))
+}
+
+/// Replace a stale daemon (see `stale_daemon`) once per app run: SIGTERM lets
+/// it end its tool commands and exit; a fresh one starts from the current
+/// program. Hosted sessions reopen from their saved state.
+fn replace_stale_daemon() {
+    if DAEMON_CHECKED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+    #[cfg(unix)]
+    if let Some((pid, reason)) = stale_daemon() {
+        eprintln!("jucode daemon is stale ({reason}); restarting it");
+        let _ = Command::new("kill").args(["-TERM", &pid.to_string()]).status();
+        for _ in 0..50 {
+            if !daemon_listening() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+    }
+}
+
 #[tauri::command(async)]
 fn daemon_endpoint() -> Result<DaemonEndpoint, String> {
+    replace_stale_daemon();
     ensure_daemon()?;
     let path = jucode_dir().join("daemon").join("token");
     let token = std::fs::read_to_string(&path)
@@ -3314,6 +3392,15 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{jucode_cwd_key, read_json_strict, valid_app_data_name};
+
+    #[test]
+    fn parses_ps_elapsed_times() {
+        use std::time::Duration;
+        assert_eq!(super::parse_etime("05:07"), Some(Duration::from_secs(307)));
+        assert_eq!(super::parse_etime(" 01:05:07\n"), Some(Duration::from_secs(3907)));
+        assert_eq!(super::parse_etime("2-01:05:07"), Some(Duration::from_secs(2 * 86_400 + 3907)));
+        assert_eq!(super::parse_etime("x"), None);
+    }
 
     #[test]
     fn jucode_cwd_key_matches_the_engine_store() {
