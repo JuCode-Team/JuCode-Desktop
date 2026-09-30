@@ -503,15 +503,17 @@
 			background: var(--surface2);
 			color: var(--text);
 		}
+		/* Out of the layout until hover, as on the desktop, so the backend
+		   mark sits at the row's end instead of before empty space. */
 		.sess .act,
 		.folder .act {
-			visibility: hidden;
+			display: none;
 		}
 		.sess:hover .act,
 		.sess:focus-within .act,
 		.folder:hover .act,
 		.folder:focus-within .act {
-			visibility: visible;
+			display: inline-flex;
 		}
 	}
 	@media (hover: none) {
