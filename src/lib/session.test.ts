@@ -24,6 +24,8 @@ import { setLocale } from './i18n';
 import type { Project, WorktreeMeta } from './types';
 
 const proj = (id = 'p1'): Project => ({ id, name: id, path: `/tmp/${id}`, sessions: [] });
+/** A new session is a draft; its first message starts the engine. */
+const begin = (id: string) => dispatch(id, { op: 'user_message', content: 'hi' });
 
 beforeEach(() => {
 	vi.clearAllMocks();
@@ -33,7 +35,7 @@ beforeEach(() => {
 });
 
 describe('SessionStore lifecycle', () => {
-	it('addSession spawns a session and makes it active', () => {
+	it('addSession makes a draft active; its first message spawns it', () => {
 		const store = new SessionStore();
 		const p = proj();
 		store.projects.push(p);
@@ -41,7 +43,46 @@ describe('SessionStore lifecycle', () => {
 		expect(p.sessions.map((s) => s.id)).toEqual([id]);
 		expect(store.activeId).toBe(id);
 		expect(store.chat).toBe(p.sessions[0].chat);
+		expect(p.sessions[0].draft).toBe(true);
+		expect(p.sessions[0].chat.booting).toBe(false);
+		expect(createSession).not.toHaveBeenCalled();
+		begin(id);
+		expect(p.sessions[0].draft).toBe(false);
 		expect(createSession).toHaveBeenCalledWith(id, p.path);
+	});
+
+	it('a draft records backend, model and effort, and applies them when it starts', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p);
+		await store.switchBackend(id, 'claude');
+		expect(createSession).not.toHaveBeenCalled();
+		expect(closeSession).not.toHaveBeenCalled();
+		const s = p.sessions[0];
+		expect(s.backendId).toBe('claude');
+		expect(s.draft).toBe(true);
+		expect(p.lastBackend).toBeUndefined();
+		s.draftPick = { model: 'opus', effort: 'high' };
+		begin(id);
+		expect(p.lastBackend).toBe('claude');
+		await Promise.resolve();
+		const lines = vi.mocked(sendLine).mock.calls.filter(([sid]) => sid === id).map(([, l]) => l);
+		const pick = lines.findIndex((l) => l.includes('set_model'));
+		const message = lines.findIndex((l) => l.includes('"text":"hi"'));
+		expect(pick).toBeGreaterThanOrEqual(0);
+		expect(message).toBeGreaterThan(pick);
+	});
+
+	it('removing a draft closes no engine', () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p);
+		store.removeSession(id);
+		expect(closeSession).not.toHaveBeenCalled();
+		expect(dispatch(id, { op: 'user_message', content: 'late' })).toBe(true);
+		expect(createSession).not.toHaveBeenCalled();
 	});
 
 	it('removeSession re-points activeId to a surviving session', () => {
@@ -189,7 +230,7 @@ describe('SessionStore lifecycle', () => {
 		const store = new SessionStore();
 		const p = proj();
 		store.projects.push(p);
-		store.addSession(p);
+		begin(store.addSession(p));
 		const s = p.sessions[0]!;
 		await vi.advanceTimersByTimeAsync(0);
 		expect(s.chat.daemonRetries).toBe(1);
@@ -210,6 +251,7 @@ describe('SessionStore lifecycle', () => {
 		const p = proj();
 		store.projects.push(p);
 		const id = store.addSession(p);
+		begin(id);
 		await Promise.resolve();
 		vi.mocked(createSession).mockClear();
 		const switching = store.switchProvider(id, { id: 'x', base_url: 'u', format: 'openai', models: [{ name: 'm' }] }, 'm');
@@ -228,7 +270,7 @@ describe('SessionStore lifecycle', () => {
 		const p = proj();
 		store.projects.push(p);
 		vi.clearAllMocks();
-		store.addSession(p, undefined, 'claude');
+		begin(store.addSession(p, undefined, 'claude'));
 		// Spawned yolo up front: no mid-turn respawn when claude's init reports it.
 		const call = (createSession as unknown as { mock: { calls: unknown[][] } }).mock.calls.at(-1);
 		expect((call?.[3] as { permission_mode?: string }).permission_mode).toBe('bypassPermissions');
@@ -240,6 +282,8 @@ describe('SessionStore lifecycle', () => {
 		const p = proj();
 		store.projects.push(p);
 		const id = store.addSession(p);
+		// Started by a command, so still without a user turn.
+		dispatch(id, { op: 'command', input: '/login jucode' });
 		expect(p.sessions[0].backendId).toBe('jucode');
 		await store.switchBackend(id, 'claude');
 		const s = p.sessions[0];
@@ -316,6 +360,7 @@ describe('SessionStore lifecycle', () => {
 		const p = proj();
 		store.projects.push(p);
 		const id = store.addSession(p);
+		begin(id);
 		for (let i = 0; i < 4; i++) store.handleExit(id);
 		// 1 spawn + 3 restarts; the 4th exit pauses instead of restarting.
 		expect(createSession).toHaveBeenCalledTimes(4);
@@ -383,7 +428,10 @@ describe('SessionStore lifecycle', () => {
 		expect(s.acpAgent).toEqual(agent);
 		expect(s.chat.acpAgentId).toBe('gemini');
 		expect(s.chat.acpAgentName).toBe('Gemini CLI');
-		// The spawn carried the agent option so create_session can look it up.
+		// Never started, so it comes back a draft; its start carries the agent
+		// option so create_session can look it up.
+		expect(s.draft).toBe(true);
+		begin(s.id);
 		const call = (createSession as unknown as { mock: { calls: unknown[][] } }).mock.calls.at(-1)!;
 		expect(call[2]).toBe('acp');
 		expect((call[3] as { agent?: string }).agent).toBe('gemini');
@@ -524,6 +572,7 @@ describe('SessionStore chats', () => {
 		expect(chats.chats).toBe(true);
 		expect(chats.path).toBe('/home/u/.jucode/chats');
 		expect(chats.sessions.map((s) => s.id)).toEqual([id]);
+		begin(id);
 		expect(createSession).toHaveBeenCalledWith(id, chats.path, 'jucode', expect.objectContaining({ chat: true }));
 		// A second chat joins the same group.
 		await store.newChat();
@@ -540,6 +589,7 @@ describe('SessionStore chats', () => {
 		vi.mocked(createSession).mockClear();
 		await again.restore(saved);
 		expect(again.projects[0].chats).toBe(true);
+		begin(again.projects[0].sessions[0].id);
 		expect(createSession).toHaveBeenCalledWith(expect.any(String), '/home/u/.jucode/chats', 'jucode', expect.objectContaining({ chat: true }));
 	});
 });
@@ -757,6 +807,8 @@ describe('SessionStore GUI ⇄ TUI handoff', () => {
 		expect(s.surface).toBeUndefined();
 		expect(s.restored).toBeUndefined();
 		expect(sendLine).not.toHaveBeenCalledWith('live-a', expect.stringContaining('/resume'));
+		expect(s.draft).toBe(true);
+		begin('live-a');
 		expect(createSession).toHaveBeenCalledWith('live-a', '/tmp/p1');
 	});
 });
@@ -837,11 +889,15 @@ describe('sessions hosted by jucode daemon', () => {
 		const p = proj();
 		store.projects.push(p);
 		const id = store.addSession(p);
+		expect(p.sessions[0].hosted).toBeFalsy(); // a draft is in no daemon yet
+		expect(hostSession).not.toHaveBeenCalled();
+		begin(id);
 		expect(p.sessions[0].hosted).toBe(true);
 		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined, undefined, false, undefined);
 		expect(createSession).not.toHaveBeenCalled();
 		// ACP agents run in the daemon too, from their registry command.
 		const acp = store.addSession(p, undefined, 'acp', { id: 'gemini', name: 'Gemini' });
+		begin(acp);
 		expect(p.sessions[1].hosted).toBe(true);
 		await flush();
 		expect(hostSession).toHaveBeenCalledWith(acp, p.path, undefined, undefined, false, {
@@ -857,6 +913,7 @@ describe('sessions hosted by jucode daemon', () => {
 		const p = proj();
 		store.projects.push(p);
 		const id = store.addSession(p, undefined, 'claude');
+		begin(id);
 		const s = p.sessions[0];
 		expect(s.hosted).toBe(true);
 		// No pinned uuid: the daemon names the conversation.
@@ -871,6 +928,7 @@ describe('sessions hosted by jucode daemon', () => {
 		expect(createSession).not.toHaveBeenCalled();
 
 		const codex = store.addSession(p, undefined, 'codex');
+		begin(codex);
 		expect(hostSession).toHaveBeenCalledWith(codex, p.path, undefined, undefined, false, {
 			engine: 'codex',
 			options: { approval_mode: 'read-only' }
@@ -889,6 +947,7 @@ describe('sessions hosted by jucode daemon', () => {
 		const p = proj();
 		store.projects.push(p);
 		const id = store.addSession(p);
+		begin(id);
 		const s = p.sessions[0];
 		s.chat.sessionId = 'daemon-sess';
 		s.chat.messages.push({ kind: 'user', text: 'hi' });
@@ -906,7 +965,7 @@ describe('sessions hosted by jucode daemon', () => {
 		const store = new SessionStore();
 		const p = proj();
 		store.projects.push(p);
-		store.addSession(p);
+		begin(store.addSession(p));
 		// The engine reported its id; no user turn yet.
 		p.sessions[0].chat.sessionId = 'daemon-sess';
 		const saved = store.serialize();

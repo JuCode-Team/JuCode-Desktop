@@ -39,6 +39,7 @@
 		type Op
 	} from '$lib/protocol';
 	import { buildModelRows } from '$lib/composer/modelRows';
+	import { defaultEffort } from '$lib/composer/effort';
 	import { dispatch } from '$lib/backends/router';
 	import { browser } from '$lib/browser.svelte';
 	import { prefs } from '$lib/prefs.svelte';
@@ -139,6 +140,14 @@
 	// Ops flow through this session's backend adapter; an unsupported op
 	// (non-jucode stub backends) surfaces as an inline system notice.
 	function send(op: Op) {
+		// A typed /model on a draft is a pick like the menu's, not a reason to
+		// start the engine.
+		if (session.draft && op.op === 'command' && /^\/model(\s|$)/.test(op.input.trim())) {
+			const line = op.input.trim();
+			if (line === '/model') openModelPicker();
+			else selectRow(line);
+			return;
+		}
 		// claude's /resume can't go over the wire: stream-json mode has no session
 		// listing protocol, the history lives in files under ~/.claude/projects.
 		// Bare /resume synthesizes the picker from the claude_sessions command; a
@@ -220,6 +229,16 @@
 	// Open the model picker as a popover. If we already have a cached catalog,
 	// show it instantly and refresh in the background; otherwise fetch first.
 	function openModelPicker() {
+		// A draft has no engine to ask: the list is the one its backend
+		// reported last time, marked with the draft's own pick.
+		if (session.draft) {
+			const pick = session.draftPick?.model;
+			const models = chat.modelCatalog.map((m) => ({ ...m, active: pick ? m.model === pick : m.active }));
+			chat.picker = { kind: 'model', models, activeEffort: chat.effort };
+			const act = models.findIndex((m) => m.active);
+			selIdx = act >= 0 ? act : 0;
+			return;
+		}
 		if (chat.modelCatalog.length) {
 			chat.picker = {
 				kind: 'model',
@@ -467,6 +486,8 @@
 	// session's engine (which enforces it and acks with an approval_mode event).
 	function setApprovalMode(m: ApprovalMode) {
 		chat.setApprovalMode(m);
+		// A draft starts in the recorded mode (see SessionStore #spawn).
+		if (session.draft) return;
 		// Switching claude INTO yolo (bypassPermissions) isn't honored at runtime —
 		// respawn the engine with the flag (resumes the conversation) instead of
 		// sending a live control frame that would silently no-op.
@@ -490,6 +511,22 @@
 	});
 
 	function selectRow(command: string) {
+		// A draft only records the model; it is applied when the first message
+		// starts the engine.
+		if (session.draft && command.startsWith('/model ')) {
+			const [name, effort] = command.slice('/model '.length).trim().split(/\s+/);
+			const entry = chat.modelCatalog.find((m) => m.model === name);
+			chat.model = name;
+			chat.modelLabel = entry?.label ?? '';
+			if (entry?.reasoning_efforts?.length) {
+				chat.efforts = entry.reasoning_efforts;
+				if (!chat.efforts.includes(chat.effort)) chat.effort = defaultEffort(chat.efforts);
+			}
+			if (effort) chat.effort = effort;
+			session.draftPick = { model: name, effort: chat.effort || undefined };
+			chat.closePicker();
+			return;
+		}
 		if (command.startsWith('/model ')) {
 			const target = command.slice('/model '.length).trim().split(/\s+/)[0] || '';
 			if (target && target !== chat.model) pendingModel = target;
@@ -531,8 +568,15 @@
 		send({ op: 'command', input: command });
 		chat.closePicker();
 	}
+	// Not through selectRow: that closes the model list, and the menu stays
+	// open while the effort changes.
 	function setEffort(effort: string) {
-		if (chat.model && !pendingModel && !chat.switching) selectRow(`/model ${chat.model} ${effort}`);
+		if (session.draft) {
+			chat.effort = effort;
+			session.draftPick = { ...session.draftPick, effort };
+			return;
+		}
+		if (chat.model && !pendingModel && !chat.switching) send({ op: 'command', input: `/model ${chat.model} ${effort}` });
 	}
 	function pickerKey(e: KeyboardEvent) {
 		if (!chat.picker) return;

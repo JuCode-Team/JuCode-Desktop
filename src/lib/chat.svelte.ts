@@ -1,4 +1,5 @@
 import type { AgentEvent } from './protocol';
+import { loadProfile, profileKey, rememberProfile, type BackendProfile } from '$lib/backendProfile';
 import { isBackendId, type BackendId } from './backends/types';
 import {
 	EDIT_TOOLS,
@@ -567,6 +568,24 @@ export class ChatState {
 		return undefined;
 	}
 
+	#remember(patch: BackendProfile) {
+		rememberProfile(profileKey(this.backendId, this.acpAgentId), patch);
+	}
+
+	/** A draft (no engine yet) shows what its backend reported last time. */
+	seedFromProfile() {
+		const p = loadProfile(profileKey(this.backendId, this.acpAgentId));
+		this.provider = p.provider ?? '';
+		this.model = p.model ?? '';
+		this.modelLabel = p.modelLabel ?? '';
+		this.effort = p.effort ?? '';
+		this.efforts = p.efforts ?? [];
+		this.contextWindow = p.contextWindow ?? 0;
+		this.modelCatalog = p.catalog ?? [];
+		this.modelCatalogEffort = p.catalogEffort ?? '';
+		this.commands = p.commands ?? [];
+	}
+
 	handle(ev: AgentEvent) {
 		// The engine has spoken — the child is up, so the boot animation ends.
 		this.booting = false;
@@ -609,6 +628,14 @@ export class ChatState {
 				this.engineState = str(ev.state) || this.engineState;
 				this.contextWindow = num(ev.context_window);
 				this.contextLimit = num(ev.context_limit);
+				this.#remember({
+					provider: this.provider,
+					model: this.model,
+					modelLabel: this.modelLabel,
+					effort: this.effort,
+					efforts: this.efforts,
+					contextWindow: this.contextWindow
+				});
 				break;
 			case 'user_message': {
 				const text = str(ev.content);
@@ -773,6 +800,7 @@ export class ChatState {
 			case 'model_view':
 				this.modelCatalog = arr<ModelOption>(ev.models);
 				this.modelCatalogEffort = str(ev.active_effort);
+				this.#remember({ catalog: this.modelCatalog, catalogEffort: this.modelCatalogEffort });
 				this.picker = {
 					kind: 'model',
 					models: arr<ModelOption>(ev.models),
@@ -879,6 +907,7 @@ export class ChatState {
 				break;
 			case 'command_list':
 				this.commands = arr<CommandItem>(ev.commands);
+				this.#remember({ commands: this.commands });
 				break;
 			case 'usage': {
 				const out = num(ev.output_tokens);

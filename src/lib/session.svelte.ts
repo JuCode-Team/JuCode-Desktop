@@ -3,7 +3,7 @@ import { acpAgentsList, createSession, closeSession, daemon, hostSession, sessio
 import type { EngineSpec } from './daemon';
 import { canHandOffToTui, isValidResumeSessionId } from './tuiHandoff';
 import { createAdapter, normalizeBackendId, type BackendId } from './backends';
-import { dispatch, dropHeldOps, holdOps, ioFor, registerAdapter, unregisterAdapter } from './backends/router';
+import { clearDraft, dispatch, dropHeldOps, holdOps, ioFor, markDraft, registerAdapter, unregisterAdapter } from './backends/router';
 import { buildBackendOpts, defaultBackendFor, loadBackendSettings } from './backends/settings';
 import { needsClaudeYoloRespawn, toEngineMode } from './approval';
 import { toClaudeMode } from './backends/claude';
@@ -256,12 +256,13 @@ export class SessionStore {
 		});
 	}
 
-	/** Spawn a fresh session in `project` and make it active. `firstMessage`
-	 *  (e.g. a parallel task's 任务描述) is sent as the opening user turn once
-	 *  the engine is up. `backend` overrides the project's last-used backend
-	 *  (which itself falls back to the settings default). `acpAgent` picks the
-	 *  registry agent for 'acp' sessions (defaults to the project's last one;
-	 *  without any, the session falls back to the native engine). */
+	/** A new session in `project`, made active, as a draft: nothing starts
+	 *  until its first message (see `#startDraft`). `firstMessage` (e.g. a
+	 *  parallel task's 任务描述) is that message, sent right away. `backend`
+	 *  overrides the project's last-used backend (which itself falls back to
+	 *  the settings default). `acpAgent` picks the registry agent for 'acp'
+	 *  sessions (defaults to the project's last one; without any, the session
+	 *  falls back to the native engine). */
 	addSession(
 		project: Project,
 		firstMessage?: string,
@@ -276,24 +277,54 @@ export class SessionStore {
 			agent = undefined;
 		}
 		const s = this.#newSession(backendId, agent);
-		s.hosted = hostsNewSessions(backendId);
+		this.#makeDraft(s);
 		project.sessions.push(s);
-		project.lastBackend = backendId;
-		if (backendId === 'acp' && agent) project.lastAcpAgent = agent;
 		this.activeId = s.id;
+		if (firstMessage) {
+			s.chat.optimisticUser(firstMessage);
+			dispatch(s.id, { op: 'user_message', content: firstMessage });
+		}
+		return s.id;
+	}
+
+	/** No engine yet: the menus show what the backend reported last time, and
+	 *  the first op the session is sent starts it. Call it before the session
+	 *  joins its project (the list is reactive state; see `#startDraft`). */
+	#makeDraft(s: Session) {
+		s.draft = true;
+		s.chat.booting = false;
+		s.chat.engineState = 'ready';
+		s.chat.seedFromProfile();
+		markDraft(s.id, () => this.#startDraft(s.id));
+	}
+
+	/** The first message: the draft becomes a session of its backend. Looked
+	 *  up by id, so it changes the session as the reactive list holds it. */
+	#startDraft(id: string) {
+		const s = this.allSessions.find((x) => x.id === id);
+		const project = this.projects.find((p) => p.sessions.some((x) => x.id === id));
+		if (!s?.draft || !project) return;
+		s.draft = false;
+		s.hosted = hostsNewSessions(s.backendId);
+		project.lastBackend = s.backendId;
+		if (s.backendId === 'acp' && s.acpAgent) project.lastAcpAgent = s.acpAgent;
 		// Pin a session id we control for claude (via --session-id) so the
 		// conversation persists under a known uuid and --resume can restore its
 		// context after a crash/restart — the CLI's own auto-generated id isn't
 		// reliably resumable in gateway setups ("No conversation found").
-		const extra = backendId === 'claude' && !s.hosted ? { session_id: newUuid() } : undefined;
+		const extra = s.backendId === 'claude' && !s.hosted ? { session_id: newUuid() } : undefined;
 		if (extra) s.chat.sessionId = extra.session_id;
-		this.#spawn(s, project.path, () => {
-			if (firstMessage) {
-				s.chat.optimisticUser(firstMessage);
-				dispatch(s.id, { op: 'user_message', content: firstMessage });
-			}
-		}, extra).catch((e) => this.#engineFailed(s.chat, e));
-		return s.id;
+		const pick = s.draftPick;
+		s.draftPick = undefined;
+		const model = pick?.model || s.chat.model;
+		// The model and effort picked while a draft go first; the held first
+		// message follows.
+		const applyPick = () => {
+			if (!pick || !model) return;
+			const effort = pick.effort ?? '';
+			dispatch(s.id, { op: 'command', input: effort ? `/model ${model} ${effort}` : `/model ${model}` });
+		};
+		this.#spawn(s, project.path, applyPick, extra).catch((e) => this.#engineFailed(s.chat, e));
 	}
 
 	/**
@@ -310,6 +341,10 @@ export class SessionStore {
 		if (s.backendId === backend && (backend !== 'acp' || s.acpAgent?.id === acpAgent?.id)) return;
 		if (s.chat.userTurns > 0 || s.restored) return;
 		if (backend === 'acp' && !acpAgent) return; // nothing to launch
+		if (s.draft) {
+			this.#redraft(s, backend, acpAgent);
+			return;
+		}
 		const project = this.projects.find((pr) => pr.sessions.some((x) => x.id === id));
 		// Swap the projection + adapter BEFORE the old child exits, so the exit
 		// event lands on the new ChatState with `switching` set and isn't treated
@@ -349,6 +384,27 @@ export class SessionStore {
 			chat.switching = false;
 			this.#engineFailed(chat, e);
 		}
+	}
+
+	/** A draft's backend changes: only the choice, nothing starts. */
+	#redraft(s: Session, backend: BackendId, acpAgent?: { id: string; name: string }) {
+		const chat = new ChatState();
+		chat.backendId = backend;
+		chat.title = s.chat.title;
+		chat.titleLocked = s.chat.titleLocked;
+		const agent = backend === 'acp' ? acpAgent : undefined;
+		if (agent) {
+			chat.acpAgentId = agent.id;
+			chat.acpAgentName = agent.name;
+		}
+		const adapter = createAdapter(backend);
+		registerAdapter(s.id, adapter);
+		s.chat = chat;
+		s.backendId = backend;
+		s.adapter = adapter;
+		s.acpAgent = agent;
+		s.draftPick = undefined;
+		this.#makeDraft(s);
 	}
 
 	/** Archive a thread: hide it from the sidebar by default without closing or
@@ -429,8 +485,9 @@ export class SessionStore {
 	forget(id: string) {
 		const s = this.allSessions.find((x) => x.id === id);
 		if (!s) return;
-		if (!s.dormant) closeSession(id).catch(() => {});
+		if (!s.dormant && !s.draft) closeSession(id).catch(() => {});
 		unregisterAdapter(id);
+		clearDraft(id);
 		dropHeldOps(id);
 		const p = this.projects.find((pr) => pr.sessions.includes(s));
 		if (p) p.sessions = p.sessions.filter((x) => x !== s);
@@ -525,10 +582,10 @@ export class SessionStore {
 		return s.id;
 	}
 
-	/** Spawn a fresh session for a persisted tab that has no engine
-	 *  conversation to resume (never sent a turn), reusing the saved desktop
-	 *  id so layout chat tiles keep matching across workspace switches. */
-	#spawnSaved(
+	/** A persisted tab that never had a conversation (no first message) comes
+	 *  back as a draft of its backend, reusing the saved desktop id so layout
+	 *  chat tiles keep matching across workspace switches. */
+	#draftSaved(
 		project: Project,
 		reuseId: string,
 		title: string,
@@ -543,12 +600,8 @@ export class SessionStore {
 		if (chrome?.color) s.color = chrome.color;
 		if (chrome?.icon) s.icon = chrome.icon;
 		if (chrome?.titleLocked) s.chat.titleLocked = true;
+		this.#makeDraft(s);
 		project.sessions.push(s);
-		s.hosted = hostsNewSessions(backend);
-		// Same rationale as addSession: pin a resumable uuid for claude.
-		const extra = backend === 'claude' && !s.hosted ? { session_id: newUuid() } : undefined;
-		if (extra) s.chat.sessionId = extra.session_id;
-		this.#spawn(s, project.path, undefined, extra).catch((e) => this.#engineFailed(s.chat, e));
 		return s.id;
 	}
 
@@ -758,6 +811,16 @@ export class SessionStore {
 			this.#engineFailed(s.chat, e);
 			return;
 		}
+		// A draft reads the new config when it starts.
+		if (s.draft) {
+			s.chat.provider = provider.id;
+			s.chat.model = model;
+			s.chat.modelLabel = '';
+			s.chat.efforts = efforts;
+			s.chat.effort = String(patch.reasoning_effort ?? '');
+			s.draftPick = undefined;
+			return;
+		}
 		const sid = s.chat.sessionId;
 		const canResume = s.chat.resumable;
 		s.chat.switching = true;
@@ -781,6 +844,13 @@ export class SessionStore {
 		const s = this.allSessions.find((x) => x.id === id);
 		if (!s) return;
 		if (s.backendId !== 'claude' && s.backendId !== 'codex') return;
+		// A draft's engine reads the rewritten config when it starts.
+		if (s.draft) {
+			await switchToolProfile(s.backendId, mode, model).catch((e) =>
+				s.chat.messages.push({ kind: 'error', text: String(e) })
+			);
+			return;
+		}
 		s.chat.switching = true;
 		s.chat.engineState = 'connecting';
 		s.chat.messages.push({
@@ -885,8 +955,9 @@ export class SessionStore {
 		const s = this.allSessions.find((x) => x.id === id);
 		// Closing a hosted session's tab removes it from every client's list.
 		if (s) this.#share(s, { hidden: true });
-		if (!s?.dormant) closeSession(id).catch(() => {});
+		if (!s?.dormant && !s?.draft) closeSession(id).catch(() => {});
 		unregisterAdapter(id);
+		clearDraft(id);
 		dropHeldOps(id);
 		const p = this.projects.find((pr) => pr.sessions.some((s) => s.id === id));
 		if (p) p.sessions = p.sessions.filter((s) => s.id !== id);
@@ -896,8 +967,9 @@ export class SessionStore {
 	/** Tear down a project and all its sessions (the page handles confirmation). */
 	removeProject(p: Project) {
 		for (const s of p.sessions) {
-			closeSession(s.id).catch(() => {});
+			if (!s.dormant && !s.draft) closeSession(s.id).catch(() => {});
 			unregisterAdapter(s.id);
+			clearDraft(s.id);
 			dropHeldOps(s.id);
 		}
 		this.projects = this.projects.filter((x) => x.id !== p.id);
@@ -1116,8 +1188,8 @@ export class SessionStore {
 						icon: parseTabIcon(t.icon),
 						titleLocked: !!t.titleLocked
 					};
-					// With a conversation to resume, resume it; an empty window spawns
-					// fresh. Both keep the saved desktop id (pre-id files mint anew).
+					// With a conversation to resume, resume it; an empty window comes
+					// back as a draft. Both keep the saved desktop id (pre-id files mint anew).
 					// A tab handed to the TUI restores as a TUI surface (no engine).
 					const surface = t.surface === 'tui' && sid ? ('tui' as const) : undefined;
 					// A hosted conversation waits in the daemon: list it now and open
@@ -1138,7 +1210,7 @@ export class SessionStore {
 								surface,
 								t.hosted === true
 							)
-						: this.#spawnSaved(proj, t.id!, t.title, backend, !!t.archived, chrome, acpAgent);
+						: this.#draftSaved(proj, t.id!, t.title, backend, !!t.archived, chrome, acpAgent);
 					if (!first && !t.archived) first = id;
 				}
 			}

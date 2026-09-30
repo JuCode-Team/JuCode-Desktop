@@ -14,11 +14,13 @@ vi.mock('$lib/protocol', () => ({
 
 import { SessionStore } from '$lib/session.svelte';
 import { createSession, sendOp, sendLine, claudeSessionTranscript } from '$lib/protocol';
-import { adapterFor } from './router';
+import { adapterFor, dispatch } from './router';
 import { setLocale } from '$lib/i18n';
 import type { Project } from '$lib/types';
 
 const proj = (id = 'p1'): Project => ({ id, name: id, path: `/tmp/${id}`, sessions: [] });
+/** A new session is a draft; its first message starts the engine. */
+const begin = (id: string) => dispatch(id, { op: 'user_message', content: 'hi' });
 
 beforeEach(() => {
 	vi.clearAllMocks();
@@ -31,6 +33,8 @@ describe('SessionStore × backends', () => {
 		const p = proj();
 		store.projects.push(p);
 		const id = store.addSession(p);
+		expect(createSession).not.toHaveBeenCalled();
+		begin(id);
 		expect(createSession).toHaveBeenCalledWith(id, p.path);
 		expect(p.sessions[0].backendId).toBe('jucode');
 		expect(p.sessions[0].chat.backendId).toBe('jucode');
@@ -43,6 +47,8 @@ describe('SessionStore × backends', () => {
 		const p = proj();
 		store.projects.push(p);
 		const id = store.addSession(p, undefined, 'claude');
+		expect(p.lastBackend).toBeUndefined(); // a draft belongs to no backend yet
+		begin(id);
 		// claude sessions pin a --session-id (uuid) so the conversation is resumable.
 		expect(createSession).toHaveBeenCalledWith(id, p.path, 'claude', { permission_mode: 'default', session_id: expect.any(String) });
 		expect(p.sessions[0].backendId).toBe('claude');
@@ -51,6 +57,7 @@ describe('SessionStore × backends', () => {
 		// The next plain addSession inherits the project's last-used backend.
 		const id2 = store.addSession(p);
 		expect(p.sessions[1].backendId).toBe('claude');
+		begin(id2);
 		expect(createSession).toHaveBeenCalledWith(id2, p.path, 'claude', { permission_mode: 'default', session_id: expect.any(String) });
 	});
 
@@ -59,7 +66,7 @@ describe('SessionStore × backends', () => {
 		const p = proj();
 		store.projects.push(p);
 		// A claude session with a first message: onStart pushes the approval mode
-		// and prefetches the model catalog, then the message goes out as a
+		// and prefetches the model catalog and command list, then the message goes out as a
 		// stream-json user frame — never send_op.
 		store.addSession(p, '你好', 'claude');
 		await Promise.resolve();
@@ -80,8 +87,8 @@ describe('SessionStore × backends', () => {
 		const store = new SessionStore();
 		const p = proj();
 		store.projects.push(p);
-		store.addSession(p, undefined, 'jucode');
-		store.addSession(p, undefined, 'codex');
+		begin(store.addSession(p, undefined, 'jucode'));
+		begin(store.addSession(p, undefined, 'codex'));
 		for (const [i, s] of p.sessions.entries()) {
 			s.chat.sessionId = `sid-${i}`;
 			s.chat.title = `t${i}`;

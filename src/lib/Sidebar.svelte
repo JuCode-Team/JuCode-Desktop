@@ -234,7 +234,8 @@
 			{:else}
 				<span class="sess-title" ondblclick={(e) => { e.stopPropagation(); startRename(s); }} role="presentation">{s.chat.title}</span>
 			{/if}
-			{#if s.backendId && s.backendId !== 'jucode'}
+			<!-- A draft belongs to no backend until its first message. -->
+			{#if s.backendId && s.backendId !== 'jucode' && !s.draft}
 				<span class="backend-chip" title={BACKEND_LABELS[s.backendId]}><BackendIcon backend={s.backendId} size={12} /></span>
 			{/if}
 			{#if s.chat.pendingApproval || s.chat.trustPrompt}

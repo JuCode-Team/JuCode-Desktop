@@ -19,6 +19,27 @@ export function holdOps(sessionId: string): void {
 	if (!held.has(sessionId)) held.set(sessionId, []);
 }
 
+/** Draft sessions (no engine yet): the function that starts the engine. */
+const drafts = new Map<string, () => void>();
+
+/** A draft session: its first op is held and starts its engine, which then
+ *  delivers it (the start goes through `#spawn`, which keeps the queue). */
+export function markDraft(sessionId: string, start: () => void): void {
+	held.set(sessionId, []);
+	drafts.set(sessionId, start);
+}
+
+/** No engine yet (see `markDraft`). */
+export function isDraft(sessionId: string): boolean {
+	return drafts.has(sessionId);
+}
+
+/** Forget a draft that was removed before it started. */
+export function clearDraft(sessionId: string): void {
+	drafts.delete(sessionId);
+	held.delete(sessionId);
+}
+
 /** The engine is up: deliver the held ops in order and stop holding. */
 export function releaseOps(sessionId: string): void {
 	const ops = held.get(sessionId);
@@ -81,6 +102,11 @@ export function dispatch(
 		// Only what still means something to the next engine: an interrupt or
 		// an approval answer belongs to the one that is gone.
 		if (op.op !== 'interrupt' && op.op !== 'approve') queue.push(op);
+		const start = drafts.get(sessionId);
+		if (start && queue.length) {
+			drafts.delete(sessionId);
+			start();
+		}
 		return true;
 	}
 	const lines = adapter.encodeOp(op);

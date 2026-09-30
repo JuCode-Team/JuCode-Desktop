@@ -36,6 +36,11 @@ export interface Session {
 	/** A hosted session listed from the daemon without an engine open here
 	 *  yet; it opens when it is first shown (`SessionStore.wake`). */
 	dormant?: boolean;
+	/** A new session with no engine yet: its backend, model and effort are
+	 *  only choices until the first message starts it (`markDraft`). */
+	draft?: boolean;
+	/** Model and effort picked while a draft, applied when it starts. */
+	draftPick?: { model?: string; effort?: string };
 }
 
 /** 并行任务（git worktree）项目的元数据，随项目布局持久化。 */

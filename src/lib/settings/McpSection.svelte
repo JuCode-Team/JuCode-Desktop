@@ -37,13 +37,15 @@
 	import Segmented from '$lib/ui/Segmented.svelte';
 	import Switch from '$lib/ui/Switch.svelte';
 	import { t } from '$lib/i18n';
+	import { isDraft } from '$lib/backends/router';
 	import SettingsSection from './SettingsSection.svelte';
 	import SettingsRow from './SettingsRow.svelte';
 
 	let { sessionId, chat }: { sessionId: string; chat?: ChatState } = $props();
 
-	// A live engine is required for MCP ops; an exited one can't answer.
-	const live = $derived(!!chat && !!sessionId && chat.engineState !== 'exited');
+	// A live engine is required for MCP ops; an exited one can't answer, and
+	// a draft has none (asking would start it).
+	const live = $derived(!!chat && !!sessionId && chat.engineState !== 'exited' && !isDraft(sessionId));
 
 	// Persisted config entries (edit-form source + no-session fallback), kept in
 	// sync optimistically on every mutation we send.
