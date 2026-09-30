@@ -50,6 +50,9 @@ export interface SavedProject {
 	chats?: boolean;
 }
 
+/** Waits between attempts to reach an unreachable daemon, ms (~4.5 min). */
+const DAEMON_RETRY_DELAYS = [1000, 2000, 4000, 8000, 15000, 30000, 30000, 30000, 30000, 30000, 30000, 30000];
+
 /** New JuCode sessions run in the daemon when the setting is on. */
 function hostsNewSessions(backend: BackendId): boolean {
 	return backend === 'jucode' && loadBackendSettings().daemon;
@@ -108,8 +111,20 @@ export class SessionStore {
 	#engineFailed(chat: ChatState, e: unknown) {
 		chat.engineState = 'exited';
 		chat.restarting = false;
-		chat.messages.push({ kind: 'error', text: t('shell.startFail', { msg: String(e) }) });
 		const s = this.allSessions.find((x) => x.chat === chat);
+		// A hosted session whose daemon can't be reached (restarting, being
+		// upgraded): keep trying for about 4.5 minutes, backing off, without
+		// spending the crash budget or stacking an error per attempt.
+		if (s?.hosted && s.surface !== 'tui' && chat.daemonRetries < DAEMON_RETRY_DELAYS.length) {
+			if (chat.daemonRetries === 0) chat.messages.push({ kind: 'system', text: t('shell.daemonReconnecting') });
+			const delay = DAEMON_RETRY_DELAYS[chat.daemonRetries++]!;
+			setTimeout(() => {
+				const live = this.allSessions.find((x) => x.id === s.id);
+				if (live?.chat === chat && chat.engineState === 'exited') this.restartSession(s.id, false, '', false);
+			}, delay);
+			return;
+		}
+		chat.messages.push({ kind: 'error', text: t('shell.startFail', { msg: String(e) }) });
 		// Out of retries: held messages wait for a manual restart.
 		if (!s || s.surface === 'tui' || chat.restarts >= 3) return;
 		setTimeout(() => {
@@ -281,6 +296,7 @@ export class SessionStore {
 		if (project) project.lastBackend = backend;
 		try {
 			await closeSession(id);
+			if (this.#gone(s)) return;
 		} catch {
 			/* old child may already be gone */
 		}
@@ -493,7 +509,7 @@ export class SessionStore {
 	 * ChatState.handle) — i.e. only after a restart genuinely succeeds — and by
 	 * `force` (the manual button), which clears the budget so the user can retry.
 	 */
-	restartSession(id: string, force = false, reason = '') {
+	restartSession(id: string, force = false, reason = '', spend = true) {
 		const s = this.allSessions.find((x) => x.id === id);
 		// The native TUI owns handed-off conversations. No crash/manual path may
 		// bring up a GUI engine beside it; returnToGui flips ownership first.
@@ -503,7 +519,8 @@ export class SessionStore {
 			s.chat.restarts = 0;
 		}
 		s.chat.restartWindowStart = now;
-		s.chat.restarts++;
+		if (spend) s.chat.restarts++;
+		if (force) s.chat.daemonRetries = 0;
 		const sid = s.chat.sessionId;
 		// A restored session's conversation exists engine-side even while its
 		// replayed transcript is still empty (replay is async / best-effort) —
@@ -515,7 +532,7 @@ export class SessionStore {
 			: reason
 				? t('shell.autoRestartingWhy', { reason })
 				: t('shell.autoRestarting');
-		s.chat.messages.push({ kind: 'system', text });
+		if (spend) s.chat.messages.push({ kind: 'system', text });
 		// claude resumes via the --resume spawn option (no /resume command in
 		// stream-json mode); codex resumes via the thread/resume RPC (thread id
 		// through SessionCtx); jucode resumes with the command after the handshake.
@@ -617,6 +634,7 @@ export class SessionStore {
 		else if (efforts.length) patch.reasoning_effort = efforts.includes('medium') ? 'medium' : efforts[0];
 		try {
 			await writeConfig(patch);
+			if (this.#gone(s)) return;
 		} catch (e) {
 			this.#engineFailed(s.chat, e);
 			return;
@@ -628,6 +646,7 @@ export class SessionStore {
 		s.chat.messages.push({ kind: 'system', text: t('shell.switchingTo', { provider: provider.id, model }) });
 		try {
 			await closeSession(id);
+			if (this.#gone(s)) return;
 			await this.#spawn(s, this.projectPathOf(id));
 			s.chat.switching = false;
 			if (sid && canResume && !s.hosted) dispatch(id, { op: 'command', input: `/resume ${sid}` });
@@ -653,12 +672,14 @@ export class SessionStore {
 		const canResume = s.chat.resumable || (!!sid && !!s.restored);
 		try {
 			await switchToolProfile(s.backendId, mode, model);
+			if (this.#gone(s)) return;
 			if (s.surface === 'tui') {
 				s.chat.switching = false;
 				s.chat.engineState = 'ready';
 				return;
 			}
 			await closeSession(id);
+			if (this.#gone(s)) return;
 			s.chat.resumeBroken = false;
 			const mayResume = !!(sid && canResume);
 			const extra: Record<string, unknown> = {};
@@ -696,6 +717,7 @@ export class SessionStore {
 		s.chat.engineState = 'connecting';
 		try {
 			await closeSession(id);
+			if (this.#gone(s)) return;
 			await this.#spawn(s, this.projectPathOf(id), undefined, {
 				permission_mode: 'bypassPermissions',
 				...(sid && canResume ? { resume: sid } : {})
@@ -725,6 +747,7 @@ export class SessionStore {
 		s.chat.truncateToUserTurn(userIndex);
 		try {
 			await closeSession(id);
+			if (this.#gone(s)) return;
 			await this.#spawn(s, this.projectPathOf(id), undefined, {
 				...(sid && resumeAtUuid ? { resume: sid, resume_session_at: resumeAtUuid } : {}),
 				...(yolo ? { permission_mode: 'bypassPermissions' } : {})
@@ -805,6 +828,13 @@ export class SessionStore {
 			undefined,
 			hostsNewSessions(backend)
 		);
+	}
+
+	/** The tab was closed (or its workspace swapped out) while an async
+	 *  engine switch was awaiting: spawning now would leave an engine nobody
+	 *  owns, or replace the one a reopened tab just started. */
+	#gone(s: Session): boolean {
+		return !this.allSessions.includes(s);
 	}
 
 	/** Hand a conversation to the native TUI (same chat tile, `surface` flips

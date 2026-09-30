@@ -240,6 +240,9 @@ export class ChatState {
 	// $state so the diagnostics panel reflects restarts live.
 	restarts = $state(0);
 	restartWindowStart: number | null = null;
+	/** Hosted: consecutive failed attempts to reach the daemon (see
+	 *  SessionStore#engineFailed); reset with the crash budget. */
+	daemonRetries = 0;
 	// Set when a claude --resume target isn't found: the next restart must NOT
 	// resume the same doomed id (it would crash-loop). One-shot — consumed by the
 	// store's restartSession, which then comes up fresh.
@@ -960,6 +963,7 @@ export class ChatState {
 				if (!ev.error) {
 					this.restarts = 0;
 					this.restartWindowStart = null;
+					this.daemonRetries = 0;
 				}
 				if (!this.busy) {
 					this.#endTurn();

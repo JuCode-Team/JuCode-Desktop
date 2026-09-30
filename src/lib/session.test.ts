@@ -180,6 +180,43 @@ describe('SessionStore lifecycle', () => {
 		expect(sendLine).toHaveBeenCalledWith(id, expect.stringContaining('later'));
 	});
 
+	it('a hosted tab keeps retrying an unreachable daemon without spending its crash budget', async () => {
+		vi.useFakeTimers();
+		vi.stubGlobal('localStorage', { getItem: () => JSON.stringify({ daemon: true }), setItem: () => {} });
+		vi.mocked(hostSession).mockRejectedValue(new Error('cannot reach jucode daemon'));
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		store.addSession(p);
+		const s = p.sessions[0]!;
+		await vi.advanceTimersByTimeAsync(0);
+		expect(s.chat.daemonRetries).toBe(1);
+		await vi.advanceTimersByTimeAsync(1000 + 2000 + 4000);
+		expect(vi.mocked(hostSession).mock.calls.length).toBe(4);
+		expect(s.chat.restarts).toBe(0);
+		expect(s.chat.messages.filter((m) => m.kind === 'error')).toHaveLength(0);
+		vi.mocked(hostSession).mockReset();
+		vi.mocked(hostSession).mockResolvedValue(undefined);
+		vi.unstubAllGlobals();
+		vi.useRealTimers();
+	});
+
+	it('an engine switch awaiting its config write does not spawn for a closed tab', async () => {
+		let release!: () => void;
+		vi.mocked(writeConfig).mockImplementationOnce(() => new Promise<void>((r) => (release = r)));
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p);
+		await Promise.resolve();
+		vi.mocked(createSession).mockClear();
+		const switching = store.switchProvider(id, { id: 'x', base_url: 'u', format: 'openai', models: [{ name: 'm' }] }, 'm');
+		store.removeSession(id);
+		release();
+		await switching;
+		expect(createSession).not.toHaveBeenCalled();
+	});
+
 	it('a new claude session is spawned in the desktop approval mode', () => {
 		vi.stubGlobal('localStorage', {
 			getItem: (k: string) => (k === 'jucode-approval-mode' ? 'all' : null),
