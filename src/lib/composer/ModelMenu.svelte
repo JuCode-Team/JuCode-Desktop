@@ -14,6 +14,7 @@
 	import type { ModelRow } from './modelRows';
 	import { defaultEffort, effortLabel } from './effort';
 	import EffortSlider from './EffortSlider.svelte';
+	import GroupPicker from './GroupPicker.svelte';
 	import { modelColor, isTopEffort } from '$lib/modelColor';
 
 	// The composer's model menu, opened from the model button: everything about
@@ -176,6 +177,10 @@
 		</section>
 	{/if}
 
+	{#if chat.backendId === 'jucode' && chat.provider === 'jucode' && chat.model}
+		{#key chat.model}<GroupPicker model={chat.model} />{/key}
+	{/if}
+
 	{#if rows.length || query || showSearch}
 		<section class="models">
 			{#if showSearch}
@@ -233,7 +238,8 @@
 		transform-origin: bottom right;
 		animation: pop-in var(--t-med) var(--ease-spring);
 	}
-	section + section {
+	/* GroupPicker renders its own section, hence :global. */
+	.mm > :global(section + section) {
 		margin-top: 6px;
 		padding-top: 8px;
 		border-top: 1px solid var(--hairline);

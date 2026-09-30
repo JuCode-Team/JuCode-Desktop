@@ -925,6 +925,13 @@ fn fetch_jucode_models() -> Result<serde_json::Value, String> {
     jucode_get("/v1/models")
 }
 
+/// The groups the account may route through, with rate multipliers and the
+/// models each serves.
+#[tauri::command(async)]
+fn fetch_jucode_groups() -> Result<serde_json::Value, String> {
+    jucode_get("/v1/open/groups")
+}
+
 /// Plan quota usage (5h / weekly / monthly used vs cap).
 #[tauri::command(async)]
 fn fetch_usage() -> Result<serde_json::Value, String> {
@@ -3111,6 +3118,7 @@ pub fn run() {
             fetch_usage,
             fetch_usage_logs,
             fetch_jucode_models,
+            fetch_jucode_groups,
             fetch_deepseek_balance,
             transcribe_audio,
             generate_text,

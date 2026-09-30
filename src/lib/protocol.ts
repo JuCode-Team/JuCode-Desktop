@@ -250,6 +250,18 @@ export async function fetchJucodeModels(): Promise<JucodeModel[]> {
 	const v = await invoke<{ data?: JucodeModel[] }>('fetch_jucode_models');
 	return Array.isArray(v.data) ? v.data : [];
 }
+export type JucodeGroup = {
+	id: string;
+	name: string;
+	description?: string;
+	billing_source?: 'plan_only' | 'balance_only' | '';
+	rate_multiplier: number;
+	models?: string[];
+};
+export async function fetchJucodeGroups(): Promise<JucodeGroup[]> {
+	const v = await invoke<{ groups?: JucodeGroup[] }>('fetch_jucode_groups');
+	return Array.isArray(v.groups) ? v.groups : [];
+}
 export function fetchAccountInfo(): Promise<AccountInfo> {
 	return invoke('fetch_account_info');
 }
