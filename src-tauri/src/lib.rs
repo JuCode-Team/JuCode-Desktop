@@ -64,9 +64,27 @@ fn retire(session: Arc<Session>) {
             }
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
-        let _ = child.kill();
+        kill_tree(&mut child);
         let _ = child.wait();
     });
+}
+
+/// Kills a child with its descendants where the child is only a launcher:
+/// on Windows a `.cmd` shim (npm-installed CLIs) is cmd.exe, and killing it
+/// leaves the real program running with our stdout. Elsewhere the child is
+/// the program itself.
+fn kill_tree(child: &mut Child) {
+    #[cfg(windows)]
+    {
+        let mut cmd = Command::new("taskkill");
+        no_window(&mut cmd);
+        let _ = cmd
+            .args(["/pid", &child.id().to_string(), "/T", "/F"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+    let _ = child.kill();
 }
 
 /// Writes queued lines to `stdin` until the session is dropped or the child
@@ -279,11 +297,16 @@ fn create_session(
 
     // Piped stderr (codex / claude): forward lines as {"__stderr": "<line>"}
     // agent-event payloads so adapters can surface diagnostics.
+    // Signalled (by dropping it) when the stderr reader is done, so the exit
+    // is reported after the engine's last diagnostics (claude's "No
+    // conversation found" decides how the restart resumes).
+    let (stderr_done, stderr_finished) = std::sync::mpsc::channel::<()>();
     if let Some(stderr) = stderr {
         let id = session.clone();
         let handle = app.clone();
         let is_current = is_current.clone();
         std::thread::spawn(move || {
+            let _done = stderr_done;
             let reader = BufReader::new(stderr);
             for line in reader.lines() {
                 match line {
@@ -332,6 +355,7 @@ fn create_session(
         // Only an engine that is still registered exited on its own; a closed
         // or replaced one ends silently.
         if is_current(&handle, &id) {
+            let _ = stderr_finished.recv_timeout(std::time::Duration::from_millis(500));
             let reason = engine_exit_reason(&handle, &id);
             let _ = handle.emit(
                 "agent-exit",
