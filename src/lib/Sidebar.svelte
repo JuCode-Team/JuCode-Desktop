@@ -18,6 +18,8 @@
 	import FolderOpenIcon from 'phosphor-svelte/lib/FolderOpenIcon';
 	import ChatsIcon from 'phosphor-svelte/lib/ChatsIcon';
 	import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon';
+	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
+	import Button from '$lib/ui/Button.svelte';
 	import { t } from '$lib/i18n';
 	import { BACKEND_LABELS } from '$lib/backends';
 	import BackendIcon from '$lib/BackendIcon.svelte';
@@ -82,6 +84,22 @@
 
 	// Which projects have their archived section expanded (collapsed by default).
 	let showArchived = $state<Record<string, boolean>>({});
+	// Bulk restore: the project whose archived list is in selection mode, and
+	// the picked session ids.
+	let selecting = $state('');
+	let picked = $state<string[]>([]);
+	function toggleSelecting(id: string) {
+		selecting = selecting === id ? '' : id;
+		picked = [];
+	}
+	function togglePick(id: string) {
+		picked = picked.includes(id) ? picked.filter((x) => x !== id) : [...picked, id];
+	}
+	function restorePicked() {
+		for (const id of picked) onUnarchiveSession(id);
+		selecting = '';
+		picked = [];
+	}
 	// Collapsed project folders, and folders showing all of their sessions
 	// instead of the first SHOW_LIMIT.
 	let collapsed = $state<Record<string, boolean>>({});
@@ -182,16 +200,23 @@
 	</nav>
 
 
-	{#snippet sessRow(s: Project['sessions'][number], nested = false)}
+	{#snippet sessRow(s: Project['sessions'][number], nested = false, selectable = false)}
 		<button
 			class="sess"
 			class:nested
-			class:on={s.id === activeId}
+			class:on={!selectable && s.id === activeId}
 			class:arch={s.archived}
+			class:selectable
+			aria-pressed={selectable ? picked.includes(s.id) : undefined}
 			style:box-shadow={s.color ? `inset 2px 0 0 ${s.color}` : undefined}
-			onclick={() => onSelect(s.id)}
+			onclick={() => (selectable ? togglePick(s.id) : onSelect(s.id))}
 			oncontextmenu={(e) => onSessionMenu(s.id, e)}
 		>
+			{#if selectable}
+				<span class="pick" class:on={picked.includes(s.id)} aria-hidden="true">
+					{#if picked.includes(s.id)}<CheckIcon size={12} weight="bold" />{/if}
+				</span>
+			{/if}
 			{#if s.icon}
 				<TabGlyph icon={s.icon} color={s.color} size={14} />
 			{/if}
@@ -222,6 +247,7 @@
 				<!-- A reply arrived while this session was not in view: the one place a dot is used. -->
 				<span class="unread" aria-label={t('shell.unread')}></span>
 			{/if}
+			{#if !selectable}
 			<span
 				class="act"
 				role="button"
@@ -247,17 +273,39 @@
 				onkeydown={(e) => e.key === 'Enter' && (e.stopPropagation(), onCloseSession(s.id))}
 				aria-label="close"><XIcon size={16} /></span
 			>
+			{/if}
 		</button>
 	{/snippet}
 
 	{#snippet archived(p: Project, arch: Project['sessions'], nested: boolean)}
 		{#if arch.length}
-			<button class="more" class:nested onclick={() => (showArchived[p.id] = !showArchived[p.id])}>
-				<span class="chev" class:open={showArchived[p.id]}><CaretRightIcon size={16} /></span>
-				<span>{t('shell.archived')} · {arch.length}</span>
-			</button>
-			{#if showArchived[p.id] || query}
-				{#each arch as s (s.id)}{@render sessRow(s, nested)}{/each}
+			{@const open = showArchived[p.id] || !!query}
+			{@const sel = selecting === p.id && open}
+			<div class="more-line" class:nested>
+				<button class="more" onclick={() => (showArchived[p.id] = !showArchived[p.id])}>
+					<span class="chev" class:open={showArchived[p.id]}><CaretRightIcon size={16} /></span>
+					<span>{t('shell.archived')} · {arch.length}</span>
+				</button>
+				{#if open && arch.length > 1}
+					<button class="more-act" onclick={() => toggleSelecting(p.id)}>
+						{sel ? t('shell.archiveSelectCancel') : t('shell.archiveSelect')}
+					</button>
+				{/if}
+			</div>
+			{#if open}
+				{#each arch as s (s.id)}{@render sessRow(s, nested, sel)}{/each}
+				{#if sel}
+					{@const all = arch.every((s) => picked.includes(s.id))}
+					<div class="bulk" class:nested>
+						<button class="more-act" onclick={() => (picked = all ? [] : arch.map((s) => s.id))}>
+							{all ? t('shell.archiveSelectNone') : t('shell.archiveSelectAll')}
+						</button>
+						<span class="grow"></span>
+						<Button size="sm" variant="primary" disabled={!picked.length} onclick={restorePicked}>
+							{t('shell.archiveRestore', { n: picked.length })}
+						</Button>
+					</div>
+				{/if}
 			{/if}
 		{/if}
 	{/snippet}
@@ -541,6 +589,65 @@
 	.sess.nested {
 		padding-left: 42px;
 	}
+	.more-line {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+	}
+	.more-line .more {
+		flex: 1;
+		min-width: 0;
+	}
+	.more-act {
+		flex-shrink: 0;
+		padding: 4px 8px;
+		border: none;
+		border-radius: var(--r-sm);
+		background: none;
+		color: var(--dim);
+		font: inherit;
+		font-size: var(--fs-xs);
+		cursor: pointer;
+		transition:
+			background var(--t-fast) var(--ease-out),
+			color var(--t-fast) var(--ease-out);
+	}
+	.more-act:hover {
+		background: var(--surface2);
+		color: var(--text);
+	}
+	.bulk {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 6px 4px 8px 12px;
+		animation: rise var(--t-fast) var(--ease-out);
+	}
+	.bulk.nested {
+		padding-left: 28px;
+	}
+	.grow {
+		flex: 1;
+	}
+	.pick {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 16px;
+		height: 16px;
+		flex-shrink: 0;
+		border: 1px solid var(--border-strong);
+		border-radius: var(--r-xs);
+		background: var(--surface);
+		color: var(--on-accent);
+		transition:
+			background var(--t-fast) var(--ease-out),
+			border-color var(--t-fast) var(--ease-out);
+	}
+	.pick.on {
+		border-color: var(--accent);
+		background: var(--accent);
+	}
 	.sess.arch .sess-title {
 		color: var(--dim2);
 	}
@@ -644,7 +751,7 @@
 		color: var(--dim);
 		font-size: var(--fs-xs);
 	}
-	.more.nested {
+	.more-line.nested .more {
 		padding-left: 42px;
 	}
 	.chev {

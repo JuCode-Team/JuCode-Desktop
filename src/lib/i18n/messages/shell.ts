@@ -169,6 +169,11 @@ const shell = {
 		archive: '归档对话',
 		unarchive: '取消归档',
 		archived: '已归档',
+		archiveSelect: '选择',
+		archiveSelectCancel: '取消',
+		archiveSelectAll: '全选',
+		archiveSelectNone: '全不选',
+		archiveRestore: '恢复 {n} 个',
 		// The one-and-only creatable session type (mosaic +, sidebar, palette):
 		// the coding agent is picked inside the session, not at creation.
 		agentSession: '创建 Agent 会话',
@@ -397,6 +402,7 @@ const shell = {
 		startFail: '无法启动引擎：{msg}',
 		restarting: '正在重启引擎…',
 		autoRestarting: '引擎已退出，正在自动重启…',
+		historyFail: '读取历史会话失败：{msg}',
 		autoRestartingWhy: '引擎已退出（{reason}），正在自动重启…',
 		restartExhausted: '引擎多次退出，已暂停自动重启。点「重启引擎」重试。',
 		switchingTo: '正在切换到 {provider} · {model}…'
@@ -569,6 +575,11 @@ const shell = {
 		archive: 'Archive thread',
 		unarchive: 'Unarchive',
 		archived: 'Archived',
+		archiveSelect: 'Select',
+		archiveSelectCancel: 'Cancel',
+		archiveSelectAll: 'Select all',
+		archiveSelectNone: 'Select none',
+		archiveRestore: 'Restore {n}',
 		// The one-and-only creatable session type (mosaic +, sidebar, palette):
 		// the coding agent is picked inside the session, not at creation.
 		agentSession: 'New agent session',
@@ -797,6 +808,7 @@ const shell = {
 		startFail: 'Failed to start engine: {msg}',
 		restarting: 'Restarting engine…',
 		autoRestarting: 'Engine exited, auto-restarting…',
+		historyFail: 'Failed to read session history: {msg}',
 		autoRestartingWhy: 'Engine exited ({reason}), auto-restarting…',
 		restartExhausted: 'Engine exited repeatedly; auto-restart paused. Click "Restart engine" to retry.',
 		switchingTo: 'Switching to {provider} · {model}…'

@@ -143,6 +143,16 @@ export interface ClaudeSessionEntry {
 export function claudeSessions(cwd: string): Promise<ClaudeSessionEntry[]> {
 	return invoke('claude_sessions', { cwd });
 }
+// Saved JuCode conversations for a project (engine session store on disk).
+export interface JucodeSessionEntry {
+	id: string;
+	label: string;
+	updated_at: number;
+	entries: number;
+}
+export function jucodeSessions(cwd: string): Promise<JucodeSessionEntry[]> {
+	return invoke('jucode_sessions', { cwd });
+}
 export interface ClaudeTranscriptRow {
 	role: string;
 	content: string;

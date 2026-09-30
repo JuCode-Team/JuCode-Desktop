@@ -506,6 +506,54 @@ fn jucode_dir() -> PathBuf {
     PathBuf::from(home.unwrap_or_default()).join(".jucode")
 }
 
+/// One saved JuCode conversation for the history picker.
+#[derive(serde::Serialize)]
+struct JucodeSessionEntry {
+    id: String,
+    label: String,
+    updated_at: u64,
+    entries: u64,
+}
+
+/// The engine's session directory name for `cwd` (FNV-1a, as agent-core's
+/// session::hash_path).
+fn jucode_cwd_key(cwd: &str) -> String {
+    let mut hash = 0xcbf29ce484222325u64;
+    for byte in cwd.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("{hash:016x}")
+}
+
+/// The JuCode conversations saved for `cwd`, newest first, read from the
+/// engine's session store (`~/.jucode/sessions/<fnv1a(cwd)>/<id>.json`) so the
+/// history picker needs no running engine. Empty conversations are skipped.
+#[tauri::command(async)]
+fn jucode_sessions(cwd: String) -> Result<Vec<JucodeSessionEntry>, String> {
+    let dir = jucode_dir().join("sessions").join(jucode_cwd_key(&cwd));
+    let Ok(read) = std::fs::read_dir(&dir) else {
+        return Ok(Vec::new());
+    };
+    let mut out: Vec<JucodeSessionEntry> = read
+        .flatten()
+        .filter(|e| e.path().extension().is_some_and(|x| x == "json"))
+        .filter_map(|e| {
+            let meta = read_json(&e.path());
+            let id = meta.get("id")?.as_str()?.to_string();
+            let entries = meta.get("entries_count").and_then(|v| v.as_u64()).unwrap_or(0);
+            (entries > 0).then(|| JucodeSessionEntry {
+                label: meta.get("label").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                updated_at: meta.get("updated_at").and_then(|v| v.as_u64()).unwrap_or(0),
+                entries,
+                id,
+            })
+        })
+        .collect();
+    out.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    Ok(out)
+}
+
 fn read_json(path: &std::path::Path) -> serde_json::Value {
     std::fs::read_to_string(path)
         .ok()
@@ -3178,6 +3226,7 @@ pub fn run() {
             plugins::github_pr::gh,
             worktree_base,
             claude_history::claude_sessions,
+            jucode_sessions,
             claude_history::claude_session_transcript,
             pty_open,
             pty_write,
@@ -3209,7 +3258,13 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{read_json_strict, valid_app_data_name};
+    use super::{jucode_cwd_key, read_json_strict, valid_app_data_name};
+
+    #[test]
+    fn jucode_cwd_key_matches_the_engine_store() {
+        // A directory name the engine created for this path.
+        assert_eq!(jucode_cwd_key("/Users/apple/.jucode/chats"), "41f93034987d6cdc");
+    }
 
     #[test]
     fn app_data_names_stay_inside_the_config_dir() {

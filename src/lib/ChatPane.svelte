@@ -503,22 +503,17 @@
 		// isn't replaced; everything else acts on this session.
 		if (command.startsWith('/resume ') && project) {
 			const sid = command.slice('/resume '.length).trim();
-			// Codex/claude resume items open in a fresh session of the same backend
-			// (codex: thread/resume via SessionCtx.resume; claude: the --resume
-			// spawn option + transcript replay from the session file).
-			if (chat.backendId === 'codex' || chat.backendId === 'claude') {
-				const backend = chat.backendId;
-				const item = chat.picker?.kind === 'resume' ? chat.picker.items.find((i) => i.id === sid) : undefined;
-				chat.closePicker();
-				store.activeId = store.restoreSession(project, sid, item?.label ?? '', backend);
+			// A history item opens in a new tab so the current chat isn't
+			// replaced: codex via thread/resume, claude via --resume + transcript
+			// replay, jucode via session_open (hosted) or /resume after spawn.
+			const picker = chat.picker?.kind === 'resume' ? chat.picker : undefined;
+			const backend = picker?.backend ?? chat.backendId;
+			const item = picker?.items.find((i) => i.id === sid);
+			chat.closePicker();
+			if (backend === 'codex' || backend === 'claude' || backend === 'jucode') {
+				store.openSaved(project, sid, item?.label ?? '', backend);
 				return;
 			}
-			// jucode history entries come from the jucode engine, so the new session
-			// is always jucode-backed regardless of the project's last-used backend.
-			chat.closePicker();
-			const id = store.addSession(project, undefined, 'jucode');
-			dispatch(id, { op: 'command', input: command });
-			return;
 		}
 		send({ op: 'command', input: command });
 		chat.closePicker();

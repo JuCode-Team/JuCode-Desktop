@@ -1,5 +1,5 @@
 import { ChatState } from './chat.svelte';
-import { createSession, closeSession, hostSession, projectRoot, chatsDir, writeConfig, git, claudeSessionTranscript, switchToolProfile } from './protocol';
+import { createSession, closeSession, hostSession, projectRoot, chatsDir, writeConfig, git, claudeSessionTranscript, switchToolProfile, jucodeSessions } from './protocol';
 import { canHandOffToTui, isValidResumeSessionId } from './tuiHandoff';
 import { createAdapter, normalizeBackendId, type BackendId } from './backends';
 import { dispatch, ioFor, registerAdapter, unregisterAdapter } from './backends/router';
@@ -353,7 +353,10 @@ export class SessionStore {
 		// even while the replayed transcript is still empty.
 		s.restored = true;
 		project.sessions.push(s);
-		if (backend === 'claude' || backend === 'codex') s.chat.sessionId = sid;
+		// Known before the engine confirms it: a tab saved (or restarted) before
+		// the resumed engine reports its id must keep pointing at the saved
+		// conversation, or it comes back as a fresh session next time.
+		s.chat.sessionId = sid;
 		// The conversation was handed to the native TUI when it was persisted:
 		// render the TuiPanel (which resumes by id) and never spawn the GUI
 		// engine beside it — one process per conversation. `returnToGui`
@@ -725,12 +728,55 @@ export class SessionStore {
 		if (!this.allSessions.some((s) => s.id === this.activeId)) this.activeId = this.allSessions[0]?.id ?? '';
 	}
 
-	/** Open the project's history picker (/resume with no arg). History is a
-	 *  jucode-engine feature, so prefer a live jucode session (or spawn one). */
-	openHistory(p: Project) {
-		const id = p.sessions.find((s) => s.backendId === 'jucode')?.id ?? this.addSession(p, undefined, 'jucode');
+	/** Open the project's history: the JuCode conversations saved for its
+	 *  directory, read from disk, as a picker in one of its chats (the active
+	 *  one when it is in this project). Only a project with no chat at all gets
+	 *  a new one to show it in. */
+	async openHistory(p: Project) {
+		const active = p.sessions.find((s) => s.id === this.activeId);
+		const id = active?.id ?? p.sessions.find((s) => !s.archived)?.id ?? this.addSession(p);
 		this.activeId = id;
-		dispatch(id, { op: 'command', input: '/resume' });
+		const chat = this.allSessions.find((s) => s.id === id)?.chat;
+		if (!chat) return;
+		try {
+			const sessions = await jucodeSessions(p.path);
+			chat.handle({
+				type: 'resume_view',
+				backend: 'jucode',
+				items: sessions.map((x) => ({
+					id: x.id,
+					label: x.label || x.id,
+					detail: new Date(x.updated_at * 1000).toLocaleString(),
+					active: x.id === chat.sessionId
+				}))
+			});
+		} catch (e) {
+			chat.messages.push({ kind: 'system', text: t('shell.historyFail', { msg: String(e) }) });
+		}
+	}
+
+	/** Open a saved conversation from a history picker in a new tab. */
+	openSaved(project: Project, sid: string, title: string, backend: BackendId) {
+		// Already open: switch to it (a second engine on the same conversation
+		// would fight over it).
+		const open = this.allSessions.find((s) => s.backendId === backend && s.chat.sessionId === sid);
+		if (open) {
+			if (open.archived) open.archived = false;
+			this.activeId = open.id;
+			return;
+		}
+		this.activeId = this.restoreSession(
+			project,
+			sid,
+			title,
+			backend,
+			false,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			hostsNewSessions(backend)
+		);
 	}
 
 	/** Hand a conversation to the native TUI (same chat tile, `surface` flips

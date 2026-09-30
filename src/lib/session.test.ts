@@ -11,7 +11,8 @@ vi.mock('./protocol', () => ({
 	chatsDir: vi.fn(() => Promise.resolve('/home/u/.jucode/chats')),
 	writeConfig: vi.fn(() => Promise.resolve()),
 	git: vi.fn(() => Promise.resolve('')),
-	claudeSessionTranscript: vi.fn(() => Promise.resolve([]))
+	claudeSessionTranscript: vi.fn(() => Promise.resolve([])),
+	jucodeSessions: vi.fn(() => Promise.resolve([{ id: 's6old', label: 'old chat', updated_at: 1, entries: 4 }]))
 }));
 
 import { SessionStore } from './session.svelte';
@@ -101,6 +102,44 @@ describe('SessionStore lifecycle', () => {
 		store.restartSession(id);
 		const again = (createSession as unknown as { mock: { calls: unknown[][] } }).mock.calls.at(-1);
 		expect((again?.[3] as { resume?: string } | undefined)?.resume).toBeUndefined();
+	});
+
+	it('restored jucode tabs keep their saved id before the engine reports one', async () => {
+		const store = new SessionStore();
+		await store.restore([
+			{ id: 'p', name: 'p', path: '/tmp/p', tabs: [
+				{ id: 't1', sid: 's6abc86b2069f0d98', title: 'hosted', hosted: true },
+				{ id: 't2', sid: 's6abc77400cc77818', title: 'local' }
+			] }
+		] as never);
+		const tabs = store.serialize()[0]?.tabs ?? [];
+		expect(tabs.map((t) => t.sid)).toEqual(['s6abc86b2069f0d98', 's6abc77400cc77818']);
+	});
+
+	it('history opens as a picker in the project chat without a new session', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p, undefined, 'claude');
+		await store.openHistory(p);
+		expect(p.sessions.length).toBe(1);
+		const chat = p.sessions[0]!.chat;
+		expect(store.activeId).toBe(id);
+		expect(chat.picker).toMatchObject({ kind: 'resume', backend: 'jucode', items: [{ id: 's6old', label: 'old chat' }] });
+	});
+
+	it('a picked jucode conversation opens once, through the daemon when hosting', () => {
+		vi.stubGlobal('localStorage', { getItem: () => JSON.stringify({ daemon: true }), setItem: () => {} });
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		store.openSaved(p, 's6old', 'old chat', 'jucode');
+		expect(hostSession).toHaveBeenCalledWith(store.activeId, p.path, 's6old', undefined, false);
+		const first = store.activeId;
+		store.openSaved(p, 's6old', 'old chat', 'jucode');
+		expect(store.activeId).toBe(first);
+		expect(p.sessions.length).toBe(1);
+		vi.unstubAllGlobals();
 	});
 
 	it('a new claude session is spawned in the desktop approval mode', () => {

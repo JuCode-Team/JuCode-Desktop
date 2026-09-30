@@ -1,5 +1,5 @@
 import type { AgentEvent } from './protocol';
-import type { BackendId } from './backends/types';
+import { isBackendId, type BackendId } from './backends/types';
 import {
 	EDIT_TOOLS,
 	parseHunks,
@@ -53,7 +53,9 @@ export interface ResumeItem {
 export type Picker =
 	| { kind: 'tree'; nodes: TreeNode[] }
 	| { kind: 'model'; models: ModelOption[]; activeEffort: string }
-	| { kind: 'resume'; items: ResumeItem[] }
+	// `backend`: whose conversations the items are, when not this chat's own
+	// (the project history lists JuCode conversations in any chat).
+	| { kind: 'resume'; items: ResumeItem[]; backend?: BackendId }
 	| { kind: 'checkpoint'; items: ResumeItem[] }
 	| null;
 
@@ -678,7 +680,11 @@ export class ChatState {
 				};
 				break;
 			case 'resume_view':
-				this.picker = { kind: 'resume', items: arr<ResumeItem>(ev.items) };
+				this.picker = {
+					kind: 'resume',
+					items: arr<ResumeItem>(ev.items),
+					...(isBackendId(str(ev.backend)) ? { backend: str(ev.backend) as BackendId } : {})
+				};
 				break;
 			case 'checkpoint_view': {
 				const items = arr<ResumeItem>(ev.items);
