@@ -469,7 +469,7 @@ export class SessionStore {
 	 * ChatState.handle) — i.e. only after a restart genuinely succeeds — and by
 	 * `force` (the manual button), which clears the budget so the user can retry.
 	 */
-	restartSession(id: string, force = false) {
+	restartSession(id: string, force = false, reason = '') {
 		const s = this.allSessions.find((x) => x.id === id);
 		// The native TUI owns handed-off conversations. No crash/manual path may
 		// bring up a GUI engine beside it; returnToGui flips ownership first.
@@ -486,7 +486,12 @@ export class SessionStore {
 		// the same rule serialize uses to decide a tab is resumable.
 		const canResume = s.chat.resumable || (!!sid && !!s.restored);
 		s.chat.engineState = 'connecting';
-		s.chat.messages.push({ kind: 'system', text: force ? t('shell.restarting') : t('shell.autoRestarting') });
+		const text = force
+			? t('shell.restarting')
+			: reason
+				? t('shell.autoRestartingWhy', { reason })
+				: t('shell.autoRestarting');
+		s.chat.messages.push({ kind: 'system', text });
 		// claude resumes via the --resume spawn option (no /resume command in
 		// stream-json mode); codex resumes via the thread/resume RPC (thread id
 		// through SessionCtx); jucode resumes with the command after the handshake.
@@ -522,7 +527,7 @@ export class SessionStore {
 	 *  retried 3× in a row without the engine coming back healthy. The counter is
 	 *  reset by a healthy `status` event, so a restart that actually recovers frees
 	 *  the budget again; a run of crashes without recovery exhausts it. */
-	handleExit(id: string) {
+	handleExit(id: string, reason = '') {
 		const s = this.allSessions.find((x) => x.id === id);
 		if (!s) return;
 		// An intentional GUI close can be observed after openInTui has already
@@ -540,7 +545,7 @@ export class SessionStore {
 		}
 		s.chat.engineState = 'exited';
 		if (s.chat.restarts < 3) {
-			this.restartSession(id);
+			this.restartSession(id, false, reason);
 		} else {
 			s.chat.messages.push({ kind: 'error', text: t('shell.restartExhausted') });
 		}

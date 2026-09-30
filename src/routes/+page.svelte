@@ -808,7 +808,9 @@
 			daemon.onEvent = (frame) => agentDirectory.handle(frame);
 			daemon.onDisconnect = () => agentDirectory.disconnected();
 			if (loadBackendSettings().daemon) agentDirectory.start();
-			const unexit = await listen<string>('agent-exit', (e) => store.handleExit(e.payload));
+			const unexit = await listen<{ session: string; reason: string }>('agent-exit', (e) =>
+				store.handleExit(e.payload.session, e.payload.reason)
+			);
 			const undrop = await getCurrentWebview().onDragDropEvent((e) => {
 				if (e.payload.type === 'drop')
 					for (const p of e.payload.paths) panes.get(store.activeId)?.addAttachment(p);

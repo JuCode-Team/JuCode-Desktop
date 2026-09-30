@@ -397,6 +397,7 @@ const shell = {
 		startFail: '无法启动引擎：{msg}',
 		restarting: '正在重启引擎…',
 		autoRestarting: '引擎已退出，正在自动重启…',
+		autoRestartingWhy: '引擎已退出（{reason}），正在自动重启…',
 		restartExhausted: '引擎多次退出，已暂停自动重启。点「重启引擎」重试。',
 		switchingTo: '正在切换到 {provider} · {model}…'
 	},
@@ -796,6 +797,7 @@ const shell = {
 		startFail: 'Failed to start engine: {msg}',
 		restarting: 'Restarting engine…',
 		autoRestarting: 'Engine exited, auto-restarting…',
+		autoRestartingWhy: 'Engine exited ({reason}), auto-restarting…',
 		restartExhausted: 'Engine exited repeatedly; auto-restart paused. Click "Restart engine" to retry.',
 		switchingTo: 'Switching to {provider} · {model}…'
 	}

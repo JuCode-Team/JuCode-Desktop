@@ -291,11 +291,47 @@ fn create_session(
         // Only an engine that is still registered exited on its own; a closed
         // or replaced one ends silently.
         if is_current(&handle, &id) {
-            let _ = handle.emit("agent-exit", id.clone());
+            let reason = engine_exit_reason(&handle, &id);
+            let _ = handle.emit(
+                "agent-exit",
+                serde_json::json!({ "session": id, "reason": reason }),
+            );
         }
     });
 
     Ok(())
+}
+
+/// How a registered engine ended ("exit code 1", "signal 9"), for the
+/// restart notice. Its stdout has closed; give the process a moment to exit.
+fn engine_exit_reason(handle: &AppHandle, id: &str) -> String {
+    let Some(entry) = handle
+        .state::<Engines>()
+        .sessions
+        .lock()
+        .ok()
+        .and_then(|map| map.get(id).cloned())
+    else {
+        return String::new();
+    };
+    for _ in 0..20 {
+        let status = entry.child.lock().ok().and_then(|mut c| c.try_wait().ok().flatten());
+        if let Some(status) = status {
+            if let Some(code) = status.code() {
+                return format!("exit code {code}");
+            }
+            #[cfg(unix)]
+            {
+                use std::os::unix::process::ExitStatusExt;
+                if let Some(signal) = status.signal() {
+                    return format!("signal {signal}");
+                }
+            }
+            return status.to_string();
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    String::new()
 }
 
 /// Writes one raw line (a single protocol frame) to a session child's stdin.
