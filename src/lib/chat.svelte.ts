@@ -141,6 +141,9 @@ export class ChatState {
 	// while the claude/codex/jucode child is still booting. Drives the spawn
 	// loading animation in the empty chat area.
 	booting = $state(true);
+	// Set while the store (re)starts this chat's engine; what the user sends
+	// meanwhile is held and delivered once it is up (router holdOps).
+	restarting = $state(false);
 	// Last model catalog seen (from a `model_view`), so the picker popover can open
 	// instantly from cache while a fresh `/model` round-trip refreshes it.
 	modelCatalog = $state<ModelOption[]>([]);
@@ -264,6 +267,7 @@ export class ChatState {
 	 *  The echo is de-duplicated in the `user_message` handler. */
 	optimisticUser(content: string) {
 		this.messages.push({ kind: 'user', text: content });
+		this.unsavedSid = false;
 		this.#pendingUserEcho = content;
 		if (this.title === 'New session' && !this.titleLocked && content.trim()) this.title = content.trim().slice(0, 40);
 		this.#resetCurrent();
@@ -387,8 +391,11 @@ export class ChatState {
 	 *  so `/resume <id>` would fail with "No such file". Gates restart/switch resume
 	 *  and which tabs get persisted. */
 	get resumable() {
-		return this.sessionId !== '' && this.messages.some((m) => m.kind === 'user');
+		return this.sessionId !== '' && !this.unsavedSid && this.messages.some((m) => m.kind === 'user');
 	}
+	/** `sessionId` was pinned for an engine that came up fresh under an
+	 *  existing transcript and has had no turn yet: nothing is saved under it. */
+	unsavedSid = $state(false);
 
 	/** The activity phase shown by the bottom indicator. O(1) — checks the last message. */
 	get phase(): 'connecting' | 'waiting' | 'generating' | 'tool' | 'compacting' | null {

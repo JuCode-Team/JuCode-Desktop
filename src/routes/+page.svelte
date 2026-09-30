@@ -496,6 +496,13 @@
 		// A persisted claude yolo mode can't be pushed over the wire (runtime
 		// bypassPermissions is ignored) — respawn with the flag instead.
 		if (needsClaudeYoloRespawn(c.backendId, mode)) {
+			// Spawned with the bypass flag and still not in bypass: the CLI
+			// refused it (e.g. a managed policy). Respawning again would kill
+			// every first turn in a loop; follow the engine's mode instead.
+			if (store.allSessions.find((x) => x.id === sid)?.spawnedMode === 'bypassPermissions') {
+				c.messages.push({ kind: 'error', text: t('shell.claudeYoloRefused') });
+				return;
+			}
 			store.respawnClaudeYolo(sid);
 			return;
 		}

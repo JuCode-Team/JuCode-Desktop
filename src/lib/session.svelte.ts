@@ -2,7 +2,7 @@ import { ChatState } from './chat.svelte';
 import { createSession, closeSession, hostSession, projectRoot, chatsDir, writeConfig, git, claudeSessionTranscript, switchToolProfile, jucodeSessions } from './protocol';
 import { canHandOffToTui, isValidResumeSessionId } from './tuiHandoff';
 import { createAdapter, normalizeBackendId, type BackendId } from './backends';
-import { dispatch, ioFor, registerAdapter, unregisterAdapter } from './backends/router';
+import { dispatch, dropHeldOps, holdOps, ioFor, registerAdapter, unregisterAdapter } from './backends/router';
 import { buildBackendOpts, defaultBackendFor, loadBackendSettings } from './backends/settings';
 import { needsClaudeYoloRespawn, toEngineMode } from './approval';
 import { toClaudeMode } from './backends/claude';
@@ -107,13 +107,18 @@ export class SessionStore {
 	 *  causes (daemon still starting, a network blip) clear up on their own. */
 	#engineFailed(chat: ChatState, e: unknown) {
 		chat.engineState = 'exited';
+		chat.restarting = false;
 		chat.messages.push({ kind: 'error', text: t('shell.startFail', { msg: String(e) }) });
 		const s = this.allSessions.find((x) => x.chat === chat);
+		// Out of retries: held messages wait for a manual restart.
 		if (!s || s.surface === 'tui' || chat.restarts >= 3) return;
 		setTimeout(() => {
-			if (chat.engineState === 'exited') this.restartSession(s.id);
+			// The tab may have been closed, or its chat replaced, meanwhile.
+			const live = this.allSessions.find((x) => x.id === s.id);
+			if (live?.chat === chat && chat.engineState === 'exited') this.restartSession(s.id);
 		}, 1500 * (chat.restarts + 1));
 	}
+
 
 	/** Builds a session record (chat + per-session adapter) and registers the
 	 *  adapter with the op router. `acpAgent` (acp backend only) records which
@@ -168,6 +173,11 @@ export class SessionStore {
 			agentOpt || extraOpts || chatOpt || modeOpt
 				? { ...(base ?? {}), ...(agentOpt ?? {}), ...(chatOpt ?? {}), ...(modeOpt ?? {}), ...(extraOpts ?? {}) }
 				: base;
+		if (s.backendId === 'claude') s.spawnedMode = String((opts as Record<string, unknown>)?.permission_mode ?? '');
+		// Ops sent until the new engine is up wait for it instead of reaching no
+		// child (or the one being replaced).
+		holdOps(s.id);
+		s.chat.restarting = true;
 		// A hosted session reopens its daemon session when it has one (restart,
 		// restore, provider switch) and creates one otherwise.
 		const spawned = s.hosted
@@ -184,7 +194,12 @@ export class SessionStore {
 				sessionId: s.id,
 				...(resume ? { resume } : {})
 			});
+			// The spawn's own follow-up (resume, first message) goes first, then
+			// whatever the user sent meanwhile.
+			const held = dropHeldOps(s.id);
+			s.chat.restarting = false;
 			after?.();
+			for (const op of held) dispatch(s.id, op);
 		});
 	}
 
@@ -522,6 +537,14 @@ export class SessionStore {
 		// engine comes up in default mode while the desktop still thinks it's yolo.
 		const extra: Record<string, unknown> = {};
 		if (resumeViaSpawn) extra.resume = sid;
+		// A claude engine coming up fresh gets a new pinned id (as a new session
+		// does), not a leftover one it never used, which a later resume would
+		// fail on.
+		else if (s.backendId === 'claude') {
+			extra.session_id = newUuid();
+			s.chat.sessionId = extra.session_id as string;
+			s.chat.unsavedSid = true;
+		}
 		if (s.backendId === 'claude') extra.permission_mode = toClaudeMode(toEngineMode(s.chat.approvalMode));
 		this.#spawn(
 			s,
@@ -557,6 +580,9 @@ export class SessionStore {
 			return;
 		}
 		s.chat.engineState = 'exited';
+		// Until an engine is back (automatically, or by the restart button once
+		// the budget is spent), what the user sends waits for it.
+		holdOps(id);
 		if (s.chat.restarts < 3) {
 			this.restartSession(id, false, reason);
 		} else {
@@ -713,6 +739,7 @@ export class SessionStore {
 	removeSession(id: string) {
 		closeSession(id).catch(() => {});
 		unregisterAdapter(id);
+		dropHeldOps(id);
 		const p = this.projects.find((pr) => pr.sessions.some((s) => s.id === id));
 		if (p) p.sessions = p.sessions.filter((s) => s.id !== id);
 		if (this.activeId === id) this.activeId = this.allSessions[0]?.id ?? '';
@@ -723,6 +750,7 @@ export class SessionStore {
 		for (const s of p.sessions) {
 			closeSession(s.id).catch(() => {});
 			unregisterAdapter(s.id);
+			dropHeldOps(s.id);
 		}
 		this.projects = this.projects.filter((x) => x.id !== p.id);
 		if (!this.allSessions.some((s) => s.id === this.activeId)) this.activeId = this.allSessions[0]?.id ?? '';

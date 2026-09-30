@@ -16,6 +16,7 @@ vi.mock('./protocol', () => ({
 }));
 
 import { SessionStore } from './session.svelte';
+import { dispatch } from './backends/router';
 import { createSession, hostSession, closeSession, sendOp, sendLine, git, writeConfig } from './protocol';
 import { setLocale } from './i18n';
 import type { Project, WorktreeMeta } from './types';
@@ -140,6 +141,43 @@ describe('SessionStore lifecycle', () => {
 		expect(store.activeId).toBe(first);
 		expect(p.sessions.length).toBe(1);
 		vi.unstubAllGlobals();
+	});
+
+	it('a message sent while the engine restarts is delivered once it is up', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p, undefined, 'claude');
+		await Promise.resolve();
+		await Promise.resolve();
+		const s = p.sessions[0]!;
+		s.chat.engineState = 'exited';
+		store.restartSession(id);
+		vi.mocked(sendLine).mockClear();
+		expect(dispatch(id, { op: 'user_message', content: 'still there?' })).toBe(true);
+		expect(sendLine).not.toHaveBeenCalledWith(id, expect.stringContaining('still there?'));
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(sendLine).toHaveBeenCalledWith(id, expect.stringContaining('still there?'));
+	});
+
+	it('after auto-restart gives up, messages wait for the manual restart', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p, undefined, 'claude');
+		await Promise.resolve();
+		await Promise.resolve();
+		const s = p.sessions[0]!;
+		s.chat.restarts = 3;
+		store.handleExit(id);
+		vi.mocked(sendLine).mockClear();
+		dispatch(id, { op: 'user_message', content: 'later' });
+		expect(sendLine).not.toHaveBeenCalled();
+		store.restartSession(id, true);
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(sendLine).toHaveBeenCalledWith(id, expect.stringContaining('later'));
 	});
 
 	it('a new claude session is spawned in the desktop approval mode', () => {

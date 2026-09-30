@@ -403,6 +403,7 @@ const shell = {
 		restarting: '正在重启引擎…',
 		autoRestarting: '引擎已退出，正在自动重启…',
 		historyFail: '读取历史会话失败：{msg}',
+		claudeYoloRefused: 'Claude Code 没有进入全自动模式（可能被策略禁用），已按它当前的模式继续',
 		autoRestartingWhy: '引擎已退出（{reason}），正在自动重启…',
 		restartExhausted: '引擎多次退出，已暂停自动重启。点「重启引擎」重试。',
 		switchingTo: '正在切换到 {provider} · {model}…'
@@ -809,6 +810,7 @@ const shell = {
 		restarting: 'Restarting engine…',
 		autoRestarting: 'Engine exited, auto-restarting…',
 		historyFail: 'Failed to read session history: {msg}',
+		claudeYoloRefused: 'Claude Code did not enter full-auto mode (a policy may forbid it); continuing in its current mode',
 		autoRestartingWhy: 'Engine exited ({reason}), auto-restarting…',
 		restartExhausted: 'Engine exited repeatedly; auto-restart paused. Click "Restart engine" to retry.',
 		switchingTo: 'Switching to {provider} · {model}…'

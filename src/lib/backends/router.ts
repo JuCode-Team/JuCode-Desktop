@@ -10,6 +10,29 @@ import type { Op } from '$lib/protocol';
 import type { AdapterIO, EngineAdapter } from './types';
 
 const adapters = new Map<string, EngineAdapter>();
+/** Ops sent while a session's engine is (re)starting, delivered once it is up. */
+const held = new Map<string, Op[]>();
+
+/** Queue this session's ops until `releaseOps`: its engine is (re)starting or
+ *  has exited, and an op sent now would reach no child (or a dying one). */
+export function holdOps(sessionId: string): void {
+	if (!held.has(sessionId)) held.set(sessionId, []);
+}
+
+/** The engine is up: deliver the held ops in order and stop holding. */
+export function releaseOps(sessionId: string): void {
+	const ops = held.get(sessionId);
+	held.delete(sessionId);
+	for (const op of ops ?? []) dispatch(sessionId, op);
+}
+
+/** Stop holding and return what was held, undelivered (the engine is not
+ *  coming back). */
+export function dropHeldOps(sessionId: string): Op[] {
+	const ops = held.get(sessionId) ?? [];
+	held.delete(sessionId);
+	return ops;
+}
 
 export function registerAdapter(sessionId: string, adapter: EngineAdapter): void {
 	adapters.set(sessionId, adapter);
@@ -51,6 +74,13 @@ export function dispatch(
 	const adapter = adapters.get(sessionId);
 	if (!adapter) {
 		void protocol.sendOp(sessionId, op)?.catch?.(onError);
+		return true;
+	}
+	const queue = held.get(sessionId);
+	if (queue) {
+		// Only what still means something to the next engine: an interrupt or
+		// an approval answer belongs to the one that is gone.
+		if (op.op !== 'interrupt' && op.op !== 'approve') queue.push(op);
 		return true;
 	}
 	const lines = adapter.encodeOp(op);

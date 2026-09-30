@@ -22,6 +22,8 @@ export interface Session {
 	/** Opened by resuming a persisted conversation — the engine already holds
 	 *  context, so the backend is locked even before any visible user turn. */
 	restored?: boolean;
+	/** claude: the permission mode its current engine was spawned with. */
+	spawnedMode?: string;
 	/** Which surface currently owns the conversation: the GUI chat (default,
 	 *  undefined) or the native TUI resumed by session id. Exactly one process
 	 *  holds the conversation at a time — the store closes the GUI engine

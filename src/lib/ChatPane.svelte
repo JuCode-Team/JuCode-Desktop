@@ -443,7 +443,8 @@
 			}
 			// Echo the message instantly when it starts a turn now (a busy session
 			// queues it instead, shown in the composer's queue strip).
-			if (!chat.busy) {
+			// A restarting engine holds the message and starts the turn once up.
+			if (!chat.busy || chat.restarting) {
 				captureCheckpoint(); // snapshot files before this turn (for rewind)
 				chat.optimisticUser(content);
 			}
@@ -470,11 +471,23 @@
 		// respawn the engine with the flag (resumes the conversation) instead of
 		// sending a live control frame that would silently no-op.
 		if (needsClaudeYoloRespawn(chat.backendId, buildSetApprovalModeOp(m).mode)) {
-			store.respawnClaudeYolo(session.id);
+			// Not mid-turn: the respawn would cut the turn off, and one claude
+			// has not saved yet cannot be resumed. Switch once it ends.
+			if (chat.busy) yoloAfterTurn = true;
+			else store.respawnClaudeYolo(session.id);
 			return;
 		}
+		yoloAfterTurn = false;
 		send(buildSetApprovalModeOp(m));
 	}
+
+	let yoloAfterTurn = $state(false);
+	$effect(() => {
+		if (yoloAfterTurn && !chat.busy && chat.approvalMode === 'all') {
+			yoloAfterTurn = false;
+			store.respawnClaudeYolo(session.id);
+		}
+	});
 
 	function selectRow(command: string) {
 		if (command.startsWith('/model ')) {
