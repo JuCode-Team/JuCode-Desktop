@@ -619,16 +619,26 @@ fn set_auth_key(provider: String, key: String) -> Result<(), String> {
 }
 
 /// Removes a provider's stored credential — logout (jucode) / clear key (others).
-/// For jucode this clears the OAuth token block; the device authorization
-/// itself can be revoked from the web console's 授权设备 page.
-#[tauri::command]
+/// For jucode, `jucode logout` revokes this computer's device authorization
+/// and drops the OAuth tokens.
+#[tauri::command(async)]
 fn remove_auth_key(provider: String) -> Result<(), String> {
-    let mut current = read_auth_strict()?;
     if provider == "jucode" {
-        if let Some(root) = current.as_object_mut() {
-            root.remove("jucode");
+        *jucode_session_cache() = None;
+        let mut cmd = Command::new(resolve_bin());
+        no_window(&mut cmd);
+        shell_env::apply_to_command(&mut cmd, true, &[], &[]);
+        let out = cmd
+            .arg("logout")
+            .stdin(Stdio::null())
+            .output()
+            .map_err(|e| format!("could not run jucode: {e}"))?;
+        if !out.status.success() {
+            return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
         }
+        return Ok(());
     }
+    let mut current = read_auth_strict()?;
     if let Some(map) = current.get_mut("providers").and_then(|v| v.as_object_mut()) {
         map.remove(&provider);
     }
@@ -642,17 +652,30 @@ fn unix_now() -> u64 {
         .unwrap_or(0)
 }
 
+/// A cached JuCode session: API URL, access token, its expiry, and the
+/// auth.json modification time it was read at.
+type JucodeSession = (String, String, u64, Option<std::time::SystemTime>);
+
+fn jucode_session_cache() -> std::sync::MutexGuard<'static, Option<JucodeSession>> {
+    static CACHE: Mutex<Option<JucodeSession>> = Mutex::new(None);
+    CACHE.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 /// The JuCode gateway URL and an access token, from `jucode token` (the
 /// engine owns login and refreshing), kept until two minutes before it
-/// expires.
+/// expires or until auth.json changes (a logout, a login to another
+/// account).
 fn jucode_session() -> Result<(String, String), String> {
-    static CACHE: Mutex<Option<(String, String, u64)>> = Mutex::new(None);
-    let mut cache = CACHE.lock().map_err(|e| format!("lock poisoned: {e}"))?;
-    if let Some((api, token, expires_at)) = cache.as_ref() {
-        if *expires_at > unix_now() + 120 {
+    let auth_mtime = std::fs::metadata(AuthStore::app_local().auth)
+        .and_then(|meta| meta.modified())
+        .ok();
+    let mut cache = jucode_session_cache();
+    if let Some((api, token, expires_at, read_at)) = cache.as_ref() {
+        if *expires_at > unix_now() + 120 && *read_at == auth_mtime {
             return Ok((api.clone(), token.clone()));
         }
     }
+    *cache = None;
     let mut cmd = Command::new(resolve_bin());
     no_window(&mut cmd);
     shell_env::apply_to_command(&mut cmd, true, &[], &[]);
@@ -681,7 +704,11 @@ fn jucode_session() -> Result<(String, String), String> {
         .get("expires_at")
         .and_then(|v| v.as_u64())
         .unwrap_or(0);
-    *cache = Some((api.clone(), token.clone(), expires_at));
+    // `jucode token` may have refreshed and rewritten auth.json.
+    let auth_mtime = std::fs::metadata(AuthStore::app_local().auth)
+        .and_then(|meta| meta.modified())
+        .ok();
+    *cache = Some((api.clone(), token.clone(), expires_at, auth_mtime));
     Ok((api, token))
 }
 
