@@ -20,7 +20,7 @@ vi.mock('./protocol', () => ({
 }));
 
 const { DaemonSync } = await import('./daemonSync.svelte');
-const { SessionStore } = await import('./session.svelte');
+const { SessionStore, listedSessions } = await import('./session.svelte');
 const { WorkspaceStore } = await import('./workbench/workspaceStore.svelte');
 const { sessionMeta } = await import('./protocol');
 
@@ -130,6 +130,25 @@ describe('DaemonSync', () => {
 		// Older sessions are listed either way.
 		sync.reconcile([fresh('s-new'), { ...fresh('s-old'), created_at: Date.now() - 60_000 }]);
 		expect(p.sessions.map((s) => s.chat.sessionId)).toEqual(['', 's-new', 's-old']);
+	});
+
+	it('keeps the sidebar order and pins over a reconcile; new daemon sessions join at the end', async () => {
+		const { sync, store } = await setup();
+		const p = store.projects[0];
+		const session = (id: string) => ({ session: id, cwd: '/w/app', created_at: 0, open: false, engine: 'jucode', title: id });
+		sync.reconcile([session('s-1'), session('s-2'), session('s-3')]);
+		const id = (sid: string) => p.sessions.find((s) => s.chat.sessionId === sid)!.id;
+		store.moveSession(id('s-3'), id('s-1'), false);
+		store.setPinned(id('s-2'), true);
+		sync.reconcile([session('s-1'), session('s-2'), session('s-3'), session('s-4')]);
+		expect(listedSessions(p).map((s) => s.chat.sessionId)).toEqual(['s-2', 's-3', 's-1', 's-4']);
+
+		// After a restart the saved order comes back and the daemon list keeps it.
+		const again = new SessionStore();
+		await again.restore(store.serialize());
+		again.loaded = true;
+		new DaemonSync(again, new WorkspaceStore()).reconcile([session('s-1'), session('s-2'), session('s-3'), session('s-4')]);
+		expect(listedSessions(again.projects[0]).map((s) => s.chat.sessionId)).toEqual(['s-2', 's-3', 's-1', 's-4']);
 	});
 
 	it('shares renames, archiving and closing of daemon sessions', async () => {

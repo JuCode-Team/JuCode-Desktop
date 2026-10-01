@@ -9,7 +9,7 @@ import { buildBackendOpts, defaultBackendFor } from './backends/settings';
 import { toEngineMode } from './approval';
 import { t } from '$lib/i18n';
 import { normalizeColor, parseTabIcon, type TabIcon } from './workbench/tabChrome';
-import type { Project, Session, WorktreeMeta } from './types';
+import { CHATS_ENABLED, type Project, type Session, type WorktreeMeta } from './types';
 
 /** Optional per-tab chrome persisted alongside the session id + title. */
 export interface SavedTabChrome {
@@ -33,6 +33,7 @@ export interface SavedProject {
 		/** backend 为 'acp' 时：驱动该会话的 registry agent（重启动/恢复时必需）。 */
 		acpAgent?: { id: string; name: string };
 		archived?: boolean;
+		pinned?: boolean;
 		/** The conversation was handed to the native TUI (resume by `sid`).
 		 *  Omitted for the default GUI surface so old layouts stay clean. */
 		surface?: 'tui';
@@ -56,6 +57,14 @@ const DAEMON_RETRY_DELAYS = [1000, 2000, 4000, 8000, 15000, 30000, 30000, 30000,
 
 const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
 
+/** A project's sessions as the sidebar lists them: pinned first, each group
+ *  in the project's own order (new sessions join at the end); archived ones
+ *  are left out. */
+export function listedSessions(p: Project): Session[] {
+	const live = p.sessions.filter((s) => !s.archived);
+	return [...live.filter((s) => s.pinned), ...live.filter((s) => !s.pinned)];
+}
+
 /**
  * Owns the project/session tree and its lifecycle (spawn, restore, restart,
  * remove) so the page is left with UI glue only. Reactive via Svelte 5 runes;
@@ -74,6 +83,14 @@ export class SessionStore {
 
 	get allSessions() {
 		return this.projects.flatMap((p) => p.sessions);
+	}
+	/** Projects the UI shows: a hidden chats group stays in the tree (and in
+	 *  the saved and daemon lists) but is never listed or opened. */
+	get shownProjects() {
+		return CHATS_ENABLED ? this.projects : this.projects.filter((p) => !p.chats);
+	}
+	get shownSessions() {
+		return this.shownProjects.flatMap((p) => p.sessions);
 	}
 	get active() {
 		return this.allSessions.find((s) => s.id === this.activeId);
@@ -381,7 +398,7 @@ export class SessionStore {
 		if (this.activeId === id) {
 			const next =
 				this.activeProject?.sessions.find((x) => x.id !== id && !x.archived) ??
-				this.allSessions.find((x) => x.id !== id && !x.archived);
+				this.shownSessions.find((x) => x.id !== id && !x.archived);
 			this.activeId = next?.id ?? '';
 		}
 	}
@@ -408,6 +425,25 @@ export class SessionStore {
 		if (!s) return;
 		s.archived = false;
 		this.#share(s, { archived: false });
+	}
+
+	/** Pin or unpin a session. Desktop only: the daemon keeps no such flag. */
+	setPinned(id: string, pinned: boolean) {
+		const s = this.allSessions.find((x) => x.id === id);
+		if (s) s.pinned = pinned || undefined;
+	}
+
+	/** Moves a session next to `targetId` in its project's order (a sidebar
+	 *  drag); the two are expected in the same pinned group. */
+	moveSession(id: string, targetId: string, after: boolean) {
+		const p = this.projects.find((pr) => pr.sessions.some((x) => x.id === id));
+		const s = p?.sessions.find((x) => x.id === id);
+		if (!p || !s || id === targetId) return;
+		const rest = p.sessions.filter((x) => x !== s);
+		const i = rest.findIndex((x) => x.id === targetId);
+		if (i < 0) return;
+		rest.splice(after ? i + 1 : i, 0, s);
+		p.sessions = rest;
 	}
 
 	/** A session's title, archive state or removal goes to the daemon, which
@@ -482,7 +518,7 @@ export class SessionStore {
 		dropHeldOps(id);
 		const p = this.projects.find((pr) => pr.sessions.includes(s));
 		if (p) p.sessions = p.sessions.filter((x) => x !== s);
-		if (this.activeId === id) this.activeId = this.allSessions.find((x) => !x.archived)?.id ?? '';
+		if (this.activeId === id) this.activeId = this.shownSessions.find((x) => !x.archived)?.id ?? '';
 	}
 
 	/** Adds a project another client created, with no sessions of its own. */
@@ -873,7 +909,7 @@ export class SessionStore {
 		dropHeldOps(id);
 		const p = this.projects.find((pr) => pr.sessions.some((s) => s.id === id));
 		if (p) p.sessions = p.sessions.filter((s) => s.id !== id);
-		if (this.activeId === id) this.activeId = this.allSessions[0]?.id ?? '';
+		if (this.activeId === id) this.activeId = this.shownSessions[0]?.id ?? '';
 	}
 
 	/** Tear down a project and all its sessions (the page handles confirmation). */
@@ -885,7 +921,7 @@ export class SessionStore {
 			dropHeldOps(s.id);
 		}
 		this.projects = this.projects.filter((x) => x.id !== p.id);
-		if (!this.allSessions.some((s) => s.id === this.activeId)) this.activeId = this.allSessions[0]?.id ?? '';
+		if (!this.allSessions.some((s) => s.id === this.activeId)) this.activeId = this.shownSessions[0]?.id ?? '';
 	}
 
 	/** Open the project's history: the JuCode conversations saved for its
@@ -1024,6 +1060,7 @@ export class SessionStore {
 					...(s.backendId !== 'jucode' ? { backend: s.backendId } : {}),
 					...(s.backendId === 'acp' && s.acpAgent ? { acpAgent: s.acpAgent } : {}),
 					...(s.archived ? { archived: true } : {}),
+					...(s.pinned ? { pinned: true } : {}),
 					...(s.surface === 'tui' ? { surface: 'tui' as const } : {}),
 					...(s.color ? { color: s.color } : {}),
 					...(s.icon ? { icon: s.icon } : {}),
@@ -1037,7 +1074,6 @@ export class SessionStore {
 	 *  the list as `stale` — no sessions are spawned into a dead cwd — so the
 	 *  sidebar can offer a remove-from-list affordance instead of crashing. */
 	async restore(saved: SavedProject[]) {
-		let first = '';
 		if (saved.length) {
 			for (const p of saved) {
 				const proj: Project = { id: p.id, name: p.name, path: p.path, sessions: [] };
@@ -1111,10 +1147,11 @@ export class SessionStore {
 								t.model
 							)
 						: this.#draftSaved(proj, t.id!, t.title, backend, !!t.archived, chrome, acpAgent);
-					if (!first && !t.archived) first = id;
+					if (t.pinned === true) proj.sessions.find((s) => s.id === id)!.pinned = true;
 				}
 			}
-			const firstLive = this.projects.find((p) => !p.stale);
+			const first = this.shownSessions.find((s) => !s.archived)?.id;
+			const firstLive = this.shownProjects.find((p) => !p.stale);
 			this.activeId = first || (firstLive && this.addSession(firstLive)) || '';
 		} else {
 			const root = await projectRoot();

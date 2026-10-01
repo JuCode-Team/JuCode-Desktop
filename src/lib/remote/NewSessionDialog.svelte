@@ -8,6 +8,7 @@
 	import Segmented from '$lib/ui/Segmented.svelte';
 	import { remoteProjects, type ProjectView } from './store.svelte';
 	import { t } from '$lib/i18n';
+	import { CHATS_ENABLED } from '$lib/types';
 
 	let {
 		project,
@@ -20,7 +21,7 @@
 		onClose: () => void;
 	} = $props();
 
-	const projects = $derived(remoteProjects.active?.projects ?? []);
+	const projects = $derived((remoteProjects.active?.projects ?? []).filter((p) => CHATS_ENABLED || !p.chats));
 	let projectId = $state(untrack(() => project?.id ?? ''));
 	$effect(() => {
 		if (!projectId && projects.length) projectId = projects[0].id;

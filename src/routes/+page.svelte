@@ -46,7 +46,7 @@
 	import { browser, type WebRef } from '$lib/browser.svelte';
 	import { prefs } from '$lib/prefs.svelte';
 	import { t } from '$lib/i18n';
-	import { SessionStore } from '$lib/session.svelte';
+	import { SessionStore, listedSessions } from '$lib/session.svelte';
 	import { workspaces } from '$lib/workbench/workspaceStore.svelte';
 	import {
 		activateTab,
@@ -90,7 +90,7 @@
 	import Desk from '$lib/Desk.svelte';
 	import AgentPage from '$lib/AgentPage.svelte';
 	import { agentDirectory } from '$lib/agents.svelte';
-	import type { Project, WorktreeMeta } from '$lib/types';
+	import { CHATS_ENABLED, type Project, type WorktreeMeta } from '$lib/types';
 	import PlanPanel from '$lib/PlanPanel.svelte';
 	import GoalPanel from '$lib/GoalPanel.svelte';
 	import ChangesPanel from '$lib/ChangesPanel.svelte';
@@ -304,7 +304,7 @@
 	function initTiles() {
 		tiles = reconcileLayout(
 			workspaces.active?.layout ?? null,
-			allSessions.map((s) => s.id),
+			store.shownSessions.map((s) => s.id),
 			store.activeId || null
 		);
 		const activeLeaf = store.activeId ? leafOfTab(tiles.root, chatPanel(store.activeId)) : null;
@@ -334,7 +334,7 @@
 	/** Per-leaf “+” menu (and the empty-canvas buttons). */
 	function mosaicAdd(leafId: string | null, key: string) {
 		if (key === 'chat') {
-			const p = activeProject ?? projects[0];
+			const p = activeProject ?? store.shownProjects[0];
 			if (!p) return;
 			if (leafId) focusedLeaf = leafId;
 			store.addSession(p); // the activeId effect opens its tile in the focused leaf
@@ -374,9 +374,9 @@
 		});
 	});
 
-	// Chat tiles of closed sessions disappear with them.
+	// Chat tiles of closed (or hidden) sessions disappear with them.
 	$effect(() => {
-		const ids = new Set(allSessions.map((s) => s.id));
+		const ids = new Set(store.shownSessions.map((s) => s.id));
 		if (!tilesReady) return;
 		untrack(() => {
 			let next = tiles;
@@ -731,7 +731,7 @@
 		} else if (route === 'session') {
 			const sid = decodeURIComponent(url.pathname.replace(/^\/+/, ''));
 			if (!sid) return;
-			const proj = projectPath ? await openProjectPath(projectPath, false) : (activeProject ?? projects[0]);
+			const proj = projectPath ? await openProjectPath(projectPath, false) : (activeProject ?? store.shownProjects[0]);
 			if (!proj) return;
 			// 恢复的会话开在新标签里，不覆盖当前会话。
 			store.activeId = store.restoreSession(proj, sid, '');
@@ -782,7 +782,8 @@
 		if (matches(e, 'stop') && pane) return act(pane.stop);
 		if (matches(e, 'model') && pane) return act(pane.openModelMenu);
 		// Sessions as the sidebar lists them under the current project.
-		const list = (activeProject ?? store.projects[0])?.sessions.filter((s) => !s.archived) ?? [];
+		const listed = activeProject ?? store.shownProjects[0];
+		const list = listed ? listedSessions(listed) : [];
 		const n = matches(e, 'sessionN');
 		if (typeof n === 'number' && n > 0) return act(() => list[n - 1] && (store.activeId = list[n - 1].id));
 		const step = matches(e, 'nextSession') ? 1 : matches(e, 'prevSession') ? -1 : 0;
@@ -893,7 +894,7 @@
 			});
 			// 托盘菜单「新建会话」：在当前项目（或第一个项目）里开新会话。
 			const untray = await listen('tray-new-session', () => {
-				const p = store.activeProject ?? store.projects[0];
+				const p = store.activeProject ?? store.shownProjects[0];
 				if (p) store.addSession(p);
 			});
 			cleanups.push(undrop, unbrowser, untray);
@@ -1023,6 +1024,8 @@
 				onCloseProject={removeProject}
 				onArchiveSession={(id) => store.archiveSession(id)}
 				onUnarchiveSession={(id) => store.unarchiveSession(id)}
+				onPinSession={(id, pinned) => store.setPinned(id, pinned)}
+				onMoveSession={(id, target, after) => store.moveSession(id, target, after)}
 				onRenameSession={(id, title) => store.renameSession(id, title)}
 				onSessionMenu={openSessionMenu}
 				onHistory={(p) => store.openHistory(p)}
@@ -1041,13 +1044,13 @@
 			<div class="canvas">
 
 				<div class="stage">
-					{#if store.loaded && projects.length === 0}
+					{#if store.loaded && store.shownProjects.length === 0}
 						<div class="nochat" data-tauri-drag-region>
 							<span class="welcome-mark">JuCode</span>
 							<p class="welcome-tip">{t('shell.noChat')}</p>
 							<div class="welcome-actions">
 								<Button variant="primary" size="sm" onclick={addProject}>{t('shell.startFromProject')}</Button>
-								<Button size="sm" onclick={() => store.newChat()}>{t('shell.startChat')}</Button>
+								{#if CHATS_ENABLED}<Button size="sm" onclick={() => store.newChat()}>{t('shell.startChat')}</Button>{/if}
 							</div>
 						</div>
 					{:else}
@@ -1231,6 +1234,8 @@
 			onRename={(n) => store.renameSession(chromeSession.id, n)}
 			onColor={(c) => store.setSessionChrome(chromeSession.id, { color: c })}
 			onIcon={(i) => store.setSessionChrome(chromeSession.id, { icon: i })}
+			pinned={!!chromeSession.pinned}
+			onPin={(v) => store.setPinned(chromeSession.id, v)}
 			onClose={() => (sessionChromeFor = null)}
 		/>
 	{/if}
