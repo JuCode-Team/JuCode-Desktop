@@ -71,6 +71,7 @@
 	import ProviderAccountCard from './ProviderAccountCard.svelte';
 	import ProviderCatalogPicker from './ProviderCatalogPicker.svelte';
 	import CustomProviderForm from './CustomProviderForm.svelte';
+	import Modal from '$lib/ui/Modal.svelte';
 	import { GROUPS, JUCODE_ONLY, resolveSection, searchRows, type SearchRow, type SectionKey } from './nav';
 
 	let {
@@ -180,7 +181,10 @@
 	let pluginSettings = $state(loadPluginSettings());
 
 	// inline editor state
-	let editing = $state<string | null>(null); // provider id, '__catalog__', or '__new__'
+	// A provider id (its card open), or a step of the add dialog: '__catalog__'
+	// (pick), '__key__' (key for a built-in, `keyTarget`), '__new__' (form).
+	let editing = $state<string | null>(null);
+	let keyTarget = $state<Provider | null>(null);
 	let keyInput = $state('');
 	let form = $state<{ id: string; base_url: string; format: string; key: string; models: ModelCfg[] }>({ id: '', base_url: '', format: 'responses', key: '', models: [] });
 	let selectedCatalog = $state<CatalogProvider | null>(null);
@@ -196,10 +200,26 @@
 		...builtin.map((b) => ({ id: b.id, base_url: b.base_url, models: b.models, format: b.protocol, builtin: true })),
 		...custom
 	]);
-	const catalogProviders = $derived(
-		PROVIDER_CATALOG.providers.filter((entry) => !allProviders.some((provider) => provider.id === entry.id))
-	);
-	const providerOpts = $derived(allProviders.map((p) => ({ value: p.id, label: p.name ?? cap(p.id) })));
+	// Usable: has a key / login, or is a custom endpoint (which may need none).
+	const usable = (p: Provider) => keyed.includes(p.id) || !p.builtin;
+	// The page lists what the user has added (plus JuCode, the login entry, and
+	// whatever is the default); the rest is offered by the add dialog.
+	const addedProviders = $derived(allProviders.filter((p) => usable(p) || p.id === 'jucode' || p.id === cfg.provider));
+	const addable = $derived<CatalogProvider[]>([
+		...allProviders
+			.filter((p) => !addedProviders.includes(p))
+			.map((p) => ({
+				id: p.id,
+				name: cap(p.id),
+				description: p.base_url,
+				base_url: p.base_url,
+				protocol: p.format as CatalogProvider['protocol'],
+				models: p.models,
+				featured: false
+			})),
+		...PROVIDER_CATALOG.providers.filter((entry) => !allProviders.some((provider) => provider.id === entry.id))
+	]);
+	const providerOpts = $derived(allProviders.filter(usable).map((p) => ({ value: p.id, label: p.name ?? cap(p.id) })));
 	const modelOpts = $derived(models.map((m) => ({ value: m.name, label: m.name, ...m })));
 	// Empty = the main model (the engine's `Config::title`).
 	const titleModelOpts = $derived([{ value: '', label: t('settings.behavior.followMainModel') }, ...modelOpts]);
@@ -337,6 +357,14 @@
 		mCtx = undefined;
 	}
 	function selectCatalogProvider(provider: CatalogProvider) {
+		// A built-in provider only needs its key.
+		const known = allProviders.find((p) => p.id === provider.id);
+		if (known) {
+			keyTarget = known;
+			keyInput = '';
+			editing = '__key__';
+			return;
+		}
 		selectedCatalog = provider;
 		form = providerFormPrefill(provider);
 		editing = '__new__';
@@ -649,7 +677,7 @@
 						</SettingsRow>
 					</SettingsSection>
 					<SettingsSection id="provider-list" title={t('settings.account.groupLabel')} description={t('settings.account.hint')}>
-						{#each allProviders as p (p.id)}
+						{#each addedProviders as p (p.id)}
 							<ProviderAccountCard
 								provider={p}
 								authed={keyed.includes(p.id)}
@@ -669,31 +697,49 @@
 								onDelete={deleteProvider}
 							/>
 						{/each}
-						{#if editing === '__catalog__'}
-							<ProviderCatalogPicker
-								providers={catalogProviders}
-								onSelect={selectCatalogProvider}
-								onCustom={openCustom}
-								onCancel={() => (editing = null)}
-							/>
-						{:else if editing === '__new__'}
-							<CustomProviderForm
-								bind:form
-								bind:mName
-								bind:mCtx
-								formats={FORMATS}
-								{fmt}
-								title={selectedCatalog ? t('settings.catalog.connect', { provider: selectedCatalog.name }) : undefined}
-								submitLabel={selectedCatalog ? t('settings.catalog.addProvider') : undefined}
-								createDisabled={!!selectedCatalog && !form.key.trim()}
-								onAddModel={addFormModel}
-								onCreate={createProvider}
-								onCancel={() => (editing = selectedCatalog ? '__catalog__' : null)}
-							/>
-						{:else}
-							<button class="addrow" id="set-provider-add" onclick={openCreate}><PlusIcon size={16} /> {t('settings.custom.add')}</button>
-						{/if}
+						<button class="addrow" id="set-provider-add" onclick={openCreate}><PlusIcon size={16} /> {t('settings.custom.add')}</button>
 					</SettingsSection>
+					{#if editing === '__catalog__' || editing === '__key__' || editing === '__new__'}
+						<Modal title={t('settings.custom.add')} width={540} padded={false} onClose={() => (editing = null)}>
+							{#if editing === '__catalog__'}
+								<ProviderCatalogPicker
+									providers={addable}
+									onSelect={selectCatalogProvider}
+									onCustom={openCustom}
+									onCancel={() => (editing = null)}
+								/>
+							{:else if editing === '__key__' && keyTarget}
+								<div class="keystep">
+									<div class="keyhead">
+										<span class="tile"><Vendor provider={keyTarget.id} size={18} /></span>
+										<span class="keytxt">
+											<span class="keyname">{t('settings.catalog.connect', { provider: cap(keyTarget.id) })}</span>
+											<span class="keyurl">{keyTarget.base_url}</span>
+										</span>
+									</div>
+									<TextField bind:value={keyInput} type="password" mono placeholder={t('settings.account.keyPlaceholder', { id: keyTarget.id })} />
+									<div class="keyfoot">
+										<Button variant="ghost" size="sm" onclick={() => (editing = '__catalog__')}>{t('settings.page.back')}</Button>
+										<Button variant="primary" size="sm" disabled={!keyInput.trim()} onclick={() => keyTarget && saveKey(keyTarget.id)}>{t('settings.catalog.addProvider')}</Button>
+									</div>
+								</div>
+							{:else if editing === '__new__'}
+								<CustomProviderForm
+									bind:form
+									bind:mName
+									bind:mCtx
+									formats={FORMATS}
+									{fmt}
+									title={selectedCatalog ? t('settings.catalog.connect', { provider: selectedCatalog.name }) : undefined}
+									submitLabel={selectedCatalog ? t('settings.catalog.addProvider') : undefined}
+									createDisabled={!!selectedCatalog && !form.key.trim()}
+									onAddModel={addFormModel}
+									onCreate={createProvider}
+									onCancel={() => (editing = '__catalog__')}
+								/>
+							{/if}
+						</Modal>
+					{/if}
 				{:else if current === 'models'}
 					<SettingsSection title={t('settings.page.defaults')} description={t('settings.footHint')}>
 						<SettingsRow id="default-model" title={t('settings.behavior.defaultModel')} description={allModelOpts.length ? t('settings.page.defaultModelDesc') : t('settings.behavior.noModels')}>
@@ -1034,6 +1080,44 @@
 	.addrow:hover {
 		background: var(--surface);
 		color: var(--text);
+	}
+
+	/* add dialog: the key step for a built-in provider */
+	.keystep {
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
+		padding: 16px 18px;
+	}
+	.keyhead {
+		display: flex;
+		align-items: center;
+		gap: 11px;
+	}
+	.keyhead .tile {
+		width: 34px;
+		height: 34px;
+		border-radius: var(--r-sm);
+	}
+	.keytxt {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
+	}
+	.keyname {
+		font-size: var(--fs-sm);
+		font-weight: 600;
+	}
+	.keyurl {
+		font-family: var(--font-mono);
+		font-size: var(--fs-2xs);
+		color: var(--dim2);
+	}
+	.keyfoot {
+		display: flex;
+		justify-content: flex-end;
+		gap: 8px;
 	}
 
 	/* option rows in the model / provider pickers */

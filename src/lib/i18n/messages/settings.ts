@@ -64,8 +64,8 @@ const settings = {
 			readTimeoutDesc: '等待响应数据的最长时间，0 表示使用默认值。'
 		},
 		account: {
-			groupLabel: '登录与 Provider',
-			hint: '各 Provider 独立登录、可同时使用。点卡片登录或查看详情;展开后可设为新会话默认。',
+			groupLabel: '已添加的 Provider',
+			hint: '已添加的 Provider 可同时使用。点卡片查看详情、更新密钥或设为默认。',
 			default: '默认',
 			custom: '自定义',
 			byok: 'BYOK',
@@ -115,7 +115,7 @@ const settings = {
 		},
 		catalog: {
 			title: '选择 Provider',
-			hint: '选择后会填好端点、协议和模型列表。你只需粘贴 API key。',
+			hint: '选择后会填好端点、协议和模型列表，只需粘贴 API key。列表里没有的，可以手动配置。',
 			search: '搜索 Provider 或模型…',
 			featured: '推荐',
 			modelCount: '{count} 个模型',
@@ -436,8 +436,8 @@ const settings = {
 			readTimeoutDesc: 'Longest wait for response data; 0 uses the default.'
 		},
 		account: {
-			groupLabel: 'Login & Providers',
-			hint: 'Each provider logs in independently and can be used at the same time. Click a card to log in or view details; expand it to set as the default for new sessions.',
+			groupLabel: 'Added providers',
+			hint: 'Added providers can be used at the same time. Click a card to see details, update its key or make it the default.',
 			default: 'Default',
 			custom: 'Custom',
 			byok: 'BYOK',
@@ -487,7 +487,7 @@ const settings = {
 		},
 		catalog: {
 			title: 'Choose a provider',
-			hint: 'The endpoint, protocol and model list are filled in for you. Just paste your API key.',
+			hint: 'The endpoint, protocol and model list are filled in for you; just paste your API key. For anything not listed, set it up manually.',
 			search: 'Search providers or models…',
 			featured: 'Featured',
 			modelCount: '{count} models',

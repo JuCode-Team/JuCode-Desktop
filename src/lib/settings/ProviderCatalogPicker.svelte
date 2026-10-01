@@ -29,15 +29,14 @@
 				.includes(needle)
 		);
 	});
-	const protocolLabel = (protocol: CatalogProvider['protocol']) =>
-		t(`settings.catalog.protocol.${protocol}`);
+	// Built-in providers may speak a protocol the label table doesn't name.
+	const PROTOCOLS = new Set(['responses', 'anthropic', 'chat']);
+	const protocolLabel = (protocol: string) =>
+		PROTOCOLS.has(protocol) ? t(`settings.catalog.protocol.${protocol}`) : protocol;
 </script>
 
 <div class="catalog">
-	<div>
-		<div class="catalog-title">{t('settings.catalog.title')}</div>
-		<p class="catalog-hint">{t('settings.catalog.hint')}</p>
-	</div>
+	<p class="catalog-hint">{t('settings.catalog.hint')}</p>
 	<label class="search">
 		<MagnifyingGlassIcon size={14} />
 		<TextField bind:value={query} placeholder={t('settings.catalog.search')} />
@@ -51,9 +50,9 @@
 						{provider.name}
 						{#if provider.featured}<span class="featured-tag"><StarIcon size={10} /> {t('settings.catalog.featured')}</span>{/if}
 					</span>
-					<span class="catalog-description">{provider.description}</span>
+					{#if provider.description}<span class="catalog-description">{provider.description}</span>{/if}
 					<span class="catalog-meta">
-						{protocolLabel(provider.protocol)} · {t('settings.catalog.modelCount', { count: provider.models.length })}
+						{protocolLabel(provider.protocol)}{#if provider.models.length} · {t('settings.catalog.modelCount', { count: provider.models.length })}{/if}
 					</span>
 				</span>
 			</button>
@@ -73,12 +72,8 @@
 		flex-direction: column;
 		gap: 12px;
 	}
-	.catalog-title {
-		font-size: var(--fs-sm);
-		font-weight: 600;
-	}
 	.catalog-hint {
-		margin: 3px 0 0;
+		margin: 0;
 		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
