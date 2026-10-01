@@ -120,4 +120,4 @@ macOS 包用一张固定的自签名证书签名（未公证，首次打开仍�
   （`APPLE_SIGNING_IDENTITY`）。不开 hardened runtime（不做公证就不需要，也免去麦克风等
   entitlement 配置）。
 - 手动运行 Release workflow 只构建 macOS 包，不发布，用来检查签名：
-  `codesign -d -r- JuCode.app` 应显示 `certificate leaf = H"..."`，而不是 `cdhash`。
+  `codesign -d -r- JuCode.app` 应显示 `certificate root = H"..."`，而不是 `cdhash`。
