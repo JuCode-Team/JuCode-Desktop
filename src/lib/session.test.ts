@@ -23,6 +23,7 @@ vi.mock('./protocol', () => ({
 }));
 
 import { SessionStore, listedSessions } from './session.svelte';
+import { UNTITLED } from './chat.svelte';
 import { dispatch } from './backends/router';
 import { hostSession, closeSession, sendLine, git, writeConfig, sessionHistory, sessionMeta } from './protocol';
 import type { EngineSpec } from './daemon';
@@ -1368,31 +1369,51 @@ describe('sessions in the jucode daemon', () => {
 });
 
 describe('agent sessions', () => {
-	it('opens a new session as the agent in a project for its directory', async () => {
+	it("opens a new session as the agent in a hidden project for its directory", async () => {
 		const store = new SessionStore();
 		const id = store.openAgentSession({ id: 'ops', name: 'Ops', cwd: '/srv/ops' });
-		expect(store.projects.map((p) => p.path)).toEqual(['/srv/ops']);
+		expect(store.projects.map((p) => [p.path, p.agents])).toEqual([['/srv/ops', true]]);
 		const s = store.projects[0].sessions[0];
 		expect(s.id).toBe(id);
-		expect(s.chat.title).toBe('Ops');
+		// Named by the daemon after its first message, not after the agent.
+		expect(s.chat.title).toBe(UNTITLED);
+		expect(s.chat.agent).toBe('ops');
 		expect(store.activeId).toBe(id);
+		// The workbench shows it; the sidebar, canvas, save and sync do not.
+		expect(store.shownSessions).toEqual([]);
+		expect(store.serialize()).toEqual([]);
 		await flush();
 		expect(hostSession).toHaveBeenCalledWith(id, '/srv/ops', undefined, 'ops', false, undefined);
 	});
 
-	it("reuses the open tab of the agent's session, or reopens it by id", async () => {
+	it("reuses the open session of the agent, or reopens it by id, apart from the user's project", async () => {
 		const store = new SessionStore();
 		const p = proj();
 		p.path = '/srv/ops';
 		store.projects.push(p);
-		const first = store.openAgentSession({ id: 'ops', name: 'Ops', cwd: '/srv/ops' }, 'daemon-1');
+		const first = store.openAgentSession({ id: 'ops', name: 'Ops', cwd: '/srv/ops' }, 'daemon-1', '处理今日工单');
+		expect(store.allSessions.find((x) => x.id === first)?.chat.title).toBe('处理今日工单');
 		await flush();
 		expect(hostSession).toHaveBeenCalledWith(first, '/srv/ops', 'daemon-1', undefined, false, undefined);
-		// The existing project is reused, and the same session is not opened twice.
-		expect(store.projects).toHaveLength(1);
+		expect(p.sessions.some((s) => s.id === first)).toBe(false);
+		expect(store.projects.filter((x) => x.agents)).toHaveLength(1);
 		vi.mocked(hostSession).mockClear();
 		expect(store.openAgentSession({ id: 'ops', name: 'Ops', cwd: '/srv/ops' }, 'daemon-1')).toBe(first);
 		await flush();
 		expect(hostSession).not.toHaveBeenCalled();
+		// A plain hosted session (no agent) still opens in the user's project.
+		const plain = store.openAgentSession({ id: '', name: 'p', cwd: '/srv/ops' }, 'daemon-2');
+		expect(p.sessions.some((s) => s.id === plain)).toBe(true);
+	});
+
+	it("moves an agent's session out of a user project", () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p);
+		store.adoptAgentSession(id, '/srv/ops');
+		expect(p.sessions).toHaveLength(0);
+		const host = store.projects.find((x) => x.agents)!;
+		expect([host.path, host.sessions.map((s) => s.id)]).toEqual(['/srv/ops', [id]]);
 	});
 });

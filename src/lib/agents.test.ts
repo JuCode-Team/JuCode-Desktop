@@ -27,7 +27,7 @@ vi.mock('./protocol', () => ({
 	}
 }));
 
-import { AgentDirectory } from './agents.svelte';
+import { AgentDirectory, agentWorkspace, agentsOfWorkspace } from './agents.svelte';
 import { daemon } from './protocol';
 
 beforeEach(() => vi.clearAllMocks());
@@ -212,5 +212,18 @@ describe('arrivals', () => {
 		dir.handle({ type: 'actions', actions: [a('a2')] });
 		dir.handle({ type: 'report_posted', report: { id: 'r1', agent: 'ops', title: 'done' } });
 		expect(seen).toEqual(['question:q2', 'action:a2', 'report:done']);
+	});
+});
+
+describe('agent workspaces', () => {
+	const workspaces = [{ id: 'w1', isDefault: true }, { id: 'w2' }];
+	it("lists an agent in its workspace, else in the default one", () => {
+		expect(agentWorkspace({ workspace: 'w2' }, workspaces)).toBe('w2');
+		expect(agentWorkspace({}, workspaces)).toBe('w1');
+		// Its workspace was deleted.
+		expect(agentWorkspace({ workspace: 'gone' }, workspaces)).toBe('w1');
+		const agents = [{ id: 'a', workspace: 'w2' }, { id: 'b' }, { id: 'c', workspace: 'gone' }];
+		expect(agentsOfWorkspace(agents, workspaces, 'w1').map((a) => a.id)).toEqual(['b', 'c']);
+		expect(agentsOfWorkspace(agents, workspaces, 'w2').map((a) => a.id)).toEqual(['a']);
 	});
 });

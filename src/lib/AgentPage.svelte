@@ -1,6 +1,8 @@
 <script lang="ts">
-	// One long-lived agent: its settings, scheduled tasks, brief, memory and
-	// sessions.
+	// One long-lived agent on the workbench: who it is and whether it is
+	// working, a box to give it a task, and tabs for its tasks (one per
+	// session), brief and memory, and settings (scheduled tasks have their
+	// own page).
 	import { onMount } from 'svelte';
 	import XIcon from 'phosphor-svelte/lib/XIcon';
 	import ShuffleIcon from 'phosphor-svelte/lib/ShuffleIcon';
@@ -14,33 +16,42 @@
 	import Button from '$lib/ui/Button.svelte';
 	import Select from '$lib/ui/Select.svelte';
 	import Switch from '$lib/ui/Switch.svelte';
-	import Modal from '$lib/ui/Modal.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import { confirm } from '$lib/ui/confirm.svelte';
-	import AgentSchedules from '$lib/AgentSchedules.svelte';
 	import AgentAvatar from '$lib/AgentAvatar.svelte';
+	import AgentActivity from '$lib/AgentActivity.svelte';
+	import SettingsSection from '$lib/settings/SettingsSection.svelte';
+	import SettingsRow from '$lib/settings/SettingsRow.svelte';
 	import TabChromePopover from '$lib/workbench/TabChromePopover.svelte';
 	import { newAvatarSeed } from '$lib/avatar';
+	import { workspaces } from '$lib/workbench/workspaceStore.svelte';
 	import {
 		agentDirectory,
+		agentWorkspace,
 		type AgentChanges,
 		type AgentDetail,
-		type AgentView,
-		type TimerView
+		type AgentView
 	} from '$lib/agents.svelte';
 	import { t } from '$lib/i18n';
 
 	let {
 		agentId,
-		onClose,
+		onDeleted,
 		onOpenSession,
+		onOpenAgent,
 		onNewSession
 	}: {
 		agentId: string;
-		onClose: () => void;
+		onDeleted: () => void;
 		onOpenSession: (session: string) => void;
+		onOpenAgent: (agent: string) => void;
 		onNewSession: () => void;
 	} = $props();
+
+	type Tab = 'activity' | 'brief' | 'settings';
+	let tab = $state<Tab>('activity');
+	/** The broadcast copy: live name, status and running sessions. */
+	const live = $derived(agentDirectory.agents.find((a) => a.id === agentId));
 
 	let detail = $state<AgentDetail | null>(null);
 	let error = $state('');
@@ -61,10 +72,21 @@
 		}))
 	);
 	const sessions = $derived(
-		[...(detail?.sessions ?? [])].sort((a, b) => b.created_at - a.created_at)
+		agentDirectory.sessions
+			.filter((s) => s.agent === agentId)
+			.sort((a, b) => (b.updated_at ?? b.created_at) - (a.updated_at ?? a.created_at))
 	);
+	/** Sessions running right now. */
+	const working = $derived(sessions.filter((s) => live?.running?.includes(s.session)));
+	const nextRun = $derived(
+		agentDirectory.schedules
+			.filter((s) => s.agent === agentId && s.enabled && s.next_run_at)
+			.map((s) => ({ at: s.next_run_at! * 1000, name: s.name }))
+			.sort((a, b) => a.at - b.at)[0]
+	);
+	const lastActive = $derived(sessions[0] ? (sessions[0].updated_at ?? sessions[0].created_at) : 0);
+	const pending = $derived(agentDirectory.pendingFor(agentId));
 
-	let timers = $state<TimerView[]>([]);
 	async function load() {
 		try {
 			detail = await agentDirectory.detail(agentId);
@@ -75,7 +97,6 @@
 	}
 	onMount(() => {
 		void load();
-		agentDirectory.timers(agentId).then((list) => (timers = list), () => {});
 	});
 
 	async function change(changes: AgentChanges) {
@@ -130,7 +151,12 @@
 	}
 
 	function when(ms: number): string {
-		return new Date(ms).toLocaleString();
+		return new Date(ms).toLocaleString(undefined, {
+			month: 'numeric',
+			day: 'numeric',
+			hour: '2-digit',
+			minute: '2-digit'
+		});
 	}
 
 	function rename(e: Event & { currentTarget: HTMLInputElement }) {
@@ -166,21 +192,28 @@
 		}
 	}
 
-	let messageText = $state('');
-	let messageState = $state<'' | 'sending' | 'sent'>('');
-	let messageError = $state('');
-	async function sendMessage() {
-		const body = messageText.trim();
-		if (!body || messageState === 'sending') return;
-		messageState = 'sending';
-		messageError = '';
+	// A task starts a new session; while the agent is working, what is typed
+	// goes to that work instead unless the user detaches it. The activity tab
+	// shows it arrive.
+	let taskText = $state('');
+	let detached = $state(false);
+	const followUp = $derived(detached ? undefined : working[0]);
+	let sending = $state(false);
+	let taskError = $state('');
+	async function assign() {
+		const body = taskText.trim();
+		if (!body || sending) return;
+		sending = true;
+		taskError = '';
 		try {
-			await agentDirectory.message(agentId, body);
-			messageText = '';
-			messageState = 'sent';
+			await agentDirectory.message(agentId, body, followUp?.session);
+			taskText = '';
+			detached = false;
+			tab = 'activity';
 		} catch (e) {
-			messageError = e instanceof Error ? e.message : String(e);
-			messageState = '';
+			taskError = e instanceof Error ? e.message : String(e);
+		} finally {
+			sending = false;
 		}
 	}
 
@@ -195,7 +228,7 @@
 		if (!ok) return;
 		try {
 			await agentDirectory.remove(agentId);
-			onClose();
+			onDeleted();
 		} catch (e) {
 			deleteError = e instanceof Error ? e.message : String(e);
 		}
@@ -223,190 +256,85 @@
 	</TabChromePopover>
 {/if}
 
-<Modal label={agentId} width={720} padded={false} {onClose}>
-	<div class="sheet">
-		<div class="head">
-			<div>
-				<h2>
-					{#if detail}
-						<button class="avatar-btn" onclick={openPicker} aria-label={t('shell.chrome.avatar')} title={t('shell.chrome.avatar')}>
-							<AgentAvatar agent={detail.agent} size={28} />
-						</button>
+<div class="page">
+	{#if error}<div class="err"><Notice>{error}</Notice></div>{/if}
+	{#if !detail}
+		{#if !error}<div class="loading"><CircleNotchIcon size={18} class="spin" /></div>{/if}
+	{:else}
+		{@const agent = live ?? detail.agent}
+		<header class="head">
+			<button class="avatar-btn" onclick={openPicker} aria-label={t('shell.chrome.avatar')} title={t('shell.chrome.avatar')}>
+				<AgentAvatar {agent} size={44} />
+			</button>
+			<div class="ident">
+				<h1>{agent.name}</h1>
+				{#if live?.summary}<p class="summary">{live.summary}</p>{/if}
+				<p class="facts">
+					{#if !agent.enabled}
+						<span class="state">{t('shell.desk.statusOff')}</span>
+					{:else if working.length}
+						<span class="state live"><CircleNotchIcon size={13} class="spin" />{t('shell.desk.statusWorking')}</span>
+						{#each working as s (s.session)}
+							<button class="fact-link" onclick={() => onOpenSession(s.session)}>{s.title || t('shell.agentPage.untitled')}</button>
+						{/each}
+					{:else}
+						<span class="state">{t('shell.desk.statusIdle')}</span>
 					{/if}
-					{detail?.agent.name ?? agentId}
-				</h2>
-				<p><code>{agentId}</code>{#if detail} · <code>{detail.agent.cwd}</code>{/if}</p>
+					{#if agent.enabled && nextRun}
+						<span class="fact">{t('shell.agentPage.nextRun', { time: when(nextRun.at), name: nextRun.name })}</span>
+					{/if}
+					{#if lastActive}<span class="fact">{t('shell.agentPage.lastActive', { time: when(lastActive) })}</span>{/if}
+				</p>
+				<p class="where"><code>{agent.cwd}</code></p>
 			</div>
-			<IconButton onclick={onClose} label={t('common.close')}><XIcon size={18} /></IconButton>
+			<label class="enable">
+				<span>{t('shell.agentPage.enabled')}</span>
+				<Switch checked={agent.enabled} label={t('shell.agentPage.enabled')} onChange={(enabled) => change({ enabled })} />
+			</label>
+		</header>
+
+		{#if !agent.enabled}
+			<div class="err"><Notice tone="warn">{t('shell.agentPage.stopped')}</Notice></div>
+		{:else}
+			<div class="task">
+				{#if followUp}
+					<div class="follow">
+						<span>{t('shell.agentPage.followUp', { title: followUp.title || t('shell.agentPage.untitled') })}</span>
+						<button onclick={() => (detached = true)} title={t('shell.agentPage.followUpDetach')} aria-label={t('shell.agentPage.followUpDetach')}>
+							<XIcon size={12} />
+						</button>
+					</div>
+				{/if}
+				<textarea
+					rows="3"
+					bind:value={taskText}
+					placeholder={followUp ? t('shell.agentPage.followUpPlaceholder') : t('shell.agentPage.taskPlaceholder')}
+					onkeydown={(e) => e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing && (e.preventDefault(), assign())}
+				></textarea>
+				<div class="task-foot">
+					<span class="hint-inline">{followUp ? '' : t('shell.agentPage.taskNewHint')}</span>
+					<span class="grow"></span>
+					<Button variant="primary" size="sm" disabled={!taskText.trim() || sending} onclick={assign}>
+						{#if sending}<CircleNotchIcon size={13} class="spin" />{:else}<PaperPlaneRightIcon size={13} />{/if}
+						{t('shell.agentPage.taskSend')}
+					</Button>
+				</div>
+				{#if taskError}<Notice>{taskError}</Notice>{/if}
+			</div>
+		{/if}
+
+		<div class="tabs" role="tablist">
+			{#each [['activity', t('shell.agentPage.tabActivity'), pending], ['brief', t('shell.agentPage.tabBrief'), 0], ['settings', t('shell.agentPage.tabSettings'), 0]] as const as [key, label, count] (key)}
+				<button role="tab" class:on={tab === key} aria-selected={tab === key} onclick={() => (tab = key)}>
+					{label}{#if count}<span class="count" class:alert={key === 'activity'}>{count}</span>{/if}
+				</button>
+			{/each}
 		</div>
 
-		<div class="body">
-			{#if error}<div class="err"><Notice>{error}</Notice></div>{/if}
-			{#if !detail}
-				{#if !error}<div class="loading"><CircleNotchIcon size={18} class="spin" /></div>{/if}
-			{:else}
-				{#if !detail.agent.enabled}<div class="err"><Notice tone="warn">{t('shell.agentPage.stopped')}</Notice></div>{/if}
-				<section>
-					<h3>{t('shell.agentPage.settings')}</h3>
-					<div class="row">
-						<span>{t('shell.agentPage.name')}</span>
-						<input class="name" value={detail.agent.name} onchange={rename} />
-					</div>
-					<div class="row">
-						<span>{t('shell.agentPage.enabled')}</span>
-						<Switch
-							checked={detail.agent.enabled}
-							label={t('shell.agentPage.enabled')}
-							onChange={(enabled) => change({ enabled })}
-						/>
-					</div>
-					<div class="row">
-						<span>{t('shell.agentPage.approvalMode')}</span>
-						<div class="pick">
-							<Select
-								value={detail.agent.approval_mode}
-								options={MODES}
-								onChange={(approval_mode) => change({ approval_mode })}
-							/>
-						</div>
-					</div>
-					<p class="hint">{MODES.find((m) => m.value === detail!.agent.approval_mode)?.desc ?? ''}</p>
-				</section>
-
-				<section>
-					<h3>{t('shell.agentPage.message')}</h3>
-					<p class="hint">{t('shell.agentPage.messageHint')}</p>
-					<div class="item">
-						<input
-							class="grow msg"
-							bind:value={messageText}
-							placeholder={t('shell.agentPage.messagePlaceholder')}
-							oninput={() => (messageState = '')}
-							onkeydown={(e) => e.key === 'Enter' && !e.isComposing && (e.preventDefault(), sendMessage())}
-						/>
-						<Button size="sm" disabled={!messageText.trim() || messageState === 'sending'} onclick={sendMessage}>
-							{#if messageState === 'sending'}<CircleNotchIcon size={13} class="spin" />{:else}<PaperPlaneRightIcon size={13} />{/if}
-							{messageState === 'sent' ? t('shell.agentPage.sent') : t('shell.agentPage.send')}
-						</Button>
-					</div>
-					{#if messageError}<Notice>{messageError}</Notice>{/if}
-				</section>
-
-				<AgentSchedules {agentId} {onOpenSession} />
-
-				{#if timers.length}
-					<section>
-						<h3>{t('shell.agentPage.timers')}</h3>
-						{#each timers as timer (timer.timer)}
-							<div class="timer">
-								<span class="when">{when(timer.fire_at)}</span>
-								<span class="timer-body">{timer.body}</span>
-							</div>
-						{/each}
-					</section>
-				{/if}
-
-				<section>
-					<h3>{t('shell.agentPage.sandbox')}</h3>
-					<p class="hint">{t('shell.agentPage.sandboxHint')}</p>
-					<div class="row">
-						<span>{t('shell.agentPage.sandbox')}</span>
-						<Select
-							value={detail.agent.sandbox}
-							options={SANDBOXES}
-							onChange={(sandbox) => change({ sandbox: sandbox as AgentView['sandbox'] })}
-						/>
-					</div>
-					<div class="row">
-						<span>{t('shell.agentPage.network')}</span>
-						<Switch
-							checked={detail.agent.network}
-							label={t('shell.agentPage.network')}
-							onChange={(network) => change({ network })}
-						/>
-					</div>
-
-					<div class="section-head sub">
-						<span>{t('shell.agentPage.directories')}</span>
-						<Button size="sm" onclick={addDirectory}><FolderPlusIcon size={13} /> {t('shell.agentPage.addDirectory')}</Button>
-					</div>
-					<p class="hint">{t('shell.agentPage.directoriesHint')}</p>
-					{#each detail.agent.directories as dir, index (dir.path)}
-						<div class="item">
-							<code class="grow">{dir.path}</code>
-							<Select
-								value={dir.mode}
-								options={DIR_MODES}
-								onChange={(mode) =>
-									change({
-										directories: detail!.agent.directories.map((d, i) =>
-											i === index ? { ...d, mode: mode as 'ro' | 'rw' } : d
-										)
-									})}
-							/>
-							<IconButton
-								label={t('shell.agentPage.remove')}
-								onclick={() =>
-									change({ directories: detail!.agent.directories.filter((_, i) => i !== index) })}
-							>
-								<XIcon size={13} />
-							</IconButton>
-						</div>
-					{/each}
-
-					<div class="section-head sub">
-						<span>{t('shell.agentPage.rules')}</span>
-						<Button size="sm" onclick={() => (rules = [...rules, { prefix: '', action: 'ask' }])}>
-							<PlusIcon size={13} /> {t('shell.agentPage.addRule')}
-						</Button>
-					</div>
-					<p class="hint">{t('shell.agentPage.rulesHint')}</p>
-					{#each rules as rule, index (index)}
-						<div class="item">
-							<input
-								class="grow"
-								bind:value={rule.prefix}
-								placeholder={t('shell.agentPage.rulePrefix')}
-								onchange={saveRules}
-							/>
-							<Select
-								value={rule.action}
-								options={ACTIONS}
-								onChange={(action) => {
-									rule.action = action as typeof rule.action;
-									saveRules();
-								}}
-							/>
-							<IconButton
-								label={t('shell.agentPage.remove')}
-								onclick={() => {
-									rules = rules.filter((_, i) => i !== index);
-									saveRules();
-								}}
-							>
-								<XIcon size={13} />
-							</IconButton>
-						</div>
-					{/each}
-				</section>
-
-				<section>
-					<div class="section-head">
-						<h3>{t('shell.agentPage.sessions')}</h3>
-						<Button size="sm" disabled={!detail.agent.enabled} onclick={onNewSession}><PlusIcon size={13} /> {t('shell.agentPage.newSession')}</Button>
-					</div>
-					{#if sessions.length === 0}
-						<p class="empty">{t('shell.agentPage.noSessions')}</p>
-					{/if}
-					{#each sessions as s (s.session)}
-						<button class="session" onclick={() => onOpenSession(s.session)}>
-							<code>{s.session}</code>
-							<span class="when">{when(s.created_at)}</span>
-							{#if s.open}<span class="open">{t('shell.agentPage.open')}</span>{/if}
-						</button>
-					{/each}
-				</section>
-
+		<div class="tab-body">
+			{#if tab === 'activity'}
+				<AgentActivity {agent} {onOpenSession} {onOpenAgent} {onNewSession} />
+			{:else if tab === 'brief'}
 				<section>
 					<h3>{t('shell.agentPage.brief')}</h3>
 					<p class="hint">{t('shell.agentPage.roleHint')}</p>
@@ -453,46 +381,190 @@
 						{/if}
 					{/if}
 				</section>
+			{:else}
+				<SettingsSection>
+					<SettingsRow title={t('shell.agentPage.name')}>
+						<input class="name" value={detail.agent.name} onchange={rename} />
+					</SettingsRow>
+					<SettingsRow title={t('shell.agentPage.workspace')} description={t('shell.agentPage.workspaceHint')}>
+						<div class="pick">
+							<Select
+								value={agentWorkspace(detail.agent, workspaces.workspaces)}
+								options={workspaces.workspaces.map((w) => ({ value: w.id, label: w.name }))}
+								onChange={(workspace) => change({ workspace })}
+							/>
+						</div>
+					</SettingsRow>
+					<SettingsRow
+						title={t('shell.agentPage.approvalMode')}
+						description={MODES.find((m) => m.value === detail!.agent.approval_mode)?.desc ?? ''}
+					>
+						<div class="pick">
+							<Select value={detail.agent.approval_mode} options={MODES} onChange={(approval_mode) => change({ approval_mode })} />
+						</div>
+					</SettingsRow>
+					<SettingsRow title={t('shell.agentPage.sandbox')} description={t('shell.agentPage.sandboxHint')}>
+						<div class="pick">
+							<Select
+								value={detail.agent.sandbox}
+								options={SANDBOXES}
+								onChange={(sandbox) => change({ sandbox: sandbox as AgentView['sandbox'] })}
+							/>
+						</div>
+					</SettingsRow>
+					<SettingsRow title={t('shell.agentPage.network')}>
+						<Switch checked={detail.agent.network} label={t('shell.agentPage.network')} onChange={(network) => change({ network })} />
+					</SettingsRow>
+				</SettingsSection>
 
-				<section class="danger">
-					<div class="row">
-						<span class="col">
-							{t('shell.agentPage.deleteAgent')}
-							<small>{t('shell.agentPage.deleteHint')}</small>
-						</span>
+				<SettingsSection title={t('shell.agentPage.directories')} description={t('shell.agentPage.directoriesHint')}>
+					{#snippet action()}
+						<Button size="sm" onclick={addDirectory}><FolderPlusIcon size={13} /> {t('shell.agentPage.addDirectory')}</Button>
+					{/snippet}
+					{#each detail.agent.directories as dir, index (dir.path)}
+						<div class="item">
+							<code class="grow" title={dir.path}>{dir.path}</code>
+							<div class="pick sm">
+								<Select
+									value={dir.mode}
+									options={DIR_MODES}
+									onChange={(mode) =>
+										change({
+											directories: detail!.agent.directories.map((d, i) => (i === index ? { ...d, mode: mode as 'ro' | 'rw' } : d))
+										})}
+								/>
+							</div>
+							<IconButton
+								label={t('shell.agentPage.remove')}
+								onclick={() => change({ directories: detail!.agent.directories.filter((_, i) => i !== index) })}
+							>
+								<XIcon size={13} />
+							</IconButton>
+						</div>
+					{:else}
+						<p class="none">{t('shell.agentPage.noDirectories')}</p>
+					{/each}
+				</SettingsSection>
+
+				<SettingsSection title={t('shell.agentPage.rules')} description={t('shell.agentPage.rulesHint')}>
+					{#snippet action()}
+						<Button size="sm" onclick={() => (rules = [...rules, { prefix: '', action: 'ask' }])}>
+							<PlusIcon size={13} /> {t('shell.agentPage.addRule')}
+						</Button>
+					{/snippet}
+					{#each rules as rule, index (index)}
+						<div class="item">
+							<input class="grow" bind:value={rule.prefix} placeholder={t('shell.agentPage.rulePrefix')} onchange={saveRules} />
+							<div class="pick sm">
+								<Select
+									value={rule.action}
+									options={ACTIONS}
+									onChange={(action) => {
+										rule.action = action as typeof rule.action;
+										saveRules();
+									}}
+								/>
+							</div>
+							<IconButton
+								label={t('shell.agentPage.remove')}
+								onclick={() => {
+									rules = rules.filter((_, i) => i !== index);
+									saveRules();
+								}}
+							>
+								<XIcon size={13} />
+							</IconButton>
+						</div>
+					{:else}
+						<p class="none">{t('shell.agentPage.noRules')}</p>
+					{/each}
+				</SettingsSection>
+
+				<SettingsSection>
+					<SettingsRow title={t('shell.agentPage.deleteAgent')} description={t('shell.agentPage.deleteHint')}>
 						<Button size="sm" variant="danger" onclick={deleteAgent}>
 							<TrashIcon size={13} /> {t('shell.agentPage.deleteAgent')}
 						</Button>
-					</div>
-					{#if deleteError}<Notice>{deleteError}</Notice>{/if}
-				</section>
+					</SettingsRow>
+				</SettingsSection>
+				{#if deleteError}<div class="err"><Notice>{deleteError}</Notice></div>{/if}
 			{/if}
 		</div>
-	</div>
-</Modal>
+	{/if}
+</div>
 
 <style>
-	/* Fixed height so the sheet doesn't resize as the detail loads. */
-	.sheet {
-		height: min(720px, 84vh);
-		display: flex;
-		flex-direction: column;
-	}
 	.head {
 		display: flex;
 		align-items: flex-start;
-		justify-content: flex-end;
-		padding: 18px 20px 14px;
-		border-bottom: 1px solid var(--hairline);
+		gap: 16px;
 	}
-	h2 {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		margin: 0;
+	.ident {
+		flex: 1;
+		min-width: 0;
+	}
+	h1 {
+		margin: 2px 0 0;
 		font-family: var(--font-sans);
 		font-size: var(--fs-xl);
 		font-weight: 600;
+		letter-spacing: -0.01em;
+		line-height: 1.15;
+		color: var(--text);
+	}
+	.summary {
+		margin: 8px 0 0;
+		font-size: var(--fs-sm);
+		line-height: 1.55;
+		color: var(--dim);
+	}
+	.where {
+		margin: 6px 0 0;
+		color: var(--dim2);
+	}
+	.facts {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 4px 14px;
+		margin: 10px 0 0;
+		font-size: var(--fs-xs);
+		color: var(--dim);
+	}
+	.fact-link {
+		max-width: 260px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		padding: 0;
+		border: none;
+		background: none;
+		color: var(--text);
+		font: inherit;
+		cursor: pointer;
+	}
+	.fact-link:hover {
+		text-decoration: underline;
+	}
+	.enable {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding-top: 8px;
+		font-size: var(--fs-xs);
+		color: var(--dim);
+		cursor: pointer;
+	}
+	.state {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		font-size: var(--fs-xs);
+		color: var(--dim);
+		white-space: nowrap;
+	}
+	.state.live {
+		color: var(--accent-bright);
 	}
 	.avatar-btn {
 		display: inline-flex;
@@ -500,13 +572,15 @@
 		gap: 6px;
 		padding: 2px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r-md);
 		background: none;
 		color: inherit;
 		font: inherit;
 		cursor: pointer;
 	}
-	.avatar-btn:hover,
+	.avatar-btn:hover {
+		background: var(--surface2);
+	}
 	.avatar-pick {
 		display: flex;
 		align-items: center;
@@ -514,27 +588,128 @@
 		gap: 6px;
 		font-size: var(--fs-sm);
 	}
-	.head p {
-		margin: 4px 0 0;
-		font-size: var(--fs-xs);
-		color: var(--dim);
-	}
 	code {
 		font-family: var(--font-mono);
 		font-size: var(--fs-xs);
 	}
-	.body {
+
+	/* The task box: the one place on the page that asks for input. */
+	.task {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		margin-top: 24px;
+		padding: 12px 12px 10px;
+		border: 1px solid var(--border);
+		border-radius: var(--r-lg);
+		background: var(--surface);
+		transition: border-color var(--t-fast) var(--ease-out);
+	}
+	.task:focus-within {
+		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
+	}
+	.task textarea {
+		border: none;
+		background: none;
+		color: var(--text);
+		font-family: var(--font-sans);
+		font-size: var(--fs-md);
+		line-height: 1.55;
+		padding: 2px 4px;
+		outline: none;
+		resize: none;
+	}
+	.task textarea::placeholder {
+		color: var(--dim2);
+	}
+	.follow {
+		display: inline-flex;
+		align-items: center;
+		align-self: flex-start;
+		gap: 4px;
+		max-width: 100%;
+		padding: 2px 4px 2px 10px;
+		border-radius: var(--r-full);
+		background: var(--accent-soft);
+		color: var(--text);
+		font-size: var(--fs-xs);
+	}
+	.follow span {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.follow button {
+		display: inline-flex;
+		padding: 3px;
+		border: none;
+		border-radius: var(--r-full);
+		background: none;
+		color: var(--dim);
+		cursor: pointer;
+	}
+	.follow button:hover {
+		background: var(--surface2);
+		color: var(--text);
+	}
+	.hint-inline {
+		font-size: var(--fs-xs);
+		color: var(--dim2);
+	}
+	.task-foot {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+	.grow {
 		flex: 1;
-		overflow-y: auto;
-		padding: 4px 20px 20px;
+	}
+
+	.tabs {
+		display: flex;
+		gap: 22px;
+		margin-top: 28px;
+		border-bottom: 1px solid var(--hairline);
+	}
+	.tabs button {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		margin-bottom: -1px;
+		padding: 0 0 10px;
+		border: none;
+		border-bottom: 2px solid transparent;
+		background: none;
+		color: var(--dim);
+		font: inherit;
+		font-size: var(--fs-sm);
+		cursor: pointer;
+		transition: color var(--t-fast) var(--ease-out);
+	}
+	.tabs button:hover {
+		color: var(--text);
+	}
+	.tabs button.on {
+		color: var(--text);
+		border-bottom-color: var(--text);
+	}
+	.count {
+		font-size: var(--fs-2xs);
+		font-family: var(--font-mono);
+		padding: 0 6px;
+		border-radius: var(--r-full);
+		background: var(--surface2);
+		color: var(--dim);
+	}
+	.count.alert {
+		background: color-mix(in oklab, var(--warn) 18%, transparent);
+		color: var(--warn);
+	}
+	.tab-body {
+		padding-top: 6px;
 	}
 	section {
 		margin-top: 16px;
-	}
-	.section-head {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
 	}
 	h3 {
 		margin: 0 0 8px;
@@ -549,15 +724,18 @@
 		color: var(--dim2);
 		line-height: 1.5;
 	}
-	.section-head.sub {
-		margin-top: 12px;
-		font-size: var(--fs-sm);
-	}
+	/* A list row inside a SettingsSection card, padded like a SettingsRow. */
 	.item {
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		padding: 4px 0;
+		padding: 10px 12px 10px 18px;
+	}
+	.none {
+		margin: 0;
+		padding: 16px 18px;
+		font-size: var(--fs-xs);
+		color: var(--dim2);
 	}
 	.item .grow {
 		flex: 1;
@@ -576,43 +754,10 @@
 		padding: 6px 9px;
 		outline: none;
 	}
-	.row {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 6px 0;
-		font-size: var(--fs-sm);
-	}
 	.empty {
 		margin: 0;
 		font-size: var(--fs-sm);
 		color: var(--dim2);
-	}
-	.session {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		width: 100%;
-		padding: 7px 10px;
-		border: none;
-		border-radius: var(--r-md);
-		background: none;
-		color: var(--text);
-		cursor: pointer;
-		text-align: left;
-	}
-	.session:hover {
-		background: var(--surface);
-	}
-	.when {
-		flex: 1;
-		font-size: var(--fs-xs);
-		color: var(--dim);
-	}
-	.open {
-		font-size: var(--fs-2xs);
-		font-family: var(--font-mono);
-		color: var(--accent-bright);
 	}
 	.file {
 		margin-bottom: 10px;
@@ -691,6 +836,10 @@
 	.pick {
 		width: 180px;
 	}
+	.pick.sm {
+		flex: none;
+		width: 120px;
+	}
 	input.name {
 		width: 180px;
 		border: 1px solid var(--border);
@@ -701,44 +850,12 @@
 		padding: 6px 9px;
 		outline: none;
 	}
-	.item input.msg {
-		font-family: var(--font-sans);
-		font-size: var(--fs-sm);
-	}
 	input.name:focus,
 	.item input:focus {
 		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
 	}
-	.timer {
-		display: flex;
-		gap: 10px;
-		padding: 4px 0;
-		font-size: var(--fs-sm);
-	}
-	.timer .when {
-		flex: none;
-	}
-	.timer-body {
-		flex: 1;
-		min-width: 0;
-		color: var(--text);
-	}
-	.col {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-	}
-	.col small {
-		font-size: var(--fs-xs);
-		color: var(--dim2);
-	}
-	.danger {
-		margin-top: 24px;
-		padding-top: 12px;
-		border-top: 1px solid var(--hairline);
-	}
 	.err {
-		margin-top: 12px;
+		margin-bottom: 16px;
 	}
 	.loading {
 		display: flex;

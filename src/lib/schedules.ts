@@ -20,6 +20,8 @@ export interface Schedule {
 	date?: string | null;
 	/** Every run in a new session; false continues the previous run's. */
 	new_session: boolean;
+	/** Proposed by the agent itself; off until the user turns it on. */
+	by_agent?: boolean;
 	/** Unix seconds. */
 	created_at: number;
 	last_run_at: number | null;

@@ -10,7 +10,6 @@ export type SectionKey =
 	| 'providers'
 	| 'models'
 	| 'network'
-	| 'plugins'
 	| 'mcp'
 	| 'market'
 	| 'agents'
@@ -21,7 +20,7 @@ export type SectionKey =
 // Grouped by what a setting applies to: the app itself, every coding agent,
 // or only sessions run by the JuCode CLI engine (its ~/.jucode/config.json).
 export const GROUPS: { key: string; sections: SectionKey[] }[] = [
-	{ key: 'app', sections: ['general', 'account', 'usage', 'voice', 'plugins'] },
+	{ key: 'app', sections: ['general', 'account', 'usage', 'voice'] },
 	{ key: 'agents', sections: ['agents', 'acp', 'daemon', 'market'] },
 	{ key: 'jucode', sections: ['providers', 'models', 'mcp', 'network'] },
 	{ key: 'about', sections: ['updates'] }
@@ -51,6 +50,7 @@ export const ROWS: SearchRow[] = [
 	{ section: 'general', id: 'theme', titleKey: 'settings.theme' },
 	{ section: 'general', id: 'vibrancy', titleKey: 'settings.behavior.vibrancy', descKey: 'settings.behavior.vibrancyHint' },
 	{ section: 'general', id: 'turn-stats', titleKey: 'settings.behavior.turnStats', descKey: 'settings.behavior.turnStatsHint' },
+	{ section: 'general', id: 'cache-miss', titleKey: 'settings.behavior.cacheMissAlert', descKey: 'settings.behavior.cacheMissAlertHint' },
 	{ section: 'general', id: 'html-open', titleKey: 'settings.behavior.htmlOpen', descKey: 'settings.behavior.htmlOpenHint' },
 	{ section: 'account', id: 'account-login', titleKey: 'settings.page.jucodeAccount', descKey: 'settings.page.jucodeAccountDesc' },
 	{ section: 'account', id: 'account-models', titleKey: 'shell.modelSetup.manage', descKey: 'settings.page.manageModelsDesc' },
@@ -73,7 +73,6 @@ export const ROWS: SearchRow[] = [
 	{ section: 'network', id: 'retry-attempts', titleKey: 'settings.behavior.retryAttempts', descKey: 'settings.page.retryAttemptsDesc' },
 	{ section: 'network', id: 'connect-timeout', titleKey: 'settings.behavior.connectTimeout', descKey: 'settings.page.connectTimeoutDesc' },
 	{ section: 'network', id: 'read-timeout', titleKey: 'settings.behavior.readTimeout', descKey: 'settings.page.readTimeoutDesc' },
-	{ section: 'plugins', id: 'plugins', titleKey: 'settings.plugins.groupLabel', descKey: 'settings.plugins.hint' },
 	{ section: 'mcp', id: 'mcp-servers', titleKey: 'settings.mcp.groupLabel', descKey: 'settings.mcp.hint' },
 	{ section: 'mcp', id: 'mcp-extensions', titleKey: 'settings.ext.groupLabel', descKey: 'settings.ext.hint' },
 	{ section: 'market', id: 'market-open', titleKey: 'settings.market.groupLabel', descKey: 'settings.market.hint' },

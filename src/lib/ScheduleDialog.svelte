@@ -3,7 +3,6 @@
 	// then runs the saved task, so a new task can be tried right away.
 	import { onMount, tick, untrack } from 'svelte';
 	import ClockIcon from 'phosphor-svelte/lib/ClockIcon';
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import Button from '$lib/ui/Button.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
@@ -35,14 +34,15 @@
 			? toDraft(schedule)
 			: { agent, name: '', prompt: '', enabled: true, repeat: 'daily', time: '09:00', days: [1], date: '', new_session: true }
 	);
+	// Every run is a new session, told what the last run concluded.
 	let draft = $state<ScheduleDraft>({
 		...initial,
+		new_session: true,
 		date: initial.date || `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}`
 	});
 	// The frequency is kept while repeat is off, so turning it back on restores it.
 	let repeating = $state(initial.repeat !== 'once');
 	let frequency = $state<Repeat>(initial.repeat === 'once' ? 'daily' : initial.repeat);
-	let advanced = $state(!initial.new_session);
 	let busy = $state(false);
 	let error = $state('');
 	let nameEl = $state<HTMLInputElement | null>(null);
@@ -146,19 +146,6 @@
 		</div>
 	{/if}
 
-	<button class="disclose" aria-expanded={advanced} onclick={() => (advanced = !advanced)}>
-		<span class="caret" class:open={advanced}><CaretRightIcon size={12} /></span>
-		{t('shell.schedule.advanced')}
-	</button>
-	{#if advanced}
-		<div class="row">
-			<span class="col">
-				{t('shell.schedule.newSession')}
-				<small>{t('shell.schedule.newSessionHint')}</small>
-			</span>
-			<Switch bind:checked={draft.new_session} label={t('shell.schedule.newSession')} />
-		</div>
-	{/if}
 
 	{#if error}<Notice>{error}</Notice>{/if}
 	{#snippet footer()}
@@ -210,41 +197,10 @@
 		gap: 12px;
 		font-size: var(--fs-sm);
 	}
-	.col {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-	}
-	.col small {
-		font-size: var(--fs-xs);
-		color: var(--dim2);
-	}
 	.days {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 6px;
-	}
-	.disclose {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		align-self: flex-start;
-		padding: 0;
-		border: none;
-		background: none;
-		color: var(--dim);
-		font-size: var(--fs-xs);
-		cursor: pointer;
-	}
-	.disclose:hover {
-		color: var(--text);
-	}
-	.caret {
-		display: inline-flex;
-		transition: transform var(--t-fast) var(--ease-out);
-	}
-	.caret.open {
-		transform: rotate(90deg);
 	}
 	.grow {
 		flex: 1;

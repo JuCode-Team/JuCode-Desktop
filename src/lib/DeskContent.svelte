@@ -1,8 +1,9 @@
 <script lang="ts">
 	// The desk's content: questions and pending actions waiting for the user,
 	// which agents are working, the next scheduled runs, and their reports. Everything comes from the
-	// jucode daemon through agentDirectory (the shown computer's, on the remote
-	// page). Shown in the desktop's desk sheet and on the remote page.
+	// jucode daemon through agentDirectory. Shown on the desktop's workbench
+	// and on the remote page. With `agent`, only that agent's pending items
+	// (its page shows the rest as activity).
 	import QuestionIcon from 'phosphor-svelte/lib/QuestionIcon';
 	import ShieldCheckIcon from 'phosphor-svelte/lib/ShieldCheckIcon';
 	import FileTextIcon from 'phosphor-svelte/lib/FileTextIcon';
@@ -16,24 +17,37 @@
 	import { t } from '$lib/i18n';
 
 	let {
-		onOpenSession
+		onOpenSession,
+		onOpenAgent,
+		agent,
+		agents
 	}: {
 		/** Show a daemon session. */
 		onOpenSession: (session: string) => void;
+		/** Show an agent's page; its names link there when given. */
+		onOpenAgent?: (agent: string) => void;
+		agent?: string;
+		/** Only these agents' items (the workbench's workspace scope). */
+		agents?: string[];
 	} = $props();
 
 	// The app's directory; on the remote page, the shown computer's.
 	const agentDirectory = useAgents();
+	const inScope = (id: string | undefined) => (!agent || id === agent) && (!agents || (!!id && agents.includes(id)));
+	const questions = $derived(agentDirectory.questions.filter((q) => inScope(q.agent)));
+	const actions = $derived(agentDirectory.actions.filter((a) => inScope(agentDirectory.agentOfSession(a.session_id)?.id)));
+	const reports = $derived(agentDirectory.reports.filter((r) => inScope(r.agent)));
+	const pending = $derived(questions.length + actions.length);
 
 	let answers = $state<Record<string, string>>({});
 	let busy = $state<Record<string, boolean>>({});
 	let errors = $state<Record<string, string>>({});
 	let expanded = $state<Record<string, boolean>>({});
 
-	const working = $derived(agentDirectory.agents.filter((a) => a.busy));
+	const working = $derived(agentDirectory.agents.filter((a) => a.busy && inScope(a.id)));
 	const upcoming = $derived(
 		agentDirectory.schedules
-			.filter((s) => s.enabled && s.next_run_at)
+			.filter((s) => s.enabled && s.next_run_at && inScope(s.agent))
 			.sort((a, b) => a.next_run_at! - b.next_run_at!)
 			.slice(0, 3)
 	);
@@ -79,22 +93,31 @@
 	{#if agent}<AgentAvatar {agent} size={14} />{/if}
 {/snippet}
 
+{#snippet who(id: string | undefined, label: string, at: number)}
+	{#if id && onOpenAgent}
+		<button class="who link" onclick={() => onOpenAgent(id)}>{label}</button><span class="who">· {when(at)}</span>
+	{:else}
+		<span class="who">{label} · {when(at)}</span>
+	{/if}
+{/snippet}
+
 {#if agentDirectory.status === 'unreachable'}
 	<div class="unreachable"><Notice tone="warn">{t('shell.desk.unreachable')}</Notice></div>
 {/if}
 
+{#if !agent || pending}
 <section>
-	<h3>{t('shell.desk.pending')} <span class="count">{agentDirectory.pending}</span></h3>
-	{#if agentDirectory.pending === 0}
+	<h3>{t('shell.desk.pending')} <span class="count">{pending}</span></h3>
+	{#if pending === 0}
 		<p class="empty">{t('shell.desk.nothingPending')}</p>
 	{/if}
-	{#each agentDirectory.questions as q (q.id)}
+	{#each questions as q (q.id)}
 		<article class="card" class:high={q.importance === 'high'}>
 			<div class="card-head">
 				<QuestionIcon size={14} />
 				<span class="kind">{t('shell.desk.question')}</span>
 				{@render face(agentDirectory.agents.find((x) => x.id === q.agent))}
-				<span class="who">{agentDirectory.agentName(q.agent)} · {when(q.asked_at)}</span>
+				{@render who(q.agent, agentDirectory.agentName(q.agent), q.asked_at)}
 				{#if q.due_at}<span class="due">{t('shell.desk.due', { time: when(q.due_at) })}</span>{/if}
 			</div>
 			<div class="title">{q.title}</div>
@@ -126,14 +149,14 @@
 			</div>
 		</article>
 	{/each}
-	{#each agentDirectory.actions as a (a.id)}
+	{#each actions as a (a.id)}
 		{@const agent = agentDirectory.agentOfSession(a.session_id)}
 		<article class="card">
 			<div class="card-head">
 				<ShieldCheckIcon size={14} />
 				<span class="kind">{t('shell.desk.action')}</span>
 				{@render face(agent)}
-				<span class="who">{agent?.name ?? a.cwd} · {when(a.created_at)}</span>
+				{@render who(agent?.id, agent?.name ?? a.cwd, a.created_at)}
 			</div>
 			<div class="title"><code>{a.name}</code> {a.summary}</div>
 			<details>
@@ -151,7 +174,9 @@
 		</article>
 	{/each}
 </section>
+{/if}
 
+{#if !agent}
 <section>
 	<h3>{t('shell.desk.working')}</h3>
 	{#if working.length === 0}
@@ -159,7 +184,7 @@
 	{:else}
 		<div class="working">
 			{#each working as agent (agent.id)}
-				<span class="chip"><CircleNotchIcon size={14} class="spin" /><AgentAvatar {agent} size={14} />{agent.name}</span>
+				<button class="chip" disabled={!onOpenAgent} onclick={() => onOpenAgent?.(agent.id)}><CircleNotchIcon size={14} class="spin" /><AgentAvatar {agent} size={14} />{agent.name}</button>
 			{/each}
 		</div>
 	{/if}
@@ -175,10 +200,10 @@
 
 <section>
 	<h3>{t('shell.desk.reports')}</h3>
-	{#if agentDirectory.reports.length === 0}
+	{#if reports.length === 0}
 		<p class="empty">{t('shell.desk.noReports')}</p>
 	{/if}
-	{#each agentDirectory.reports as r (r.id)}
+	{#each reports as r (r.id)}
 		<article class="report" class:unread={!r.read}>
 			<button class="report-head" onclick={() => toggleReport(r)}>
 				<FileTextIcon size={13} />
@@ -189,12 +214,14 @@
 			{#if expanded[r.id]}
 				{#if r.body}<div class="text">{r.body}</div>{/if}
 				<div class="actions">
+					{#if onOpenAgent}<Button size="sm" onclick={() => onOpenAgent(r.agent)}>{agentDirectory.agentName(r.agent)}</Button>{/if}
 					<Button size="sm" onclick={() => onOpenSession(r.session)}>{t('shell.desk.openSession')}</Button>
 				</div>
 			{/if}
 		</article>
 	{/each}
 </section>
+{/if}
 
 <style>
 	section {
@@ -333,7 +360,27 @@
 		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
+	.link {
+		padding: 0;
+		border: none;
+		background: none;
+		font: inherit;
+		cursor: pointer;
+	}
+	.link:hover {
+		color: var(--text);
+		text-decoration: underline;
+	}
+	button.chip:not(:disabled) {
+		cursor: pointer;
+	}
+	button.chip:not(:disabled):hover {
+		background: var(--surface);
+	}
 	.chip {
+		border: none;
+		color: inherit;
+		font-family: inherit;
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;

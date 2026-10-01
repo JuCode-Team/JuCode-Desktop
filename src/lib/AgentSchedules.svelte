@@ -1,6 +1,7 @@
 <script lang="ts">
-	// An agent's scheduled tasks on its Agent page: when each runs next, its
-	// last run, and the controls to switch, run, edit and delete it.
+	// An agent's scheduled tasks on the workbench's 定时任务 page: when each
+	// runs next, its last run, and the controls to switch, run, edit and delete it.
+	import type { Snippet } from 'svelte';
 	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
 	import PlayIcon from 'phosphor-svelte/lib/PlayIcon';
 	import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon';
@@ -17,10 +18,13 @@
 
 	let {
 		agentId,
-		onOpenSession
+		onOpenSession,
+		heading
 	}: {
 		agentId: string;
 		onOpenSession: (session: string) => void;
+		/** Replaces the section title (the page names the agent instead). */
+		heading?: Snippet;
 	} = $props();
 
 	const schedules = $derived(
@@ -71,7 +75,7 @@
 
 <section>
 	<div class="section-head">
-		<h3>{t('shell.schedule.title')}</h3>
+		{#if heading}{@render heading()}{:else}<h3>{t('shell.schedule.title')}</h3>{/if}
 		<Button size="sm" onclick={() => (editing = null)}><PlusIcon size={13} /> {t('shell.schedule.add')}</Button>
 	</div>
 	{#if schedules.length === 0}
@@ -85,7 +89,10 @@
 				onChange={(enabled) => act(() => agentDirectory.setScheduleEnabled(s.id, enabled))}
 			/>
 			<div class="text">
-				<div class="name">{s.name}</div>
+				<div class="name">
+					{s.name}
+					{#if s.by_agent && !s.enabled}<span class="proposed">{t('shell.schedule.proposed')}</span>{/if}
+				</div>
 				<div class="meta">
 					<span>{summary(s)}</span>
 					<span>
@@ -154,6 +161,14 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+	.proposed {
+		margin-left: 6px;
+		padding: 1px 7px;
+		border-radius: var(--r-full);
+		background: color-mix(in oklab, var(--warn) 16%, transparent);
+		color: var(--warn);
+		font-size: var(--fs-2xs);
 	}
 	.task.off .name {
 		color: var(--dim2);

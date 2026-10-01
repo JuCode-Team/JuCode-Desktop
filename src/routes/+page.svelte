@@ -40,12 +40,14 @@
 	} from '$lib/protocol';
 	import { dispatch } from '$lib/backends/router';
 	import { caps } from '$lib/backends';
+	import { loadBackendSettings } from '$lib/backends/settings';
 	import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
 	import { updater } from '$lib/updater.svelte';
 	import { checkDaemonVersion } from '$lib/daemonVersion';
 	import UpdatePrompt from '$lib/UpdatePrompt.svelte';
 	import { browser, type WebRef } from '$lib/browser.svelte';
 	import { prefs } from '$lib/prefs.svelte';
+	import { fmtTokens } from '$lib/usageStats';
 	import { cloudSync } from '$lib/cloudSync.svelte';
 	import { t } from '$lib/i18n';
 	import { SessionStore, listedSessions } from '$lib/session.svelte';
@@ -80,7 +82,7 @@
 	import ChatPane, { type ChatPaneApi, type ProviderOption } from '$lib/ChatPane.svelte';
 	import SettingsPage from '$lib/settings/SettingsPage.svelte';
 	import type { SectionKey } from '$lib/settings/nav';
-	import Setup from '$lib/Setup.svelte';
+	import Welcome from '$lib/welcome/Welcome.svelte';
 	import Marketplace from '$lib/Marketplace.svelte';
 	import Sidebar from '$lib/Sidebar.svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -89,9 +91,8 @@
 	import { matches } from '$lib/shortcuts';
 	import TaskDialog from '$lib/TaskDialog.svelte';
 	import AgentDialog from '$lib/AgentDialog.svelte';
-	import Desk from '$lib/Desk.svelte';
-	import AgentPage from '$lib/AgentPage.svelte';
-	import { agentDirectory } from '$lib/agents.svelte';
+	import DeskPage from '$lib/DeskPage.svelte';
+	import { agentDirectory, agentsOfWorkspace } from '$lib/agents.svelte';
 	import { CHATS_ENABLED, type Project, type WorktreeMeta } from '$lib/types';
 	import PlanPanel from '$lib/PlanPanel.svelte';
 	import GoalPanel from '$lib/GoalPanel.svelte';
@@ -110,7 +111,7 @@
 	// Project/session tree + lifecycle lives in the store; the page keeps thin
 	// reactive aliases so templates and handlers read it naturally.
 	const store = new SessionStore();
-	const projects = $derived(store.projects);
+	const projects = $derived(store.userProjects);
 	const allSessions = $derived(store.allSessions);
 	const active = $derived(store.active);
 	const chat = $derived(store.chat);
@@ -135,13 +136,20 @@
 		notify('JuCode', t('shell.notifyDone', { title: title || t('shell.untitled') }));
 	// An agent's question, pending action or report while the window is in
 	// the background.
-	agentDirectory.onArrival = (kind, agent, text) => {
-		if (!document.hasFocus()) void notify(agent, t(`shell.notify.${kind}`, { text }));
+	agentDirectory.onArrival = (kind, agent, text, agentId) => {
+		const message = t(`shell.notify.${kind}`, { text });
+		if (!document.hasFocus()) void notify(agent, message);
+		// In front: a notice that leads to the agent on the workbench.
+		else
+			toast.info(`${agent} · ${message}`, {
+				action: { label: t('shell.desk.title'), run: () => openDesk(agentId ?? null) }
+			});
 	};
 	let showSettings = $state(false);
 	let settingsSection = $state<SectionKey>('general');
 	function openSettings(section: SectionKey = 'general') {
 		settingsSection = section;
+		showDesk = false;
 		showSettings = true;
 	}
 	function closeSettings() {
@@ -150,21 +158,41 @@
 	}
 	let showMarket = $state(false);
 	let showSetup = $state(false);
+	// The welcome page's first view when opened from the palette (sign-in on request).
+	let setupView = $state<'login' | undefined>();
 	let showPalette = $state(false);
 	let showShortcuts = $state(false);
 	// 「新建并行任务」对话框：为哪个（主仓库）项目开任务。
 	let taskDialogFor = $state<Project | null>(null);
 	let showAgentDialog = $state(false);
+	// The workbench page, on the overview, one agent, or one of its sessions
+	// (agent sessions open only there, never on the canvas).
 	let showDesk = $state(false);
-	let agentPageFor = $state<string | null>(null);
+	let deskAgent = $state<string | null>(null);
+	let deskSession = $state<string | null>(null);
+	function openDesk(agent: string | null) {
+		deskAgent = agent;
+		deskSession = null;
+		showSettings = false;
+		showDesk = true;
+	}
 
-	/** Show a daemon session in a tab: an agent's, or a plain hosted one. */
-	function openDaemonSession(session: string) {
-		const agent = agentDirectory.agentOfSession(session);
-		const cwd = agentDirectory.sessions.find((s) => s.session === session)?.cwd ?? '';
-		store.openAgentSession(agent ?? { id: '', name: cwd.split('/').pop() || session, cwd }, session);
+	/** Show a daemon session: an agent's on the workbench, a plain hosted one
+	 *  in a tab. */
+	function openDaemonSession(session: string, agentId?: string) {
+		const agent =
+			agentDirectory.agentOfSession(session) ?? agentDirectory.agents.find((a) => a.id === agentId);
+		const listed = agentDirectory.sessions.find((s) => s.session === session);
+		if (agent) {
+			deskSession = store.openAgentSession(agent, session, listed?.title);
+			deskAgent = agent.id;
+			showSettings = false;
+			showDesk = true;
+			return;
+		}
+		const cwd = listed?.cwd ?? '';
+		store.openAgentSession({ id: '', name: base(cwd), cwd }, session, listed?.title);
 		showDesk = false;
-		agentPageFor = null;
 	}
 	let showQuickOpen = $state(false);
 
@@ -376,6 +404,8 @@
 		const id = store.activeId;
 		if (!tilesReady || !id) return;
 		untrack(() => {
+			// An agent's session shows on the workbench only.
+			if (!store.shownSessions.some((s) => s.id === id)) return;
 			if (chatSessionsIn(tiles).includes(id)) applyTiles(activateTab(tiles, chatPanel(id)));
 			else applyTiles(openChatTab(tiles, focusedLeaf, id));
 			const leaf = leafOfTab(tiles.root, chatPanel(id));
@@ -530,13 +560,30 @@
 		untrack(() => sync.reconcile(list));
 	});
 	// Tabs of an agent's sessions (restored ones too) keep the agent's
-	// approval mode: see ChatState.agent.
+	// approval mode: see ChatState.agent. One still in a user project (opened
+	// before agent sessions moved to the workbench) moves to its agent's host.
 	$effect(() => {
 		for (const s of store.allSessions) {
-			if (s.chat.agent || !s.chat.sessionId) continue;
-			const agent = agentDirectory.sessions.find((d) => d.session === s.chat.sessionId)?.agent;
-			if (agent) s.chat.agent = agent;
+			if (!s.chat.agent && s.chat.sessionId) {
+				const agent = agentDirectory.sessions.find((d) => d.session === s.chat.sessionId)?.agent;
+				if (agent) s.chat.agent = agent;
+			}
+			const cwd = s.chat.agent && agentDirectory.agents.find((a) => a.id === s.chat.agent)?.cwd;
+			if (cwd) untrack(() => store.adoptAgentSession(s.id, cwd));
 		}
+	});
+	// Off the workbench, the active session is always one the canvas shows:
+	// leaving it from an agent's session goes back to the last shown one.
+	let lastShown = '';
+	$effect(() => {
+		const id = store.activeId;
+		const shown = store.shownSessions.some((s) => s.id === id);
+		if (shown) lastShown = id;
+		else if (id && !showDesk)
+			untrack(() => {
+				const back = store.shownSessions.find((s) => s.id === lastShown) ?? store.shownSessions[0];
+				store.activeId = back?.id ?? '';
+			});
 	});
 	// A session listed from the daemon opens when it is first shown.
 	$effect(() => {
@@ -666,15 +713,16 @@
 		store.createProject(path);
 	}
 	async function removeProject(p: Project) {
-		if (p.sessions.length) {
-			const ok = await confirm({
-				title: t('shell.closeProjectTitle'),
-				message: t('shell.closeProjectConfirm', { name: p.name, count: p.sessions.length }),
-				confirmLabel: t('shell.closeProjectTitle'),
-				danger: true
-			});
-			if (!ok) return;
-		}
+		const ok = await confirm({
+			title: t('shell.closeProjectTitle'),
+			message: p.sessions.length
+				? t('shell.closeProjectConfirm', { name: p.name, count: p.sessions.length })
+				: t('shell.closeProjectEmptyConfirm', { name: p.name }),
+			confirmLabel: t('shell.closeProjectTitle'),
+			danger: true,
+			dontAskKey: 'remove-project'
+		});
+		if (!ok) return;
 		// Best-effort dirty-tab guard: closing a project with unsaved editor
 		// buffers under its root discards them — confirm first.
 		const projRoot = p.path.replace(/\/+$/, '');
@@ -691,11 +739,27 @@
 		store.removeProject(p);
 	}
 
+	async function removeSession(id: string) {
+		const s = sessionMap.get(id);
+		// A draft that never started has nothing to lose.
+		if (s && !s.draft) {
+			const ok = await confirm({
+				title: t('shell.removeSessionTitle'),
+				message: t('shell.removeSessionConfirm', { title: s.chat.title || t('shell.untitled') }),
+				confirmLabel: t('shell.removeSessionTitle'),
+				danger: true,
+				dontAskKey: 'remove-session'
+			});
+			if (!ok) return;
+		}
+		store.removeSession(id);
+	}
+
 	// ---------- 并行任务（git worktree） ----------
 	/** 把任务 worktree 作为项目打开（已在列表中则聚焦），可携带首条消息（任务描述）。 */
 	function openTaskProject(path: string, meta: WorktreeMeta, description = '') {
 		taskDialogFor = null;
-		const existing = store.projects.find((p) => normPath(p.path) === normPath(path));
+		const existing = store.userProjects.find((p) => normPath(p.path) === normPath(path));
 		if (existing) {
 			store.activeId = existing.sessions[0]?.id ?? store.addSession(existing);
 			return;
@@ -704,14 +768,14 @@
 	}
 	/** 任务清理完成（worktree 已删除）后，把对应项目从侧边栏移除。 */
 	function closeTaskProject(path: string) {
-		const p = store.projects.find((x) => normPath(x.path) === normPath(path));
+		const p = store.userProjects.find((x) => normPath(x.path) === normPath(path));
 		if (p) store.removeProject(p);
 	}
 	/** 打开「新建并行任务」对话框；worktree 项目上则回落到其主仓库项目。 */
 	function newTask(p: Project | undefined) {
 		if (!p) return;
 		if (p.worktree) {
-			const main = store.projects.find((x) => normPath(x.path) === normPath(p.worktree!.mainRepoPath));
+			const main = store.userProjects.find((x) => normPath(x.path) === normPath(p.worktree!.mainRepoPath));
 			taskDialogFor = main ?? { ...p, path: p.worktree.mainRepoPath, name: base(p.worktree.mainRepoPath) };
 			return;
 		}
@@ -722,7 +786,7 @@
 	const normPath = (p: string) => p.replace(/\/+$/, '');
 	/** 打开（或聚焦）路径对应的项目；不存在则在目录有效时创建。 */
 	async function openProjectPath(path: string, focusSession = true): Promise<Project | null> {
-		const existing = store.projects.find((p) => normPath(p.path) === normPath(path));
+		const existing = store.userProjects.find((p) => normPath(p.path) === normPath(path));
 		if (existing) {
 			if (focusSession) store.activeId = existing.sessions[0]?.id ?? store.addSession(existing);
 			return existing;
@@ -866,6 +930,20 @@
 					}
 				}
 				flushModeSync(s.chat, s.id);
+				const miss = s.chat.cacheMiss;
+				if (miss) {
+					s.chat.cacheMiss = null;
+					if (prefs.cacheMissAlert) {
+						toast.warn(
+							t('shell.cacheMiss.message', {
+								title: s.chat.title || t('shell.untitled'),
+								input: fmtTokens(miss.input),
+								cached: fmtTokens(miss.cached)
+							}),
+							{ duration: 5000, action: { label: t('shell.cacheMiss.stop'), run: () => dispatch(s.id, { op: 'interrupt' }) } }
+						);
+					}
+				}
 				// Read the current active session at call time (store.activeId is
 				// reactive) — not a value snapshotted when the listener was mounted —
 				// so unseen/notification target the right session after tab switches.
@@ -988,17 +1066,17 @@
 	<!-- TOP: one title bar across the window (traffic lights, sidebar toggle,
 	     the title of what is in front aligned with the canvas, panel actions). -->
 	<TitleBar
-		leftWidth={RAIL_WIDTH + (showSettings || showSidebar ? sidebarWidth : 0)}
+		leftWidth={RAIL_WIDTH + (showSettings || showDesk || showSidebar ? sidebarWidth : 0)}
 		resizing={sbResizing}
 		sidebarOpen={showSidebar}
 		onToggleSidebar={toggleSidebar}
-		title={showSettings ? t('settings.title') : (active?.chat.title ?? '')}
-		subtitle={showSettings ? '' : (activeProject?.name ?? '')}
-		addOptions={showSettings ? [] : addOptions}
+		title={showSettings ? t('settings.title') : showDesk ? t('shell.desk.title') : (active?.chat.title ?? '')}
+		subtitle={showSettings || showDesk ? '' : (activeProject?.name ?? '')}
+		addOptions={showSettings || showDesk ? [] : addOptions}
 		onAdd={(key) => mosaicAdd(focusedLeaf, key)}
 	>
 		{#snippet actions()}
-			{#if !showSettings && active && active.surface !== 'tui' && canHandOffToTui(active.backendId)}
+			{#if !showSettings && !showDesk && active && active.surface !== 'tui' && canHandOffToTui(active.backendId)}
 				<button
 					class="tile-action"
 					disabled={!tuiReady(active.id)}
@@ -1033,7 +1111,7 @@
 		     with a rounded top-left corner. Settings covers it as a page; the
 		     session list and canvas stay mounted (hidden) underneath so chats,
 		     terminals and TUI tiles keep their state. -->
-		<div class="panel" class:covered={showSettings}>
+		<div class="panel" class:covered={showSettings || showDesk}>
 			<!-- LEFT: the navigator — workspace / projects / sessions. Clicking a session
 			     opens or focuses its chat tile on the canvas. -->
 			<Sidebar
@@ -1046,7 +1124,7 @@
 				onNewTask={newTask}
 				onNewSession={(p) => store.addSession(p)}
 				onNewChat={() => store.newChat()}
-				onCloseSession={(id) => store.removeSession(id)}
+				onCloseSession={removeSession}
 				onCloseProject={removeProject}
 				onArchiveSession={(id) => store.archiveSession(id)}
 				onUnarchiveSession={(id) => store.unarchiveSession(id)}
@@ -1056,17 +1134,14 @@
 				onSessionMenu={openSessionMenu}
 				onProjectMenu={openProjectMenu}
 				onHistory={(p) => store.openHistory(p)}
-				agents={agentDirectory.agents}
+				agents={agentsOfWorkspace(agentDirectory.agents, workspaces.workspaces, workspaces.activeId)}
 				agentsStatus={agentDirectory.status}
-				onOpenAgent={(a) =>
-					// The daemon refuses a disabled agent's sessions: show its page to enable it.
-					a.enabled
-						? store.openAgentSession(a, agentDirectory.latestSession(a.id)?.session)
-						: (agentPageFor = a.id)}
+				onOpenAgent={(a) => openDesk(a.id)}
 				onNewAgent={() => (showAgentDialog = true)}
-				onAgentPage={(a) => (agentPageFor = a.id)}
+				onAgentSession={(a) => store.openAgentSession(a, agentDirectory.latestSession(a.id)?.session)}
+				agentPending={(id) => agentDirectory.pendingFor(id)}
 				pendingCount={agentDirectory.pending}
-				onDesk={() => (showDesk = true)}
+				onDesk={() => openDesk(null)}
 			/>
 			<div class="resizer side" class:hidden={!showSidebar} role="separator" aria-label="resize sidebar" onpointerdown={startSidebarResize}></div>
 
@@ -1143,6 +1218,7 @@
 												onRegister={registerPane}
 												onUnregister={unregisterPane}
 												onOpenSettings={openSettings}
+												onOpenAgent={openDesk}
 											/>
 										{/if}
 									{:else}
@@ -1179,6 +1255,40 @@
 					onClose={closeSettings}
 				/>
 			{/if}
+			{#if showDesk}
+				<DeskPage
+					bind:agentId={deskAgent}
+					bind:sessionId={deskSession}
+					openSid={deskSession ? (sessionMap.get(deskSession)?.chat.sessionId ?? null) : null}
+					navWidth={sidebarWidth}
+					onClose={() => (showDesk = false)}
+					onOpenSession={openDaemonSession}
+					onNewAgent={() => (showAgentDialog = true)}
+					onNewSession={(agent) => {
+						deskSession = store.openAgentSession(agent);
+						deskAgent = agent.id;
+					}}
+				>
+					{#snippet chatView(id)}
+						{@const sess = sessionMap.get(id)}
+						{#if sess}
+							<ChatPane
+								session={sess}
+								{store}
+								{providers}
+								{providersList}
+								isActive={id === activeId}
+								onRegister={registerPane}
+								onUnregister={unregisterPane}
+								onOpenSettings={openSettings}
+								onOpenAgent={openDesk}
+							/>
+						{:else}
+							<div class="gone">{t('shell.chatGone')}</div>
+						{/if}
+					{/snippet}
+				</DeskPage>
+			{/if}
 		</div>
 	</div>
 
@@ -1188,17 +1298,22 @@
 
 	<UpdatePrompt />
 	{#if showSetup && activeId}
-		<Setup
+		<Welcome
 			sessionId={activeId}
+			startAt={setupView}
 			{chat}
-			{loggedIn}
+			loggedIn={providers.includes('jucode')}
+			configured={providers.length > 0}
 			onRefreshAuth={refreshAuth}
-			onOpenSettings={() => {
-				localStorage.setItem('jucode-setup-done', '1');
+			onOpenSettings={(section) => {
 				showSetup = false;
-				openSettings('account');
+				openSettings(section);
 			}}
-			onClose={() => (showSetup = false)}
+			onClose={() => {
+				showSetup = false;
+				// The session opened on first run starts with the agent picked there.
+				if (activeId) store.switchBackend(activeId, loadBackendSettings().default);
+			}}
 		/>
 	{/if}
 
@@ -1227,30 +1342,13 @@
 		<TaskDialog project={taskDialogFor} onClose={() => (taskDialogFor = null)} onCreated={openTaskProject} />
 	{/if}
 
-	{#if showDesk}
-		<Desk onClose={() => (showDesk = false)} onOpenSession={openDaemonSession} />
-	{/if}
-
-	{#if agentPageFor}
-		{@const pageAgent = agentDirectory.agents.find((a) => a.id === agentPageFor)}
-		<AgentPage
-			agentId={agentPageFor}
-			onClose={() => (agentPageFor = null)}
-			onOpenSession={openDaemonSession}
-			onNewSession={() => {
-				if (pageAgent) store.openAgentSession(pageAgent);
-				agentPageFor = null;
-			}}
-		/>
-	{/if}
-
 	{#if showAgentDialog}
 		<AgentDialog
 			defaultDir={store.activeProject?.path ?? ''}
 			onClose={() => (showAgentDialog = false)}
 			onCreated={(agent) => {
 				showAgentDialog = false;
-				store.openAgentSession(agent);
+				openDesk(agent.id);
 			}}
 		/>
 	{/if}
@@ -1304,7 +1402,10 @@
 			onOpenPanel={openPanelTile}
 			onToggleSidebar={toggleSidebar}
 			onToggleTheme={cycleTheme}
-			onSetup={() => (showSetup = true)}
+			onSetup={(view) => {
+				setupView = view;
+				showSetup = true;
+			}}
 			onHistory={() => activeProject && store.openHistory(activeProject)}
 			onShortcuts={() => (showShortcuts = true)}
 		/>
@@ -1356,7 +1457,7 @@
 	}
 	/* Under the settings page: hidden but mounted. The frosted settings nav is
 	   translucent, so the session list must not show through it. */
-	.panel.covered > :global(:not(.settings)) {
+	.panel.covered > :global(:not(.settings, .desk-page)) {
 		visibility: hidden;
 	}
 

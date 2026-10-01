@@ -10,6 +10,7 @@
 	import Modal from '$lib/ui/Modal.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import AgentAvatar from '$lib/AgentAvatar.svelte';
+	import { workspaces } from '$lib/workbench/workspaceStore.svelte';
 	import { agentDirectory, type AgentView } from '$lib/agents.svelte';
 	import { newAvatarSeed } from '$lib/avatar';
 	import { t } from '$lib/i18n';
@@ -69,7 +70,8 @@
 				name: name.trim(),
 				cwd: cwd.trim(),
 				role: role.trim(),
-				avatar_seed: seed
+				avatar_seed: seed,
+				workspace: workspaces.activeId
 			});
 			onCreated(agent);
 		} catch (e) {

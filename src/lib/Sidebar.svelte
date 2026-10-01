@@ -11,7 +11,6 @@
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
 	import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon';
 	import TrayIcon from 'phosphor-svelte/lib/TrayIcon';
-	import IdentificationCardIcon from 'phosphor-svelte/lib/IdentificationCardIcon';
 	import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon';
 	import FolderIcon from 'phosphor-svelte/lib/FolderIcon';
 	import FolderOpenIcon from 'phosphor-svelte/lib/FolderOpenIcon';
@@ -57,7 +56,8 @@
 		agentsStatus = 'off',
 		onOpenAgent = () => {},
 		onNewAgent = () => {},
-		onAgentPage = () => {},
+		onAgentSession = () => {},
+		agentPending = () => 0,
 		pendingCount = 0,
 		onDesk = () => {}
 	}: {
@@ -88,9 +88,13 @@
 		/** Long-lived agents of the local jucode daemon. */
 		agents?: AgentView[];
 		agentsStatus?: 'off' | 'connecting' | 'on' | 'unreachable';
+		/** Show the agent on the workbench. */
 		onOpenAgent?: (agent: AgentView) => void;
 		onNewAgent?: () => void;
-		onAgentPage?: (agent: AgentView) => void;
+		/** Open the agent's latest session. */
+		onAgentSession?: (agent: AgentView) => void;
+		/** Questions and pending actions of one agent. */
+		agentPending?: (agent: string) => number;
 		/** Questions and pending actions waiting for the user. */
 		pendingCount?: number;
 		onDesk?: () => void;
@@ -316,6 +320,9 @@
 			{/if}
 			{#if s.icon}
 				<TabGlyph icon={s.icon} color={s.color} size={14} />
+			{:else if s.chat.agent}
+				{@const owner = agents.find((a) => a.id === s.chat.agent)}
+				{#if owner}<AgentAvatar agent={owner} size={14} />{/if}
 			{/if}
 			{#if renaming === s.id}
 				<!-- svelte-ignore a11y_no_static_element_interactions (keep row clicks out of the editor) -->
@@ -435,31 +442,35 @@
 				<button class="sess ghost" onclick={onNewAgent}><PlusIcon size={16} /><span class="sess-title">{t('shell.agents.add')}</span></button>
 			{/if}
 			{#each agents as a (a.id)}
+				{@const waiting = agentPending(a.id)}
 				<button
 					class="sess agent"
 					class:off={!a.enabled}
 					onclick={() => onOpenAgent(a)}
-					title={a.enabled ? t('shell.agents.open', { name: a.name }) : t('shell.agents.details')}
+					title={t('shell.agents.view', { name: a.name })}
 				>
 					<AgentAvatar agent={a} size={18} />
 					<span class="agent-text">
 						<span class="sess-title">{a.name}</span>
 						{#if a.summary}<span class="agent-summary">{a.summary}</span>{/if}
 					</span>
-					{#if a.busy}<CircleNotchIcon size={16} class="spin state" />{/if}
-					{#if !a.enabled}<span class="tag">{t('shell.agents.disabled')}</span>{/if}
-					<span
-						class="act"
-						role="button"
-						tabindex="0"
-						onclick={(e) => {
-							e.stopPropagation();
-							onAgentPage(a);
-						}}
-						onkeydown={(e) => e.key === 'Enter' && (e.stopPropagation(), onAgentPage(a))}
-						aria-label={t('shell.agents.details')}
-						title={t('shell.agents.details')}><IdentificationCardIcon size={16} /></span
-					>
+					{#if waiting}<span class="count">{waiting}</span>
+					{:else if a.busy}<CircleNotchIcon size={16} class="spin state" />{/if}
+					{#if !a.enabled}<span class="tag">{t('shell.agents.disabled')}</span>
+					{:else}
+						<span
+							class="act"
+							role="button"
+							tabindex="0"
+							onclick={(e) => {
+								e.stopPropagation();
+								onAgentSession(a);
+							}}
+							onkeydown={(e) => e.key === 'Enter' && (e.stopPropagation(), onAgentSession(a))}
+							aria-label={t('shell.agents.open', { name: a.name })}
+							title={t('shell.agents.open', { name: a.name })}><ChatsIcon size={16} /></span
+						>
+					{/if}
 				</button>
 			{/each}
 		</section>

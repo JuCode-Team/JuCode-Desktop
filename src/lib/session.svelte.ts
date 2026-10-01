@@ -87,7 +87,12 @@ export class SessionStore {
 	/** Projects the UI shows: a hidden chats group stays in the tree (and in
 	 *  the saved and daemon lists) but is never listed or opened. */
 	get shownProjects() {
-		return CHATS_ENABLED ? this.projects : this.projects.filter((p) => !p.chats);
+		return this.userProjects.filter((p) => CHATS_ENABLED || !p.chats);
+	}
+	/** Every project but the hidden ones that host agent sessions (see
+	 *  Project.agents): what is saved, synced and matched by path. */
+	get userProjects() {
+		return this.projects.filter((p) => !p.agents);
 	}
 	get shownSessions() {
 		return this.shownProjects.flatMap((p) => p.sessions);
@@ -145,6 +150,7 @@ export class SessionStore {
 		const id = reuseId && !this.allSessions.some((s) => s.id === reuseId) ? reuseId : this.uid();
 		const chat = new ChatState();
 		chat.backendId = backendId;
+		chat.bindRunKey(id);
 		if (acpAgent) {
 			chat.acpAgentId = acpAgent.id;
 			chat.acpAgentName = acpAgent.name;
@@ -337,6 +343,7 @@ export class SessionStore {
 		// as a crash to auto-restart (handleExit resolves chat via the session).
 		const chat = new ChatState();
 		chat.backendId = backend;
+		chat.bindRunKey(id);
 		chat.switching = true;
 		unregisterAdapter(id);
 		const adapter = createJucodeAdapter();
@@ -372,6 +379,7 @@ export class SessionStore {
 	#redraft(s: Session, backend: BackendId, acpAgent?: { id: string; name: string }) {
 		const chat = new ChatState();
 		chat.backendId = backend;
+		chat.bindRunKey(s.id);
 		chat.title = s.chat.title;
 		const agent = backend === 'acp' ? acpAgent : undefined;
 		if (agent) {
@@ -659,21 +667,25 @@ export class SessionStore {
 	 *  that agent) in its open tab or a new one, or a new session of the
 	 *  agent when `sid` is omitted. The tab lands in the project for the
 	 *  agent's directory, which is added when missing. */
-	openAgentSession(agent: { id: string; name: string; cwd: string }, sid?: string) {
+	/** `title`: the daemon's for an existing conversation; a new one is named
+	 *  by the daemon after its first message. */
+	openAgentSession(agent: { id: string; name: string; cwd: string }, sid?: string, title?: string | null) {
 		const open = sid && this.allSessions.find((s) => s.chat.sessionId === sid);
 		if (open) {
 			open.archived = false;
 			this.activeId = open.id;
 			return open.id;
 		}
-		let project = this.projects.find((p) => p.path === agent.cwd && !p.worktree);
+		// An agent's sessions live in its hidden host (the workbench shows
+		// them); a plain hosted session (no agent id) opens in its project.
+		let project = agent.id ? this.#agentHost(agent.cwd) : this.userProjects.find((p) => p.path === agent.cwd && !p.worktree);
 		if (!project) {
 			project = { id: this.uid(), name: base(agent.cwd), path: agent.cwd, sessions: [] };
 			this.projects.push(project);
 		}
 		const s = this.#newSession('jucode');
-		s.chat.title = agent.name;
-		s.chat.agent = agent.id;
+		if (title) s.chat.title = title;
+		if (agent.id) s.chat.agent = agent.id;
 		if (sid) {
 			// The daemon holds the conversation; the backend stays jucode.
 			s.restored = true;
@@ -931,6 +943,26 @@ export class SessionStore {
 		if (this.activeId === id) this.activeId = this.shownSessions[0]?.id ?? '';
 	}
 
+	/** The hidden project an agent working in `cwd` hosts its sessions in. */
+	#agentHost(cwd: string): Project {
+		let host = this.projects.find((p) => p.agents && p.path === cwd);
+		if (!host) {
+			host = { id: this.uid(), name: base(cwd), path: cwd, sessions: [], agents: true };
+			this.projects.push(host);
+		}
+		return host;
+	}
+
+	/** An agent's session opened before agent sessions moved to the workbench
+	 *  (it sits in a user project): move it to its agent's hidden host. */
+	adoptAgentSession(id: string, cwd: string) {
+		const from = this.projects.find((p) => !p.agents && p.sessions.some((s) => s.id === id));
+		if (!from) return;
+		const s = from.sessions.find((x) => x.id === id)!;
+		from.sessions = from.sessions.filter((x) => x.id !== id);
+		this.#agentHost(cwd).sessions.push(s);
+	}
+
 	/** Tear down a project and all its sessions (the page handles confirmation). */
 	removeProject(p: Project) {
 		for (const s of p.sessions) {
@@ -1059,7 +1091,7 @@ export class SessionStore {
 	 *  is only written when it isn't the default, so pre-existing layouts stay
 	 *  byte-identical; 'acp' tabs also carry their agent so restore can respawn. */
 	serialize(): SavedProject[] {
-		return this.projects.map((p) => ({
+		return this.userProjects.map((p) => ({
 			id: p.id,
 			name: p.name,
 			path: p.path,
