@@ -71,8 +71,10 @@ for (const manifest of cargo) {
 
 for (const dir of pnpm) {
 	const list = JSON.parse(
+		// On Windows pnpm is pnpm.cmd, which only a shell resolves.
 		execFileSync('pnpm', ['licenses', 'list', '--prod', '--json'], {
 			cwd: dir,
+			shell: process.platform === 'win32',
 			encoding: 'utf8',
 			maxBuffer: 64 * 1024 * 1024,
 			stdio: ['ignore', 'pipe', 'inherit']
