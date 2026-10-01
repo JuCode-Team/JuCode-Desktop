@@ -1,15 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
 import { git } from '$lib/protocol';
-import type { PluginManifest } from './registry';
-
-export const githubPrManifest = {
-	id: 'github-pr',
-	name: 'GitHub Pull Requests',
-	commands: ['check', 'view', 'create'],
-	bin: 'gh',
-	defaultEnabled: true
-} as const satisfies PluginManifest;
-
 export type GitHubPrState = 'checking' | 'missing' | 'unauthed' | 'noRemote' | 'ready';
 
 export interface PrInfo {

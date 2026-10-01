@@ -1,11 +1,20 @@
 <script lang="ts">
 	import { t } from '$lib/i18n';
+	import CallTimer from '$lib/CallTimer.svelte';
+	import type { CallTiming } from '$lib/chat.svelte';
 
-	let { phase, tokens = 0 }: { phase: string | null; tokens?: number } = $props();
+	let { phase, tokens = 0, call = null }: { phase: string | null; tokens?: number; call?: CallTiming | null } = $props();
+
+	// While a model request is in flight its own stage (connecting, waiting for
+	// the first token, streaming) replaces the coarser phase, with a timer.
+	const CALL_PHASE = { connect: 'connecting', ttft: 'firstToken', output: 'generating' } as const;
+	const timed = $derived(call !== null && (phase === 'connecting' || phase === 'waiting' || phase === 'generating'));
+	const shown = $derived(timed && call ? CALL_PHASE[call.phase] : phase);
 
 	const LABEL = $derived<Record<string, string>>({
 		connecting: t('chat.phaseConnecting'),
 		waiting: t('chat.phaseWaiting'),
+		firstToken: t('chat.phaseFirstToken'),
 		generating: t('chat.phaseGenerating'),
 		tool: t('chat.phaseTool'),
 		compacting: t('chat.phaseCompacting')
@@ -13,21 +22,22 @@
 	const fmt = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
 </script>
 
-{#if phase}
+{#if shown}
 	<div class="ind">
-		{#if phase === 'generating'}
+		{#if shown === 'generating'}
 			<span class="glyph dots"><i></i><i></i><i></i></span>
-		{:else if phase === 'waiting'}
+		{:else if shown === 'waiting' || shown === 'firstToken'}
 			<span class="glyph breathe"></span>
-		{:else if phase === 'connecting'}
+		{:else if shown === 'connecting'}
 			<span class="glyph ring"></span>
-		{:else if phase === 'tool'}
+		{:else if shown === 'tool'}
 			<span class="glyph scan"></span>
-		{:else if phase === 'compacting'}
+		{:else if shown === 'compacting'}
 			<span class="glyph compress"><i></i><i></i></span>
 		{/if}
-		<span class="label">{LABEL[phase] ?? phase}</span>
-		{#if phase === 'compacting' && tokens > 0}<span class="ctok">{t('chat.tokens', { n: fmt(tokens) })}</span>{/if}
+		<span class="label">{LABEL[shown] ?? shown}</span>
+		{#if timed && call}<CallTimer since={call.since} />{/if}
+		{#if shown === 'compacting' && tokens > 0}<span class="ctok">{t('chat.tokens', { n: fmt(tokens) })}</span>{/if}
 	</div>
 {/if}
 

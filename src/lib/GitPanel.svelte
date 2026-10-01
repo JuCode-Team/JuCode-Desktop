@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon';
 	import ArrowsClockwiseIcon from 'phosphor-svelte/lib/ArrowsClockwiseIcon';
 	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
@@ -36,7 +36,9 @@
 		type GitHubPrState,
 		type PrInfo
 	} from '$lib/plugins/github-pr';
-	import { isPluginEnabled, PLUGIN_SETTINGS_EVENT } from '$lib/plugins/registry';
+	import { deps, recheckDeps } from '$lib/deps.svelte';
+	import DepAction from '$lib/DepAction.svelte';
+	import DepDetails from '$lib/DepDetails.svelte';
 	import { t } from '$lib/i18n';
 	import ParallelTasks from '$lib/ParallelTasks.svelte';
 	import type { WorktreeMeta } from '$lib/types';
@@ -76,7 +78,6 @@
 	let syncBusy = $state<'' | 'pull' | 'push' | 'fetch'>('');
 
 	// GitHub PR（通过 gh CLI）
-	let pluginEnabled = $state(isPluginEnabled('github-pr'));
 	let ghState = $state<GitHubPrState>('checking');
 	let pr = $state<PrInfo | null>(null);
 	let prForm = $state(false);
@@ -124,20 +125,7 @@
 	}
 	onMount(() => {
 		refresh();
-		if (pluginEnabled) checkGh();
-		const updatePlugin = () => {
-			const enabled = isPluginEnabled('github-pr');
-			if (enabled === pluginEnabled) return;
-			pluginEnabled = enabled;
-			pr = null;
-			prForm = false;
-			if (enabled) {
-				ghState = 'checking';
-				checkGh();
-			}
-		};
-		window.addEventListener(PLUGIN_SETTINGS_EVENT, updatePlugin);
-		return () => window.removeEventListener(PLUGIN_SETTINGS_EVENT, updatePlugin);
+		checkGh();
 	});
 
 	async function run(args: string[]) {
@@ -319,6 +307,15 @@
 		ghState = await checkGitHubPr(dir());
 		if (ghState === 'ready') await loadPr();
 	}
+	// gh can be installed from here (the same install as in settings); once it
+	// is, look again.
+	const ghDep = $derived(deps.list.find((d) => d.id === 'gh'));
+	$effect(() => {
+		if (ghState === 'missing') untrack(recheckDeps);
+	});
+	$effect(() => {
+		if (ghState === 'missing' && ghDep?.present) untrack(checkGh);
+	});
 	async function loadPr() {
 		pr = await viewGitHubPr(dir());
 	}
@@ -473,39 +470,36 @@
 				{#if compareLoaded && compareFiles.length === 0 && !compareBusy}<div class="clean">{t('dock.git.reviewEmpty')}</div>{/if}
 			{/if}
 
-			{#if pluginEnabled}
-				<div class="sec">{t('dock.git.pr')}</div>
-				{#if ghState === 'checking'}
-					<div class="ghrow dim">{t('dock.git.ghChecking')}</div>
-				{:else if ghState === 'missing'}
-					<div class="ghrow">
-						{t('dock.git.ghMissing')}
-						<button class="cmd" onclick={() => copyCmd('brew install gh')} title={t('dock.git.copyCmd')}>
-							{copied === 'brew install gh' ? t('common.copied') : 'brew install gh'}
-						</button>
-					</div>
-				{:else if ghState === 'unauthed'}
-					<div class="ghrow">
-						{t('dock.git.ghUnauthed')}
-						<button class="cmd" onclick={() => copyCmd('gh auth login')} title={t('dock.git.copyCmd')}>
-							{copied === 'gh auth login' ? t('common.copied') : 'gh auth login'}
-						</button>
-					</div>
-				{:else if ghState === 'noRemote'}
-					<div class="ghrow dim">{t('dock.git.noGithubRemote')}</div>
-				{:else if pr}
-					<div class="prrow">
-						<span class="prstate {pr.state.toLowerCase()}">{pr.isDraft ? 'DRAFT' : pr.state}</span>
-						<button class="prlink" onclick={() => pr && openUrl(pr.url)} title={t('dock.git.prOpenHint')}>
-							<span class="prtitle">{pr.title || pr.url}</span>
-							<ArrowSquareOutIcon size={11} />
-						</button>
-					</div>
-				{:else}
-					<div class="prrow">
-						<Button size="sm" onclick={openPrForm} disabled={busy}><GitPullRequestIcon size={13} /> {t('dock.git.createPr')}</Button>
-					</div>
-				{/if}
+			<div class="sec">{t('dock.git.pr')}</div>
+			{#if ghState === 'checking'}
+				<div class="ghrow dim">{t('dock.git.ghChecking')}</div>
+			{:else if ghState === 'missing'}
+				<div class="ghrow">
+					{t('dock.git.ghMissing')}
+					{#if ghDep}<DepAction dep={ghDep} />{/if}
+				</div>
+				{#if ghDep}<DepDetails dep={ghDep} />{/if}
+			{:else if ghState === 'unauthed'}
+				<div class="ghrow">
+					{t('dock.git.ghUnauthed')}
+					<button class="cmd" onclick={() => copyCmd('gh auth login')} title={t('dock.git.copyCmd')}>
+						{copied === 'gh auth login' ? t('common.copied') : 'gh auth login'}
+					</button>
+				</div>
+			{:else if ghState === 'noRemote'}
+				<div class="ghrow dim">{t('dock.git.noGithubRemote')}</div>
+			{:else if pr}
+				<div class="prrow">
+					<span class="prstate {pr.state.toLowerCase()}">{pr.isDraft ? 'DRAFT' : pr.state}</span>
+					<button class="prlink" onclick={() => pr && openUrl(pr.url)} title={t('dock.git.prOpenHint')}>
+						<span class="prtitle">{pr.title || pr.url}</span>
+						<ArrowSquareOutIcon size={11} />
+					</button>
+				</div>
+			{:else}
+				<div class="prrow">
+					<Button size="sm" onclick={openPrForm} disabled={busy}><GitPullRequestIcon size={13} /> {t('dock.git.createPr')}</Button>
+				</div>
 			{/if}
 
 			{#if !worktree}

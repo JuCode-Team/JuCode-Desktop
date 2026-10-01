@@ -314,6 +314,7 @@
 				{streamingMsg}
 				{streamingReasoning}
 				phase={chat.phase}
+				call={chat.call}
 				compactionTokens={chat.compactionTokens}
 				{scroller}
 				onEdit={(value) => {

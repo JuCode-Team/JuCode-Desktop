@@ -62,7 +62,8 @@
 		onOpenPanel: (kind: string) => void;
 		onToggleSidebar: () => void;
 		onToggleTheme: () => void;
-		onSetup: () => void;
+		/** Open the welcome page; 'login' starts on the sign-in view even when signed in. */
+		onSetup: (view?: 'login') => void;
 		onHistory: () => void;
 		onShortcuts: () => void;
 	} = $props();
@@ -120,7 +121,11 @@
 				run: wrap(() => onOpenPanel(p.key))
 			})),
 			{ id: 'settings', label: t('shell.cmd.settings'), keys: shortcutLabel('settings'), icon: SettingsIcon, keywords: t('shell.cmd.settingsKw'), run: wrap(onSettings) },
-			{ id: 'setup', label: t('shell.cmd.setup'), hint: t('shell.cmd.setupHint'), icon: WrenchIcon, keywords: t('shell.cmd.setupKw'), run: wrap(onSetup) },
+			{ id: 'setup', label: t('shell.cmd.setup'), hint: t('shell.cmd.setupHint'), icon: WrenchIcon, keywords: t('shell.cmd.setupKw'), run: wrap(() => onSetup()) },
+			// Debug builds only: VITE_JUCODE_DEBUG=1 when running or building.
+			...(import.meta.env.VITE_JUCODE_DEBUG === '1'
+				? [{ id: 'setup-login', label: t('shell.cmd.setupLogin'), hint: t('shell.cmd.setupLoginHint'), icon: WrenchIcon, keywords: t('shell.cmd.setupLoginKw'), run: wrap(() => onSetup('login')) }]
+				: []),
 			{ id: 'sidebar', label: t('shell.cmd.sidebar'), keys: shortcutLabel('sidebar'), icon: SidebarSimpleIcon, keywords: t('shell.cmd.sidebarKw'), run: wrap(onToggleSidebar) },
 			{ id: 'shortcuts', label: t('shell.shortcuts.title'), keys: shortcutLabel('shortcuts'), icon: KeyboardIcon, keywords: t('shell.shortcuts.keywords'), run: wrap(onShortcuts) },
 			{ id: 'theme', label: t('shell.cmd.theme'), icon: CircleHalfIcon, keywords: t('shell.cmd.themeKw'), run: wrap(onToggleTheme) }

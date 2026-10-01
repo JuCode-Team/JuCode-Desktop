@@ -45,9 +45,9 @@
 		display: flex;
 		flex-direction: column;
 		margin: 0 auto 8px;
-		max-width: 880px;
+		max-width: calc(var(--chat-w, 844px) + 2 * var(--chat-pad, 32px));
 		width: 100%;
-		padding: 0 18px;
+		padding: 0 var(--chat-pad, 32px);
 	}
 	.pill {
 		display: inline-flex;

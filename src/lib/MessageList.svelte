@@ -10,41 +10,54 @@
 	import ToolCard from '$lib/ToolCard.svelte';
 	import { parseToolOutput, toolIcon, toolTarget, toolVerb } from '$lib/toolSummary';
 	import Indicator from '$lib/Indicator.svelte';
+	import CallTimer from '$lib/CallTimer.svelte';
+	import RetryNotice from '$lib/RetryNotice.svelte';
 	import ErrorNotice from '$lib/ErrorNotice.svelte';
 	import type { ErrorAction } from '$lib/errorInfo';
 	import { t } from '$lib/i18n';
-	import type { Msg, TurnStats } from '$lib/chat.svelte';
+	import type { CallTiming, Msg, RetryState } from '$lib/chat.svelte';
 	import { prefs } from '$lib/prefs.svelte';
-	import { fmtTokens } from '$lib/usageStats';
+	import { fmtDur, turnParts } from '$lib/turnStats';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { convertFileSrc } from '@tauri-apps/api/core';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
+	import QuotesIcon from 'phosphor-svelte/lib/QuotesIcon';
 
 	let {
 		messages,
 		streamingMsg,
 		streamingReasoning,
 		phase,
+		call = null,
 		compactionTokens = 0,
+		retry = null,
 		findActive = null,
 		scroller = null,
 		onEdit,
+		onCite,
 		onRewind,
 		onFile,
 		onDismiss,
 		backend = '',
-		onErrorAction
+		onErrorAction,
+		mark = $bindable(-1)
 	}: {
 		messages: Msg[];
 		streamingMsg: Msg | null;
 		streamingReasoning: Msg | null;
 		phase: string | null;
+		/** The model request in flight, timed live (see CallTiming). */
+		call?: CallTiming | null;
 		compactionTokens?: number;
+		/** A failed model request being re-sent: shown instead of the phase. */
+		retry?: RetryState | null;
 		findActive?: number | null;
 		// The scroll viewport (owned by +page). When provided and the history is
 		// long, rows outside the viewport are windowed out.
 		scroller?: HTMLElement | null;
 		onEdit: (text: string) => void;
+		/** Quote text selected in a reply into the composer. */
+		onCite?: (text: string) => void;
 		onRewind: (text: string, userIndex: number) => void;
 		/** Open a workspace file referenced by a chat link (editor / browser). */
 		onFile?: (href: string) => void;
@@ -54,6 +67,8 @@
 		backend?: string;
 		/** An error notice's fix (restart, sign in, compact …). */
 		onErrorAction?: (action: ErrorAction) => void;
+		/** Ordinal of the user message in view: at or above the upper third. */
+		mark?: number;
 	} = $props();
 
 	// ── Virtual list (dynamic-height windowing) ─────────────────────────────
@@ -69,6 +84,10 @@
 	let measureVersion = $state(0);
 	let scrollTop = $state(0);
 	let viewH = $state(0);
+	let atEnd = $state(true);
+	// The list's top within the scroller's content (the scroller's padding).
+	let listTop = $state(0);
+	let listEl: HTMLElement;
 	let raf = 0;
 
 	// Track the viewport's scroll position + height.
@@ -78,6 +97,9 @@
 		const sync = () => {
 			scrollTop = el.scrollTop;
 			viewH = el.clientHeight;
+			atEnd = el.scrollHeight - el.scrollTop - el.clientHeight < 8;
+			cite = null;
+			listTop = listEl.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop;
 		};
 		sync();
 		el.addEventListener('scroll', sync, { passive: true });
@@ -158,7 +180,40 @@
 			rowEls[findActive]?.scrollIntoView({ block: 'center', behavior: 'smooth' });
 		}
 	});
-	let rowEls: HTMLElement[] = [];
+	let rowEls: (HTMLElement | null)[] = [];
+
+	// Index in `messages` of each user message, in order: the rail's marks.
+	const markRows = $derived(messages.flatMap((m, i) => (m.kind === 'user' ? [i] : [])));
+	$effect(() => {
+		const rows = markRows;
+		if (atEnd) {
+			mark = rows.length - 1;
+			return;
+		}
+		const line = scrollTop + viewH / 3 - listTop;
+		let n = 0;
+		while (n + 1 < rows.length && offsets[rows[n + 1]!]! <= line) n++;
+		mark = rows.length ? n : -1;
+	});
+
+	/** Scroll mark `n`'s message to the top of the viewport. */
+	export function jumpToMark(n: number) {
+		const i = markRows[n];
+		if (i === undefined || !scroller) return;
+		const el = scroller;
+		const alignRow = (behavior: ScrollBehavior) => {
+			const row = rowEls[i];
+			if (!row?.isConnected) return false;
+			const top = el.scrollTop + row.getBoundingClientRect().top - el.getBoundingClientRect().top - 16;
+			el.scrollTo({ top, behavior });
+			return true;
+		};
+		if (alignRow('smooth')) return;
+		// Windowed out: go to its estimated offset, which renders it, then align
+		// on the real row once it has been measured.
+		el.scrollTo({ top: listTop + offsets[i]! - 16 });
+		requestAnimationFrame(() => requestAnimationFrame(() => alignRow('auto')));
+	}
 
 	// Map each user message to its 0-based ordinal so a rewind can target the
 	// matching engine turn (the engine lists user turns in the same order).
@@ -168,6 +223,26 @@
 		for (const m of messages) if (m.kind === 'user') map.set(m, n++);
 		return map;
 	});
+
+	// Selecting text inside one reply (or its reasoning) offers to quote it.
+	let cite = $state<{ text: string; x: number; top: number; bottom: number } | null>(null);
+	function offerCite() {
+		const sel = window.getSelection();
+		const text = sel?.toString().trim();
+		if (!onCite || !sel || sel.isCollapsed || !text) return;
+		const range = sel.getRangeAt(0);
+		const node = range.commonAncestorContainer;
+		const host = (node instanceof Element ? node : node.parentElement)?.closest('.answer, .reason-body');
+		if (!host || !listEl.contains(host)) return;
+		const r = range.getBoundingClientRect();
+		cite = { text, x: r.left + r.width / 2, top: r.top, bottom: r.bottom };
+	}
+	function takeCite() {
+		if (!cite) return;
+		onCite?.(cite.text);
+		window.getSelection()?.removeAllRanges();
+		cite = null;
+	}
 
 	let copied = $state<unknown>(null);
 	function copy(text: string, m: unknown) {
@@ -189,39 +264,13 @@
 	});
 	const shownPhase = $derived(sendingShown && (phase === 'connecting' || phase === 'waiting') ? null : phase);
 
-	/** The turn figures chosen in settings, in footer order. */
-	function turnParts(s: TurnStats): { text: string; title: string; mono?: boolean }[] {
-		const out: { text: string; title: string; mono?: boolean }[] = [];
-		for (const k of prefs.turnStats) {
-			if (k === 'elapsed') out.push({ text: fmtDur(s.elapsed), title: t('chat.stat.elapsed'), mono: true });
-			else if (k === 'ttft' && s.ttft !== undefined)
-				out.push({ text: t('chat.stat.ttftShort', { t: fmtDur(s.ttft) }), title: t('chat.stat.ttft') });
-			else if (k === 'tokens' && (s.inTokens || s.outTokens))
-				out.push({ text: `↑${fmtTokens(s.inTokens)} ↓${fmtTokens(s.outTokens)}`, title: t('chat.stat.tokens'), mono: true });
-			else if (k === 'files' && s.files)
-				out.push({ text: t('chat.stat.filesShort', { n: s.files, a: s.added, r: s.removed }), title: t('chat.stat.files') });
-			else if (k === 'tools' && s.tools) out.push({ text: t('chat.stat.toolsShort', { n: s.tools }), title: t('chat.stat.tools') });
-			else if (k === 'cost' && s.cost > 0)
-				out.push({ text: `$${s.cost < 0.01 ? s.cost.toFixed(4) : s.cost.toFixed(2)}`, title: t('chat.stat.cost'), mono: true });
-			else if (k === 'model' && s.model) out.push({ text: s.model, title: t('chat.stat.model') });
-		}
-		return out;
-	}
-
-	const fmtDur = (ms: number) =>
-		ms < 1000
-			? `${ms}ms`
-			: ms < 60000
-				? `${(ms / 1000).toFixed(1)}s`
-				: `${Math.floor(ms / 60000)}m${Math.round((ms % 60000) / 1000)}s`;
-
 	// Smoothing buffer: SSE deltas arrive in big bursts every few seconds, which
 	// reads as jerky chunk-by-chunk output. Reveal the received text at an adaptive
 	// pace so it flows continuously. `shown` chases the active message's length with
 	// a proportional controller (speed grows with backlog, floored so it never
 	// stalls while content is pending), integrated over real time.
-	const REVEAL_TAU = 1.2; // s — backlog time constant (higher = smoother, more lag)
-	const MIN_CPS = 24; // chars/s floor while streaming
+	const REVEAL_TAU = 0.5; // s — backlog time constant (higher = smoother, more lag)
+	const MIN_CPS = 60; // chars/s floor while streaming
 	let shownChars = $state(0);
 	let smoothing: Msg | null = null;
 	const active = $derived<Msg | null>(streamingMsg ?? streamingReasoning);
@@ -285,6 +334,21 @@
 		}
 		const i = text.lastIndexOf('\n\n');
 		return i < 0 ? 0 : i + 2;
+	}
+
+	// A user message's text split into runs of "> " quote lines (quoted
+	// passages, shown as quotes) and the text between.
+	function userBlocks(text: string): { text: string; quote: boolean }[] {
+		const out: { text: string; quote: boolean }[] = [];
+		for (const line of text.split('\n')) {
+			const quote = /^>( |$)/.test(line);
+			const last = out[out.length - 1];
+			const body = quote ? line.replace(/^> ?/, '') : line;
+			if (last?.quote === quote) last.text += `\n${body}`;
+			else out.push({ text: body, quote });
+		}
+		// The blank lines around a quote are its spacing, not text.
+		return out.map((b) => (b.quote ? b : { ...b, text: b.text.replace(/^\n+|\n+$/g, '') })).filter((b) => b.text);
 	}
 
 	// A user message's text with its [图片 #N] placeholders split out.
@@ -353,7 +417,9 @@
 	}
 </script>
 
-<div class="list" style:padding-top="{padTop}px" style:padding-bottom="{padBottom}px">
+<svelte:document onselectionchange={() => cite && window.getSelection()?.isCollapsed && (cite = null)} />
+
+<div class="list" bind:this={listEl} onmouseup={() => setTimeout(offerCite)} role="presentation" style:padding-top="{padTop}px" style:padding-bottom="{padBottom}px">
 	{#each windowRows as m, k (m)}
 		{@const i = range.first + k}
 		{#if shown(m)}
@@ -367,12 +433,13 @@
 				<button class="uedit" onclick={() => onEdit(m.text)} aria-label="quote" title={t('chat.quoteTitle')}><PencilSimpleIcon size={12} /></button>
 				<div class="ucol">
 					<!-- One line: the bubble is pre-wrap, so template whitespace would show. -->
-					<div class="bubble" class:pending={m.state === 'sending'}>{#if m.images?.length}<div class="uimgs">{#each m.images as p (p)}<img src={convertFileSrc(p)} alt="" />{/each}</div>{/if}{#each userSegments(m.text) as seg, j (j)}{#if seg.image}<span class="utoken">{t('chat.imageToken', { n: seg.image })}</span>{:else}{seg.text}{/if}{/each}</div>
+					<div class="bubble" class:pending={m.state === 'sending'}>{#if m.images?.length}<div class="uimgs">{#each m.images as p (p)}<img src={convertFileSrc(p)} alt="" />{/each}</div>{/if}{#each userBlocks(m.text) as block, b (b)}{#if block.quote}<span class="uquote">{block.text}</span>{:else}<span class="utext">{#each userSegments(block.text) as seg, j (j)}{#if seg.image}<span class="utoken">{t('chat.imageToken', { n: seg.image })}</span>{:else}{seg.text}{/if}{/each}</span>{/if}{/each}</div>
 					{#if m.state}
 						{#key m.state}
 							<div class="sendstate {m.state}" in:fade={{ duration: 160 }}>
 								{#if m.state === 'failed'}<WarningCircleIcon size={13} />{:else}<span class="sdot"></span>{/if}
 								<span>{t(`chat.send.${m.state}`)}</span>
+								{#if call && (m.state === 'connecting' || m.state === 'waiting')}<CallTimer since={call.since} />{/if}
 							</div>
 						{/key}
 					{/if}
@@ -388,8 +455,12 @@
 				{:else}
 					<Markdown text={m.text} {onFile} />
 					<div class="foot">
+						<!-- A turn of one segment: its time is the turn's. -->
+						{#if m.segMs !== undefined && (m.turn?.segments ?? 2) > 1}
+							<span class="stat mono" title={t('chat.stat.segment')}>{t('chat.stat.segShort', { t: fmtDur(m.segMs) })}</span>
+						{/if}
 						{#if m.turn}
-							{#each turnParts(m.turn) as part, j (j)}
+							{#each turnParts(m.turn, prefs.turnStats) as part, j (j)}
 								<span class="stat" class:mono={part.mono} title={part.title}>{part.text}</span>
 							{/each}
 						{:else if m.elapsed}
@@ -411,9 +482,13 @@
 				{#if !m.collapsed}
 					<div class="reason-body" transition:slide={{ duration: 180 }}>
 						{#if m === streamingReasoning}
-							{#each revealed(m).split('\n') as line, i (i)}
-								<div class="rline">{line || ' '}</div>
-							{/each}
+							<!-- Reasoning summaries are markdown (OpenAI's open with a
+							     **bold** title): completed blocks parse once, the short
+							     tail block re-parses as it grows. -->
+							{@const rt = revealed(m)}
+							{@const si = splitIdx(rt)}
+							{#if si > 0}<Markdown text={rt.slice(0, si)} />{/if}
+							<Markdown text={rt.slice(si)} />
 						{:else}
 							<Markdown text={m.text} {onFile} />
 						{/if}
@@ -454,10 +529,57 @@
 			</div>
 		{/if}
 	{/each}
-	<Indicator phase={shownPhase} tokens={compactionTokens} />
+	{#if retry}
+		<RetryNotice {retry} {backend} />
+	{:else}
+		<Indicator phase={shownPhase} tokens={compactionTokens} {call} />
+	{/if}
 </div>
+{#if cite}
+	{@const below = cite.top < 60}
+	<!-- mousedown would clear the selection before the click lands. -->
+	<button
+		class="cite"
+		class:below
+		style:left="{cite.x}px"
+		style:top="{below ? cite.bottom + 8 : cite.top - 8}px"
+		onmousedown={(e) => e.preventDefault()}
+		onclick={takeCite}
+	>
+		<QuotesIcon size={13} />{t('chat.cite')}
+	</button>
+{/if}
 
 <style>
+	.cite {
+		position: fixed;
+		z-index: 300;
+		transform: translate(-50%, -100%);
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 5px 10px;
+		border-radius: var(--r-sm);
+		border: 1px solid var(--border);
+		background: var(--panel);
+		box-shadow: var(--shadow-pop);
+		color: var(--text);
+		font-size: var(--fs-xs);
+		cursor: pointer;
+		animation: cite-in var(--t-fast) var(--ease-out);
+		transition: background var(--t-fast) var(--ease-out);
+	}
+	.cite.below {
+		transform: translateX(-50%);
+	}
+	.cite:hover {
+		background: var(--surface2);
+	}
+	@keyframes cite-in {
+		from {
+			opacity: 0;
+		}
+	}
 	.list {
 		display: flex;
 		flex-direction: column;
@@ -629,6 +751,32 @@
 		object-fit: cover;
 		display: block;
 	}
+	.uquote,
+	.utext {
+		display: block;
+	}
+	.uquote {
+		position: relative;
+		padding: 5px 10px 5px 29px;
+		border-radius: var(--r-md);
+		background: color-mix(in oklab, var(--text) 5%, transparent);
+		color: var(--dim);
+	}
+	.uquote::before {
+		content: '';
+		position: absolute;
+		left: 10px;
+		top: calc(5px + 0.8em - 6px);
+		width: 12px;
+		height: 12px;
+		background: var(--dim2);
+		mask: var(--quote-mask) center / contain no-repeat;
+	}
+	.uquote + .utext,
+	.utext + .uquote,
+	.uquote + .uquote {
+		margin-top: 8px;
+	}
 	.utoken {
 		padding: 0 5px;
 		border-radius: var(--r-xs);
@@ -780,19 +928,5 @@
 		font-size: var(--fs-sm);
 		line-height: 1.6;
 		word-break: break-word;
-	}
-	.rline {
-		white-space: pre-wrap;
-		animation: rline-in 0.26s ease both;
-	}
-	@keyframes rline-in {
-		from {
-			opacity: 0;
-			transform: translateY(4px);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
 	}
 </style>

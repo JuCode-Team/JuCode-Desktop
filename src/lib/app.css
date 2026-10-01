@@ -16,6 +16,9 @@
    Type scale: every font-size uses a --fs-* step. Radius: every corner uses a
    --r-* step. Colors come only from the tokens below. */
 :root {
+	/* Phosphor QuotesIcon (fill), as a mask for quote chips and blocks. */
+	--quote-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath d='M116,72v88a48.05,48.05,0,0,1-48,48,8,8,0,0,1,0-16,32,32,0,0,0,32-32v-8H40a16,16,0,0,1-16-16V72A16,16,0,0,1,40,56h60A16,16,0,0,1,116,72ZM216,56H156a16,16,0,0,0-16,16v64a16,16,0,0,0,16,16h60v8a32,32,0,0,1-32,32,8,8,0,0,0,0,16,48.05,48.05,0,0,0,48-48V72A16,16,0,0,0,216,56Z'/%3E%3C/svg%3E");
+
 	--brand: #8b5cf6;
 	--brand-bright: #a78bfa;
 
@@ -80,6 +83,10 @@
 	--shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.07);
 	--shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.07);
 	--scrim: rgba(0, 0, 0, 0.55);
+	/* Frosted dialog sheet (ui/Modal.svelte): a translucent fill over a blur
+	   of what is behind. Menus, pickers and toasts stay opaque. */
+	--glass-strong: color-mix(in oklab, var(--panel) 88%, transparent);
+	--glass-blur: blur(20px) saturate(150%);
 
 	/* Code editor syntax palette (CodeMirror highlight style reads these). */
 	--cm-keyword: #c4a7ff;
@@ -129,6 +136,7 @@
 	--shadow-pop: 0 10px 28px rgba(24, 24, 27, 0.12), 0 0 0 1px rgba(24, 24, 27, 0.07);
 	--shadow-modal: 0 20px 56px rgba(24, 24, 27, 0.18), 0 0 0 1px rgba(24, 24, 27, 0.07);
 	--scrim: rgba(24, 24, 27, 0.32);
+	--glass-strong: color-mix(in oklab, var(--panel) 88%, transparent);
 
 	--cm-keyword: #7c3aed;
 	--cm-string: #15803d;
@@ -211,16 +219,20 @@ body {
  * theme (theme.svelte.ts), so the frost is light under the light theme. --vibrancy-tint (sidebar) and
  * --vibrancy-chrome (rail and top-left strip) are those fills, tuned per theme. */
 :root[data-os='macos'],
-:root[data-os='macos'] body {
+:root[data-os='macos'] body,
+:root[data-vibrancy='on'],
+:root[data-vibrancy='on'] body {
 	background: transparent;
 }
+/* Windows uses the same fills over Mica / Acrylic (the window is transparent
+   there too, see tauri.windows.conf.json); Linux has no native frost. */
 :root[data-vibrancy='on'] {
-	--vibrancy-tint: color-mix(in oklab, var(--sidebar) 65%, transparent);
-	--vibrancy-chrome: color-mix(in oklab, var(--rail) 60%, transparent);
+	--vibrancy-tint: color-mix(in oklab, var(--sidebar) 36%, transparent);
+	--vibrancy-chrome: color-mix(in oklab, var(--rail) 32%, transparent);
 }
 [data-theme='light']:root[data-vibrancy='on'] {
-	--vibrancy-tint: color-mix(in oklab, var(--sidebar) 82%, transparent);
-	--vibrancy-chrome: color-mix(in oklab, var(--rail) 78%, transparent);
+	--vibrancy-tint: color-mix(in oklab, var(--sidebar) 56%, transparent);
+	--vibrancy-chrome: color-mix(in oklab, var(--rail) 50%, transparent);
 }
 
 ::-webkit-scrollbar {

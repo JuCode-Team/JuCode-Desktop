@@ -1,5 +1,7 @@
 // Lightweight user preferences (localStorage-backed, reactive). Kept separate
 // from engine/backend settings — these are pure UI choices.
+import { invoke } from '@tauri-apps/api/core';
+
 const KEY = 'jucode-prefs';
 
 type PrefsShape = {
@@ -7,12 +9,19 @@ type PrefsShape = {
 	 *  (rendered). When false it opens in the editor (source). Non-HTML files
 	 *  always open in the editor. */
 	htmlOpenInBrowser: boolean;
-	/** macOS only: frost the sidebar with the native window vibrancy. The native
-	 *  effect layer is always present but stays invisible unless this opts the CSS
-	 *  in (the root `data-vibrancy` flag), so toggling needs no window round-trip. */
+	/** Frost the sidebar and window chrome with the native window effect
+	 *  (macOS vibrancy, Windows Mica / Acrylic). The native layer is always
+	 *  present but stays invisible unless this opts the CSS in (the root
+	 *  `data-vibrancy` flag), so toggling needs no window round-trip. */
 	sidebarVibrancy: boolean;
 	/** Which per-turn figures the reply footer shows (see TurnStats). */
 	turnStats: TurnStatKey[];
+	/** Width in px of the conversation column (messages and composer), set by
+	 *  dragging its edge. */
+	chatWidth: number;
+	/** Offer to stop a running turn when one of its requests misses the
+	 *  prompt cache (see cacheMiss.ts). */
+	cacheMissAlert: boolean;
 };
 
 export const TURN_STAT_KEYS = ['elapsed', 'ttft', 'tokens', 'files', 'tools', 'cost', 'model'] as const;
@@ -21,7 +30,9 @@ export type TurnStatKey = (typeof TURN_STAT_KEYS)[number];
 const DEFAULTS: PrefsShape = {
 	htmlOpenInBrowser: true,
 	sidebarVibrancy: true,
-	turnStats: ['elapsed', 'tokens', 'files']
+	turnStats: ['elapsed', 'tokens', 'files'],
+	chatWidth: 844,
+	cacheMissAlert: true
 };
 
 function load(): PrefsShape {
@@ -47,16 +58,26 @@ export function applyPlatformClass() {
 	document.documentElement.dataset.os = os;
 }
 
-/** True on the macOS desktop app, where the native vibrancy layer exists. */
-export const vibrancySupported = () =>
-	typeof window !== 'undefined' &&
-	('__TAURI_INTERNALS__' in window || '__TAURI__' in window) &&
-	/Macintosh|Mac OS X/.test(navigator.userAgent);
+/** The window has a native frost behind it (the app reports which at
+ *  startup: `window_effect`); without one the translucent chrome would show
+ *  the bare desktop. */
+export const vibrancySupported = () => prefs.windowEffect !== null;
 
 class PrefsStore {
 	htmlOpenInBrowser = $state(DEFAULTS.htmlOpenInBrowser);
 	sidebarVibrancy = $state(DEFAULTS.sidebarVibrancy);
+	/** `vibrancy`, `mica` or `acrylic`; null where none applied (Linux, the
+	 *  browser, an unsupported Windows). */
+	windowEffect = $state<string | null>(
+		// The macOS app always has one: assume it for the first frame (no flash
+		// of an opaque sidebar); window_effect confirms it right after.
+		typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window && /Macintosh|Mac OS X/.test(navigator.userAgent)
+			? 'vibrancy'
+			: null
+	);
 	turnStats = $state<TurnStatKey[]>(DEFAULTS.turnStats);
+	chatWidth = $state(DEFAULTS.chatWidth);
+	cacheMissAlert = $state(DEFAULTS.cacheMissAlert);
 
 	init() {
 		const p = load();
@@ -65,7 +86,17 @@ class PrefsStore {
 		this.turnStats = Array.isArray(p.turnStats)
 			? p.turnStats.filter((k): k is TurnStatKey => (TURN_STAT_KEYS as readonly string[]).includes(k))
 			: DEFAULTS.turnStats;
+		this.chatWidth = Number.isFinite(p.chatWidth) ? p.chatWidth : DEFAULTS.chatWidth;
+		this.cacheMissAlert = p.cacheMissAlert !== false;
 		this.#applyVibrancy();
+		if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+			invoke<string | null>('window_effect')
+				.then((effect) => {
+					this.windowEffect = effect;
+					this.#applyVibrancy();
+				})
+				.catch(() => {});
+		}
 	}
 
 	#save() {
@@ -75,7 +106,9 @@ class PrefsStore {
 				JSON.stringify({
 					htmlOpenInBrowser: this.htmlOpenInBrowser,
 					sidebarVibrancy: this.sidebarVibrancy,
-					turnStats: this.turnStats
+					turnStats: this.turnStats,
+					chatWidth: this.chatWidth,
+					cacheMissAlert: this.cacheMissAlert
 				})
 			);
 		} catch {
@@ -93,6 +126,11 @@ class PrefsStore {
 		}
 	}
 
+	setChatWidth(v: number) {
+		this.chatWidth = Math.round(v);
+		this.#save();
+	}
+
 	setHtmlOpenInBrowser(v: boolean) {
 		this.htmlOpenInBrowser = v;
 		this.#save();
@@ -102,6 +140,11 @@ class PrefsStore {
 		const rest = this.turnStats.filter((k) => k !== key);
 		// Kept in TURN_STAT_KEYS order, the footer's order.
 		this.turnStats = on ? TURN_STAT_KEYS.filter((k) => k === key || rest.includes(k)) : rest;
+		this.#save();
+	}
+
+	setCacheMissAlert(v: boolean) {
+		this.cacheMissAlert = v;
 		this.#save();
 	}
 

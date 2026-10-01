@@ -14,6 +14,7 @@ import {
 } from './approval';
 import { t } from './i18n';
 import { costUsd } from './pricing';
+import { CacheWatch } from './cacheMiss';
 import { parseMcpServersEvent, type McpServerView } from './mcp';
 
 /** Where a sent message is before its reply starts: accepted locally, the
@@ -34,11 +35,31 @@ export interface TurnStats {
 	tools: number;
 	cost: number;
 	model: string;
+	/** Reply segments (assistant messages split by tool calls) in the turn. */
+	segments: number;
+}
+
+/** The model request in flight, for the live timer: which stage it is in and
+ *  when that stage began. `connect`: request sent, no response yet; `ttft`:
+ *  connected, waiting for the first token; `output`: tokens streaming. */
+export interface CallTiming {
+	phase: 'connect' | 'ttft' | 'output';
+	since: number;
 }
 
 export type Msg =
 	| { kind: 'user'; text: string; state?: SendState; images?: string[] }
-	| { kind: 'assistant'; text: string; tokens?: number; elapsed?: number; uuid?: string; turn?: TurnStats }
+	| {
+			kind: 'assistant';
+			text: string;
+			tokens?: number;
+			elapsed?: number;
+			/** This segment's own time: from the request that produced it until
+			 *  its tool call or the end of the turn, ms. */
+			segMs?: number;
+			uuid?: string;
+			turn?: TurnStats;
+	  }
 	| { kind: 'reasoning'; text: string; collapsed: boolean }
 	| { kind: 'tool'; callId: string; name: string; output: string; running: boolean; isError: boolean }
 	| { kind: 'system'; text: string }
@@ -133,6 +154,16 @@ export interface TurnDiff {
 }
 
 /** Reactive chat state projected from the engine's AgentEvent stream. */
+/** A failed model request being re-sent: attempt `attempt` of `max`, after
+ *  `delayMs` from `at` (ms), because of `reason` (the provider's error). */
+export interface RetryState {
+	attempt: number;
+	max: number;
+	reason: string;
+	delayMs: number;
+	at: number;
+}
+
 /** A session's title before the daemon names it. */
 export const UNTITLED = 'New session';
 
@@ -227,6 +258,9 @@ export class ChatState {
 	/** The last turn ended in an error (its message); cleared by the next one. */
 	lastError = $state<string | null>(null);
 	compactionTokens = $state(0);
+	/** The model request failed and is being re-sent (jucode engine); null
+	 *  once output flows again or the turn ends. */
+	retry = $state<RetryState | null>(null);
 	// Files the agent edited this session (drives the Changes panel).
 	changedFiles = $state<string[]>([]);
 	// Per user-turn file edits (path → added/removed line counts), keyed by the
@@ -274,12 +308,25 @@ export class ChatState {
 	resumeBroken = false;
 	/** Skip the next `transcript` replay (see its handler). */
 	keepNextTranscript = false;
+	/** A request of the running turn that missed the prompt cache. One-shot —
+	 *  consumed by the page, which offers to stop the turn. */
+	cacheMiss: { input: number; cached: number } | null = null;
+	#cacheWatch = new CacheWatch();
 	// Set while an intentional provider-switch restart is in flight, so the exit it
 	// causes isn't treated as a crash to auto-restart.
 	switching = false;
 
 	#assistantIdx = -1;
 	#reasoningIdx = -1;
+	/** The live per-request timer (see CallTiming); null between requests. */
+	call = $state<CallTiming | null>(null);
+	/** This session's total running time: the sum of its turns, ms. Kept per
+	 *  session in localStorage under `#runKey` (see bindRunKey). */
+	runMs = $state(0);
+	#runKey = '';
+	// When the request behind the current reply segment started.
+	#segStart: number | null = null;
+	#turnSegments = 0;
 	// Set once the engine reports an authoritative cost (jucode via context_usage).
 	// While false we estimate cost client-side from token usage × model pricing
 	// (claude/codex don't report cost).
@@ -335,8 +382,12 @@ export class ChatState {
 	#endTurn() {
 		this.#collapseReasoning();
 		if (this.#sending?.state !== 'failed') this.#setSend(null);
+		this.call = null;
 		if (this.#turnStart === null) return;
-		const elapsed = Date.now() - this.#turnStart;
+		const now = Date.now();
+		this.#closeSegment(now);
+		const elapsed = now - this.#turnStart;
+		this.#addRun(elapsed);
 		const edits = Object.values(this.turnEdits[this.userTurns - 1] ?? {});
 		const turn: TurnStats = {
 			elapsed,
@@ -348,11 +399,13 @@ export class ChatState {
 			removed: edits.reduce((n, e) => n + e.removed, 0),
 			tools: this.#turnTools,
 			cost: this.cost - this.#turnCostStart,
-			model: this.model
+			model: this.model,
+			segments: this.#turnSegments
 		};
 		this.#turnStart = null;
 		this.#firstOutput = null;
-		this.#turnIn = this.#turnOut = this.#turnTools = 0;
+		this.#turnIn = this.#turnOut = this.#turnTools = this.#turnSegments = 0;
+		this.#segStart = null;
 		for (let i = this.messages.length - 1; i >= 0; i--) {
 			const m = this.messages[i];
 			if (m.kind === 'assistant') {
@@ -383,16 +436,62 @@ export class ChatState {
 
 	/** The reply started streaming: the sent message has arrived. */
 	#outputStarted() {
-		if (this.#firstOutput === null && this.#turnStart !== null) this.#firstOutput = Date.now();
+		this.retry = null;
+		const now = Date.now();
+		if (this.#firstOutput === null && this.#turnStart !== null) this.#firstOutput = now;
+		if (this.call?.phase !== 'output') this.call = { phase: 'output', since: now };
 		this.#setSend(null);
+	}
+
+	/** A model request was sent. jucode then reports the connection
+	 *  (`thinking_start`); the other engines only the first token, so their
+	 *  wait counts as the time to it. */
+	#requestStarted() {
+		const now = Date.now();
+		this.#closeSegment(now);
+		this.#segStart = now;
+		this.call = { phase: this.backendId === 'jucode' ? 'connect' : 'ttft', since: now };
+	}
+
+	/** The open reply segment ends (its tool call, a new request, the turn's
+	 *  end): stamp its own time. Text after it starts a new segment. */
+	#closeSegment(now: number) {
+		const m = this.#assistantIdx >= 0 ? this.messages[this.#assistantIdx] : null;
+		if (m?.kind === 'assistant' && m.segMs === undefined && this.#segStart !== null) {
+			m.segMs = now - this.#segStart;
+			this.#turnSegments++;
+		}
+		this.#assistantIdx = -1;
+	}
+
+	/** Keys this chat's running total to its session and loads what it ran
+	 *  before (the transcript replay carries no timing). */
+	bindRunKey(key: string) {
+		this.#runKey = key;
+		try {
+			this.runMs = Number(localStorage.getItem(`jucode-run-ms:${key}`)) || 0;
+		} catch {
+			/* no localStorage (e.g. tests) */
+		}
+	}
+
+	#addRun(ms: number) {
+		this.runMs += ms;
+		if (!this.#runKey) return;
+		try {
+			localStorage.setItem(`jucode-run-ms:${this.#runKey}`, String(this.runMs));
+		} catch {
+			/* no localStorage (e.g. tests) */
+		}
 	}
 
 	/** A turn's timer and totals start (idempotent within the turn). */
 	#startTurn() {
 		if (this.#turnStart !== null) return;
 		this.#turnStart = Date.now();
+		this.#segStart = this.#turnStart;
 		this.#firstOutput = null;
-		this.#turnIn = this.#turnOut = this.#turnTools = 0;
+		this.#turnIn = this.#turnOut = this.#turnTools = this.#turnSegments = 0;
 		this.#turnCostStart = this.cost;
 		this.#lastTurn = null;
 	}
@@ -622,6 +721,7 @@ export class ChatState {
 				this.cwd = str(ev.cwd);
 				if (str(ev.session_id)) this.sessionId = str(ev.session_id);
 				this.contextWindow = num(ev.context_window);
+				this.#cacheWatch.reset();
 				// A fresh engine incarnation (first start, crash auto-restart or
 				// provider switch) announces its approval mode next — re-arm the
 				// startup sync so the desktop's persisted mode is pushed again.
@@ -648,6 +748,7 @@ export class ChatState {
 				break;
 			}
 			case 'model_status':
+				if (str(ev.model) !== this.model) this.#cacheWatch.reset();
 				this.provider = str(ev.provider);
 				this.model = str(ev.model);
 				this.modelLabel = str(ev.model_label);
@@ -706,6 +807,7 @@ export class ChatState {
 			case 'thinking_start':
 				// jucode: the gateway answered; the first token is on its way.
 				if (this.#sending?.state === 'connecting' || this.#sending?.state === 'sending') this.#setSend('waiting');
+				if (this.call) this.call = { phase: 'ttft', since: Date.now() };
 				break;
 			case 'reasoning_delta': {
 				this.#outputStarted();
@@ -720,6 +822,10 @@ export class ChatState {
 			case 'tool_start':
 				this.#outputStarted();
 				this.#turnTools++;
+				// The request is done; its tools run untimed. Text after them is a
+				// new segment, below the tool cards.
+				this.call = null;
+				this.#closeSegment(Date.now());
 				// One reasoning block per round: collapse this round's reasoning once
 				// its tool call appears, so the next round starts a fresh block.
 				this.#collapseReasoning();
@@ -746,6 +852,9 @@ export class ChatState {
 				break;
 			}
 			case 'tool_output': {
+				// Engines that do not announce each request (codex) start the next
+				// one once the tools are back.
+				this.#segStart = Date.now();
 				const t = this.#tool(str(ev.call_id));
 				if (t) {
 					t.output = str(ev.output);
@@ -915,7 +1024,14 @@ export class ChatState {
 				};
 				break;
 			case 'retrying':
-				this.messages.push({ kind: 'system', text: `reconnecting… (attempt ${num(ev.attempt)})` });
+				// Shown live at the end of the transcript (RetryNotice), not as a log line.
+				this.retry = {
+					attempt: num(ev.attempt),
+					max: num(ev.max_attempts),
+					reason: str(ev.reason),
+					delayMs: num(ev.delay_ms),
+					at: Date.now()
+				};
 				break;
 			case 'resume_failed':
 				// The engine couldn't resume the session id — restart fresh instead of
@@ -927,6 +1043,7 @@ export class ChatState {
 				break;
 			case 'compaction_end':
 				this.compactionTokens = 0;
+				this.#cacheWatch.reset();
 				this.messages.push({ kind: 'system', text: 'context compacted' });
 				break;
 			case 'compaction_failed':
@@ -955,6 +1072,11 @@ export class ChatState {
 			case 'usage': {
 				const out = num(ev.output_tokens);
 				const inn = num(ev.input_tokens);
+				// Engines without cache figures (acp) leave the field out.
+				if (typeof ev.cached_input_tokens === 'number') {
+					const cached = ev.cached_input_tokens;
+					if (this.#cacheWatch.check(inn, cached) && this.busy) this.cacheMiss = { input: inn, cached };
+				}
 				this.totalIn += inn;
 				this.totalOut += out;
 				// Estimate cost from tokens when the engine doesn't report it itself.
@@ -1016,6 +1138,7 @@ export class ChatState {
 			case 'connecting':
 				this.engineState = 'connecting';
 				this.#startTurn();
+				this.#requestStarted();
 				if (this.#sending?.state === 'sending') this.#setSend('connecting');
 				break;
 			case 'compaction_start':
@@ -1037,6 +1160,7 @@ export class ChatState {
 					this.daemonRetries = 0;
 				}
 				if (!this.busy) {
+					this.retry = null;
 					this.#endTurn();
 					this.#resetCurrent();
 					this.pendingApproval = null;
@@ -1070,6 +1194,7 @@ export class ChatState {
 				});
 				break;
 			case 'error': {
+				this.retry = null;
 				const last = this.messages[this.messages.length - 1];
 				this.lastError = str(ev.message);
 				this.pendingApproval = null;

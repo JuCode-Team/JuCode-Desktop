@@ -14,7 +14,6 @@
 	import PlugsIcon from 'phosphor-svelte/lib/PlugsIcon';
 	import BrainIcon from 'phosphor-svelte/lib/BrainIcon';
 	import GlobeIcon from 'phosphor-svelte/lib/GlobeIcon';
-	import PuzzlePieceIcon from 'phosphor-svelte/lib/PuzzlePieceIcon';
 	import HardDrivesIcon from 'phosphor-svelte/lib/HardDrivesIcon';
 	import StorefrontIcon from 'phosphor-svelte/lib/StorefrontIcon';
 	import RobotIcon from 'phosphor-svelte/lib/RobotIcon';
@@ -26,6 +25,7 @@
 	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
 	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
 	import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon';
+	import CopyIcon from 'phosphor-svelte/lib/CopyIcon';
 	import {
 		readConfig,
 		writeConfig,
@@ -41,13 +41,13 @@
 	import { dispatch } from '$lib/backends/router';
 	import { caps } from '$lib/backends';
 	import { prefs, TURN_STAT_KEYS, vibrancySupported } from '$lib/prefs.svelte';
+	import { turnParts } from '$lib/turnStats';
 	import { themeState, setTheme, type ThemePref } from '$lib/theme.svelte';
-	import type { ChatState } from '$lib/chat.svelte';
+	import type { ChatState, TurnStats } from '$lib/chat.svelte';
 	import { modelSetup } from '$lib/modelSetupState.svelte';
 	import { loginErrorSince } from '$lib/loginWatch';
 	import { t, setLocale, getLocale, LOCALES, LOCALE_LABELS } from '$lib/i18n';
 	import { ASR_PROVIDERS, asrProvider, resolveAsrSettings, type AsrSettings } from '$lib/audio';
-	import { PLUGINS, loadPluginSettings, setPluginEnabled } from '$lib/plugins/registry';
 	import { PROVIDER_CATALOG, providerFormPrefill, type CatalogProvider } from '$lib/providers/catalog';
 	import Vendor from '$lib/Vendor.svelte';
 	import AccountPanel from '$lib/AccountPanel.svelte';
@@ -107,7 +107,6 @@
 		providers: PlugsIcon,
 		models: BrainIcon,
 		network: GlobeIcon,
-		plugins: PuzzlePieceIcon,
 		mcp: HardDrivesIcon,
 		market: StorefrontIcon,
 		agents: RobotIcon,
@@ -116,6 +115,22 @@
 		updates: InfoIcon
 	};
 	const current = $derived(resolveSection(section));
+
+	// Made-up turn for the reply-stats preview, so every figure has a value.
+	const SAMPLE_TURN: TurnStats = {
+		elapsed: 48300,
+		ttft: 1200,
+		segments: 2,
+		inTokens: 18400,
+		outTokens: 2100,
+		files: 3,
+		added: 42,
+		removed: 7,
+		tools: 6,
+		cost: 0.084,
+		model: 'claude-sonnet-5-5'
+	};
+	const previewParts = $derived(turnParts(SAMPLE_TURN, prefs.turnStats));
 
 	// ---------- search ----------
 	let query = $state('');
@@ -180,7 +195,6 @@
 	let custom = $state<Provider[]>([]);
 	let asr = $state<AsrSettings>(resolveAsrSettings(null));
 	let asrKey = $state('');
-	let pluginSettings = $state(loadPluginSettings());
 
 	// inline editor state
 	// A provider id (its card open), or a step of the add dialog: '__catalog__'
@@ -494,7 +508,7 @@
 		toggleEdit(p.id);
 	}
 
-	// ---------- voice + plugins ----------
+	// ---------- voice ----------
 	// ASR keys are separate from chat-provider keys, except the historical MiMo
 	// key which stays at providers.mimo for backward compatibility.
 	const selectedAsr = $derived(asrProvider(asr.provider));
@@ -509,10 +523,6 @@
 		await setAuthKey(selectedAsr.authKey, asrKey.trim());
 		keyed = await readAuthProviders();
 		asrKey = '';
-	}
-	function togglePlugin(id: string, enabled: boolean) {
-		pluginSettings = { ...pluginSettings, [id]: enabled };
-		setPluginEnabled(id, enabled);
 	}
 </script>
 
@@ -592,7 +602,20 @@
 						{/if}
 					</SettingsSection>
 					<SettingsSection title={t('settings.page.conversation')}>
-						<SettingsRow id="turn-stats" title={t('settings.behavior.turnStats')} description={t('settings.behavior.turnStatsHint')}>
+						<SettingsRow id="turn-stats" title={t('settings.behavior.turnStats')} description={t('settings.behavior.turnStatsHint')} stacked>
+							<div class="stat-preview" aria-label={t('settings.behavior.turnStatsPreview')}>
+								<span class="sp-label">{t('settings.behavior.turnStatsPreview')}</span>
+								<div class="sp-line"></div>
+								<div class="sp-line short"></div>
+								<div class="sp-foot">
+									{#each previewParts as part, j (j)}
+										<span class="sp-stat" class:sp-mono={part.mono} title={part.title}>{part.text}</span>
+									{:else}
+										<span class="sp-none">{t('settings.behavior.turnStatsNone')}</span>
+									{/each}
+									<span class="sp-copy"><CopyIcon size={13} /> {t('common.copy')}</span>
+								</div>
+							</div>
 							<div class="stat-picks">
 								{#each TURN_STAT_KEYS as key (key)}
 									<Checkbox checked={prefs.turnStats.includes(key)} onchange={(on) => prefs.setTurnStat(key, on)}>
@@ -600,6 +623,9 @@
 									</Checkbox>
 								{/each}
 							</div>
+						</SettingsRow>
+						<SettingsRow id="cache-miss" title={t('settings.behavior.cacheMissAlert')} description={t('settings.behavior.cacheMissAlertHint')}>
+							<Switch checked={prefs.cacheMissAlert} label={t('settings.behavior.cacheMissAlert')} onChange={(on) => prefs.setCacheMissAlert(on)} />
 						</SettingsRow>
 					</SettingsSection>
 					<SettingsSection title={t('settings.page.files')}>
@@ -810,17 +836,6 @@
 							<span class="unit">{t('settings.behavior.seconds')}</span>
 						</SettingsRow>
 					</SettingsSection>
-				{:else if current === 'plugins'}
-					<SettingsSection id="plugins" title={t('settings.plugins.groupLabel')} description={t('settings.plugins.hint')}>
-						{#each PLUGINS as plugin (plugin.id)}
-							<SettingsRow
-								title={plugin.name}
-								description={t('settings.plugins.commands', { commands: plugin.commands.join(', ') }) + (plugin.bin ? ` · ${t('settings.plugins.binary', { bin: plugin.bin })}` : '')}
-							>
-								<Switch checked={pluginSettings[plugin.id] === true} label={plugin.name} onChange={(enabled) => togglePlugin(plugin.id, enabled)} />
-							</SettingsRow>
-						{/each}
-					</SettingsSection>
 				{:else if current === 'mcp'}
 					<!-- The JuCode CLI's servers; only a JuCode session can apply edits live. -->
 					<McpSection {sessionId} chat={caps(chat).mcpManage ? chat : undefined} />
@@ -832,7 +847,7 @@
 					</SettingsSection>
 				{:else if current === 'agents'}
 					<BackendSection />
-					<div class="deps" id="set-dependencies"><Dependencies ids={['node', 'ffmpeg']} /></div>
+					<div class="deps" id="set-dependencies"><Dependencies ids={['node', 'ffmpeg', 'git', 'gh']} /></div>
 				{:else if current === 'acp'}
 					<AcpSection />
 				{:else if current === 'daemon'}
@@ -860,12 +875,66 @@
 </div>
 
 <style>
-	.stat-picks {
+	.stat-preview {
+		position: relative;
+		padding: 16px 18px 14px;
+		border: 1px solid var(--hairline);
+		border-radius: var(--r-lg);
+		background: var(--surface);
+	}
+	.sp-label {
+		position: absolute;
+		top: 10px;
+		right: 14px;
+		font-size: var(--fs-2xs);
+		color: var(--dim2);
+	}
+	.sp-line {
+		height: 8px;
+		width: 72%;
+		margin-bottom: 8px;
+		border-radius: var(--r-full);
+		background: var(--surface2);
+	}
+	.sp-line.short {
+		width: 46%;
+	}
+	/* Mirrors the reply footer in MessageList. */
+	.sp-foot {
 		display: flex;
 		flex-wrap: wrap;
-		justify-content: flex-end;
-		gap: 8px 16px;
-		max-width: 360px;
+		align-items: center;
+		gap: 6px 12px;
+		min-height: 20px;
+		margin-top: 12px;
+		font-size: var(--fs-2xs);
+		color: var(--dim2);
+	}
+	.sp-stat + .sp-stat::before {
+		content: '·';
+		margin-right: 10px;
+		opacity: 0.6;
+	}
+	.sp-stat + .sp-stat {
+		margin-left: -2px;
+	}
+	.sp-mono {
+		font-family: var(--font-mono);
+	}
+	.sp-none {
+		font-style: italic;
+	}
+	.sp-copy {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		padding: 2px 6px;
+	}
+	.stat-picks {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+		gap: 12px 24px;
+		margin-top: 14px;
 	}
 
 	/* Covers the content panel; the rail and title bar stay around it. */

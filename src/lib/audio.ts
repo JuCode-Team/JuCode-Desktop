@@ -132,19 +132,97 @@ export function toBase64(bytes: Uint8Array): string {
 	return btoa(bin);
 }
 
+/** Root-mean-square level of one capture block. */
+function rms(block: Float32Array): number {
+	let sum = 0;
+	for (let i = 0; i < block.length; i++) sum += block[i] * block[i];
+	return block.length ? Math.sqrt(sum / block.length) : 0;
+}
+
+/** Blocks quieter than this never count as speech, whatever the segment's level. */
+const MIN_SPEECH_RMS = 0.003;
+/** A block is a pause when it falls below this fraction of the segment's loudest block. */
+const PAUSE_RATIO = 0.15;
+
 /**
- * One-shot microphone recorder: start() → speak → stop() returns base64 WAV.
- * Capture uses a zero-gain ScriptProcessor tap (destination connection is
- * required for processing to run; the gain node keeps the mic out of the
- * speakers).
+ * Splits a live capture into utterances at pauses, so each one can be
+ * transcribed while the user keeps talking. Thresholds are relative to the
+ * segment's own loudest block because capture level varies a lot between
+ * webviews. A segment is cut after a long pause, after a shorter one once it
+ * runs long, and hard at `maxSeconds`; one with too little speech (a click, a
+ * cough) is dropped rather than sent to a model that would hallucinate filler.
+ */
+export class Segmenter {
+	private chunks: Float32Array[] = [];
+	private length = 0;
+	private loudest = 0;
+	private speech = 0;
+	private pause = 0;
+
+	constructor(
+		private rate: number,
+		private opts = { pause: 0.8, longPause: 0.3, longAfter: 12, maxSeconds: 30, minSpeech: 0.3, preroll: 0.3 }
+	) {}
+
+	/** Feeds one block; returns a finished segment when this block ends one. */
+	push(block: Float32Array): Float32Array | null {
+		const level = rms(block);
+		const speaking = level >= MIN_SPEECH_RMS && level >= this.loudest * PAUSE_RATIO;
+		this.chunks.push(block);
+		this.length += block.length;
+		if (speaking) {
+			this.loudest = Math.max(this.loudest, level);
+			this.speech += block.length;
+			this.pause = 0;
+		} else if (!this.loudest) {
+			// No speech yet: keep only a short pre-roll so the first syllable isn't clipped.
+			while (this.chunks.length > 1 && this.length - this.chunks[0].length >= this.opts.preroll * this.rate) {
+				this.length -= this.chunks.shift()!.length;
+			}
+			return null;
+		} else {
+			this.pause += block.length;
+		}
+		const seconds = this.length / this.rate;
+		const pause = this.pause / this.rate;
+		if (pause >= this.opts.pause || (seconds >= this.opts.longAfter && pause >= this.opts.longPause) || seconds >= this.opts.maxSeconds) {
+			return this.flush();
+		}
+		return null;
+	}
+
+	/** Ends the current segment; null when it holds too little speech. */
+	flush(): Float32Array | null {
+		const keep = this.speech >= this.opts.minSpeech * this.rate;
+		const pcm = new Float32Array(this.length);
+		let off = 0;
+		for (const c of this.chunks) {
+			pcm.set(c, off);
+			off += c.length;
+		}
+		this.chunks = [];
+		this.length = this.loudest = this.speech = this.pause = 0;
+		return keep ? pcm : null;
+	}
+}
+
+/**
+ * Microphone recorder that hands each utterance to `onSegment` as base64 WAV
+ * while recording continues; stop() flushes the last one. Capture uses a
+ * zero-gain ScriptProcessor tap (destination connection is required for
+ * processing to run; the gain node keeps the mic out of the speakers).
+ * `analyser` exposes the live signal for a waveform.
  */
 export class VoiceRecorder {
 	private ctx: AudioContext | null = null;
 	private stream: MediaStream | null = null;
-	private chunks: Float32Array[] = [];
+	private segmenter: Segmenter | null = null;
 	private rate = 48000;
+	analyser: AnalyserNode | null = null;
 	/** Input device label, for diagnostics. */
 	label = '';
+
+	constructor(private onSegment: (base64: string) => void) {}
 
 	async start(): Promise<void> {
 		// Ask for AGC/noise suppression explicitly — WKWebView doesn't reliably
@@ -158,9 +236,14 @@ export class VoiceRecorder {
 		// the ScriptProcessor never fires and we'd record nothing.
 		await this.ctx.resume().catch(() => {});
 		this.rate = this.ctx.sampleRate;
+		const segmenter = new Segmenter(this.rate);
+		this.segmenter = segmenter;
 		const source = this.ctx.createMediaStreamSource(this.stream);
+		this.analyser = this.ctx.createAnalyser();
+		this.analyser.fftSize = 1024;
+		source.connect(this.analyser);
 		const tap = this.ctx.createScriptProcessor(4096, 1, 1);
-		tap.onaudioprocess = (e) => this.chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+		tap.onaudioprocess = (e) => this.emit(segmenter.push(new Float32Array(e.inputBuffer.getChannelData(0))));
 		const mute = this.ctx.createGain();
 		mute.gain.value = 0;
 		source.connect(tap);
@@ -168,33 +251,21 @@ export class VoiceRecorder {
 		mute.connect(this.ctx.destination);
 	}
 
-	/**
-	 * Stops capture, releases the mic, and returns the encoded audio plus the
-	 * pre-normalization peak amplitude (0–1) — a peak near 0 means the OS handed
-	 * us silence (mic permission/device problem) and the clip isn't worth sending.
-	 */
-	stop(): { base64: string; seconds: number; peak: number } {
+	/** Stops capture, releases the mic, and emits the final segment. */
+	stop(): void {
 		this.stream?.getTracks().forEach((t) => t.stop());
 		this.ctx?.close().catch(() => {});
-		const total = this.chunks.reduce((n, c) => n + c.length, 0);
-		const pcm = new Float32Array(total);
-		let off = 0;
-		for (const c of this.chunks) {
-			pcm.set(c, off);
-			off += c.length;
-		}
-		this.chunks = [];
+		this.emit(this.segmenter?.flush() ?? null);
 		this.ctx = null;
 		this.stream = null;
+		this.segmenter = null;
+		this.analyser = null;
+	}
+
+	private emit(pcm: Float32Array | null): void {
+		if (!pcm) return;
 		let peak = 0;
-		for (let i = 0; i < pcm.length; i++) {
-			const a = Math.abs(pcm[i]);
-			if (a > peak) peak = a;
-		}
-		return {
-			base64: toBase64(encodeWav(normalize(downsample(pcm, this.rate), peak))),
-			seconds: total / this.rate,
-			peak
-		};
+		for (let i = 0; i < pcm.length; i++) peak = Math.max(peak, Math.abs(pcm[i]));
+		this.onSegment(toBase64(encodeWav(normalize(downsample(pcm, this.rate), peak))));
 	}
 }

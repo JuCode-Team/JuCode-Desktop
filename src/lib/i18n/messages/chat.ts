@@ -35,6 +35,8 @@ const chat = {
 		voiceStopTitle: '停止录音并转写',
 		voiceBusyTitle: '转写中…',
 		voiceMicError: '无法访问麦克风：{error}',
+		agentSession: '{name} 的会话',
+		agentOnDesk: '在工作台查看',
 		videoMeta: '{s} 秒 · {n} 帧',
 		webRefTitle: '网页元素引用',
 		switchModel: '切换模型',
@@ -53,6 +55,8 @@ const chat = {
 			elapsed: '本轮总耗时',
 			ttft: '首个输出的等待时间',
 			ttftShort: '首字 {t}',
+			segment: '本段回复用时：从发出请求到它调用工具或本轮结束',
+			segShort: '本段 {t}',
 			tokens: '输入 / 输出 Token',
 			files: '本轮修改的文件（新增 / 删除行）',
 			filesShort: '{n} 个文件 +{a} −{r}',
@@ -67,6 +71,8 @@ const chat = {
 		groupSession: '本会话分组',
 		provider: '提供商',
 		providerLocal: '本机',
+		windowUnset: '未设置窗口',
+		manageModels: '管理模型',
 		providerLocalDesc: '用这台电脑上 {tool} 的登录或配置',
 		providerAuto: 'JuCode 自动',
 		quota: {
@@ -96,6 +102,14 @@ const chat = {
 		statusTitle: '状态',
 		approvalModeTitle: '工具审批模式',
 		gitBranch: '当前 git 分支',
+		branchMenu: {
+			title: '分支',
+			search: '搜索 {repo} 的分支',
+			none: '没有匹配的分支',
+			create: '新建并切换到分支…',
+			createNamed: '新建并切换到 {name}',
+			busy: 'AI 运行中，结束后才能切换分支'
+		},
 		tuiContinue: '在 TUI 中继续',
 		tuiContinueTitle: '关闭 GUI 引擎，在原生 TUI 中恢复此会话',
 		tuiContinueUnavailable: '发送第一条消息后可在 TUI 中继续',
@@ -103,6 +117,9 @@ const chat = {
 		toCompaction: '{pct}% · 到压缩点',
 		contextUsed: '{pct}% · 上下文占用',
 		sessionUsage: '本会话用量',
+		sessionIn: '输入',
+		sessionRun: '运行时间',
+		sessionOut: '输出',
 		cost: '成本',
 		stopTitle: '停止',
 		sendTitle: '发送',
@@ -117,6 +134,16 @@ const chat = {
 		toolGroup: '调用了 {n} 个工具',
 		imageToken: '图片 #{n}',
 		toolGroupFailed: '{n} 个失败',
+		turnRail: '对话导航',
+		cite: '引用',
+		resizeColumn: '拖动调整对话宽度',
+		retry: {
+			title: '请求失败，正在重试',
+			attempt: '第 {n} / {max} 次',
+			in: '{s} 秒后重试',
+			now: '正在重新连接…',
+			reason: '原因'
+		},
 		err: {
 			raw: '原始信息',
 			hideRaw: '收起',
@@ -164,6 +191,7 @@ const chat = {
 		// Indicator
 		phaseConnecting: '连接中',
 		phaseWaiting: '等待响应',
+		phaseFirstToken: '等待首字',
 		phaseGenerating: '生成中',
 		phaseTool: '执行工具',
 		phaseCompacting: '压缩上下文'
@@ -202,6 +230,8 @@ const chat = {
 		voiceStopTitle: 'Stop recording and transcribe',
 		voiceBusyTitle: 'Transcribing…',
 		voiceMicError: 'Cannot access the microphone: {error}',
+		agentSession: "{name}'s session",
+		agentOnDesk: 'Show in the workbench',
 		videoMeta: '{s}s · {n} frames',
 		webRefTitle: 'Web element reference',
 		switchModel: 'Switch model',
@@ -220,6 +250,8 @@ const chat = {
 			elapsed: 'Total time of this turn',
 			ttft: 'Wait for the first output',
 			ttftShort: 'first token {t}',
+			segment: 'Time of this reply segment: from its request to its tool call or the end of the turn',
+			segShort: 'segment {t}',
 			tokens: 'Input / output tokens',
 			files: 'Files changed this turn (added / removed lines)',
 			filesShort: '{n} files +{a} −{r}',
@@ -234,6 +266,8 @@ const chat = {
 		groupSession: 'Session group',
 		provider: 'Provider',
 		providerLocal: 'This machine',
+		windowUnset: 'Window not set',
+		manageModels: 'Manage models',
 		providerLocalDesc: 'The login or config of {tool} on this computer',
 		providerAuto: 'JuCode auto',
 		quota: {
@@ -263,6 +297,14 @@ const chat = {
 		statusTitle: 'Status',
 		approvalModeTitle: 'Tool approval mode',
 		gitBranch: 'Current git branch',
+		branchMenu: {
+			title: 'Branches',
+			search: 'Search {repo} branches',
+			none: 'No matching branches',
+			create: 'Create and check out a new branch…',
+			createNamed: 'Create and check out {name}',
+			busy: 'The AI is working; switch branches when it finishes'
+		},
 		tuiContinue: 'Continue in TUI',
 		tuiContinueTitle: 'Close the GUI engine and resume this session in the native TUI',
 		tuiContinueUnavailable: 'Send the first message before continuing in TUI',
@@ -270,6 +312,9 @@ const chat = {
 		toCompaction: '{pct}% · to compaction',
 		contextUsed: '{pct}% · context used',
 		sessionUsage: 'This session',
+		sessionIn: 'Input',
+		sessionRun: 'Run time',
+		sessionOut: 'Output',
 		cost: 'Cost',
 		stopTitle: 'Stop',
 		sendTitle: 'Send',
@@ -284,6 +329,16 @@ const chat = {
 		toolGroup: 'Used {n} tools',
 		imageToken: 'Image #{n}',
 		toolGroupFailed: '{n} failed',
+		turnRail: 'Conversation turns',
+		cite: 'Quote',
+		resizeColumn: 'Drag to resize the conversation',
+		retry: {
+			title: 'Request failed, retrying',
+			attempt: 'attempt {n} of {max}',
+			in: 'retrying in {s}s',
+			now: 'reconnecting…',
+			reason: 'Reason'
+		},
 		err: {
 			raw: 'Raw message',
 			hideRaw: 'Hide',
@@ -331,6 +386,7 @@ const chat = {
 		// Indicator
 		phaseConnecting: 'Connecting',
 		phaseWaiting: 'Awaiting response',
+		phaseFirstToken: 'Waiting for the first token',
 		phaseGenerating: 'Generating',
 		phaseTool: 'Running tool',
 		phaseCompacting: 'Compacting context'

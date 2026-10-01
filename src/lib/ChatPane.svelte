@@ -26,6 +26,8 @@
 </script>
 
 <script lang="ts">
+	import AgentAvatar from '$lib/AgentAvatar.svelte';
+	import { agentDirectory } from '$lib/agents.svelte';
 	import { onDestroy, onMount, tick, untrack } from 'svelte';
 	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
@@ -55,6 +57,7 @@
 	import { editorStore } from '$lib/editor/editorStore.svelte';
 	import Composer from '$lib/Composer.svelte';
 	import MessageList from '$lib/MessageList.svelte';
+	import TurnRail from '$lib/TurnRail.svelte';
 	import StatusStrip from '$lib/composer/StatusStrip.svelte';
 	import ApprovalCard from '$lib/ApprovalCard.svelte';
 	import RateLimitBanner from '$lib/RateLimitBanner.svelte';
@@ -79,7 +82,8 @@
 		isActive = false,
 		onRegister,
 		onUnregister,
-		onOpenSettings
+		onOpenSettings,
+		onOpenAgent
 	}: {
 		session: Session;
 		store: SessionStore;
@@ -93,9 +97,13 @@
 		/** Passes the api back so a remount (tile drag) can't drop the fresh one. */
 		onUnregister?: (id: string, api: ChatPaneApi) => void;
 		onOpenSettings?: (section: SectionKey) => void;
+		/** Show an agent on the workbench. */
+		onOpenAgent?: (agent: string) => void;
 	} = $props();
 
 	const chat = $derived(session.chat);
+	/** The long-lived agent this session belongs to. */
+	const owner = $derived(chat.agent ? agentDirectory.agents.find((a) => a.id === chat.agent) : undefined);
 	const project = $derived(store.projects.find((p) => p.sessions.some((s) => s.id === session.id)));
 
 	let input = $state('');
@@ -110,6 +118,9 @@
 	type PickedRef = WebRef & { id: number };
 	let webRefs = $state<PickedRef[]>([]);
 	let refSeq = 0;
+	// Passages quoted from replies: a chip in the composer, the quote on send.
+	let quotes: { id: number; text: string }[] = [];
+	let quoteSeq = 0;
 	// Images sit in the text as [图片 #N] tokens where they were added; on submit
 	// the images whose token is still there are sent, in token order.
 	let images = $state<{ n: number; path: string }[]>([]);
@@ -119,6 +130,45 @@
 	let composerRef = $state<{ insertToken: (t: string) => void; openModelMenu: () => void } | undefined>();
 	let bottomH = $state(120);
 	let atBottom = $state(true);
+	let messageList = $state<MessageList | null>(null);
+	let mark = $state(-1);
+	const marks = $derived(chat.messages.flatMap((m) => (m.kind === 'user' ? [m.text] : [])));
+
+	// The conversation column's width: dragging either edge resizes it about
+	// the centre; the width is kept once the drag ends.
+	// Narrow enough to read, wide enough for the composer's bar on one line.
+	const CHAT_MIN = 640;
+	const EDGE = 10; // px from the text to the drag strip's centre
+	let wrapW = $state(0);
+	let dragW = $state<number | null>(null);
+	let hot = $state<{ edge: string; y: number } | null>(null);
+	const chatW = $derived(Math.max(CHAT_MIN, dragW ?? prefs.chatWidth));
+	// The least room beside the column (more with the rail at the left edge),
+	// and the room it has: main's padding-inline.
+	const chatPad = $derived(marks.length > 1 ? 56 : 32);
+	const pad = $derived(Math.max(chatPad, (wrapW - chatW) / 2));
+	function startResize(e: PointerEvent) {
+		e.preventDefault();
+		const el = e.currentTarget as HTMLElement;
+		const box = el.parentElement!.getBoundingClientRect();
+		const centre = box.left + box.width / 2;
+		el.setPointerCapture(e.pointerId);
+		const move = (ev: PointerEvent) => {
+			dragW = Math.max(CHAT_MIN, Math.min(box.width - 2 * chatPad, 2 * (Math.abs(ev.clientX - centre) - EDGE)));
+		};
+		const end = () => {
+			if (dragW !== null) prefs.setChatWidth(dragW);
+			dragW = null;
+			el.removeEventListener('pointermove', move);
+		};
+		el.addEventListener('pointermove', move);
+		el.addEventListener('pointerup', end, { once: true });
+		el.addEventListener('pointercancel', end, { once: true });
+	}
+	function trackEdge(edge: string, e: PointerEvent) {
+		const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+		hot = { edge, y: e.clientY - box.top };
+	}
 
 	// In-conversation find (⌘F). The raw input updates per keystroke; the actual
 	// scan (findHits) keys off the debounced `findQuery` so the O(n) message scan
@@ -239,7 +289,7 @@
 				type: 'resume_view',
 				items: sessions.map((s) => ({
 					id: s.session,
-					label: s.title || s.session.slice(0, 8),
+					label: s.title || t('shell.untitled'),
 					detail: new Date(s.updated_at).toLocaleString(),
 					active: s.session === c.sessionId
 				}))
@@ -397,7 +447,8 @@
 				byok: t('shell.modelGroup.byok')
 			},
 			toolMode,
-			localLabel: t('chat.providerLocal')
+			localLabel: t('chat.providerLocal'),
+			unsetWindow: t('chat.windowUnset')
 		});
 	});
 
@@ -572,6 +623,15 @@
 				const re = new RegExp(`\\[网页元素#${ref.id}(?::[^\\]]*)?\\]`, 'g');
 				if (re.test(content)) content = content.replace(re, `\n\n${formatWebRef(ref)}\n`);
 			}
+			// Each quote token becomes the passage as a markdown quote.
+			for (const q of quotes) {
+				const re = new RegExp(`\\[引用#${q.id}(?::[^\\]]*)?\\]`, 'g');
+				const block = q.text
+					.split('\n')
+					.map((line) => `> ${line}`.trimEnd())
+					.join('\n');
+				content = content.replace(re, () => `\n\n${block}\n\n`);
+			}
 			content = content.replace(/\n{3,}/g, '\n\n').trim();
 			if (files.length)
 				content += `${content ? '\n\n' : ''}Attached files (read these):\n${files.join('\n')}`;
@@ -592,6 +652,7 @@
 		attachments = [];
 		videos = [];
 		webRefs = [];
+		quotes = [];
 		images = [];
 		imageSeq = 0;
 	}
@@ -767,6 +828,15 @@
 		input = text;
 		composerEl?.focus();
 	}
+	// A quoted passage drops in at the caret as a chip naming its opening words.
+	function citeText(text: string) {
+		const id = ++quoteSeq;
+		quotes.push({ id, text });
+		const words = text.replace(/[\]\s]+/g, ' ').trim();
+		const token = `[引用#${id}:${words.length > 24 ? `${words.slice(0, 24)}…` : words}]`;
+		if (composerRef) composerRef.insertToken(token);
+		else input = input && !/\s$/.test(input) ? `${input} ${token} ` : `${input}${token} `;
+	}
 	function openFind() {
 		showFind = true;
 		tick().then(() => findInputEl?.focus());
@@ -897,7 +967,15 @@
 
 <svelte:window onkeydown={onWindowKey} onfocus={refreshGitBranch} />
 
-<div class="chatpane">
+<div class="chatpane" style:--chat-w="{chatW}px" style:--chat-pad="{chatPad}px">
+	{#if owner}
+		<div class="owner">
+			<AgentAvatar agent={owner} size={16} />
+			<span class="owner-name">{t('chat.agentSession', { name: owner.name })}</span>
+			{#if owner.summary}<span class="owner-role">{owner.summary}</span>{/if}
+			{#if onOpenAgent}<button class="owner-link" onclick={() => onOpenAgent(owner.id)}>{t('chat.agentOnDesk')}</button>{/if}
+		</div>
+	{/if}
 	{#if Object.keys(chat.subagents).length}
 		<div class="agents">
 			{#each Object.entries(chat.subagents) as [path, info] (path)}
@@ -920,9 +998,10 @@
 		/>
 	{/if}
 
+	<div class="mainwrap" class:resizing={dragW !== null} bind:clientWidth={wrapW}>
 	<main bind:this={scroller} onscroll={onScroll}>
 		<div bind:this={contentEl}>
-			<MessageList messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} compactionTokens={chat.compactionTokens} {findActive} {scroller} onEdit={editMessage} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} />
+			<MessageList bind:this={messageList} bind:mark messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} />
 		</div>
 		{#if chat.booting && chat.engineState !== 'exited'}
 			<div class="welcome spawning">
@@ -941,6 +1020,25 @@
 			</div>
 		{/if}
 	</main>
+	{#if marks.length > 1}
+		<TurnRail {marks} current={mark} onJump={(n) => messageList?.jumpToMark(n)} />
+	{/if}
+	{#each ['left', 'right'] as edge (edge)}
+		<div
+				class="edge"
+				class:active={dragW !== null}
+				style:left={edge === 'left' ? `${pad - EDGE}px` : `${wrapW - pad + EDGE}px`}
+				role="separator"
+				aria-orientation="vertical"
+				aria-label={t('chat.resizeColumn')}
+				onpointerdown={startResize}
+				onpointermove={(e) => trackEdge(edge, e)}
+				onpointerleave={() => dragW === null && (hot = null)}
+			>
+				{#if hot?.edge === edge}<span style:top="{hot.y}px"></span>{/if}
+			</div>
+	{/each}
+	</div>
 	{#if !atBottom}
 		<button class="jump" style:bottom="{bottomH + 14}px" onclick={jumpToBottom} aria-label="scroll to bottom"><CaretDownIcon size={18} /></button>
 	{/if}
@@ -1002,6 +1100,9 @@
 					}
 				: undefined}
 			{gitBranch}
+			gitCwd={project?.path || chat.cwd}
+			repoName={project?.name ?? ''}
+			onBranchChanged={refreshGitBranch}
 			onBackend={(b, acpAgent) => store.switchBackend(session.id, b, acpAgent)}
 			bind:pickerQuery
 		bind:pickerSelIdx={selIdx}
@@ -1063,6 +1164,44 @@
 {/if}
 
 <style>
+	/* Whose session this is: a quiet line above the transcript. */
+	.owner {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		flex: none;
+		padding: 7px 16px;
+		border-bottom: 1px solid var(--hairline);
+		font-size: var(--fs-xs);
+		color: var(--dim);
+	}
+	.owner-name {
+		flex: none;
+		color: var(--text);
+		font-weight: 500;
+	}
+	.owner-role {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: var(--dim2);
+	}
+	.owner-link {
+		flex: none;
+		margin-left: auto;
+		padding: 0;
+		border: none;
+		background: none;
+		color: var(--dim);
+		font: inherit;
+		cursor: pointer;
+	}
+	.owner-link:hover {
+		color: var(--text);
+		text-decoration: underline;
+	}
 	.chatpane {
 		position: relative;
 		height: 100%;
@@ -1114,13 +1253,13 @@
 	.jump:active {
 		transform: translateX(-50%) scale(0.92);
 	}
-	/* Match the composer's outer frame (max-width 880, 18px side padding) so the
-	   approval box lines up flush with the input box. */
+	/* Match the composer's outer frame (the column plus --chat-pad a side) so
+	   the approval box lines up flush with the input box. */
 	.approval-wrap {
-		max-width: 880px;
+		max-width: calc(var(--chat-w) + 2 * var(--chat-pad));
 		width: 100%;
 		margin: 0 auto;
-		padding: 0 18px 10px;
+		padding: 0 var(--chat-pad) 10px;
 	}
 	.enginedown {
 		display: flex;
@@ -1154,16 +1293,52 @@
 		color: var(--dim);
 	}
 
+	.mainwrap {
+		position: relative;
+		flex: 1;
+		min-height: 0;
+		display: flex;
+		flex-direction: column;
+	}
 	main {
 		flex: 1;
+		min-height: 0;
 		overflow-y: auto;
 		padding: 22px 18px 26px;
 		display: flex;
 		flex-direction: column;
 		gap: 16px;
-		max-width: 880px;
-		width: 100%;
-		margin: 0 auto;
+		/* Full width, so the scrollbar sits at the pane's edge; the padding
+		   centres the column. */
+		padding-inline: max(var(--chat-pad), calc((100% - var(--chat-w)) / 2));
+	}
+	/* The column's edge: hovering shows a short bar at the pointer, dragging
+	   resizes the column. */
+	.edge {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		width: 12px;
+		transform: translateX(-50%);
+		cursor: col-resize;
+		z-index: 4;
+	}
+	.edge span {
+		position: absolute;
+		left: 5px;
+		width: 2px;
+		height: 120px;
+		border-radius: 1px;
+		transform: translateY(-50%);
+		background: linear-gradient(transparent, var(--dim), transparent);
+		pointer-events: none;
+	}
+	.edge.active span {
+		background: linear-gradient(transparent, var(--text), transparent);
+	}
+	.resizing {
+		cursor: col-resize;
+		user-select: none;
 	}
 	.welcome {
 		margin: auto;

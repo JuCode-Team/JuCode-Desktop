@@ -95,7 +95,29 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
+	}
+	/* Both blurs sit on pseudo-elements. On the scrim itself, backdrop-filter
+	   would make it the backdrop root of the sheet, whose blur would then see
+	   only the scrim fill; on the sheet itself, it would make the sheet the
+	   containing block of its fixed children (menus, click-away backdrops). */
+	.scrim::before,
+	.sheet::before {
+		content: '';
+		position: absolute;
+		inset: 0;
+		z-index: -1;
+		border-radius: inherit;
+		pointer-events: none;
+	}
+	.scrim::before {
 		background: var(--scrim);
+		-webkit-backdrop-filter: blur(3px);
+		backdrop-filter: blur(3px);
+	}
+	.sheet::before {
+		background: var(--glass-strong);
+		-webkit-backdrop-filter: var(--glass-blur);
+		backdrop-filter: var(--glass-blur);
 	}
 	.scrim.top {
 		align-items: flex-start;
@@ -106,8 +128,9 @@
 		flex-direction: column;
 		max-height: 84vh;
 		overflow: hidden;
+		position: relative;
+		isolation: isolate;
 		border-radius: var(--r-xl);
-		background: var(--panel);
 		box-shadow: var(--shadow-modal);
 		outline: none;
 	}

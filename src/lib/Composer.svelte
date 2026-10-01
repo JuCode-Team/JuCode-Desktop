@@ -15,12 +15,14 @@
 	import MicrophoneIcon from 'phosphor-svelte/lib/MicrophoneIcon';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon';
+	import BranchMenu from '$lib/composer/BranchMenu.svelte';
 	import CommandIcon from 'phosphor-svelte/lib/CommandIcon';
 	import { toast } from '$lib/ui/toast.svelte';
 	import BackendIcon from '$lib/BackendIcon.svelte';
 	import PopMenu, { type PopMenuItem } from '$lib/ui/PopMenu.svelte';
 	import { listFiles, saveTempImage, transcribeAudio } from '$lib/protocol';
 	import { VoiceRecorder } from '$lib/audio';
+	import VoiceWave from '$lib/composer/VoiceWave.svelte';
 	import { buildEntries, mentionMatches, type AtEntry } from '$lib/mention';
 	import { t } from '$lib/i18n';
 	import { matches, withShortcut } from '$lib/shortcuts';
@@ -53,6 +55,9 @@
 		backendLocked = true,
 		toolProvider,
 		gitBranch = '',
+		gitCwd = '',
+		repoName = '',
+		onBranchChanged,
 		onBackend,
 		onSubmit,
 		onStop,
@@ -84,6 +89,11 @@
 		toolProvider?: ToolProvider & { model: string };
 		/** Current git branch for the footer strip ('' hides the chip). */
 		gitBranch?: string;
+		/** Where the branch chip's picker runs git; '' leaves the chip read-only. */
+		gitCwd?: string;
+		repoName?: string;
+		/** A branch was switched to or created from the chip. */
+		onBranchChanged?: () => void;
 		onBackend?: (b: BackendId, acpAgent?: { id: string; name: string }) => void | Promise<void>;
 		onSubmit: () => void;
 		onStop: () => void;
@@ -105,6 +115,7 @@
 
 	let showApproval = $state(false);
 	let showAdd = $state(false);
+	let branchOpen = $state(false);
 	let modelButton = $state<HTMLButtonElement>();
 
 	// The model popover holds its own open flag so it can outlive an agent
@@ -163,10 +174,10 @@
 	// programmatically (completion / refill / cleared on send) — never mid-typing.
 	let composing = $state(false);
 	let lastSync = '';
-	const TOKEN_RE = /\[网页元素#(\d+)(?::([^\]]*))?\]|\[图片 #(\d+)\]/g;
+	const TOKEN_RE = /\[网页元素#(\d+)(?::([^\]]*))?\]|\[引用#(\d+)(?::([^\]]*))?\]|\[图片 #(\d+)\]/g;
 
 	const tokenLabel = (token: string) => {
-		const m = /^\[网页元素#(\d+)(?::([^\]]*))?\]$/.exec(token);
+		const m = /^\[(?:网页元素|引用)#(\d+)(?::([^\]]*))?\]$/.exec(token);
 		return m ? (m[2]?.trim() || `#${m[1]}`) : token;
 	};
 	function makeChip(token: string): HTMLElement {
@@ -186,6 +197,7 @@
 			}
 			span.appendChild(document.createTextNode(t('chat.imageToken', { n: img[1]! })));
 		} else span.textContent = tokenLabel(token);
+		if (token.startsWith('[引用#')) span.classList.add('quotechip');
 		return span;
 	}
 	// DOM → plain text: chips become their token, <br> becomes a newline.
@@ -229,8 +241,11 @@
 	}
 	function syncFromDom() {
 		if (!el) return;
-		const s = serialize(el);
-		// Normalize a WebKit-left empty state so the placeholder shows.
+		let s = serialize(el);
+		// Normalize a WebKit-left empty state so the placeholder shows: deleting
+		// everything can leave a lone <br> (or <div><br></div>), which reads as
+		// "\n". A real line break typed into an empty box leaves two.
+		if (s === '\n' && el.textContent === '') s = '';
 		if (s === '' && el.childNodes.length) el.textContent = '';
 		lastSync = s;
 		input = s;
@@ -364,7 +379,6 @@
 		showApproval = false;
 	}
 
-	const fmtTokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
 
 	// Every command the engine reported (the tray scrolls): names starting
 	// with what was typed first, then names containing it.
@@ -665,20 +679,47 @@
 		}
 	}
 
-	// Voice input: mic → 16 kHz WAV → MiMo ASR (Tauri backend) → append to the
-	// composer. Auto-stops at 3 min so the base64 payload stays under MiMo's
-	// 10 MB cap.
+	// Voice input: mic → utterances split at pauses → 16 kHz WAV → ASR (Tauri
+	// backend). Each utterance is transcribed while the user keeps talking and
+	// appended in order, so text shows up during recording. Auto-stops at 3 min
+	// in case the mic is left on.
 	let voice = $state<'idle' | 'rec' | 'busy'>('idle');
 	let recorder: VoiceRecorder | null = null;
+	let voiceLevels = $state<AnalyserNode | null>(null);
 	let voiceTimer: ReturnType<typeof setTimeout> | undefined;
+	let voiceQueue: Promise<void> = Promise.resolve();
+	let voiceFailed = false;
+
+	// Utterances join with a space only between non-CJK text.
+	const CJK = /[\u2e80-\u9fff\uf900-\ufaff\uff00-\uffef]/;
+	function appendVoice(text: string) {
+		if (!text) return;
+		const sep = input && !/\s$/.test(input) && !CJK.test(input.slice(-1)) && !CJK.test(text[0]) ? ' ' : '';
+		input = input + sep + text;
+		el?.focus();
+	}
+
+	function transcribeSegment(base64: string) {
+		voiceQueue = voiceQueue.then(async () => {
+			try {
+				appendVoice((await transcribeAudio(base64)).trim());
+			} catch (e) {
+				// One toast per recording: a bad key fails every utterance.
+				if (!voiceFailed) toast.error(String(e));
+				voiceFailed = true;
+			}
+		});
+	}
 
 	async function toggleVoice() {
 		if (voice === 'busy') return;
 		if (voice === 'rec') return stopVoice();
 		try {
-			const r = new VoiceRecorder();
+			const r = new VoiceRecorder(transcribeSegment);
 			await r.start();
 			recorder = r;
+			voiceLevels = r.analyser;
+			voiceFailed = false;
 			voice = 'rec';
 			voiceTimer = setTimeout(stopVoice, 180_000);
 		} catch (e) {
@@ -690,25 +731,12 @@
 	async function stopVoice() {
 		if (!recorder) return;
 		clearTimeout(voiceTimer);
-		const { base64, seconds } = recorder.stop();
+		recorder.stop();
 		recorder = null;
-		// Accidental tap — nothing worth a round-trip.
-		if (seconds < 0.5) {
-			voice = 'idle';
-			return;
-		}
+		voiceLevels = null;
 		voice = 'busy';
-		try {
-			const text = (await transcribeAudio(base64)).trim();
-			if (text) {
-				input = input && !/\s$/.test(input) ? `${input} ${text}` : input + text;
-				el?.focus();
-			}
-		} catch (e) {
-			toast.error(String(e));
-		} finally {
-			voice = 'idle';
-		}
+		await voiceQueue;
+		voice = 'idle';
 	}
 
 </script>
@@ -848,6 +876,7 @@
 					onRefreshModels={() => onModel()}
 				/>
 			{/if}
+			{#if voiceLevels}<VoiceWave analyser={voiceLevels} />{/if}
 			<button
 				class="cact voice"
 				class:on={voice === 'rec'}
@@ -869,22 +898,39 @@
 	<!-- Slim strip in the blank area under the card: branch · approval | context. -->
 	<div class="composer-foot">
 		{#if gitBranch}
-			<span class="foot-branch" title={t('chat.gitBranch')}><GitBranchIcon size={12} /><span class="branch-name">{gitBranch}</span></span>
+			<!-- Switching under a running turn would change its files mid-edit. -->
+			<span class="branch-anchor">
+				<button
+					class="foot-branch"
+					disabled={!gitCwd || chat.busy}
+					title={chat.busy ? t('chat.branchMenu.busy') : t('chat.gitBranch')}
+					onclick={() => (branchOpen = !branchOpen)}
+				><GitBranchIcon size={12} /><span class="branch-name">{gitBranch}</span></button>
+				{#if branchOpen && gitCwd}
+					<BranchMenu
+						cwd={gitCwd}
+						repo={repoName}
+						current={gitBranch}
+						onChanged={() => onBranchChanged?.()}
+						onClose={() => (branchOpen = false)}
+					/>
+				{/if}
+			</span>
 		{/if}
 		<div class="fspace"></div>
 		{#if showCtx}
 			<div class="foot-ctx">
-				<ContextIndicator pct={ctxPct} atThreshold={ctxAtThreshold} contextTokens={chat.contextTokens} contextLimit={ctxLimit} totalIn={chat.totalIn} totalOut={chat.totalOut} cost={chat.cost} />
-				<span class="ctx-text">{fmtTokens(chat.contextTokens)} / {fmtTokens(ctxLimit)}</span>
+				<ContextIndicator pct={ctxPct} atThreshold={ctxAtThreshold} contextTokens={chat.contextTokens} contextLimit={ctxLimit} totalIn={chat.totalIn} totalOut={chat.totalOut} cost={chat.cost} runMs={chat.runMs} />
 			</div>
 		{/if}
 	</div>
 </div>
 
 <style>
+	/* Lines up with the conversation column (ChatPane's --chat-w). */
 	.composer-wrap {
-		padding: 0 18px 18px;
-		max-width: 920px;
+		padding: 0 var(--chat-pad, 32px) 18px;
+		max-width: calc(var(--chat-w, 844px) + 2 * var(--chat-pad, 32px));
 		width: 100%;
 		margin: 0 auto;
 	}
@@ -899,6 +945,7 @@
 		box-shadow: var(--shadow-float-strong);
 	}
 	.rich {
+		position: relative;
 		width: 100%;
 		min-height: 22px;
 		max-height: 180px;
@@ -916,8 +963,15 @@
 		word-break: break-word;
 		cursor: text;
 	}
+	/* One line, cut short in a narrow box; laid over the caret's line. */
 	.rich.empty::before {
 		content: attr(data-placeholder);
+		position: absolute;
+		left: 0;
+		right: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 		color: var(--dim2);
 		pointer-events: none;
 	}
@@ -954,7 +1008,24 @@
 		border-radius: 3px;
 		object-fit: cover;
 	}
-	.rich :global(.refchip:not(.imgchip))::before {
+	/* A quoted passage: the opening words after a quote mark. */
+	.rich :global(.refchip.quotechip) {
+		color: var(--dim);
+		background: var(--surface2);
+		box-shadow: inset 0 0 0 1px var(--border);
+		padding: 1px 7px 1px 6px;
+	}
+	.rich :global(.refchip.quotechip)::before {
+		content: '';
+		display: inline-block;
+		width: 11px;
+		height: 11px;
+		margin-right: 5px;
+		vertical-align: -1px;
+		background: var(--dim2);
+		mask: var(--quote-mask) center / contain no-repeat;
+	}
+	.rich :global(.refchip:not(.imgchip):not(.quotechip))::before {
 		content: '🌐';
 		margin-right: 3px;
 		font-size: var(--fs-2xs);
@@ -963,6 +1034,7 @@
 		display: flex;
 		align-items: center;
 		gap: 8px;
+		white-space: nowrap;
 	}
 	.flatbtn {
 		display: inline-flex;
@@ -1132,14 +1204,33 @@
 		min-height: 24px;
 		color: var(--dim);
 	}
+	.branch-anchor {
+		position: relative;
+		display: inline-flex;
+		min-width: 0;
+	}
 	.foot-branch {
 		display: inline-flex;
 		align-items: center;
 		gap: 5px;
+		min-width: 0;
+		margin: -2px -6px;
+		padding: 2px 6px;
+		border: none;
+		border-radius: var(--r-xs);
+		background: none;
 		font-family: var(--font-mono);
 		font-size: var(--fs-2xs);
 		color: var(--dim);
-		min-width: 0;
+		cursor: pointer;
+		transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
+	}
+	.foot-branch:hover:not(:disabled) {
+		background: var(--surface2);
+		color: var(--text);
+	}
+	.foot-branch:disabled {
+		cursor: default;
 	}
 	.branch-name {
 		max-width: 180px;
@@ -1177,12 +1268,6 @@
 	.foot-ctx {
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
-	}
-	.ctx-text {
-		font-family: var(--font-mono);
-		font-size: var(--fs-2xs);
-		color: var(--dim);
 	}
 
 	.queued {

@@ -253,13 +253,26 @@ describe('ChatState.handle', () => {
 	it('collects meta notices into statusLog, keeping them out of the bubble stream', () => {
 		const c = new ChatState();
 		c.handle({ type: 'user_message', content: 'hi' });
-		c.handle({ type: 'retrying' });
+		c.handle({ type: 'compaction_end' });
 		c.handle({ type: 'compaction_end' });
 		c.handle({ type: 'error', message: 'boom' });
 		// statusLog holds only the system/meta notices…
 		expect(c.statusLog.length).toBe(2);
 		// …while user + error stay as bubbles in messages.
 		expect(c.messages.map((m) => m.kind)).toEqual(['user', 'system', 'system', 'error']);
+	});
+
+	it('shows a retry as live state, not a log line, until output flows again', () => {
+		const c = new ChatState();
+		c.handle({ type: 'user_message', content: 'hi' });
+		c.handle({ type: 'retrying', attempt: 3, max_attempts: 6, reason: 'unexpected status 503: busy', delay_ms: 2000 });
+		expect(c.retry).toMatchObject({ attempt: 3, max: 6, reason: 'unexpected status 503: busy', delayMs: 2000 });
+		expect(c.messages.map((m) => m.kind)).toEqual(['user']);
+		c.handle({ type: 'assistant_delta', delta: 'ok' });
+		expect(c.retry).toBeNull();
+		c.handle({ type: 'retrying', attempt: 2, max_attempts: 3, reason: 'timeout', delay_ms: 500 });
+		c.handle({ type: 'error', message: 'gave up' });
+		expect(c.retry).toBeNull();
 	});
 
 	it('estimates cost from token usage when the engine reports none', () => {
@@ -454,6 +467,23 @@ describe('send state and turn stats', () => {
 		expect(user(c).state).toBe('failed');
 	});
 
+	it('flags a cache miss during a running turn only', () => {
+		const c = new ChatState();
+		c.handle({ type: 'usage', input_tokens: 10_000, cached_input_tokens: 0, output_tokens: 10 });
+		c.handle({ type: 'usage', input_tokens: 12_000, cached_input_tokens: 0, output_tokens: 10 });
+		expect(c.cacheMiss).toBeNull();
+		c.handle({ type: 'connecting' });
+		c.handle({ type: 'usage', input_tokens: 14_000, cached_input_tokens: 11_990, output_tokens: 10 });
+		expect(c.cacheMiss).toBeNull();
+		c.handle({ type: 'usage', input_tokens: 16_000, cached_input_tokens: 100, output_tokens: 10 });
+		expect(c.cacheMiss).toEqual({ input: 16_000, cached: 100 });
+		c.cacheMiss = null;
+		c.handle({ type: 'compaction_end' });
+		c.handle({ type: 'usage', input_tokens: 5_000, cached_input_tokens: 0, output_tokens: 10 });
+		c.handle({ type: 'usage', input_tokens: 6_000, output_tokens: 10 });
+		expect(c.cacheMiss).toBeNull();
+	});
+
 	it('stamps the turn totals on the last reply, including late usage', () => {
 		const c = new ChatState();
 		c.optimisticUser('fix it');
@@ -469,5 +499,58 @@ describe('send state and turn stats', () => {
 		const last = [...c.messages].reverse().find((m) => m.kind === 'assistant') as { turn?: Record<string, number> };
 		expect(last.turn).toMatchObject({ inTokens: 150, outTokens: 25, tools: 1, files: 0 });
 		expect(last.turn!.ttft).toBeGreaterThanOrEqual(0);
+	});
+});
+
+describe('reply timing', () => {
+	it('splits a reply at its tool call, times each segment and the request stages', () => {
+		vi.useFakeTimers();
+		try {
+			vi.setSystemTime(0);
+			const c = new ChatState();
+			const at = (ms: number, ev: Record<string, unknown>) => {
+				vi.setSystemTime(ms);
+				c.handle(ev as never);
+			};
+			at(0, { type: 'user_message', content: 'q' });
+			at(0, { type: 'assistant_start' });
+			at(0, { type: 'connecting' });
+			expect(c.call).toEqual({ phase: 'connect', since: 0 });
+			at(300, { type: 'thinking_start' });
+			expect(c.call).toEqual({ phase: 'ttft', since: 300 });
+			at(1000, { type: 'assistant_delta', delta: 'A' });
+			expect(c.call).toEqual({ phase: 'output', since: 1000 });
+			at(2000, { type: 'tool_start', call_id: 't', name: 'read' });
+			expect(c.call).toBeNull();
+			at(2500, { type: 'tool_output', call_id: 't', name: 'read', output: 'x' });
+			at(2600, { type: 'connecting' });
+			at(3000, { type: 'assistant_delta', delta: 'B' });
+			at(4000, { type: 'status', message: 'ready' });
+
+			const kinds = c.messages.map((m) => [m.kind, 'text' in m ? m.text : '']);
+			// Text after the tool is its own message, below the tool card.
+			expect(kinds).toEqual([['user', 'q'], ['assistant', 'A'], ['tool', ''], ['assistant', 'B']]);
+			const [a, b] = c.messages.filter((m) => m.kind === 'assistant') as { segMs?: number; turn?: { segments: number; elapsed: number } }[];
+			expect(a.segMs).toBe(2000);
+			expect(b.segMs).toBe(1400);
+			expect(b.turn).toMatchObject({ segments: 2, elapsed: 4000 });
+			expect(c.call).toBeNull();
+			expect(c.runMs).toBe(4000);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('times the wait to the first token from the request on engines without a connect event', () => {
+		vi.useFakeTimers();
+		try {
+			vi.setSystemTime(100);
+			const c = new ChatState();
+			c.backendId = 'claude';
+			c.handle({ type: 'connecting' } as never);
+			expect(c.call).toEqual({ phase: 'ttft', since: 100 });
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 });

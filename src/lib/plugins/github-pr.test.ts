@@ -1,24 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { extractPrUrl, hasGitHubRemote, parseGhVersion, parsePrView } from './github-pr';
-import { githubPrManifest } from './github-pr';
-import { parsePluginSettings } from './registry';
-
-describe('GitHub PR plugin manifest', () => {
-	it('declares its command surface and optional binary', () => {
-		expect(githubPrManifest).toMatchObject({
-			id: 'github-pr',
-			name: 'GitHub Pull Requests',
-			commands: ['check', 'view', 'create'],
-			bin: 'gh'
-		});
-	});
-
-	it('is enabled by default and honors persisted disable state', () => {
-		expect(parsePluginSettings(null)['github-pr']).toBe(true);
-		expect(parsePluginSettings('{"github-pr":false}')['github-pr']).toBe(false);
-		expect(parsePluginSettings('not json')['github-pr']).toBe(true);
-	});
-});
 
 describe('GitHub PR output parsing', () => {
 	it('extracts the gh version', () => {
