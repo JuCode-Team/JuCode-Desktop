@@ -38,6 +38,8 @@ export interface SavedProject {
 		surface?: 'tui';
 		/** Claude Code / Codex through the JuCode gateway (Session.gateway). */
 		gateway?: boolean;
+		/** Claude Code: the model it last ran on (Session.model). */
+		model?: string;
 	} & SavedTabChrome)[];
 	/** 并行任务 worktree 项目的元数据（isWorktree/mainRepoPath/branch/baseBranch/slug）。 */
 	worktree?: WorktreeMeta;
@@ -180,6 +182,7 @@ export class SessionStore {
 							approval_mode: mode,
 							...gateway,
 							...program,
+							...(extraOpts?.model ? { model: extraOpts.model } : {}),
 							...(extraOpts?.resume_session_at ? { resume_at: extraOpts.resume_session_at } : {})
 						}
 					})
@@ -397,10 +400,11 @@ export class SessionStore {
 	 *  when it is first shown. Returns the desktop id. */
 	listDormant(
 		project: Project,
-		rec: { session: string; title?: string | null; archived?: boolean; engine?: string },
+		rec: { session: string; title?: string | null; archived?: boolean; engine?: string; gateway?: boolean },
 		reuseId?: string
 	): string {
 		const s = this.#newSession(normalizeBackendId(rec.engine), undefined, reuseId);
+		if (rec.gateway) s.gateway = true;
 		s.dormant = true;
 		s.restored = true;
 		s.archived = !!rec.archived;
@@ -418,10 +422,13 @@ export class SessionStore {
 		backend: BackendId,
 		archived: boolean,
 		chrome: SavedTabChrome,
-		reuseId?: string
+		reuseId?: string,
+		gateway?: boolean,
+		model?: string
 	): string {
-		const id = this.listDormant(project, { session: sid, title, archived, engine: backend }, reuseId);
+		const id = this.listDormant(project, { session: sid, title, archived, engine: backend, gateway }, reuseId);
 		const s = project.sessions[project.sessions.length - 1];
+		if (model) s.model = model;
 		if (chrome.color) s.color = chrome.color;
 		if (chrome.icon) s.icon = chrome.icon;
 		return id;
@@ -433,7 +440,7 @@ export class SessionStore {
 		const path = this.projectPathOf(id);
 		if (!s?.dormant || !path) return;
 		s.dormant = false;
-		this.#spawn(s, path, undefined, undefined, s.chat.sessionId).catch((e) => this.#engineFailed(s.chat, e));
+		this.#spawn(s, path, undefined, this.#keepModel(s), s.chat.sessionId).catch((e) => this.#engineFailed(s.chat, e));
 	}
 
 	/** Drops a session another client removed, without telling the daemon. */
@@ -492,10 +499,12 @@ export class SessionStore {
 		reuseId?: string,
 		acpAgent?: { id: string; name: string },
 		surface?: 'tui',
-		gateway?: boolean
+		gateway?: boolean,
+		model?: string
 	) {
 		const s = this.#newSession(backend, backend === 'acp' ? acpAgent : undefined, reuseId);
 		if (gateway) s.gateway = true;
+		if (model) s.model = model;
 		if (title) s.chat.title = title;
 		s.archived = archived;
 		if (chrome?.color) s.color = chrome.color;
@@ -516,7 +525,7 @@ export class SessionStore {
 			s.surface = 'tui';
 			return s.id;
 		}
-		this.#spawn(s, project.path, undefined, undefined, sid).catch((e) => this.#engineFailed(s.chat, e));
+		this.#spawn(s, project.path, undefined, this.#keepModel(s), sid).catch((e) => this.#engineFailed(s.chat, e));
 		return s.id;
 	}
 
@@ -627,7 +636,15 @@ export class SessionStore {
 		// session gets a new id that CAN be resumed on a later crash).
 		if (s.chat.resumeBroken) s.chat.sessionId = '';
 		s.chat.resumeBroken = false;
-		this.#spawn(s, this.projectPathOf(id)).catch((e) => this.#engineFailed(s.chat, e));
+		this.#spawn(s, this.projectPathOf(id), undefined, this.#keepModel(s)).catch((e) => this.#engineFailed(s.chat, e));
+	}
+
+	/** Claude Code reopened by id comes back on its default model, not the one
+	 *  the conversation ran on: start it on that one. A model pick within the
+	 *  session goes through `/model` (or the tool profile) instead. */
+	#keepModel(s: Session): Record<string, unknown> | undefined {
+		const model = s.backendId === 'claude' ? s.chat.model || s.model : '';
+		return model ? { model } : undefined;
 	}
 
 	/** Handle an engine exit: mark exited and auto-restart unless we've already
@@ -734,6 +751,9 @@ export class SessionStore {
 			}
 			return;
 		}
+		// The other profile has other models: what it ran on is not kept.
+		s.model = undefined;
+		s.chat.model = model ?? '';
 		// The TUI surface picks it up when the conversation returns here.
 		if (s.surface === 'tui') return;
 		s.chat.switching = true;
@@ -774,7 +794,7 @@ export class SessionStore {
 		try {
 			await closeSession(id);
 			if (this.#gone(s)) return;
-			await this.#spawn(s, this.projectPathOf(id), undefined, { permission_mode: 'full-auto' });
+			await this.#spawn(s, this.projectPathOf(id), undefined, { permission_mode: 'full-auto', ...this.#keepModel(s) });
 			s.chat.switching = false;
 		} catch (e) {
 			s.chat.switching = false;
@@ -805,7 +825,7 @@ export class SessionStore {
 				s,
 				this.projectPathOf(id),
 				undefined,
-				resumeAtUuid ? { resume_session_at: resumeAtUuid } : undefined
+				{ ...this.#keepModel(s), ...(resumeAtUuid ? { resume_session_at: resumeAtUuid } : {}) }
 			);
 			s.chat.switching = false;
 		} catch (e) {
@@ -969,6 +989,7 @@ export class SessionStore {
 					// is always worth keeping.
 					...(s.chat.sessionId ? { sid: s.chat.sessionId } : {}),
 					...(s.gateway ? { gateway: true } : {}),
+					...(s.backendId === 'claude' && (s.chat.model || s.model) ? { model: s.chat.model || s.model } : {}),
 					title: s.chat.title,
 					...(s.backendId !== 'jucode' ? { backend: s.backendId } : {}),
 					...(s.backendId === 'acp' && s.acpAgent ? { acpAgent: s.acpAgent } : {}),
@@ -1044,7 +1065,7 @@ export class SessionStore {
 					// when it is shown (ACP needs its agent start path below).
 					const dormant = sid && !surface && backend !== 'acp';
 					const id = dormant
-						? this.#restoreDormant(proj, sid, t.title, backend, !!t.archived, chrome, t.id)
+						? this.#restoreDormant(proj, sid, t.title, backend, !!t.archived, chrome, t.id, t.gateway === true, t.model)
 						: sid
 						? this.restoreSession(
 								proj,
@@ -1056,7 +1077,8 @@ export class SessionStore {
 								t.id,
 								acpAgent,
 								surface,
-								t.gateway === true
+								t.gateway === true,
+								t.model
 							)
 						: this.#draftSaved(proj, t.id!, t.title, backend, !!t.archived, chrome, acpAgent);
 					if (!first && !t.archived) first = id;

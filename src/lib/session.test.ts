@@ -717,6 +717,36 @@ describe('SessionStore claude and codex in the daemon', () => {
 		});
 	});
 
+	it('a saved Claude Code tab keeps its gateway and model when it reopens', async () => {
+		const store = new SessionStore();
+		const sid = '0b7c6a52-6f0e-4a8e-9a43-1d2f3c4b5a69';
+		await store.restore([
+			{ id: 'p1', name: 'p1', path: '/tmp/p1', tabs: [{ id: 't1', sid, title: 'x', backend: 'claude', gateway: true, model: 'glm-5' }] }
+		]);
+		const s = store.projects[0].sessions[0];
+		expect(s.dormant).toBe(true);
+		expect(s.gateway).toBe(true);
+		expect(store.serialize()[0].tabs![0]).toMatchObject({ gateway: true, model: 'glm-5' });
+		store.wake(s.id);
+		await flush();
+		expect(lastSpec()?.options).toMatchObject({ jucode_gateway: true, model: 'glm-5' });
+	});
+
+	it('a Claude Code restart keeps the model it ran on; a profile switch does not', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.restoreSession(p, 'claude-1', 'old', 'claude');
+		await flush();
+		const s = p.sessions[0];
+		s.chat.model = 'claude-opus-4-8[1m]';
+		store.restartSession(id, true);
+		await flush();
+		expect(lastSpec()?.options?.model).toBe('claude-opus-4-8[1m]');
+		await store.applyToolProfile(id, 'jucode');
+		expect(lastSpec()?.options?.model).toBeUndefined();
+	});
+
 	it('the yolo respawn reopens the claude conversation in full-auto', async () => {
 		const store = new SessionStore();
 		const p = proj();

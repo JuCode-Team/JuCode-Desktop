@@ -184,6 +184,9 @@ export class DaemonSync {
 			if (s) {
 				if (r.title && r.title !== s.chat.title) s.chat.title = r.title;
 				if (!!r.archived !== !!s.archived) s.archived = !!r.archived;
+				// Not open here yet: it runs the way the daemon last ran it (a tab
+				// saved without the flag would otherwise read as the official one).
+				if (s.dormant && typeof r.gateway === 'boolean') s.gateway = r.gateway;
 				continue;
 			}
 			if (daemon.desktopOf(r.session)) continue;

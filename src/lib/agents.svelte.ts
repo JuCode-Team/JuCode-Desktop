@@ -38,6 +38,8 @@ export interface DaemonSessionView {
 	/** The daemon's title, or the engine's label (newer daemons). */
 	title?: string | null;
 	archived?: boolean;
+	/** Claude Code / Codex: it last ran through the JuCode gateway. */
+	gateway?: boolean;
 	updated_at?: number;
 	chat?: boolean;
 	/** `jucode`, `claude`, `codex` or `acp` (newer daemons). */

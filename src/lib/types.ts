@@ -43,6 +43,9 @@ export interface Session {
 	 *  JuCode login (only this session's process; their own config is left
 	 *  alone). Unset: as it last ran (the daemon remembers it). */
 	gateway?: boolean;
+	/** Claude Code: the model a restored session last ran on, until its engine
+	 *  reports one (see SessionStore.#keepModel). */
+	model?: string;
 }
 
 /** 并行任务（git worktree）项目的元数据，随项目布局持久化。 */
