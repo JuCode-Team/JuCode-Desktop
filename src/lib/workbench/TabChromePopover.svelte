@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { tick } from 'svelte';
+	import { tick, type Snippet } from 'svelte';
 	import ProhibitIcon from 'phosphor-svelte/lib/ProhibitIcon';
 	import TrashIcon from 'phosphor-svelte/lib/TrashIcon';
 	import PushPinIcon from 'phosphor-svelte/lib/PushPinIcon';
@@ -9,9 +9,10 @@
 	import TabGlyph from './TabGlyph.svelte';
 	import Button from '$lib/ui/Button.svelte';
 
-	// Shared chrome editor for workspace tabs and session tabs: rename, tag
-	// color, and icon (builtin grid / slug / pasted SVG). Fixed-position at the
-	// invoking pointer/anchor, clamped to the viewport.
+	// Shared chrome editor for workspace tabs, session tabs, project folders
+	// and agents: rename, tag color, and icon (builtin grid / slug / pasted
+	// SVG). Fixed-position at the invoking pointer/anchor, clamped to the
+	// viewport.
 	let {
 		x,
 		y,
@@ -25,14 +26,16 @@
 		deleteLabel = '',
 		pinned = false,
 		onPin,
-		onClose
+		onClose,
+		children
 	}: {
 		x: number;
 		y: number;
 		name: string;
 		color?: string | null;
 		icon?: TabIcon | null;
-		onRename: (name: string) => void;
+		/** Without it there is no name field. */
+		onRename?: (name: string) => void;
 		onColor: (color: string | null) => void;
 		onIcon: (icon: TabIcon | null) => void;
 		onDelete?: () => void;
@@ -41,6 +44,8 @@
 		pinned?: boolean;
 		onPin?: (pinned: boolean) => void;
 		onClose: () => void;
+		/** Caller-specific controls below the icon fields (agents: the avatar). */
+		children?: Snippet;
 	} = $props();
 
 	// Drafts seed once from the props (the popover is transient); live edits
@@ -66,7 +71,7 @@
 
 	function commitName() {
 		const v = nameVal.trim();
-		if (v && v !== name) onRename(v);
+		if (v && v !== name) onRename?.(v);
 	}
 	function commitSlug() {
 		const parsed = parseTabIcon({ kind: 'slug', value: slugVal });
@@ -98,22 +103,24 @@
 	style:left="{left}px"
 	style:top="{top}px"
 >
-	<label class="field">
-		<span class="lbl">{t('shell.chrome.name')}</span>
-		<input
-			class="txt"
-			bind:this={nameEl}
-			bind:value={nameVal}
-			onblur={commitName}
-			onkeydown={(e) => {
-				if (e.key === 'Enter') {
-					e.preventDefault();
-					commitName();
-					onClose();
-				}
-			}}
-		/>
-	</label>
+	{#if onRename}
+		<label class="field">
+			<span class="lbl">{t('shell.chrome.name')}</span>
+			<input
+				class="txt"
+				bind:this={nameEl}
+				bind:value={nameVal}
+				onblur={commitName}
+				onkeydown={(e) => {
+					if (e.key === 'Enter') {
+						e.preventDefault();
+						commitName();
+						onClose();
+					}
+				}}
+			/>
+		</label>
+	{/if}
 
 	<div class="lbl">{t('shell.chrome.color')}</div>
 	<div class="swatches">
@@ -182,6 +189,8 @@
 		{#if svgError}<span class="err">{t('shell.chrome.svgInvalid')}</span>{/if}
 	</label>
 
+	{@render children?.()}
+
 	{#if onPin}
 		<Button size="sm" full onclick={() => onPin(!pinned)}>
 			{#if pinned}<PushPinSlashIcon size={12} />{t('shell.unpin')}{:else}<PushPinIcon size={12} />{t('shell.pin')}{/if}
@@ -193,17 +202,18 @@
 </div>
 
 <style>
+	/* Above a Modal (z-index 100): an agent's page opens it. */
 	.backdrop {
 		position: fixed;
 		inset: 0;
-		z-index: 90;
+		z-index: 101;
 		border: none;
 		background: none;
 		cursor: default;
 	}
 	.pop {
 		position: fixed;
-		z-index: 91;
+		z-index: 102;
 		width: 248px;
 		display: flex;
 		flex-direction: column;

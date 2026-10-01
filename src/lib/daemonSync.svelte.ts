@@ -18,6 +18,7 @@ import type { DaemonSessionView } from '$lib/agents.svelte';
 import type { SavedProject, SessionStore } from '$lib/session.svelte';
 import type { Project, WorktreeMeta } from '$lib/types';
 import type { WorkspaceStore } from '$lib/workbench/workspaceStore.svelte';
+import { normalizeColor, parseTabIcon, type TabIcon } from '$lib/workbench/tabChrome';
 
 interface DaemonProject {
 	id: string;
@@ -25,6 +26,8 @@ interface DaemonProject {
 	path: string;
 	chats?: boolean;
 	worktree?: WorktreeMeta;
+	color?: string;
+	icon?: TabIcon;
 }
 
 interface DaemonWorkspace {
@@ -43,13 +46,27 @@ const NEW_SESSION_GRACE_MS = 10_000;
 
 const trim = (path: string) => path.replace(/[\\/]+$/, '');
 
-function project(p: { id: string; name: string; path: string; chats?: boolean; worktree?: WorktreeMeta }): DaemonProject {
+/** Folder chrome is checked on the way in and out: the daemon keeps it as
+ *  any client sent it. */
+function project(p: {
+	id: string;
+	name: string;
+	path: string;
+	chats?: boolean;
+	worktree?: WorktreeMeta;
+	color?: unknown;
+	icon?: unknown;
+}): DaemonProject {
+	const color = normalizeColor(p.color);
+	const icon = parseTabIcon(p.icon);
 	return {
 		id: p.id,
 		name: p.name,
 		path: p.path,
 		...(p.chats ? { chats: true } : {}),
-		...(p.worktree ? { worktree: p.worktree } : {})
+		...(p.worktree ? { worktree: p.worktree } : {}),
+		...(color ? { color } : {}),
+		...(icon ? { icon } : {})
 	};
 }
 
@@ -161,8 +178,12 @@ export class DaemonSync {
 		const byPath = new Map(projects.map((p) => [trim(p.path), p]));
 		for (const p of [...this.store.projects]) {
 			const r = byPath.get(trim(p.path));
-			if (!r) this.store.removeProject(p);
-			else if (p.name !== r.name) p.name = r.name;
+			if (!r) {
+				this.store.removeProject(p);
+				continue;
+			}
+			if (p.name !== r.name) p.name = r.name;
+			this.store.setProjectChrome(p, { color: r.color ?? null, icon: r.icon ?? null });
 		}
 		for (const r of projects) {
 			if (!this.store.projects.some((p) => trim(p.path) === trim(r.path))) this.store.addProjectShell(r);
@@ -213,7 +234,7 @@ export class DaemonSync {
 function merge(saved: SavedProject[], remote: DaemonProject[]): SavedProject[] {
 	return remote.map((r) => {
 		const known = saved.find((p) => trim(p.path) === trim(r.path));
-		return known ? { ...known, name: r.name } : { ...r, tabs: [] };
+		return known ? { ...known, name: r.name, color: r.color, icon: r.icon } : { ...r, tabs: [] };
 	});
 }
 

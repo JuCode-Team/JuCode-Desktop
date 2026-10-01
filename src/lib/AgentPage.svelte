@@ -3,7 +3,7 @@
 	// sessions.
 	import { onMount } from 'svelte';
 	import XIcon from 'phosphor-svelte/lib/XIcon';
-	import RobotIcon from 'phosphor-svelte/lib/RobotIcon';
+	import ShuffleIcon from 'phosphor-svelte/lib/ShuffleIcon';
 	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import FolderPlusIcon from 'phosphor-svelte/lib/FolderPlusIcon';
@@ -18,6 +18,9 @@
 	import Notice from '$lib/ui/Notice.svelte';
 	import { confirm } from '$lib/ui/confirm.svelte';
 	import AgentSchedules from '$lib/AgentSchedules.svelte';
+	import AgentAvatar from '$lib/AgentAvatar.svelte';
+	import TabChromePopover from '$lib/workbench/TabChromePopover.svelte';
+	import { newAvatarSeed } from '$lib/avatar';
 	import {
 		agentDirectory,
 		type AgentChanges,
@@ -118,6 +121,14 @@
 		await change({ directories: [...detail.agent.directories, { path, mode: 'ro' }] });
 	}
 
+	// Clicking the avatar opens the icon picker; with no icon the generated
+	// avatar shows, and 「换一个」 gives it a new seed.
+	let picker = $state<{ x: number; y: number } | null>(null);
+	function openPicker(e: MouseEvent) {
+		const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+		picker = { x: r.left, y: r.bottom + 6 };
+	}
+
 	function when(ms: number): string {
 		return new Date(ms).toLocaleString();
 	}
@@ -191,11 +202,41 @@
 	}
 </script>
 
+{#if picker && detail}
+	{@const agent = detail.agent}
+	<TabChromePopover
+		x={picker.x}
+		y={picker.y}
+		name={agent.name}
+		color={agent.color ?? null}
+		icon={agent.icon ?? null}
+		onColor={(color) => change({ color })}
+		onIcon={(icon) => change({ icon })}
+		onClose={() => (picker = null)}
+	>
+		<div class="avatar-pick">
+			<button class="avatar-btn" class:on={!agent.icon} onclick={() => change({ icon: null })}>
+				<AgentAvatar agent={{ ...agent, icon: null }} size={22} />{t('shell.chrome.randomAvatar')}
+			</button>
+			<Button size="sm" onclick={() => change({ icon: null, avatar_seed: newAvatarSeed() })}>
+				<ShuffleIcon size={12} />{t('shell.chrome.shuffle')}
+			</Button>
+		</div>
+	</TabChromePopover>
+{/if}
+
 <Modal label={agentId} width={720} padded={false} {onClose}>
 	<div class="sheet">
 		<div class="head">
 			<div>
-				<h2><RobotIcon size={18} /> {detail?.agent.name ?? agentId}</h2>
+				<h2>
+					{#if detail}
+						<button class="avatar-btn" onclick={openPicker} aria-label={t('shell.chrome.avatar')} title={t('shell.chrome.avatar')}>
+							<AgentAvatar agent={detail.agent} size={28} />
+						</button>
+					{/if}
+					{detail?.agent.name ?? agentId}
+				</h2>
 				<p><code>{agentId}</code>{#if detail} · <code>{detail.agent.cwd}</code>{/if}</p>
 			</div>
 			<IconButton onclick={onClose} label={t('common.close')}><XIcon size={18} /></IconButton>
@@ -454,6 +495,32 @@
 		font-family: var(--font-sans);
 		font-size: var(--fs-xl);
 		font-weight: 600;
+	}
+	.avatar-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 2px;
+		border: none;
+		border-radius: var(--r-sm);
+		background: none;
+		color: inherit;
+		font: inherit;
+		cursor: pointer;
+	}
+	.avatar-btn:hover,
+	.avatar-btn.on {
+		background: var(--surface2);
+	}
+	.avatar-pick {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 6px;
+		font-size: var(--fs-sm);
+	}
+	.avatar-pick .avatar-btn {
+		padding: 3px 8px 3px 3px;
 	}
 	.head p {
 		margin: 4px 0 0;

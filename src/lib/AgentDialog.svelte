@@ -4,11 +4,14 @@
 	import { onMount, tick } from 'svelte';
 	import RobotIcon from 'phosphor-svelte/lib/RobotIcon';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
+	import ShuffleIcon from 'phosphor-svelte/lib/ShuffleIcon';
 	import { open } from '@tauri-apps/plugin-dialog';
 	import Button from '$lib/ui/Button.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
+	import AgentAvatar from '$lib/AgentAvatar.svelte';
 	import { agentDirectory, type AgentView } from '$lib/agents.svelte';
+	import { newAvatarSeed } from '$lib/avatar';
 	import { t } from '$lib/i18n';
 
 	let {
@@ -26,6 +29,8 @@
 	let idEdited = $state(false);
 	let cwd = $state('');
 	let role = $state('');
+	// The avatar it will have; 「换一个」 draws another.
+	let seed = $state(newAvatarSeed());
 	let busy = $state(false);
 	let error = $state('');
 	let nameEl = $state<HTMLInputElement | null>(null);
@@ -63,7 +68,8 @@
 				id,
 				name: name.trim(),
 				cwd: cwd.trim(),
-				role: role.trim()
+				role: role.trim(),
+				avatar_seed: seed
 			});
 			onCreated(agent);
 		} catch (e) {
@@ -86,10 +92,16 @@
 <Modal title={t('shell.agents.dialogTitle')} width={480} dismissible={!busy} {onClose}>
 	{#snippet icon()}<RobotIcon size={15} />{/snippet}
 	<p class="hint">{t('shell.agents.dialogHint')}</p>
-	<label class="field">
+	<div class="field">
 		<span>{t('shell.agents.nameLabel')}</span>
-		<input bind:this={nameEl} bind:value={name} />
-	</label>
+		<div class="dir">
+			<AgentAvatar agent={{ id, avatar_seed: seed }} size={30} />
+			<input bind:this={nameEl} bind:value={name} aria-label={t('shell.agents.nameLabel')} />
+			<Button size="sm" onclick={() => (seed = newAvatarSeed())}>
+				<ShuffleIcon size={13} />{t('shell.chrome.shuffle')}
+			</Button>
+		</div>
+	</div>
 	<label class="field">
 		<span>{t('shell.agents.idLabel')}</span>
 		<input

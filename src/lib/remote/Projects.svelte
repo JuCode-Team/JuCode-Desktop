@@ -11,7 +11,6 @@
 	import BoxArrowUpIcon from 'phosphor-svelte/lib/BoxArrowUpIcon';
 	import DotsThreeIcon from 'phosphor-svelte/lib/DotsThreeIcon';
 	import ClockCounterClockwiseIcon from 'phosphor-svelte/lib/ClockCounterClockwiseIcon';
-	import RobotIcon from 'phosphor-svelte/lib/RobotIcon';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import FilesIcon from 'phosphor-svelte/lib/FilesIcon';
 	import GitDiffIcon from 'phosphor-svelte/lib/GitDiffIcon';
@@ -21,6 +20,9 @@
 	import Modal from '$lib/ui/Modal.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import BackendIcon from '$lib/BackendIcon.svelte';
+	import AgentAvatar from '$lib/AgentAvatar.svelte';
+	import TabGlyph from '$lib/workbench/TabGlyph.svelte';
+	import { normalizeColor, parseTabIcon } from '$lib/workbench/tabChrome';
 	import { agentDirectory, type AgentView, type DaemonSessionView } from '$lib/agents.svelte';
 	import { baseName, remoteProjects, type ProjectView } from './store.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
@@ -201,7 +203,7 @@
 			{#each agentDirectory.agents as a (a.id)}
 				<div class="sess">
 					<button class="sess-main" onclick={() => onOpenAgent(a)}>
-						{#if a.busy}<CircleNotchIcon size={16} class="spin" />{:else}<RobotIcon size={16} />{/if}
+						{#if a.busy}<CircleNotchIcon size={16} class="spin" />{:else}<AgentAvatar agent={a} size={16} />{/if}
 						<span class="agent-text">
 							<span class="sess-title">{a.name}</span>
 							{#if a.summary}<span class="summary">{a.summary}</span>{/if}
@@ -237,9 +239,11 @@
 		{#each code as p (p.id)}
 			{@const open = !collapsed[p.id]}
 			{@const w = sessionsOf(p).some((s) => s.session === current) ? 'fill' : 'regular'}
+			{@const icon = parseTabIcon(p.icon)}
+			{@const color = normalizeColor(p.color)}
 			<div class="folder">
 				<button class="folder-row" onclick={() => (collapsed[p.id] = !collapsed[p.id])} title={p.path}>
-					{#if open}<FolderOpenIcon size={18} weight={w} />{:else}<FolderIcon size={18} weight={w} />{/if}
+					{#if icon}<TabGlyph {icon} color={color ?? 'var(--dim)'} active={w === 'fill'} size={16} />{:else if open}<FolderOpenIcon size={18} weight={w} {color} />{:else}<FolderIcon size={18} weight={w} {color} />{/if}
 					<span class="folder-name">{p.name}</span>
 				</button>
 				<button class="act" onclick={() => onNewSession(p)} aria-label={t('shell.remote.newSession')} title={t('shell.remote.newSession')}>
@@ -401,8 +405,8 @@
 		font-size: var(--fs-sm);
 		text-align: left;
 	}
-	.folder-row :global(svg),
-	.sess-main :global(svg) {
+	.folder-row > :global(svg),
+	.sess-main > :global(svg) {
 		color: var(--dim);
 		flex-shrink: 0;
 	}

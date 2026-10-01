@@ -86,6 +86,25 @@ describe('DaemonSync', () => {
 		expect(request).not.toHaveBeenCalled();
 	});
 
+	it('sends a folder icon and color, follows other clients, and drops a dirty icon', async () => {
+		const { sync, store, workspaces } = await setup();
+		const ws = workspaces.workspaces[0];
+		const frame = (rev: number, project: Record<string, unknown>) =>
+			sync.handle({ type: 'workspaces', rev, workspaces: [{ id: ws.id, name: ws.name, is_default: true, projects: [project] }] });
+		const base = { id: 'p1', name: 'app', path: '/w/app' };
+		frame(3, base);
+		store.setProjectChrome(store.projects[0], { color: '#2563eb', icon: { kind: 'builtin', id: 'rocket' } });
+		sync.push();
+		const sent = request.mock.calls[0][0] as { workspaces: { projects: Record<string, unknown>[] }[] };
+		expect(sent.workspaces[0].projects[0]).toMatchObject({ color: '#2563eb', icon: { kind: 'builtin', id: 'rocket' } });
+
+		request.mockClear();
+		frame(5, { ...base, color: '#dc2626', icon: { kind: 'svg', markup: '<svg><script>x</script></svg>' } });
+		expect(store.projects[0].color).toBe('#dc2626');
+		expect(store.projects[0].icon).toBeUndefined();
+		expect(request).not.toHaveBeenCalled();
+	});
+
 	it('lists daemon sessions dormant, follows their titles and archive state, and drops removed ones', async () => {
 		const { sync, store } = await setup();
 		const session = (over: Record<string, unknown> = {}) => ({

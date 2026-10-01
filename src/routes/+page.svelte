@@ -650,6 +650,13 @@
 		ev.preventDefault();
 		sessionChromeFor = { sid, x: ev.clientX, y: ev.clientY };
 	}
+	// The same popover colours a sidebar project folder and sets its icon.
+	let projectChromeFor = $state<{ id: string; x: number; y: number } | null>(null);
+	const chromeProject = $derived(projectChromeFor ? (projects.find((p) => p.id === projectChromeFor!.id) ?? null) : null);
+	function openProjectMenu(p: Project, ev: MouseEvent) {
+		ev.preventDefault();
+		projectChromeFor = { id: p.id, x: ev.clientX, y: ev.clientY };
+	}
 
 	async function addProject() {
 		const path = await open({ directory: true, title: t('shell.pickDirTitle') });
@@ -1044,6 +1051,7 @@
 				onMoveSession={(id, target, after) => store.moveSession(id, target, after)}
 				onRenameSession={(id, title) => store.renameSession(id, title)}
 				onSessionMenu={openSessionMenu}
+				onProjectMenu={openProjectMenu}
 				onHistory={(p) => store.openHistory(p)}
 				agents={agentDirectory.agents}
 				agentsStatus={agentDirectory.status}
@@ -1257,6 +1265,19 @@
 			pinned={!!chromeSession.pinned}
 			onPin={(v) => store.setPinned(chromeSession.id, v)}
 			onClose={() => (sessionChromeFor = null)}
+		/>
+	{/if}
+
+	{#if projectChromeFor && chromeProject}
+		<TabChromePopover
+			x={projectChromeFor.x}
+			y={projectChromeFor.y}
+			name={chromeProject.name}
+			color={chromeProject.color ?? null}
+			icon={chromeProject.icon ?? null}
+			onColor={(c) => store.setProjectChrome(chromeProject, { color: c })}
+			onIcon={(i) => store.setProjectChrome(chromeProject, { icon: i })}
+			onClose={() => (projectChromeFor = null)}
 		/>
 	{/if}
 

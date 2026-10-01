@@ -14,6 +14,9 @@ export interface ProjectView {
 	path: string;
 	/** The chats project (`~/.jucode/chats`). */
 	chats?: boolean;
+	/** Folder chrome set on the desktop, kept by the daemon unchecked. */
+	color?: unknown;
+	icon?: unknown;
 }
 
 export interface WorkspaceView {

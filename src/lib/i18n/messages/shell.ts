@@ -106,11 +106,11 @@ const shell = {
 			cannotDeleteDefault: '默认工作区不能删除。',
 			defaultBadge: '默认工作区（不可删除）'
 		},
-		// shared tab chrome editor (workspace tabs + session tabs)
+		// shared chrome editor (workspace tabs, session tabs, project folders, agents)
 		chrome: {
-			title: '标签外观',
+			title: '外观',
 			name: '名称',
-			color: '标签颜色',
+			color: '颜色',
 			noColor: '无颜色',
 			icon: '图标',
 			clearIcon: '清除图标',
@@ -119,7 +119,10 @@ const shell = {
 			svg: '自定义 SVG',
 			svgPlaceholder: '粘贴 <svg>…</svg>',
 			svgInvalid: 'SVG 无效或包含不允许的内容',
-			delete: '删除'
+			delete: '删除',
+			avatar: '头像',
+			randomAvatar: '随机头像',
+			shuffle: '换一个'
 		},
 		searchSessions: '搜索会话',
 
@@ -690,11 +693,11 @@ const shell = {
 			cannotDeleteDefault: 'The default workspace cannot be deleted.',
 			defaultBadge: 'Default workspace (cannot be deleted)'
 		},
-		// shared tab chrome editor (workspace tabs + session tabs)
+		// shared chrome editor (workspace tabs, session tabs, project folders, agents)
 		chrome: {
-			title: 'Tab appearance',
+			title: 'Appearance',
 			name: 'Name',
-			color: 'Tag color',
+			color: 'Color',
 			noColor: 'No color',
 			icon: 'Icon',
 			clearIcon: 'Clear icon',
@@ -703,7 +706,10 @@ const shell = {
 			svg: 'Custom SVG',
 			svgPlaceholder: 'Paste <svg>…</svg>',
 			svgInvalid: 'Invalid SVG or disallowed content',
-			delete: 'Delete'
+			delete: 'Delete',
+			avatar: 'Avatar',
+			randomAvatar: 'Generated avatar',
+			shuffle: 'Shuffle'
 		},
 		searchSessions: 'Search sessions',
 

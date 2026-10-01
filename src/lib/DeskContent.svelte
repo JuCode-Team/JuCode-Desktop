@@ -10,8 +10,10 @@
 	import ClockIcon from 'phosphor-svelte/lib/ClockIcon';
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
+	import AgentAvatar from '$lib/AgentAvatar.svelte';
 	import {
 		agentDirectory,
+		type AgentView,
 		type ActionView,
 		type QuestionView,
 		type ReportView
@@ -75,6 +77,10 @@
 	}
 </script>
 
+{#snippet face(agent: AgentView | undefined)}
+	{#if agent}<AgentAvatar {agent} size={14} />{/if}
+{/snippet}
+
 {#if agentDirectory.status === 'unreachable'}
 	<div class="unreachable"><Notice tone="warn">{t('shell.desk.unreachable')}</Notice></div>
 {/if}
@@ -89,6 +95,7 @@
 			<div class="card-head">
 				<QuestionIcon size={14} />
 				<span class="kind">{t('shell.desk.question')}</span>
+				{@render face(agentDirectory.agents.find((x) => x.id === q.agent))}
 				<span class="who">{agentDirectory.agentName(q.agent)} · {when(q.asked_at)}</span>
 				{#if q.due_at}<span class="due">{t('shell.desk.due', { time: when(q.due_at) })}</span>{/if}
 			</div>
@@ -127,6 +134,7 @@
 			<div class="card-head">
 				<ShieldCheckIcon size={14} />
 				<span class="kind">{t('shell.desk.action')}</span>
+				{@render face(agent)}
 				<span class="who">{agent?.name ?? a.cwd} · {when(a.created_at)}</span>
 			</div>
 			<div class="title"><code>{a.name}</code> {a.summary}</div>
@@ -153,7 +161,7 @@
 	{:else}
 		<div class="working">
 			{#each working as agent (agent.id)}
-				<span class="chip"><CircleNotchIcon size={14} class="spin" />{agent.name}</span>
+				<span class="chip"><CircleNotchIcon size={14} class="spin" /><AgentAvatar {agent} size={14} />{agent.name}</span>
 			{/each}
 		</div>
 	{/if}
@@ -177,6 +185,7 @@
 			<button class="report-head" onclick={() => toggleReport(r)}>
 				<FileTextIcon size={13} />
 				<span class="title">{r.title}</span>
+				{@render face(agentDirectory.agents.find((x) => x.id === r.agent))}
 				<span class="who">{agentDirectory.agentName(r.agent)} · {when(r.at)}</span>
 			</button>
 			{#if expanded[r.id]}

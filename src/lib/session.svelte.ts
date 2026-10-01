@@ -21,7 +21,7 @@ export interface SavedTabChrome {
 // session id (stable across restore so layout chat tiles keep matching);
 // `sid` is the engine conversation to resume, present only when the engine
 // actually persisted one.
-export interface SavedProject {
+export interface SavedProject extends SavedTabChrome {
 	id: string;
 	name: string;
 	path: string;
@@ -522,10 +522,19 @@ export class SessionStore {
 	}
 
 	/** Adds a project another client created, with no sessions of its own. */
-	addProjectShell(project: { id: string; name: string; path: string; chats?: boolean; worktree?: WorktreeMeta }) {
+	addProjectShell(project: {
+		id: string;
+		name: string;
+		path: string;
+		chats?: boolean;
+		worktree?: WorktreeMeta;
+		color?: unknown;
+		icon?: unknown;
+	}) {
 		const p: Project = { id: project.id, name: project.name, path: project.path, sessions: [] };
 		if (project.chats) p.chats = true;
 		if (project.worktree) p.worktree = project.worktree;
+		this.setProjectChrome(p, project);
 		this.projects.push(p);
 	}
 
@@ -549,6 +558,15 @@ export class SessionStore {
 		if (chrome.icon !== undefined) {
 			s.icon = chrome.icon === null ? undefined : parseTabIcon(chrome.icon);
 		}
+	}
+
+	/** Set or clear a project folder's color / icon (null or invalid clears).
+	 *  An unchanged icon is left as it is, so the daemon's echo saves nothing. */
+	setProjectChrome(p: Project, chrome: { color?: unknown; icon?: unknown }) {
+		if (chrome.color !== undefined) p.color = normalizeColor(chrome.color);
+		if (chrome.icon === undefined) return;
+		const icon = parseTabIcon(chrome.icon);
+		if (JSON.stringify(icon) !== JSON.stringify(p.icon)) p.icon = icon;
 	}
 
 	/** Re-open a persisted conversation in a new session: the daemon reopens
@@ -1049,6 +1067,8 @@ export class SessionStore {
 			...(p.chats ? { chats: true } : {}),
 			...(p.lastBackend && p.lastBackend !== 'jucode' ? { lastBackend: p.lastBackend } : {}),
 			...(p.lastBackend === 'acp' && p.lastAcpAgent ? { lastAcpAgent: p.lastAcpAgent } : {}),
+			...(p.color ? { color: p.color } : {}),
+			...(p.icon ? { icon: p.icon } : {}),
 			tabs: p.sessions
 				.map((s) => ({
 					id: s.id,
@@ -1079,6 +1099,7 @@ export class SessionStore {
 			for (const p of saved) {
 				const proj: Project = { id: p.id, name: p.name, path: p.path, sessions: [] };
 				if (p.chats === true) proj.chats = true;
+				this.setProjectChrome(proj, p);
 				if (p.lastBackend) proj.lastBackend = normalizeBackendId(p.lastBackend);
 				if (
 					proj.lastBackend === 'acp' &&

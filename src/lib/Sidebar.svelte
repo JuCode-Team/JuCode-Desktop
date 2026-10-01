@@ -13,7 +13,6 @@
 	import TrayIcon from 'phosphor-svelte/lib/TrayIcon';
 	import IdentificationCardIcon from 'phosphor-svelte/lib/IdentificationCardIcon';
 	import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon';
-	import RobotIcon from 'phosphor-svelte/lib/RobotIcon';
 	import FolderIcon from 'phosphor-svelte/lib/FolderIcon';
 	import FolderOpenIcon from 'phosphor-svelte/lib/FolderOpenIcon';
 	import ChatsIcon from 'phosphor-svelte/lib/ChatsIcon';
@@ -28,6 +27,7 @@
 	import BackendIcon from '$lib/BackendIcon.svelte';
 	import TabGlyph from '$lib/workbench/TabGlyph.svelte';
 	import SessionMark from '$lib/SessionMark.svelte';
+	import AgentAvatar from '$lib/AgentAvatar.svelte';
 	import { sessionStatus } from '$lib/sessionStatus';
 	import { listedSessions } from '$lib/session.svelte';
 	import { CHATS_ENABLED, type Project, type Session } from '$lib/types';
@@ -51,6 +51,7 @@
 		onMoveSession,
 		onRenameSession,
 		onSessionMenu,
+		onProjectMenu,
 		onHistory,
 		agents = [],
 		agentsStatus = 'off',
@@ -81,6 +82,8 @@
 		onRenameSession: (id: string, title: string) => void;
 		/** Right-click on a session row: the page opens the chrome popover. */
 		onSessionMenu: (id: string, ev: MouseEvent) => void;
+		/** Right-click on a project folder: the page opens the chrome popover. */
+		onProjectMenu: (p: Project, ev: MouseEvent) => void;
 		onHistory: (p: Project) => void;
 		/** Long-lived agents of the local jucode daemon. */
 		agents?: AgentView[];
@@ -438,7 +441,7 @@
 					onclick={() => onOpenAgent(a)}
 					title={a.enabled ? t('shell.agents.open', { name: a.name }) : t('shell.agents.details')}
 				>
-					<RobotIcon size={18} />
+					<AgentAvatar agent={a} size={18} />
 					<span class="agent-text">
 						<span class="sess-title">{a.name}</span>
 						{#if a.summary}<span class="agent-summary">{a.summary}</span>{/if}
@@ -494,8 +497,8 @@
 				{@const w = p.sessions.some((s) => s.id === activeId) ? 'fill' : 'regular'}
 				{#if !query || active.length || arch.length}
 					<div class="folder" class:stale={p.stale}>
-						<button class="folder-row" onclick={() => (collapsed[p.id] = !collapsed[p.id])} title={p.worktree ? t('shell.task.worktreeTip', { branch: p.worktree.branch, base: p.worktree.baseBranch || '?' }) : p.path}>
-							{#if p.worktree}<GitBranchIcon size={18} weight={w} />{:else if open}<FolderOpenIcon size={18} weight={w} />{:else}<FolderIcon size={18} weight={w} />{/if}
+						<button class="folder-row" onclick={() => (collapsed[p.id] = !collapsed[p.id])} oncontextmenu={(e) => onProjectMenu(p, e)} title={p.worktree ? t('shell.task.worktreeTip', { branch: p.worktree.branch, base: p.worktree.baseBranch || '?' }) : p.path}>
+							{#if p.icon}<TabGlyph icon={p.icon} color={p.color ?? 'var(--dim)'} active={w === 'fill'} size={16} />{:else if p.worktree}<GitBranchIcon size={18} weight={w} color={p.color} />{:else if open}<FolderOpenIcon size={18} weight={w} color={p.color} />{:else}<FolderIcon size={18} weight={w} color={p.color} />{/if}
 							<span class="folder-name">{p.name}</span>
 						</button>
 						{#if p.stale}
@@ -619,7 +622,7 @@
 	}
 	.row :global(svg),
 	.sess > :global(svg),
-	.folder-row :global(svg) {
+	.folder-row > :global(svg) {
 		color: var(--dim);
 		flex-shrink: 0;
 	}
@@ -889,6 +892,9 @@
 	.sess.agent.off .sess-title,
 	.sess.agent.off > :global(svg) {
 		color: var(--dim2);
+	}
+	.sess.agent.off > :global(.avatar) {
+		opacity: 0.5;
 	}
 	.note {
 		padding: 6px 10px;

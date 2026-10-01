@@ -3,6 +3,7 @@
 
 import { daemon } from './protocol';
 import { toWire, upsert, type Schedule, type ScheduleDraft } from './schedules';
+import type { TabIcon } from './workbench/tabChrome';
 
 export interface AgentView {
 	id: string;
@@ -19,14 +20,29 @@ export interface AgentView {
 	network: boolean;
 	directories: { path: string; mode: 'ro' | 'rw' }[];
 	command_rules: { prefix: string; action: 'allow' | 'ask' | 'forbid' }[];
+	/** Custom icon, as the daemon stored it (unsanitized; see AgentAvatar). */
+	icon?: TabIcon | null;
+	/** `#rrggbb`. */
+	color?: string | null;
+	/** Seeds the generated avatar; older agents have none and use the id. */
+	avatar_seed?: string;
 }
 
 /** Settings `agent_update` accepts; omitted fields stay as they are.
- *  `role` rewrites its role.md. */
+ *  `role` rewrites its role.md; `icon: null` / `color: null` clear them. */
 export type AgentChanges = Partial<
 	Pick<
 		AgentView,
-		'name' | 'enabled' | 'approval_mode' | 'sandbox' | 'network' | 'directories' | 'command_rules'
+		| 'name'
+		| 'enabled'
+		| 'approval_mode'
+		| 'sandbox'
+		| 'network'
+		| 'directories'
+		| 'command_rules'
+		| 'icon'
+		| 'color'
+		| 'avatar_seed'
 	>
 > & { role?: string };
 
@@ -104,6 +120,8 @@ export interface NewAgent {
 	name: string;
 	cwd: string;
 	role: string;
+	/** The avatar previewed while creating it; the daemon picks one without. */
+	avatar_seed?: string;
 }
 
 /** Reconnect backoff: 1 s, doubling to 30 s; reset by a good connection. */
@@ -316,7 +334,8 @@ export class AgentDirectory {
 			agent: agent.id,
 			name: agent.name,
 			cwd: agent.cwd,
-			role: agent.role
+			role: agent.role,
+			...(agent.avatar_seed ? { avatar_seed: agent.avatar_seed } : {})
 		});
 		return reply.agent as AgentView;
 	}
