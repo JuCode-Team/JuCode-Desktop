@@ -5,6 +5,7 @@
 	import GearIcon from 'phosphor-svelte/lib/GearIcon';
 	import ArrowCircleDownIcon from 'phosphor-svelte/lib/ArrowCircleDownIcon';
 	import { t } from '$lib/i18n';
+	import { withShortcut } from '$lib/shortcuts';
 	import type { TabIcon } from './tabChrome';
 	import type { WorkspaceEntry } from './workspaces';
 	import TabGlyph from './TabGlyph.svelte';
@@ -137,7 +138,7 @@
 		>
 			<span class="tile"><UserCircleIcon size={20} weight={card ? 'fill' : 'regular'} /></span>
 		</button>
-		<button class="ws" class:on={settingsOpen} title={t('shell.settings')} aria-label={t('shell.settings')} aria-pressed={settingsOpen} onclick={onSettings}>
+		<button class="ws" class:on={settingsOpen} title={withShortcut(t('shell.settings'), 'settings')} aria-label={t('shell.settings')} aria-pressed={settingsOpen} onclick={onSettings}>
 			<span class="tile"><GearIcon size={20} weight={settingsOpen ? 'fill' : 'regular'} /></span>
 		</button>
 	</div>

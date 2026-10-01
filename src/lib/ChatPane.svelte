@@ -19,6 +19,9 @@
 		insertWebRef: (ref: WebRef) => void;
 		toggleFind: () => void;
 		scrollToEnd: () => void;
+		focusComposer: () => void;
+		stop: () => void;
+		openModelMenu: () => void;
 	}
 </script>
 
@@ -113,7 +116,7 @@
 	let imageSeq = 0;
 	let scroller = $state<HTMLElement | null>(null);
 	let composerEl = $state<HTMLElement | null>(null);
-	let composerRef = $state<{ insertToken: (t: string) => void } | undefined>();
+	let composerRef = $state<{ insertToken: (t: string) => void; openModelMenu: () => void } | undefined>();
 	let bottomH = $state(120);
 	let atBottom = $state(true);
 
@@ -869,7 +872,12 @@
 		addAttachment,
 		insertWebRef,
 		toggleFind: () => (showFind ? closeFind() : openFind()),
-		scrollToEnd: () => void scrollToEnd()
+		scrollToEnd: () => void scrollToEnd(),
+		focusComposer: () => composerEl?.focus(),
+		stop: () => {
+			if (chat.busy) stop();
+		},
+		openModelMenu: () => composerRef?.openModelMenu()
 	};
 	$effect(() => {
 		onRegister?.(session.id, api);

@@ -23,6 +23,8 @@
 	import { caps, type BackendCaps } from '$lib/backends';
 	import Modal from '$lib/ui/Modal.svelte';
 	import { t } from '$lib/i18n';
+	import { shortcutLabel } from '$lib/shortcuts';
+	import KeyboardIcon from 'phosphor-svelte/lib/KeyboardIcon';
 
 	let {
 		chat,
@@ -39,7 +41,9 @@
 		onOpenPanel,
 		onToggleSidebar,
 		onToggleTheme,
-		onSetup
+		onSetup,
+		onHistory,
+		onShortcuts
 	}: {
 		chat: ChatState | undefined;
 		hasProject: boolean;
@@ -59,6 +63,8 @@
 		onToggleSidebar: () => void;
 		onToggleTheme: () => void;
 		onSetup: () => void;
+		onHistory: () => void;
+		onShortcuts: () => void;
 	} = $props();
 
 	type Action = {
@@ -90,11 +96,12 @@
 	// curated ones, which already cover the common /model, /tree, /resume… verbs).
 	const actions = $derived.by<Action[]>(() => {
 		const curated: Action[] = [
-			{ id: 'new-session', label: t('shell.cmd.newSession'), keys: '⌘N', icon: PlusIcon, keywords: t('shell.cmd.newSessionKw'), disabled: !hasProject, run: wrap(onNewSession) },
+			{ id: 'new-session', label: t('shell.cmd.newSession'), keys: shortcutLabel('newSession'), icon: PlusIcon, keywords: t('shell.cmd.newSessionKw'), disabled: !hasProject, run: wrap(onNewSession) },
 			{ id: 'new-project', label: t('shell.cmd.newProject'), icon: FolderPlusIcon, keywords: t('shell.cmd.newProjectKw'), run: wrap(onNewProject) },
 			{ id: 'new-task', label: t('shell.cmd.newTask'), hint: t('shell.cmd.newTaskHint'), icon: GitForkIcon, keywords: t('shell.cmd.newTaskKw'), disabled: !canNewTask, run: wrap(onNewTask) },
-			{ id: 'model', label: t('shell.cmd.model'), icon: CpuIcon, keywords: t('shell.cmd.modelKw'), cap: 'modelPicker', run: wrap(() => onRun('/model')) },
+			{ id: 'model', label: t('shell.cmd.model'), keys: shortcutLabel('model'), icon: CpuIcon, keywords: t('shell.cmd.modelKw'), cap: 'modelPicker', run: wrap(() => onRun('/model')) },
 			{ id: 'rewind', label: t('shell.cmd.rewind'), hint: t('shell.cmd.rewindHint'), icon: ArrowCounterClockwiseIcon, keywords: t('shell.cmd.rewindKw'), cap: 'checkpoints', run: wrap(() => onRun('/rewind')) },
+			{ id: 'history', label: t('shell.history'), keys: shortcutLabel('history'), icon: ClockCounterClockwiseIcon, keywords: t('shell.cmd.resumeKw'), disabled: !hasProject, run: wrap(onHistory) },
 			{ id: 'resume', label: t('shell.cmd.resume'), icon: ClockCounterClockwiseIcon, keywords: t('shell.cmd.resumeKw'), cap: 'resume', run: wrap(() => onRun('/resume')) },
 			{ id: 'tree', label: t('shell.cmd.tree'), icon: GitBranchIcon, keywords: t('shell.cmd.treeKw'), cap: 'branchTree', run: wrap(() => onRun('/tree')) },
 			{ id: 'compact', label: t('shell.cmd.compact'), icon: StackIcon, keywords: t('shell.cmd.compactKw'), cap: 'compact', run: wrap(() => onRun('/compact')) },
@@ -108,12 +115,14 @@
 				label: t('shell.cmd.openPanel', { name: p.label }),
 				hint: t('shell.cmd.openPanelHint'),
 				icon: SquaresFourIcon,
+				keys: p.key === 'terminal' ? shortcutLabel('terminal') : undefined,
 				keywords: `${t('shell.cmd.openPanelKw')} ${p.key} ${p.label}`,
 				run: wrap(() => onOpenPanel(p.key))
 			})),
-			{ id: 'settings', label: t('shell.cmd.settings'), keys: '⌘,', icon: SettingsIcon, keywords: t('shell.cmd.settingsKw'), run: wrap(onSettings) },
+			{ id: 'settings', label: t('shell.cmd.settings'), keys: shortcutLabel('settings'), icon: SettingsIcon, keywords: t('shell.cmd.settingsKw'), run: wrap(onSettings) },
 			{ id: 'setup', label: t('shell.cmd.setup'), hint: t('shell.cmd.setupHint'), icon: WrenchIcon, keywords: t('shell.cmd.setupKw'), run: wrap(onSetup) },
-			{ id: 'sidebar', label: t('shell.cmd.sidebar'), keys: '⌘B', icon: SidebarSimpleIcon, keywords: t('shell.cmd.sidebarKw'), run: wrap(onToggleSidebar) },
+			{ id: 'sidebar', label: t('shell.cmd.sidebar'), keys: shortcutLabel('sidebar'), icon: SidebarSimpleIcon, keywords: t('shell.cmd.sidebarKw'), run: wrap(onToggleSidebar) },
+			{ id: 'shortcuts', label: t('shell.shortcuts.title'), keys: shortcutLabel('shortcuts'), icon: KeyboardIcon, keywords: t('shell.shortcuts.keywords'), run: wrap(onShortcuts) },
 			{ id: 'theme', label: t('shell.cmd.theme'), icon: CircleHalfIcon, keywords: t('shell.cmd.themeKw'), run: wrap(onToggleTheme) }
 		];
 		const known = new Set(['/model', '/rewind', '/undo', '/resume', '/tree', '/compact', '/context', '/stats', '/doctor', '/new']);

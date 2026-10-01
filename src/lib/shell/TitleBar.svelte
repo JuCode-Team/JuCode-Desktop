@@ -8,6 +8,7 @@
 	import XIcon from 'phosphor-svelte/lib/XIcon';
 	import { getCurrentWindow } from '@tauri-apps/api/window';
 	import { t } from '$lib/i18n';
+	import { withShortcut } from '$lib/shortcuts';
 	import PopMenu from '$lib/ui/PopMenu.svelte';
 
 	// The window's title bar, across the full width in the chrome colour: the
@@ -65,7 +66,7 @@
 	<div class="lead" class:resizing style:width="{leftWidth}px" data-tauri-drag-region>
 		<button
 			class="tb-btn"
-			title={t('shell.toggleSidebar')}
+			title={withShortcut(t('shell.toggleSidebar'), 'sidebar')}
 			aria-label={t('shell.toggleSidebar')}
 			aria-pressed={sidebarOpen}
 			onclick={onToggleSidebar}><SidebarSimpleIcon size={18} /></button

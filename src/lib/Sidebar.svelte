@@ -21,6 +21,7 @@
 	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
 	import Button from '$lib/ui/Button.svelte';
 	import { t } from '$lib/i18n';
+	import { withShortcut } from '$lib/shortcuts';
 	import { BACKEND_LABELS } from '$lib/backends';
 	import BackendIcon from '$lib/BackendIcon.svelte';
 	import TabGlyph from '$lib/workbench/TabGlyph.svelte';
@@ -387,11 +388,11 @@
 						{#if p.stale}
 							<span class="tag" title={p.path}>{t('shell.task.stale')}</span>
 						{:else}
-							<button class="act" onclick={() => onHistory(p)} aria-label="history" title={t('shell.history')}><ClockCounterClockwiseIcon size={16} /></button>
+							<button class="act" onclick={() => onHistory(p)} aria-label="history" title={withShortcut(t('shell.history'), 'history')}><ClockCounterClockwiseIcon size={16} /></button>
 							{#if !p.worktree}
 								<button class="act" onclick={() => onNewTask(p)} aria-label="new parallel task" title={t('shell.newTask')}><GitForkIcon size={16} /></button>
 							{/if}
-							<button class="act" onclick={() => onNewSession(p)} aria-label="new session" title={t('shell.newSessionInProject')}><PlusIcon size={16} /></button>
+							<button class="act" onclick={() => onNewSession(p)} aria-label="new session" title={withShortcut(t('shell.newSessionInProject'), 'newSession')}><PlusIcon size={16} /></button>
 						{/if}
 						{#if codeProjects.length > 1 || p.stale}
 							<button class="act" class:always={p.stale} onclick={() => onCloseProject(p)} aria-label="close project" title={p.stale ? t('shell.task.staleRemove') : t('shell.closeProject')}><XIcon size={16} /></button>

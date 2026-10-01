@@ -23,6 +23,7 @@
 	import { VoiceRecorder } from '$lib/audio';
 	import { buildEntries, mentionMatches, type AtEntry } from '$lib/mention';
 	import { t } from '$lib/i18n';
+	import { matches, withShortcut } from '$lib/shortcuts';
 	import { convertFileSrc } from '@tauri-apps/api/core';
 	import MentionMenu from '$lib/composer/MentionMenu.svelte';
 	import AttachmentChips from '$lib/composer/AttachmentChips.svelte';
@@ -261,6 +262,10 @@
 	}
 	function insertTextAtCaret(text: string) {
 		insertNodesAtCaret([document.createTextNode(text)]);
+	}
+	// Exposed to the page (⇧⌘M): opens the model menu when the session has one.
+	export function openModelMenu() {
+		if ((chat.efforts.length || bcaps.modelPicker || !backendLocked) && !modelPopoverVisible) toggleModelPopover();
 	}
 	// Exposed to the page: drop a web-element reference chip at the caret.
 	export function insertToken(token: string) {
@@ -604,6 +609,12 @@
 			e.stopPropagation();
 			return;
 		}
+		if (bcaps.approvalModes && matches(e, 'approvalMode')) {
+			e.preventDefault();
+			const i = APPROVAL.findIndex((a) => a.checked);
+			onApproval(APPROVAL[(i + 1) % APPROVAL.length].key as ApprovalMode);
+			return;
+		}
 		if (e.key === 'Enter') {
 			// contenteditable would otherwise insert a <div>/<br>; we control both:
 			// plain Enter submits, Shift+Enter inserts a newline (rendered via pre-wrap).
@@ -768,7 +779,7 @@
 			</button>
 			{#if bcaps.approvalModes}
 				<div class="footsel">
-					<button class="foot-chip" class:auto={chat.approvalMode !== 'ask'} class:warn={approvalCurrent.tone === 'warn'} onclick={() => (showApproval = !showApproval)} title={t('chat.approvalModeTitle')}>
+					<button class="foot-chip" class:auto={chat.approvalMode !== 'ask'} class:warn={approvalCurrent.tone === 'warn'} onclick={() => (showApproval = !showApproval)} title={withShortcut(t('chat.approvalModeTitle'), 'approvalMode')}>
 						{#if approvalCurrent.icon}<approvalCurrent.icon size={17} />{/if}<span>{approvalCurrent.label}</span>
 					</button>
 					{#if showApproval}
@@ -790,7 +801,7 @@
 					class:pending={effortDisabled}
 					bind:this={modelButton}
 					onclick={toggleModelPopover}
-					title={t('chat.switchModel')}
+					title={withShortcut(t('chat.switchModel'), 'model')}
 					aria-haspopup="dialog"
 					aria-expanded={modelPopoverVisible}
 				>
@@ -841,7 +852,7 @@
 				{#if voice === 'busy'}<CircleNotchIcon size={15} class="spin" />{:else if voice === 'rec'}<StopCircleIcon size={15} />{:else}<MicrophoneIcon size={17} />{/if}
 			</button>
 			{#if chat.busy && !currentQ}
-				<button class="cact stop" onclick={onStop} aria-label="stop" title={t('chat.stopTitle')}><SquareIcon size={15} /></button>
+				<button class="cact stop" onclick={onStop} aria-label="stop" title={withShortcut(t('chat.stopTitle'), 'stop')}><SquareIcon size={15} /></button>
 			{:else}
 				<button class="cact send" onclick={submit} disabled={!input.trim() && !attachments.length && !videos.length} aria-label="send" title={t('chat.sendTitle')}><ArrowUpIcon size={17} /></button>
 			{/if}

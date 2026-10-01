@@ -83,6 +83,8 @@
 	import Sidebar from '$lib/Sidebar.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import CommandPalette from '$lib/CommandPalette.svelte';
+	import ShortcutsDialog from '$lib/ShortcutsDialog.svelte';
+	import { matches } from '$lib/shortcuts';
 	import TaskDialog from '$lib/TaskDialog.svelte';
 	import AgentDialog from '$lib/AgentDialog.svelte';
 	import Desk from '$lib/Desk.svelte';
@@ -140,6 +142,7 @@
 	let showMarket = $state(false);
 	let showSetup = $state(false);
 	let showPalette = $state(false);
+	let showShortcuts = $state(false);
 	// 「新建并行任务」对话框：为哪个（主仓库）项目开任务。
 	let taskDialogFor = $state<Project | null>(null);
 	let showAgentDialog = $state(false);
@@ -760,33 +763,32 @@
 		// The setup wizard is a blocking first-run modal — don't fire app shortcuts
 		// under it (e.g. Cmd+K opening the palette behind it).
 		if (showSetup) return;
-		const mod = e.metaKey || e.ctrlKey;
-		if (mod && e.key === 'k') {
+		const act = (fn: () => void) => {
 			e.preventDefault();
-			showPalette = !showPalette;
-			return;
-		}
-		if (mod && e.key === 'f' && chat) {
-			e.preventDefault();
-			panes.get(activeId)?.toggleFind();
-			return;
-		}
-		if (!mod) return;
-		if (e.key === 'n') {
-			e.preventDefault();
-			if (activeProject) store.addSession(activeProject);
-		} else if (e.key === ',') {
-			e.preventDefault();
-			if (!showSettings) openSettings();
-		} else if (e.key === 'b') {
-			e.preventDefault();
-			toggleSidebar();
-		} else if (e.key === 'e') {
-			e.preventDefault();
-			toggleAudit();
-		} else if (e.key === 'p') {
-			e.preventDefault();
-			if (activeProject) showQuickOpen = !showQuickOpen;
+			fn();
+		};
+		const pane = panes.get(activeId);
+		if (matches(e, 'palette')) return act(() => (showPalette = !showPalette));
+		if (matches(e, 'shortcuts')) return act(() => (showShortcuts = !showShortcuts));
+		if (matches(e, 'find') && chat) return act(() => pane?.toggleFind());
+		if (matches(e, 'newSession')) return act(() => activeProject && store.addSession(activeProject));
+		if (matches(e, 'settings')) return act(() => !showSettings && openSettings());
+		if (matches(e, 'sidebar')) return act(toggleSidebar);
+		if (matches(e, 'audit')) return act(toggleAudit);
+		if (matches(e, 'quickOpen')) return act(() => activeProject && (showQuickOpen = !showQuickOpen));
+		if (matches(e, 'terminal')) return act(() => openPanelTile('terminal'));
+		if (matches(e, 'history')) return act(() => activeProject && store.openHistory(activeProject));
+		if (matches(e, 'focusComposer') && pane) return act(pane.focusComposer);
+		if (matches(e, 'stop') && pane) return act(pane.stop);
+		if (matches(e, 'model') && pane) return act(pane.openModelMenu);
+		// Sessions as the sidebar lists them under the current project.
+		const list = (activeProject ?? store.projects[0])?.sessions.filter((s) => !s.archived) ?? [];
+		const n = matches(e, 'sessionN');
+		if (typeof n === 'number' && n > 0) return act(() => list[n - 1] && (store.activeId = list[n - 1].id));
+		const step = matches(e, 'nextSession') ? 1 : matches(e, 'prevSession') ? -1 : 0;
+		if (step && list.length) {
+			const i = list.findIndex((s) => s.id === activeId);
+			act(() => (store.activeId = list[(i + step + list.length) % list.length].id));
 		}
 	}
 
@@ -1250,11 +1252,25 @@
 			onToggleSidebar={toggleSidebar}
 			onToggleTheme={cycleTheme}
 			onSetup={() => (showSetup = true)}
+			onHistory={() => activeProject && store.openHistory(activeProject)}
+			onShortcuts={() => (showShortcuts = true)}
 		/>
+	{/if}
+	{#if showShortcuts}
+		<ShortcutsDialog onClose={() => (showShortcuts = false)} />
 	{/if}
 </div>
 
 <style>
+	/* The window is the app, not a page: the document never scrolls, by a
+	   trackpad (WebKit chains a scroll an inner list cannot take up to the
+	   root) or by scrollIntoView, which `hidden` still allows and `clip`
+	   does not; nor does it rubber-band. Lists scroll inside their panes. */
+	:global(html),
+	:global(body) {
+		overflow: clip;
+		overscroll-behavior: none;
+	}
 	.app {
 		display: flex;
 		flex-direction: column;
