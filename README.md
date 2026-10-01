@@ -24,8 +24,10 @@ the permissions it asks for. The app updates itself after that.
 
 The app ships its own JuCode CLI (kept in `~/.jucode/bin`, updated with the
 app; Settings → Agents can make it a `jucode` terminal command). On first
-launch a setup guide checks for git and signs you in to JuCode. Claude Code and Codex are optional;
-the guide installs them from their official sources when you want them.
+launch a welcome page signs you in to JuCode, then walks through the coding
+agent, the runtime (Git and the bundled engine) and the model. Claude Code and
+Codex are optional; it installs them from their official sources when you want
+them, and offers their upgrades later.
 
 ## What it does
 
@@ -33,8 +35,12 @@ the guide installs them from their official sources when you want them.
   each in its own session. A session can also run the real TUI of `jucode`,
   `codex` or `claude` in a terminal tab.
 - **Workbench.** Projects by directory, sessions per project, split panes,
-  a right dock with plan, files, git (stage, commit, discard, diff), terminal and
-  a built-in browser whose page elements can be referenced in a message.
+  a right dock with plan, files, git (stage, commit, discard, diff, GitHub pull
+  requests), terminal and a built-in browser whose page elements can be
+  referenced in a message. The branch under the composer switches or creates
+  branches.
+- **Agents.** Long-lived agents with a role, memory and schedules. Each task
+  runs in its own session; handoff notes carry what earlier sessions concluded.
 - **Conversation tools.** Streaming markdown, tool cards with diffs and output,
   approvals, rewind (conversation and files), branch tree, resume, find, slash
   commands, `@` file mentions, images, voice input and screen capture.
@@ -48,8 +54,8 @@ the guide installs them from their official sources when you want them.
   encrypted relay.
 - **History.** Import existing Claude Code and Codex conversations of a project
   and continue them.
-- **Skills marketplace** ([docs/skills.md](docs/skills.md)) and first-party
-  plugins ([docs/plugins.md](docs/plugins.md)).
+- **Skills marketplace**, run by the daemon
+  ([docs/skills.md](https://github.com/JuCode-Team/JuCode-CLI/blob/main/docs/skills.md) in the CLI repository).
 
 Keyboard: `⌘K` command palette · `⌘F` find · `⌘N` new session · `⌘B` session
 list · `⌘,` settings (Ctrl on Windows and Linux).
@@ -64,6 +70,11 @@ list · `⌘,` settings (Ctrl on Windows and Linux).
   `wss://app.jucode.net/relay/v1`. Conversation content is
   end-to-end encrypted; the relay sees connection metadata only.
 - Voice input sends the recording to the configured speech-to-text service.
+- Signed in to JuCode, the daemon reports each coding-agent turn's token
+  counts, model, engine and timing to your account (no prompts, code or
+  project paths), so usage adds up across your computers. Preferences such as
+  language, theme and default model sync through the account; keys, MCP
+  servers, skills and agents stay on the computer.
 - The app checks GitHub Releases for updates, and the JuCode server when
   GitHub is unreachable or slow. It has no analytics.
 
