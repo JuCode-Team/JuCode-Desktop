@@ -24,7 +24,7 @@ vi.mock('./protocol', () => ({
 
 import { SessionStore } from './session.svelte';
 import { dispatch } from './backends/router';
-import { hostSession, closeSession, sendLine, git, writeConfig, sessionHistory } from './protocol';
+import { hostSession, closeSession, sendLine, git, writeConfig, sessionHistory, sessionMeta } from './protocol';
 import type { EngineSpec } from './daemon';
 import { setLocale } from './i18n';
 import type { Project, WorktreeMeta } from './types';
@@ -135,6 +135,18 @@ describe('SessionStore lifecycle', () => {
 		begin(id);
 		await flush();
 		expect(lastSpec()).toEqual({ engine: 'codex', options: { approval_mode: 'read-only', jucode_gateway: true } });
+	});
+
+	it('a draft renamed before it starts gives the daemon its name', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p);
+		store.renameSession(id, 'Release train');
+		expect(sessionMeta).not.toHaveBeenCalled(); // no daemon session yet
+		begin(id);
+		await flush();
+		expect(sessionMeta).toHaveBeenCalledWith(p.sessions[0].chat.sessionId, { title: 'Release train' });
 	});
 
 	it('removing a draft closes no engine', () => {
@@ -640,8 +652,7 @@ describe('SessionStore lifecycle', () => {
 				sid: 'sid-0',
 				title: 'Release train',
 				color: '#db2777',
-				icon: { kind: 'slug', value: '🚀' },
-				titleLocked: true
+				icon: { kind: 'slug', value: '🚀' }
 			}
 		]);
 
@@ -650,7 +661,6 @@ describe('SessionStore lifecycle', () => {
 		const s = store2.projects[0].sessions[0];
 		expect(s.color).toBe('#db2777');
 		expect(s.icon).toEqual({ kind: 'slug', value: '🚀' });
-		expect(s.chat.titleLocked).toBe(true);
 		expect(s.chat.title).toBe('Release train');
 	});
 

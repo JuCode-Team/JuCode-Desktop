@@ -1,4 +1,4 @@
-import { ChatState } from './chat.svelte';
+import { ChatState, UNTITLED } from './chat.svelte';
 import { acpAgentsList, closeSession, daemon, hostSession, sessionMeta, sessionHistory, projectRoot, chatsDir, writeConfig, git } from './protocol';
 import type { EngineSpec } from './daemon';
 import { canHandOffToTui, isValidResumeSessionId } from './tuiHandoff';
@@ -15,8 +15,6 @@ import type { Project, Session, WorktreeMeta } from './types';
 export interface SavedTabChrome {
 	color?: string;
 	icon?: TabIcon;
-	/** The title was set by an explicit rename (auto-titling stays off). */
-	titleLocked?: boolean;
 }
 
 // The persisted shape of a project + its open tabs. `id` is the desktop
@@ -283,7 +281,12 @@ export class SessionStore {
 			const effort = pick.effort ?? '';
 			dispatch(s.id, { op: 'command', input: effort ? `/model ${model} ${effort}` : `/model ${model}` });
 		};
-		this.#spawn(s, project.path, applyPick).catch((e) => this.#engineFailed(s.chat, e));
+		this.#spawn(s, project.path, applyPick)
+			.then(() => {
+				// Renamed while a draft, before it had a daemon session.
+				if (s.chat.title !== UNTITLED) this.#share(s, { title: s.chat.title });
+			})
+			.catch((e) => this.#engineFailed(s.chat, e));
 	}
 
 	/**
@@ -346,7 +349,6 @@ export class SessionStore {
 		const chat = new ChatState();
 		chat.backendId = backend;
 		chat.title = s.chat.title;
-		chat.titleLocked = s.chat.titleLocked;
 		const agent = backend === 'acp' ? acpAgent : undefined;
 		if (agent) {
 			chat.acpAgentId = agent.id;
@@ -422,7 +424,6 @@ export class SessionStore {
 		const s = project.sessions[project.sessions.length - 1];
 		if (chrome.color) s.color = chrome.color;
 		if (chrome.icon) s.icon = chrome.icon;
-		if (chrome.titleLocked) s.chat.titleLocked = true;
 		return id;
 	}
 
@@ -456,13 +457,13 @@ export class SessionStore {
 		this.projects.push(p);
 	}
 
-	/** Explicit rename: sets the title and locks out auto-titling. */
+	/** Explicit rename; the daemon keeps it over its own titles. A draft's
+	 *  rename goes to the daemon when the draft starts. */
 	renameSession(id: string, title: string) {
 		const s = this.allSessions.find((x) => x.id === id);
 		const trimmed = title.trim();
 		if (!s || !trimmed) return;
 		s.chat.title = trimmed;
-		s.chat.titleLocked = true;
 		this.#share(s, { title: trimmed });
 	}
 
@@ -499,7 +500,6 @@ export class SessionStore {
 		s.archived = archived;
 		if (chrome?.color) s.color = chrome.color;
 		if (chrome?.icon) s.icon = chrome.icon;
-		if (chrome?.titleLocked) s.chat.titleLocked = true;
 		// The engine resumes persisted context — the backend can't be switched
 		// even while the replayed transcript is still empty.
 		s.restored = true;
@@ -537,7 +537,6 @@ export class SessionStore {
 		s.archived = archived;
 		if (chrome?.color) s.color = chrome.color;
 		if (chrome?.icon) s.icon = chrome.icon;
-		if (chrome?.titleLocked) s.chat.titleLocked = true;
 		this.#makeDraft(s);
 		project.sessions.push(s);
 		return s.id;
@@ -977,7 +976,6 @@ export class SessionStore {
 					...(s.surface === 'tui' ? { surface: 'tui' as const } : {}),
 					...(s.color ? { color: s.color } : {}),
 					...(s.icon ? { icon: s.icon } : {}),
-					...(s.chat.titleLocked ? { titleLocked: true } : {})
 				}))
 		}));
 	}
@@ -1036,8 +1034,7 @@ export class SessionStore {
 					}
 					const chrome = {
 						color: normalizeColor(t.color),
-						icon: parseTabIcon(t.icon),
-						titleLocked: !!t.titleLocked
+						icon: parseTabIcon(t.icon)
 					};
 					// With a conversation to resume, resume it; an empty window comes
 					// back as a draft. Both keep the saved desktop id (pre-id files mint anew).

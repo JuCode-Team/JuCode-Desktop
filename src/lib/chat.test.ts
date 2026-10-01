@@ -54,18 +54,11 @@ describe('ChatState.handle', () => {
 		expect(a.kind === 'assistant' && a.text).toBe('hi there');
 	});
 
-	it('sets the title from the first user message', () => {
+	it('leaves the title to the daemon', () => {
 		const c = new ChatState();
-		c.handle({ type: 'user_message', content: 'Fix the bug in foo' });
-		expect(c.title).toBe('Fix the bug in foo');
-	});
-
-	it('a locked title is never overwritten by auto-titling', () => {
-		const c = new ChatState();
-		c.titleLocked = true; // renamed while still 'New session'
 		c.optimisticUser('do the thing');
-		expect(c.title).toBe('New session');
 		c.handle({ type: 'user_message', content: 'do the thing again' });
+		c.handle({ type: 'transcript', items: [{ role: 'user', content: 'earlier' }] });
 		expect(c.title).toBe('New session');
 	});
 

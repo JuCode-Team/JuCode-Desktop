@@ -124,6 +124,9 @@ export interface TurnDiff {
 }
 
 /** Reactive chat state projected from the engine's AgentEvent stream. */
+/** A session's title before the daemon names it. */
+export const UNTITLED = 'New session';
+
 export class ChatState {
 	/** Set by the page: invoked when the agent's `browser_open` tool succeeds,
 	 *  so the embedded browser panel navigates to the requested URL. Static —
@@ -179,10 +182,9 @@ export class ChatState {
 	cost = $state(0);
 	pendingMessages = $state<string[]>([]);
 	picker = $state<Picker>(null);
-	title = $state('New session');
-	/** True after an explicit user rename: auto-titling from the first user
-	 *  message must never overwrite a chosen name (persisted with the tab). */
-	titleLocked = $state(false);
+	/** The daemon names the conversation (and keeps a rename); until then
+	 *  this placeholder. */
+	title = $state(UNTITLED);
 	pendingFill = $state<string | null>(null);
 	trustPrompt = $state<{ cwd: string; repoRoot: string | null } | null>(null);
 	goal = $state<Goal | null>(null);
@@ -303,7 +305,6 @@ export class ChatState {
 	optimisticUser(content: string) {
 		this.#trackSend({ kind: 'user', text: content, state: 'sending' });
 		this.#pendingUserEcho = content;
-		if (this.title === 'New session' && !this.titleLocked && content.trim()) this.title = content.trim().slice(0, 40);
 		this.#resetCurrent();
 	}
 
@@ -651,9 +652,6 @@ export class ChatState {
 				this.#pendingUserEcho = null;
 				// No send state: claude echoes after the reply, when it would stick.
 				this.messages.push({ kind: 'user', text });
-				if (this.title === 'New session' && !this.titleLocked && text.trim()) {
-					this.title = text.trim().slice(0, 40);
-				}
 				this.#resetCurrent();
 				break;
 			}
@@ -868,11 +866,6 @@ export class ChatState {
 					const last = this.messages.findLast((m) => m.kind === 'user');
 					if (last?.kind === 'user' && last.text === pending) this.#pendingUserEcho = null;
 					else if (sent) this.messages.push(sent);
-				}
-				if (this.title === 'New session' && !this.titleLocked) {
-					const firstUser = this.messages.find((m) => m.kind === 'user');
-					if (firstUser && firstUser.kind === 'user' && firstUser.text.trim())
-						this.title = firstUser.text.trim().slice(0, 40);
 				}
 				this.#resetCurrent();
 				break;
