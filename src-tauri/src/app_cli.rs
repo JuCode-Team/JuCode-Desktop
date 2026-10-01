@@ -32,8 +32,12 @@ pub fn managed_path() -> Option<PathBuf> {
     Some(home()?.join(".jucode").join("bin").join(exe_name()))
 }
 
-/// The sidecar inside this build, when it has one.
+/// The sidecar inside this build, when it has one. A debug build has none:
+/// a `jucode` left in target/debug by an older build is not the app's own.
 fn bundled() -> Option<PathBuf> {
+    if cfg!(debug_assertions) {
+        return None;
+    }
     let dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
     let path = dir.join(exe_name());
     path.is_file().then_some(path)
