@@ -64,7 +64,10 @@ const setup = {
 			loginBtn: '使用 JuCode 账号登录',
 			browserOpened: '已在浏览器中打开授权页，完成后会自动识别。',
 			or: '或',
-			apiKeyBtn: '使用 API Key / 自定义 Provider'
+			apiKeyBtn: '使用 API Key / 自定义 Provider',
+			agreeBefore: '继续使用即表示同意',
+			agreeAnd: '和',
+			agreeAfter: ''
 		},
 		done: {
 			title: '一切就绪',
@@ -147,7 +150,10 @@ const setup = {
 			loginBtn: 'Sign in with JuCode account',
 			browserOpened: 'The authorization page has been opened in your browser; it will be detected automatically once complete.',
 			or: 'or',
-			apiKeyBtn: 'Use API Key / Custom Provider'
+			apiKeyBtn: 'Use API Key / Custom Provider',
+			agreeBefore: 'By continuing you agree to the ',
+			agreeAnd: ' and the ',
+			agreeAfter: '.'
 		},
 		done: {
 			title: 'All Set',

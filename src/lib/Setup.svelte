@@ -22,7 +22,10 @@
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
-	import { t } from '$lib/i18n';
+	import LegalDoc from '$lib/LegalDoc.svelte';
+	import { LEGAL, type LegalDocId } from '$lib/legal';
+	import { shortcutLabel } from '$lib/shortcuts';
+	import { t, getLocale } from '$lib/i18n';
 
 	let {
 		sessionId,
@@ -95,6 +98,8 @@
 	}
 
 	let loginError = $state('');
+	let legal = $state<LegalDocId | null>(null);
+	const legalTitle = (doc: LegalDocId) => LEGAL[doc][getLocale() === 'zh' ? 'zh' : 'en'].title;
 	let loginMark = 0;
 	function login() {
 		loginError = '';
@@ -224,6 +229,9 @@
 						<Button variant="secondary" full onclick={onOpenSettings}><KeyIcon size={15} /> {t('setup.loginOauth.apiKeyBtn')}</Button>
 					</div>
 				{/if}
+				<p class="hint center agree">
+					{t('setup.loginOauth.agreeBefore')}<button class="link" onclick={() => (legal = 'terms')}>{legalTitle('terms')}</button>{t('setup.loginOauth.agreeAnd')}<button class="link" onclick={() => (legal = 'privacy')}>{legalTitle('privacy')}</button>{t('setup.loginOauth.agreeAfter')}
+				</p>
 			{:else}
 				<div class="done">
 					<span class="done-ico"><ConfettiIcon size={30} /></span>
@@ -232,7 +240,7 @@
 						{gitOk ? t('setup.done.gitReady') : t('setup.done.gitMissing')} ·
 						{loggedIn ? t('setup.done.loggedIn') : t('setup.done.notLoggedIn')}
 					</p>
-					<p class="hint center">{@html t('setup.done.hint', { cmdk: '<kbd>⌘K</kbd>', slash: '<kbd>/</kbd>', at: '<kbd>@</kbd>' })}</p>
+					<p class="hint center">{@html t('setup.done.hint', { cmdk: `<kbd>${shortcutLabel('palette')}</kbd>`, slash: '<kbd>/</kbd>', at: '<kbd>@</kbd>' })}</p>
 				</div>
 			{/if}
 		</div>
@@ -256,6 +264,10 @@
 		</div>
 	</div>
 </Modal>
+
+{#if legal}
+	<LegalDoc doc={legal} onClose={() => (legal = null)} />
+{/if}
 
 <style>
 	.wiz {
@@ -496,6 +508,20 @@
 		font-size: var(--fs-xs);
 		color: var(--dim);
 		line-height: 1.55;
+	}
+	.agree {
+		margin-top: 14px;
+	}
+	.link {
+		padding: 0;
+		border: 0;
+		background: none;
+		color: var(--accent);
+		font: inherit;
+		cursor: pointer;
+	}
+	.link:hover {
+		text-decoration: underline;
 	}
 	.hint.center {
 		text-align: center;

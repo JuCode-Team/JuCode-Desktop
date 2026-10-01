@@ -7,10 +7,15 @@
 	import { t } from '$lib/i18n';
 	import SettingsSection from './SettingsSection.svelte';
 	import SettingsRow from './SettingsRow.svelte';
+	import LegalDoc from '$lib/LegalDoc.svelte';
+	import { LEGAL, type LegalDocId } from '$lib/legal';
+	import { getLocale } from '$lib/i18n';
 
 	const FILES = ['/third-party-notices.txt', '/jucode-cli-third-party-notices.txt'];
 	let open = $state(false);
 	let text = $state('');
+	let legal = $state<LegalDocId | null>(null);
+	const legalTitle = (doc: LegalDocId) => LEGAL[doc][getLocale() === 'zh' ? 'zh' : 'en'].title;
 
 	async function show() {
 		open = true;
@@ -27,11 +32,19 @@
 </script>
 
 <SettingsSection title={t('settings.licenses.groupLabel')}>
+	{#each ['terms', 'privacy'] as const as doc (doc)}
+		<SettingsRow id={doc} title={legalTitle(doc)}>
+			<Button size="sm" variant="secondary" onclick={() => (legal = doc)}>{t('settings.licenses.open')}</Button>
+		</SettingsRow>
+	{/each}
 	<SettingsRow id="licenses" title={t('settings.licenses.title')} description={t('settings.licenses.hint')}>
 		<Button size="sm" variant="secondary" onclick={show}>{t('settings.licenses.open')}</Button>
 	</SettingsRow>
 </SettingsSection>
 
+{#if legal}
+	<LegalDoc doc={legal} onClose={() => (legal = null)} />
+{/if}
 {#if open}
 	<Modal title={t('settings.licenses.title')} width={760} onClose={() => (open = false)}>
 		<pre class="notices selectable">{text || t('settings.licenses.loading')}</pre>

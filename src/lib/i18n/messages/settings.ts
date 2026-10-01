@@ -318,7 +318,7 @@ const settings = {
 			error: '检查更新失败：{msg}'
 		},
 		licenses: {
-			groupLabel: '许可证',
+			groupLabel: '条款与许可证',
 			title: '第三方许可证',
 			hint: 'JuCode 使用的开源组件及其许可证全文。JuCode 本身以 Apache License 2.0 发布。',
 			open: '查看',
@@ -700,7 +700,7 @@ const settings = {
 			error: 'Update check failed: {msg}'
 		},
 		licenses: {
-			groupLabel: 'Licenses',
+			groupLabel: 'Terms and licenses',
 			title: 'Third-party licenses',
 			hint: 'The open-source components JuCode uses and their license texts. JuCode itself is released under the Apache License 2.0.',
 			open: 'View',
