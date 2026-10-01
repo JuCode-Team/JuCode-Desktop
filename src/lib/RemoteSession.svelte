@@ -23,7 +23,10 @@
 	import { createJucodeAdapter } from '$lib/backends/jucode';
 	import { effortLabel } from '$lib/composer/effort';
 	import { modelColor, isTopEffort } from '$lib/modelColor';
-	import { daemon, type Op } from '$lib/protocol';
+	import { daemon, type JucodeGroup, type Op } from '$lib/protocol';
+	import { agentDirectory } from '$lib/agents.svelte';
+	import { confirm } from '$lib/ui/confirm.svelte';
+	import { BACKEND_LABELS } from '$lib/backends';
 	import type { ApproveOp } from '$lib/approval';
 	import { t } from '$lib/i18n';
 
@@ -215,6 +218,46 @@
 		chat.closePicker();
 		modelOpen = true;
 		send({ op: 'command', input: '/model' });
+		if (toolSession) loadCatalog();
+	}
+
+	// Claude Code / Codex run on this machine's own login or on the JuCode
+	// gateway; the daemon knows which, and what the gateway offers.
+	const sid = $derived(chat.sessionId || session || '');
+	const view = $derived(agentDirectory.sessions.find((x) => x.session === sid));
+	const toolSession = $derived((engine === 'claude' || engine === 'codex') && !!sid);
+	let catalog = $state<{ models: { name: string; context_window?: number }[]; groups: JucodeGroup[] } | null>(null);
+	function loadCatalog() {
+		daemon
+			.request({ op: 'gateway_catalog' })
+			.then((r) => {
+				catalog = {
+					models: Array.isArray(r.models) ? (r.models as { name: string }[]) : [],
+					groups: Array.isArray(r.groups) ? (r.groups as JucodeGroup[]) : []
+				};
+			})
+			.catch(() => (catalog = { models: [], groups: [] }));
+	}
+	function setGroup(group: string) {
+		daemon.request({ op: 'session_meta', session: sid, group }).catch((e) => (error = String(e)));
+	}
+	/** Moves the session between this machine and the gateway; the daemon
+	 *  restarts its engine once the running turn ends and it resumes. */
+	async function switchSide(gateway: boolean, model: string, group?: string) {
+		closeModels();
+		if (chat.messages.some((m) => m.kind === 'user')) {
+			const ok = await confirm({
+				title: t(gateway ? 'shell.toolSwitch.confirmJucode' : 'shell.toolSwitch.confirmSystem'),
+				message: t('shell.toolSwitch.confirmBody'),
+				confirmLabel: t('shell.toolSwitch.confirm')
+			});
+			if (!ok) return;
+		}
+		if (group !== undefined) setGroup(group);
+		pendingModel = model;
+		clearTimeout(pendingTimer);
+		pendingTimer = setTimeout(() => (pendingModel = ''), 30_000);
+		daemon.send(id, JSON.stringify({ op: 'set_gateway', gateway, model })).catch((e) => (error = String(e)));
 	}
 	function closeModels() {
 		modelOpen = false;
@@ -354,7 +397,24 @@
 	</div>
 
 	{#if modelOpen}
-		<ModelMenu {chat} anchor={modelButton} {pendingModel} onPick={pickModel} onEffort={setEffort} onClose={closeModels} />
+		<ModelMenu
+			{chat}
+			anchor={modelButton}
+			{pendingModel}
+			tool={toolSession
+				? {
+						name: BACKEND_LABELS[engine as 'claude' | 'codex'],
+						onJucode: !!view?.gateway,
+						group: view?.group ?? '',
+						catalog,
+						onSwitch: switchSide,
+						onGroup: setGroup
+					}
+				: undefined}
+			onPick={pickModel}
+			onEffort={setEffort}
+			onClose={closeModels}
+		/>
 	{/if}
 </div>
 

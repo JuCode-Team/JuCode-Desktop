@@ -28,6 +28,7 @@
 	import Notice from '$lib/ui/Notice.svelte';
 	import PopMenu from '$lib/ui/PopMenu.svelte';
 	import Toaster from '$lib/ui/Toaster.svelte';
+	import ConfirmHost from '$lib/ui/ConfirmHost.svelte';
 	import { agentDirectory, type AgentView } from '$lib/agents.svelte';
 	import { daemon, setDaemonEndpoint } from '$lib/protocol';
 	import { deviceName, forgetRemoteToken, pairDevice, remoteEndpoint, remoteToken } from '$lib/remote';
@@ -628,6 +629,7 @@
 	{/if}
 </div>
 <Toaster />
+<ConfirmHost />
 
 {#snippet loadingPage(title: string)}
 	<div class="loading-page">

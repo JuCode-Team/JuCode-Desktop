@@ -15,7 +15,8 @@
 	import Vendor from '$lib/Vendor.svelte';
 	import EffortSlider from '$lib/composer/EffortSlider.svelte';
 	import { defaultEffort, effortLabel } from '$lib/composer/effort';
-	import { fmtContext } from '$lib/composer/modelRows';
+	import { fmtContext, toolModels, type ToolModel } from '$lib/composer/modelRows';
+	import type { JucodeGroup } from '$lib/protocol';
 	import { modelColor, isTopEffort } from '$lib/modelColor';
 	import type { ChatState } from '$lib/chat.svelte';
 	import { t } from '$lib/i18n';
@@ -24,6 +25,7 @@
 		chat,
 		anchor,
 		pendingModel = '',
+		tool,
 		onPick,
 		onEffort,
 		onClose
@@ -32,10 +34,22 @@
 		anchor?: HTMLElement;
 		/** A pick the engine has not confirmed yet. */
 		pendingModel?: string;
+		/** Claude Code / Codex: where the session runs (this machine or the
+		 *  JuCode gateway), what the gateway offers (null while loading), and
+		 *  how to move. A model only the other side has moves the session. */
+		tool?: {
+			name: string;
+			onJucode: boolean;
+			group: string;
+			catalog: { models: { name: string; context_window?: number }[]; groups: JucodeGroup[] } | null;
+			onSwitch: (gateway: boolean, model: string, group?: string) => void;
+			onGroup: (group: string) => void;
+		};
 		onPick: (model: string) => void;
 		onEffort: (effort: string) => void;
 		onClose: () => void;
 	} = $props();
+
 
 	// Above the model button, right edges aligned; below it when there is no
 	// room above.
@@ -64,6 +78,38 @@
 	const current = $derived(pendingModel || models.find((m) => m.active)?.model || chat.model);
 	const currentRow = $derived(models.find((m) => m.model === current));
 	const modelName = $derived(currentRow?.label || chat.modelLabel || chat.model);
+
+	// Claude Code / Codex: one list of this machine's catalog and the gateway's.
+	const merged = $derived(tool ? toolModels(models, tool.catalog?.models ?? [], tool.onJucode) : []);
+	const running = $derived<ToolModel | undefined>(
+		merged.find((m) => m.key === current || m.local === current || m.jucode === current) ?? merged.find((m) => m.active)
+	);
+	function pickMerged(m: ToolModel) {
+		if (!tool) return;
+		const here = tool.onJucode ? m.jucode : m.local;
+		if (here !== undefined) onPick(here);
+		else tool.onSwitch(!tool.onJucode, (tool.onJucode ? m.local : m.jucode) ?? m.key);
+	}
+	// Providers for the running model: this machine, the gateway's own
+	// choice, and its groups when more than one serves the model.
+	const served = $derived(
+		running?.jucode && tool?.catalog
+			? tool.catalog.groups
+					.filter((g) => g.models?.includes(running.jucode!))
+					.sort((a, b) => a.rate_multiplier - b.rate_multiplier)
+			: []
+	);
+	const groups = $derived(served.length > 1 ? served : []);
+	const providerCount = $derived((running?.local !== undefined ? 1 : 0) + (running?.jucode !== undefined ? 1 : 0) + groups.length);
+	function pickProvider(group: string | null) {
+		if (!tool || !running) return;
+		if (group === null) {
+			if (tool.onJucode && running.local !== undefined) tool.onSwitch(false, running.local);
+		} else if (tool.onJucode) tool.onGroup(group);
+		else if (running.jucode !== undefined) tool.onSwitch(true, running.jucode, group);
+		onClose();
+	}
+	const mult = (n: number) => `×${Number(n.toFixed(3))}`;
 
 	// Without efforts the first page would hold a single row; open the list.
 	let page = $state<'main' | 'models'>(untrack(() => (chat.efforts.length ? 'main' : 'models')));
@@ -112,6 +158,37 @@
 			</div>
 			<EffortSlider efforts={chat.efforts} effort={chat.effort} disabled={!!pendingModel} {onEffort} {accent} bind:current={shownEffort} />
 		</section>
+		{#if tool && running && providerCount > 1}
+			<section class="providers" aria-label={t('chat.provider')}>
+				<div class="elabel phead">{t('chat.provider')}</div>
+				{#if running.local !== undefined}
+					<button class="pop-row" onclick={() => pickProvider(null)}>
+						<span class="pop-txt">
+							<span class="pop-label">{t('chat.providerLocal')}</span>
+							<span class="pop-desc">{t('chat.providerLocalDesc', { tool: tool.name })}</span>
+						</span>
+						<span class="pop-check" class:off={tool.onJucode}><CheckIcon size={16} /></span>
+					</button>
+				{/if}
+				{#if running.jucode !== undefined}
+					{@const auto = tool.onJucode && !groups.some((g) => g.id === tool.group)}
+					<button class="pop-row" onclick={() => pickProvider('')}>
+						<span class="pop-txt">
+							<span class="pop-label">{t('chat.providerAuto')}</span>
+							<span class="pop-desc">{t('chat.groupSessionAutoDesc')}</span>
+						</span>
+						<span class="pop-check" class:off={!auto}><CheckIcon size={16} /></span>
+					</button>
+					{#each groups as g (g.id)}
+						<button class="pop-row" onclick={() => pickProvider(g.id)}>
+							<span class="pop-txt"><span class="pop-label">{g.name}</span></span>
+							<span class="ctx">{mult(g.rate_multiplier)}</span>
+							<span class="pop-check" class:off={!tool.onJucode || tool.group !== g.id}><CheckIcon size={16} /></span>
+						</button>
+					{/each}
+				{/if}
+			</section>
+		{/if}
 	{:else}
 		<section class="models">
 			{#if chat.efforts.length}
@@ -129,6 +206,21 @@
 				</div>
 			{/if}
 			<div class="list" role="listbox" aria-label={t('chat.switchModel')}>
+				{#if tool}
+					{#each merged as m (m.key)}
+						{@const on = m === running}
+						<button class="pop-row" role="option" aria-selected={on} onclick={() => pickMerged(m)}>
+							<span class="pop-ico"><Vendor model={m.vendor} size={16} /></span>
+							<span class="pop-txt"><span class="pop-label">{m.label}</span></span>
+							<span class="ctx">
+								{[m.local !== undefined && t('chat.providerLocal'), m.jucode !== undefined && 'JuCode', fmtContext(m.context_window)]
+									.filter(Boolean)
+									.join(' · ')}
+							</span>
+							<span class="pop-check" class:off={!on}><CheckIcon size={16} /></span>
+						</button>
+					{/each}
+				{:else}
 				{#each models as m (m.model)}
 					<button class="pop-row" role="option" aria-selected={m.model === current} onclick={() => onPick(m.model)}>
 						<span class="pop-ico"><Vendor model={m.vendor ?? m.model} size={16} /></span>
@@ -143,6 +235,7 @@
 						{#if fresh}{t('shell.remote.noModels')}{:else}<CircleNotchIcon size={14} class="spin" /> {t('shell.remote.loadingModels')}{/if}
 					</div>
 				{/each}
+				{/if}
 			</div>
 		</section>
 	{/if}
@@ -175,6 +268,9 @@
 	}
 	.current .pop-row {
 		font-weight: 500;
+	}
+	.phead {
+		margin: 0 8px 4px;
 	}
 	.caret {
 		width: auto;
