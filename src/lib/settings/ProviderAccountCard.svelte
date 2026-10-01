@@ -6,6 +6,7 @@
 	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
 	import WalletIcon from 'phosphor-svelte/lib/WalletIcon';
 	import { t } from '$lib/i18n';
+	import { fmtBalance } from '$lib/money';
 	import Vendor from '$lib/Vendor.svelte';
 	import AccountPanel from '$lib/AccountPanel.svelte';
 	import ProviderBalance from '$lib/settings/ProviderBalance.svelte';
@@ -82,9 +83,9 @@
 			{#if provider.id === 'jucode' && loggingIn && !authed}
 				<span class="bal wait"><span class="spin"></span> {t('settings.account.authorizing')}</span>
 			{:else if authed && provider.id === 'jucode' && jucodeBal}
-				<span class="bal"><WalletIcon size={12} /> {jucodeBal.balance ?? '0'} {jucodeBal.currency ?? ''}</span>
+				<span class="bal"><WalletIcon size={12} /> {fmtBalance(jucodeBal.balance)} {jucodeBal.currency ?? ''}</span>
 			{:else if authed && provider.id === 'deepseek' && deepseekTotal}
-				<span class="bal"><WalletIcon size={12} /> {deepseekTotal.total_balance} {deepseekTotal.currency}</span>
+				<span class="bal"><WalletIcon size={12} /> {fmtBalance(deepseekTotal.total_balance)} {deepseekTotal.currency}</span>
 			{:else if authed}
 				<span class="stat ok">{provider.id === 'jucode' ? t('settings.account.loggedIn') : t('settings.account.keyed')}</span>
 			{:else}
