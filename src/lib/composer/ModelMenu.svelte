@@ -19,6 +19,7 @@
 	import GroupPicker, { type ToolProvider } from './GroupPicker.svelte';
 	import PlanQuota from './PlanQuota.svelte';
 	import { modelColor, isTopEffort } from '$lib/modelColor';
+	import { modelSetup } from '$lib/modelSetupState.svelte';
 
 	// The composer's model menu, opened from the model button: everything about
 	// "who answers and how hard it thinks" in one place. The first page shows
@@ -161,7 +162,7 @@
 				<button class="pop-row" onclick={() => (page = 'models')} title={t('chat.pickModel')}>
 					<span class="pop-ico"><Vendor model={chat.model || modelName} size={16} /></span>
 					<span class="pop-txt"><span class="pop-label">{modelName}</span></span>
-					{#if activeRow?.detail}<span class="ctx">{activeRow.detail}</span>{/if}
+					{#if activeRow?.detail}<span class="ctx" title={activeRow.detail}>{activeRow.detail}</span>{/if}
 					<span class="pop-ico caret"><CaretRightIcon size={14} /></span>
 				</button>
 			{:else}
@@ -234,6 +235,16 @@
 					<CaretLeftIcon size={14} />
 				</IconButton>
 				<span class="mtitle">{t('chat.pickModel')}</span>
+				{#if chat.backendId === 'jucode'}
+					<!-- Which JuCode models show, and their context windows. -->
+					<button
+						class="manage"
+						onclick={() => {
+							modelSetup.open = true;
+							onClose();
+						}}>{t('chat.manageModels')}</button
+					>
+				{/if}
 			</div>
 			{#if showSearch}
 				<label class="search">
@@ -257,7 +268,7 @@
 					>
 						<span class="pop-ico"><Vendor model={row.vendor ?? row.label} size={16} /></span>
 						<span class="pop-txt"><span class="pop-label">{row.label || t('shell.empty')}</span></span>
-						{#if row.detail}<span class="ctx">{row.detail}</span>{/if}
+						{#if row.detail}<span class="ctx" title={row.detail}>{row.detail}</span>{/if}
 						<span class="pop-check" class:off={!row.active}><CheckIcon size={16} /></span>
 					</button>
 				{/each}
@@ -316,6 +327,21 @@
 		color: var(--dim);
 		font-size: var(--fs-sm);
 		font-weight: 500;
+	}
+	.manage {
+		margin-left: auto;
+		padding: 2px 6px;
+		border: none;
+		border-radius: var(--r-xs);
+		background: none;
+		color: var(--dim);
+		font: inherit;
+		font-size: var(--fs-xs);
+		cursor: pointer;
+	}
+	.manage:hover {
+		background: var(--surface2);
+		color: var(--text);
 	}
 	.agents {
 		display: flex;
@@ -419,8 +445,23 @@
 		font-size: var(--fs-2xs);
 		font-weight: 500;
 	}
+	/* Name and detail ("This machine · JuCode · 258K") share one line. WebKit
+	   (the macOS app) does not wrap text inside the row button, so both
+	   truncate instead of overlapping; the detail gives way before the name. */
+	.mm .pop-txt {
+		flex: 1 1 auto;
+	}
+	.mm .pop-label {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
 	.ctx {
-		flex-shrink: 0;
+		flex: 0 1000 auto;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 		color: var(--dim2);
 		font-size: var(--fs-xs);
 		font-variant-numeric: tabular-nums;

@@ -1,43 +1,34 @@
 <script lang="ts">
-	let { pct, label = '' }: { pct: number; label?: string } = $props();
+	// A small progress ring beside the composer's token count: it marks how full
+	// the context is; the numbers sit next to it and in the hover panel.
+	let { pct }: { pct: number } = $props();
 
-	const R = 13;
+	const R = 6;
 	const C = 2 * Math.PI * R;
 	const dash = $derived((Math.max(0, Math.min(100, pct)) / 100) * C);
-	const stroke = $derived(pct >= 90 ? 'var(--err)' : pct >= 75 ? 'var(--warn)' : 'var(--accent-bright)');
+	const stroke = $derived(pct >= 90 ? 'var(--err)' : pct >= 75 ? 'var(--warn)' : 'var(--dim)');
 </script>
 
-<span class="ring" title={label}>
-	<svg viewBox="0 0 32 32" width="30" height="30">
-		<circle cx="16" cy="16" r={R} fill="none" stroke="var(--surface2)" stroke-width="3" />
-		<circle
-			cx="16"
-			cy="16"
-			r={R}
-			fill="none"
-			stroke={stroke}
-			stroke-width="3"
-			stroke-linecap="round"
-			stroke-dasharray="{dash} {C}"
-			transform="rotate(-90 16 16)"
-		/>
-	</svg>
-	<span class="num">{pct}</span>
-</span>
+<svg class="ring" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+	<circle cx="8" cy="8" r={R} fill="none" stroke="var(--surface2)" stroke-width="2" />
+	<circle
+		cx="8"
+		cy="8"
+		r={R}
+		fill="none"
+		stroke={stroke}
+		stroke-width="2"
+		stroke-linecap="round"
+		stroke-dasharray="{dash} {C}"
+		transform="rotate(-90 8 8)"
+	/>
+</svg>
 
 <style>
 	.ring {
-		position: relative;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
 		flex-shrink: 0;
 	}
-	.num {
-		position: absolute;
-		font-family: var(--font-mono);
-		font-size: var(--fs-2xs);
-		font-weight: 600;
-		color: var(--text);
+	.ring circle {
+		transition: stroke-dasharray var(--t-slow) var(--ease-out), stroke var(--t-med) var(--ease-out);
 	}
 </style>

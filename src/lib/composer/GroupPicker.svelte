@@ -146,7 +146,8 @@
 						<span class="pop-txt">
 							<span class="pop-label">{g.name}</span>
 							{#if g.description || tag}
-								<span class="pop-desc">{[tag, g.description].filter(Boolean).join(' · ')}</span>
+								{@const desc = [tag, g.description].filter(Boolean).join(' · ')}
+								<span class="pop-desc" title={desc}>{desc}</span>
 							{/if}
 						</span>
 						<span class="mult">{mult(g.rate_multiplier)}</span>
@@ -216,5 +217,15 @@
 	}
 	.pop-check.off {
 		visibility: hidden;
+	}
+	/* Group names and descriptions are admin-written and can be long. WebKit
+	   (the macOS app) does not wrap them inside the row button and lets them
+	   run past the menu over the multiplier, so they stay on one line and
+	   truncate; the full description is the row's tooltip. */
+	.pop-label,
+	.pop-desc {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 </style>

@@ -2,7 +2,10 @@
 	// "Models to show": the JuCode account reaches every model in every group
 	// it may use, far more than a model menu can hold. The user checks the ones
 	// they want; they become `jucode_models` in config.json (and `models` while
-	// JuCode is the provider), which the engine's model menu lists.
+	// JuCode is the provider), which the engine's model menu lists. Each row
+	// also takes a context window (`context_window_overrides`): it fills in one
+	// the gateway has not configured, or raises the advertised (smallest-account)
+	// window up to the gateway's largest.
 	import { onMount } from 'svelte';
 	import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
@@ -25,6 +28,27 @@
 	let error = $state('');
 	let saving = $state(false);
 	let cfg: Record<string, unknown> = {};
+	/** Typed window per model id ("" = use the gateway's). */
+	let windows = $state<Record<string, string>>({});
+
+	/** "400000", "272k", "1m" → tokens; "" → 0; garbage → NaN. */
+	function parseWindow(raw: string | undefined): number {
+		const v = (raw ?? '').trim().toLowerCase();
+		if (!v) return 0;
+		const m = /^(\d+(?:\.\d+)?)([km]?)$/.exec(v);
+		if (!m) return NaN;
+		return Math.round(parseFloat(m[1]) * (m[2] === 'k' ? 1_000 : m[2] === 'm' ? 1_000_000 : 1));
+	}
+	/** Largest window the gateway can serve; 0 when it configured none. */
+	const maxWindow = (m: JucodeModel) => m.max_context_window || m.context_window || 0;
+	function windowProblem(m: JucodeModel): string {
+		const n = parseWindow(windows[m.id]);
+		if (Number.isNaN(n)) return t('shell.modelSetup.windowInvalid', { model: m.id });
+		const max = maxWindow(m);
+		if (max && n > max) return t('shell.modelSetup.windowTooLarge', { model: m.id, max: fmtContext(max) });
+		return '';
+	}
+	const problems = $derived(models.map(windowProblem).filter(Boolean));
 
 	// Vendor families by model-name prefix; the order is the display order.
 	// Preselected when nothing was chosen yet; mirrors the engine's
@@ -87,6 +111,12 @@
 			models = list;
 			const names = (v: unknown) =>
 				Array.isArray(v) ? v.map((m) => (m as { name?: string }).name).filter((n): n is string => !!n) : [];
+			const overrides = (config.context_window_overrides ?? {}) as Record<string, unknown>;
+			windows = Object.fromEntries(
+				Object.entries(overrides)
+					.filter(([, v]) => typeof v === 'number' && v > 0)
+					.map(([k, v]) => [k, String(v)])
+			);
 			const prev = names(config.jucode_models);
 			const current = prev.length ? prev : DEFAULT_MODELS;
 			picked = current.filter((n) => list.some((m) => m.id === n));
@@ -114,12 +144,24 @@
 		const chosen = order
 			.filter((m) => picked.includes(m.id))
 			.map((m) => ({
+				// Explicit unknowns (0 / ["none"]), as the engine's own login
+				// writes them: a missing field would read back as a default.
 				name: m.id,
-				context_window: m.context_window,
-				max_output_tokens: m.max_output_tokens,
-				reasoning_efforts: m.reasoning_efforts
+				context_window: m.context_window ?? 0,
+				max_context_window: m.max_context_window ?? m.context_window ?? 0,
+				max_output_tokens: m.max_output_tokens ?? 0,
+				reasoning_efforts: m.reasoning_efforts ?? ['none']
 			}));
-		const patch: Record<string, unknown> = { jucode_models: chosen };
+		// Windows for models outside this account's list (another login) stay.
+		const overrides: Record<string, number> = {};
+		for (const [k, v] of Object.entries((cfg.context_window_overrides ?? {}) as Record<string, unknown>)) {
+			if (typeof v === 'number' && v > 0 && !models.some((m) => m.id === k)) overrides[k] = v;
+		}
+		for (const m of models) {
+			const n = parseWindow(windows[m.id]);
+			if (n > 0) overrides[m.id] = n;
+		}
+		const patch: Record<string, unknown> = { jucode_models: chosen, context_window_overrides: overrides };
 		if (cfg.provider === 'jucode') {
 			patch.models = chosen;
 			if (!chosen.some((m) => m.name === cfg.model)) patch.model = chosen[0].name;
@@ -143,7 +185,8 @@
 		<Notice>{t('shell.modelSetup.loadFailed', { error })}</Notice>
 		<div><Button size="sm" onclick={load}>{t('shell.modelSetup.retry')}</Button></div>
 	{:else}
-		<p class="intro">{t('shell.modelSetup.intro', { n: models.length })}</p>
+		<p class="intro">{t('shell.modelSetup.intro', { n: models.length })} {t('shell.modelSetup.windowHint')}</p>
+		{#if problems.length}<Notice>{problems[0]}</Notice>{/if}
 		<label class="search">
 			<MagnifyingGlassIcon size={16} />
 			<input bind:value={query} placeholder={t('shell.modelSetup.search')} />
@@ -158,11 +201,22 @@
 						<button class="gtoggle" onclick={() => toggleGroup(list)}>{all ? t('shell.modelSetup.selectNone') : t('shell.modelSetup.selectAll')}</button>
 					</div>
 					{#each list as m (m.id)}
+						{@const max = maxWindow(m)}
 						<div class="row">
 							<Checkbox checked={picked.includes(m.id)} onchange={(on) => toggle(m.id, on)}>
 								<span class="name">{m.id}</span>
 							</Checkbox>
-							<span class="ctx">{fmtContext(m.context_window)}</span>
+							{#if max > (m.context_window ?? 0) && m.context_window}
+								<span class="ctx">{t('shell.modelSetup.windowMax', { max: fmtContext(max) })}</span>
+							{/if}
+							<input
+								class="win"
+								class:bad={!!windowProblem(m)}
+								bind:value={windows[m.id]}
+								placeholder={fmtContext(m.context_window) || t('shell.modelSetup.windowUnset')}
+								aria-label={m.id}
+								spellcheck="false"
+							/>
 						</div>
 					{/each}
 				</section>
@@ -172,7 +226,7 @@
 	{#snippet footer()}
 		{#if !loading && !error}<span class="count">{t('shell.modelSetup.selected', { n: picked.length })}</span>{/if}
 		<Button variant="ghost" disabled={saving} onclick={onClose}>{t('shell.modelSetup.later')}</Button>
-		<Button variant="primary" disabled={saving || loading || !!error || picked.length === 0} onclick={save}>{t('shell.modelSetup.done')}</Button>
+		<Button variant="primary" disabled={saving || loading || !!error || picked.length === 0 || problems.length > 0} onclick={save}>{t('shell.modelSetup.done')}</Button>
 	{/snippet}
 </Modal>
 
@@ -279,6 +333,29 @@
 		color: var(--dim2);
 		font-size: var(--fs-xs);
 		font-variant-numeric: tabular-nums;
+	}
+	.win {
+		width: 76px;
+		height: 26px;
+		padding: 0 8px;
+		border: 1px solid var(--border);
+		border-radius: var(--r-xs);
+		background: none;
+		color: var(--text);
+		font: inherit;
+		font-size: var(--fs-xs);
+		font-variant-numeric: tabular-nums;
+		text-align: right;
+		outline: none;
+	}
+	.win::placeholder {
+		color: var(--dim2);
+	}
+	.win:focus {
+		border-color: var(--accent);
+	}
+	.win.bad {
+		border-color: var(--err);
 	}
 	.count {
 		margin-right: auto;

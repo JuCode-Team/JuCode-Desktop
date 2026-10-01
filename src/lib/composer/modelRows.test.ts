@@ -28,6 +28,22 @@ describe('buildModelRows', () => {
 		});
 	});
 
+	it('marks JuCode models whose window nobody configured', () => {
+		const rows = buildModelRows({
+			...base,
+			backendId: 'jucode',
+			provider: 'byo',
+			configured: ['byo', 'jucode'],
+			unsetWindow: 'unset',
+			models: [{ model: 'my-model', active: true }],
+			providersList: [{ id: 'jucode', models: [{ name: 'gpt-6-sol' }, { name: 'gpt-5.5', context_window: 272_000 }] }]
+		});
+		expect(rows.find((r) => r.id === 'jucode::gpt-6-sol')?.detail).toBe('unset');
+		expect(rows.find((r) => r.id === 'jucode::gpt-5.5')?.detail).toBe('272K');
+		// BYOK rows keep their provider label and show nothing for an unknown window.
+		expect(rows.find((r) => r.id === 'byo::my-model')?.detail).toBe('byo');
+	});
+
 	it('appends other providers as @switch rows (jucode only)', () => {
 		const providersList = [
 			{ id: 'jucode', models: [{ name: 'gpt-5.5', context_window: 1000 }] },
@@ -126,7 +142,7 @@ describe('buildModelRows', () => {
 	it('lists a model both sides run once, and says where each runs', () => {
 		const rows = buildModelRows({ ...claude, toolMode: 'system' });
 		expect(rows.map((r) => [r.label, r.detail, r.active])).toEqual([
-			['Opus 5.5', 'Local · JuCode · 200K', true],
+			['Opus 5.5', '200K · Local · JuCode', true],
 			['Fable 5 (1M)', 'Local', false],
 			['Fable 5.1', 'JuCode', false]
 		]);

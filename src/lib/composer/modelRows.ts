@@ -41,6 +41,9 @@ export const fmtContext = (n?: number) =>
 /** The group header already names jucode and the agent's own catalog; BYOK rows
  *  from several providers share one group, so they keep the provider id. */
 const detailOf = (provider: string | null, ctx?: number) => [provider, fmtContext(ctx)].filter(Boolean).join(' · ');
+/** A JuCode gateway model whose window nobody configured says so (the user can
+ *  set one in the model settings) instead of showing nothing. */
+const jucodeDetail = (ctx: number | undefined, unsetWindow: string) => fmtContext(ctx) || unsetWindow;
 
 /**
  * A Claude Code / Codex model and where it runs: `local` is the engine's own
@@ -153,8 +156,20 @@ export function buildModelRows(input: {
 	toolMode?: 'system' | 'jucode';
 	/** Claude/Codex: what "this machine" is called beside a model. */
 	localLabel?: string;
+	/** Shown beside a JuCode model with no context window configured. */
+	unsetWindow?: string;
 }): ModelRow[] {
-	const { models, backendId, provider: cur, providersList, configured, groups, toolMode, localLabel = '' } = input;
+	const {
+		models,
+		backendId,
+		provider: cur,
+		providersList,
+		configured,
+		groups,
+		toolMode,
+		localLabel = '',
+		unsetWindow = ''
+	} = input;
 	if (backendId === 'claude' || backendId === 'codex') {
 		const onJucode = toolMode === 'jucode';
 		const served = configured.includes('jucode')
@@ -164,7 +179,8 @@ export function buildModelRows(input: {
 			id: m.key,
 			label: m.label,
 			vendor: m.vendor,
-			detail: [m.local !== undefined && localLabel, m.jucode !== undefined && 'JuCode', fmtContext(m.context_window)]
+			// The window first: a narrow menu truncates the detail from the end.
+			detail: [fmtContext(m.context_window), m.local !== undefined && localLabel, m.jucode !== undefined && 'JuCode']
 				.filter(Boolean)
 				.join(' · '),
 			active: m.active,
@@ -183,7 +199,10 @@ export function buildModelRows(input: {
 		id: `${cur}::${m.model}`,
 		label: m.label || m.model,
 		vendor: m.vendor || m.model,
-		detail: detailOf(activeGroup === groups.byok ? cur : null, m.context_window),
+		detail:
+			cur === 'jucode'
+				? jucodeDetail(m.context_window, unsetWindow)
+				: detailOf(activeGroup === groups.byok ? cur : null, m.context_window),
 		active: m.active,
 		command: `/model ${m.model}`,
 		depth: undefined,
@@ -196,7 +215,7 @@ export function buildModelRows(input: {
 				id: `${pv.id}::${m.name}`,
 				label: m.name,
 				vendor: m.name,
-				detail: detailOf(pv.id === 'jucode' ? null : pv.id, m.context_window),
+				detail: pv.id === 'jucode' ? jucodeDetail(m.context_window, unsetWindow) : detailOf(pv.id, m.context_window),
 				active: false,
 				command: `@switch ${pv.id} ${m.name}`,
 				depth: undefined,

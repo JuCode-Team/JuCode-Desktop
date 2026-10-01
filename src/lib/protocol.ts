@@ -285,7 +285,11 @@ export interface AgentTurnRow extends Omit<UsageTokens, 'turns'> {
 /** A model the JuCode account can use (GET /v1/models). */
 export type JucodeModel = {
 	id: string;
+	/** Smallest window among the gateway accounts serving the model; absent
+	 *  when the gateway has none configured. */
 	context_window?: number;
+	/** Largest; the user may raise their window up to this. */
+	max_context_window?: number;
 	max_output_tokens?: number;
 	reasoning_efforts?: string[];
 };
@@ -427,11 +431,11 @@ export function installDependency(name: string): Promise<InstallOutcome> {
 export type InstallPlan =
 	| { kind: 'run'; program: string; args: string[] }
 	| { kind: 'manual'; command: string }
+	| { kind: 'system-dialog'; program: string; args: string[] }
 	| { kind: 'open-url'; url: string }
 	| { kind: 'needs-prereq'; prereq: string };
 export interface DepReport {
 	id: string;
-	| { kind: 'system-dialog'; program: string; args: string[] }
 	present: boolean;
 	detail: string;
 	plan: InstallPlan;
@@ -441,20 +445,16 @@ export function checkDependencies(): Promise<DepReport[]> {
 }
 // Outcome of triggering run_install. 'running' → the app is streaming output
 // via install-output events and will emit install-done when finished.
+// 'system-dialog' → an OS installer window opened; the user re-checks after.
 export type InstallStart =
 	| { kind: 'running' }
+	| { kind: 'system-dialog' }
 	| { kind: 'manual-command'; command: string }
 	| { kind: 'open-url'; url: string }
-// 'system-dialog' → an OS installer window opened; the user re-checks after.
 	| { kind: 'needs-prereq'; prereq: string };
 export function runInstall(name: string): Promise<InstallStart> {
-	| { kind: 'system-dialog' }
 	return invoke('run_install', { name });
 }
-export interface InstallOutputEvent {
-	id: string;
-	line: string;
-	stream: 'stdout' | 'stderr';
 // Claude Code / Codex: the latest release and whether the installed one is
 // older; run_upgrade streams like run_install (same events, same id).
 export interface AgentUpdate {
@@ -467,6 +467,10 @@ export function checkAgentUpdate(backend: string, binOverride?: string): Promise
 export function runUpgrade(backend: string, binOverride?: string): Promise<InstallStart> {
 	return invoke('run_upgrade', { backend, binOverride });
 }
+export interface InstallOutputEvent {
+	id: string;
+	line: string;
+	stream: 'stdout' | 'stderr';
 }
 export interface InstallDoneEvent {
 	id: string;
@@ -482,7 +486,13 @@ export interface ProviderInfo {
 	id: string;
 	base_url: string;
 	protocol: string;
-	models: { name: string; context_window?: number; max_output_tokens?: number; reasoning_efforts?: string[] }[];
+	models: {
+		name: string;
+		context_window?: number;
+		max_context_window?: number;
+		max_output_tokens?: number;
+		reasoning_efforts?: string[];
+	}[];
 }
 export function listProviders(): Promise<ProviderInfo[]> {
 	return invoke('list_providers');
