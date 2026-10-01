@@ -624,145 +624,43 @@ fn unix_now() -> u64 {
         .unwrap_or(0)
 }
 
-/// Cross-process lock around a token refresh, shared with the `jucode`
-/// engine processes; released when the file closes.
-fn lock_auth_refresh() -> Result<std::fs::File, String> {
-    let dir = jucode_dir();
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let path = dir.join("auth.lock");
-    let file = std::fs::OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .write(true)
-        .open(&path)
-        .map_err(|e| format!("failed to open {}: {e}", path.display()))?;
-    file.lock()
-        .map_err(|e| format!("failed to lock {}: {e}", path.display()))?;
-    Ok(file)
-}
-
-/// Returns a valid JuCode access token, transparently refreshing (and
-/// rewriting auth.json) via the rotating refresh token when the stored
-/// access token is missing or near expiry. The CLI engine owns login; this
-/// only keeps the Desktop's own API calls authenticated between logins.
-fn jucode_access_token() -> Result<String, String> {
-    let auth = read_auth();
-    let jucode = auth
-        .get("jucode")
-        .cloned()
-        .unwrap_or_else(|| serde_json::json!({}));
-    let access = jucode
-        .get("access_token")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    let refresh = jucode
-        .get("refresh_token")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    let access_exp = jucode
-        .get("access_expires_at")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0);
-    if refresh.is_empty() {
+/// The JuCode gateway URL and an access token, from `jucode token` (the
+/// engine owns login and refreshing), kept until two minutes before it
+/// expires.
+fn jucode_session() -> Result<(String, String), String> {
+    static CACHE: Mutex<Option<(String, String, u64)>> = Mutex::new(None);
+    let mut cache = CACHE.lock().map_err(|e| format!("lock poisoned: {e}"))?;
+    if let Some((api, token, expires_at)) = cache.as_ref() {
+        if *expires_at > unix_now() + 120 {
+            return Ok((api.clone(), token.clone()));
+        }
+    }
+    let mut cmd = Command::new(resolve_bin());
+    no_window(&mut cmd);
+    shell_env::apply_to_command(&mut cmd, true, &[], &[]);
+    let out = cmd
+        .arg("token")
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|e| format!("could not run jucode: {e}"))?;
+    if !out.status.success() {
+        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+    }
+    let session: serde_json::Value =
+        serde_json::from_slice(&out.stdout).map_err(|e| format!("jucode token: {e}"))?;
+    let text = |key: &str| session.get(key).and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let (api, token) = (text("api_url"), text("access_token"));
+    if token.is_empty() {
         return Err("not logged in to JuCode".to_string());
     }
-    let now = unix_now();
-    if !access.is_empty() && access_exp > now + 120 {
-        return Ok(access);
-    }
-    // Serialize the read-modify-write of auth.json so two concurrent refreshes
-    // can't clobber each other's rotated refresh token.
-    static REFRESH_LOCK: std::sync::OnceLock<Mutex<()>> = std::sync::OnceLock::new();
-    let _guard = REFRESH_LOCK
-        .get_or_init(|| Mutex::new(()))
-        .lock()
-        .map_err(|e| format!("lock poisoned: {e}"))?;
-    // The engine processes refresh the same token (agent-core
-    // oauth::lock_auth_refresh); the gateway revokes it on first use.
-    let _file_guard = lock_auth_refresh()?;
-    // Re-read after acquiring the lock: another thread or process may have
-    // just refreshed.
-    let fresh = read_auth();
-    let fresh_jucode = fresh
-        .get("jucode")
-        .cloned()
-        .unwrap_or_else(|| serde_json::json!({}));
-    let fresh_access = fresh_jucode
-        .get("access_token")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    let fresh_exp = fresh_jucode
-        .get("access_expires_at")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0);
-    if !fresh_access.is_empty() && fresh_exp > now + 120 {
-        return Ok(fresh_access);
-    }
-    let refresh = fresh_jucode
-        .get("refresh_token")
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
-        .unwrap_or(refresh);
-    let api_url = jucode_api_url();
-    // The token endpoint carries the refresh token; refuse to send it over cleartext.
-    if !api_url.starts_with("https://") {
-        return Err("refusing to refresh JuCode token over non-https endpoint".to_string());
-    }
-    let url = format!("{}/v1/oauth/token", api_url);
-    let resp: serde_json::Value = ureq::post(&url)
-        .timeout(std::time::Duration::from_secs(30))
-        .send_json(serde_json::json!({
-            "grant_type": "refresh_token",
-            "client_id": "jucode-cli",
-            "refresh_token": refresh,
-        }))
-        .map_err(|e| e.to_string())?
-        .into_json()
-        .map_err(|e| e.to_string())?;
-    let new_access = resp
-        .get("access_token")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    let new_refresh = resp
-        .get("refresh_token")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    if new_access.is_empty() || new_refresh.is_empty() {
-        return Err("JuCode session expired; please sign in again".to_string());
-    }
-    let expires_in = resp
-        .get("expires_in")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(3600);
-    let refresh_expires_in = resp
-        .get("refresh_expires_in")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(90 * 24 * 3600);
-    let mut current = read_auth();
-    if let Some(root) = current.as_object_mut() {
-        root.insert(
-            "jucode".to_string(),
-            serde_json::json!({
-                "access_token": new_access,
-                "refresh_token": new_refresh,
-                "access_expires_at": now + expires_in,
-                "refresh_expires_at": now + refresh_expires_in,
-            }),
-        );
-    }
-    let _ = write_auth(&mut current);
-    Ok(new_access)
+    let expires_at = session.get("expires_at").and_then(|v| v.as_u64()).unwrap_or(0);
+    *cache = Some((api.clone(), token.clone(), expires_at));
+    Ok((api, token))
 }
 
 fn jucode_get(path: &str) -> Result<serde_json::Value, String> {
-    let token = jucode_access_token()?;
-    let url = format!("{}{}", jucode_api_url(), path);
+    let (api, token) = jucode_session()?;
+    let url = format!("{api}{path}");
     ureq::get(&url)
         .timeout(std::time::Duration::from_secs(30))
         .set("Authorization", &format!("Bearer {token}"))
