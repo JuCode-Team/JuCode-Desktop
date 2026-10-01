@@ -30,14 +30,23 @@
 	// Preselected when nothing was chosen yet; mirrors the engine's
 	// DEFAULT_JUCODE_MODELS (agent-core/src/core.rs).
 	const DEFAULT_MODELS = [
-		'gpt-6-sol',
+		'gpt-6.1-sol',
+		'codex-auto-review',
 		'gpt-6-astra',
+		'gpt-6-sol',
 		'gpt-6-luna',
-		'claude-fable-5-1',
-		'claude-opus-5-5',
+		'gpt-5.6-sol',
+		'gpt-5.6-terra',
+		'gpt-5.6-luna',
 		'claude-sonnet-5-5',
+		'claude-opus-5-5',
+		'claude-fable-5-1',
+		'claude-opus-5',
+		'claude-opus-4-8',
+		'claude-sonnet-5',
 		'deepseek-v4.1-flash',
-		'glm-5.3-flash'
+		'glm-5.3-flash',
+		'kimi-k3'
 	];
 
 	const FAMILIES: [string, RegExp][] = [
