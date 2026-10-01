@@ -5,7 +5,8 @@
 name = "desktop"
 version = "0.3.2"
 description = "JuCode desktop GUI"
-authors = ["you"]
+authors = ["Jucode Innovations INC."]
+license = "Apache-2.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
