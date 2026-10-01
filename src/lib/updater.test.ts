@@ -10,6 +10,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 	}
 }));
 vi.mock('@tauri-apps/plugin-process', () => ({ relaunch }));
+vi.mock('@tauri-apps/api/app', () => ({ getVersion: () => Promise.resolve('0.4.0') }));
 
 /** `update_check` finds 0.3.2 on `source`; `install` answers `update_install`. */
 function commands(install: () => Promise<void> = () => Promise.resolve(), source = 'github') {
@@ -70,5 +71,38 @@ describe('UpdaterState', () => {
 
 		expect(state.phase).toBe('error');
 		expect(state.error).toContain('signature mismatch');
+	});
+});
+
+describe('a required version', () => {
+	it('downloads the update even on a manual check, and is cleared once current', async () => {
+		const { UpdaterState } = await import('./updater.svelte');
+		let min = '0.5.0';
+		invoke.mockImplementation((cmd: string) => {
+			if (cmd === 'update_policy') return Promise.resolve(min);
+			if (cmd === 'update_check') return Promise.resolve({ version: '0.5.0', notes: 'fixes', source: 'jucode' });
+			if (cmd === 'update_install') return Promise.resolve();
+			return Promise.reject(new Error(`unexpected ${cmd}`));
+		});
+		const state = new UpdaterState();
+		await state.check();
+		expect(state.required).toBe('0.5.0');
+		expect(state.phase).toBe('ready');
+		expect(state.notes).toBe('fixes');
+		min = '';
+		await state.check();
+		expect(state.required).toBe('');
+	});
+});
+
+describe('olderThan', () => {
+	it('compares versions numerically, a pre-release before its release', async () => {
+		const { olderThan } = await import('./updater.svelte');
+		expect(olderThan('0.4.0', '0.4.10')).toBe(true);
+		expect(olderThan('0.4.10', '0.4.2')).toBe(false);
+		expect(olderThan('0.4.0', '0.4.0')).toBe(false);
+		expect(olderThan('0.5.0-beta.1', '0.5.0')).toBe(true);
+		expect(olderThan('v1.0.0', '0.9.9')).toBe(false);
+		expect(olderThan('garbage', '0.4.0')).toBe(false);
 	});
 });

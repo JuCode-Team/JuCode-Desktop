@@ -146,6 +146,28 @@ async fn install(update: &Update, on_event: &Channel<Progress>) -> Result<(), St
         .map_err(|e| e.to_string())
 }
 
+/// The lowest version the JuCode server still accepts ("" when it names
+/// none or cannot be reached: an unreachable server never locks the app).
+#[tauri::command]
+pub async fn update_policy() -> String {
+    let manifest = jucode_manifest();
+    let url = manifest.replace("/latest.json", "/policy");
+    tauri::async_runtime::spawn_blocking(move || {
+        ureq::AgentBuilder::new()
+            .timeout_connect(Duration::from_secs(5))
+            .timeout_read(Duration::from_secs(5))
+            .build()
+            .get(&url)
+            .call()
+            .ok()
+            .and_then(|response| response.into_json::<serde_json::Value>().ok())
+            .and_then(|policy| policy["min_version"].as_str().map(str::to_string))
+            .unwrap_or_default()
+    })
+    .await
+    .unwrap_or_default()
+}
+
 /// Downloads and installs the update the last check found; a GitHub download
 /// that fails is retried once from the JuCode server.
 #[tauri::command]

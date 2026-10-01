@@ -34,6 +34,24 @@ const shell = {
 			confirmBody: '对话里的思考内容带有原账号的签名，换到另一个账号后可能被拒绝。被拒时换回原来的提供商即可继续。',
 			confirm: '切换'
 		},
+		updatePrompt: {
+			label: '应用更新',
+			readyTitle: 'JuCode {version} 已就绪',
+			readyHint: '重启后使用新版本。正在运行的任务在后台服务里继续，不受影响。',
+			requiredTitle: '需要更新到 {version}',
+			requiredHint: '当前版本已停止支持，更新后才能继续使用。',
+			checking: '正在查找更新…',
+			downloading: '正在下载更新 {pct}%',
+			unreachable: '没能自动下载更新。可以重试，或从下载页手动安装。',
+			restart: '立即重启',
+			later: '稍后',
+			retry: '重试',
+			openDownload: '打开下载页'
+		},
+		daemonUpdate: {
+			idle: '后台服务会在没有任务运行时更新到 {version}',
+			failed: '后台服务更新失败：{error}'
+		},
 		notConfigured: '未配置',
 		pickerSearchPlaceholder: '筛选…',
 		empty: '(empty)',
@@ -503,6 +521,24 @@ const shell = {
 			confirmSystem: 'Continue this conversation on this machine?',
 			confirmBody: 'Its thinking carries the original account’s signature, which another account may reject. If it does, switch back to continue.',
 			confirm: 'Switch'
+		},
+		updatePrompt: {
+			label: 'App update',
+			readyTitle: 'JuCode {version} is ready',
+			readyHint: 'Restart to use the new version. Running tasks continue in the background service.',
+			requiredTitle: 'Update to {version} required',
+			requiredHint: 'This version is no longer supported. Update to keep using JuCode.',
+			checking: 'Looking for the update…',
+			downloading: 'Downloading the update {pct}%',
+			unreachable: 'The update could not be downloaded. Try again, or install it from the download page.',
+			restart: 'Restart now',
+			later: 'Later',
+			retry: 'Try again',
+			openDownload: 'Open download page'
+		},
+		daemonUpdate: {
+			idle: 'The background service updates to {version} once no task is running',
+			failed: 'Could not update the background service: {error}'
 		},
 		notConfigured: 'not configured',
 		pickerSearchPlaceholder: 'Filter…',

@@ -301,18 +301,6 @@ fn stale_daemon() -> Option<(i32, String)> {
     if exe.file_name()?.to_string_lossy() != "jucode" {
         return None; // not a jucode daemon: leave it alone
     }
-    // A release build runs its own jucode; a daemon another one started (an
-    // older install on PATH) is replaced, unless it is the user's login
-    // service, which would only start it again.
-    if let Some(app) = app_cli::path() {
-        let same = |a: &Path, b: &Path| match (a.canonicalize(), b.canonicalize()) {
-            (Ok(a), Ok(b)) => a == b,
-            _ => a == b,
-        };
-        if !same(&exe, &app) && !app_cli::daemon_service_installed() {
-            return Some((pid, format!("it runs {}, not the app's jucode", exe.display())));
-        }
-    }
     let Ok(meta) = std::fs::metadata(&exe) else {
         return Some((pid, format!("{} was removed", exe.display())));
     };
@@ -346,6 +334,11 @@ fn parse_etime(text: &str) -> Option<std::time::Duration> {
 /// program. Hosted sessions reopen from their saved state.
 fn replace_stale_daemon() {
     if DAEMON_CHECKED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+    // A release build compares versions with the daemon instead and lets it
+    // restart once idle (daemon.ts); this check is for development builds.
+    if app_cli::path().is_some() {
         return;
     }
     #[cfg(unix)]
@@ -2901,10 +2894,14 @@ pub fn run() {
             worktree_base,
             native_import::native_sessions,
             app_cli::install_cli_command,
+            app_cli::app_cli_version,
+            app_cli::replace_daemon,
             #[cfg(desktop)]
             app_update::update_check,
             #[cfg(desktop)]
             app_update::update_install,
+            #[cfg(desktop)]
+            app_update::update_policy,
             native_import::import_native_session,
             pty_open,
             pty_write,

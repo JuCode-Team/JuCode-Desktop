@@ -112,9 +112,54 @@ fn same_contents(a: &Path, b: &Path) -> bool {
     matches!((read(a), read(b)), (Some(x), Some(y)) if x == y)
 }
 
+/// The version of the jucode this build ships (src-tauri/jucode-cli.version),
+/// None in a build without one. A daemon of another version is replaced once
+/// it is idle (see daemon.ts).
+#[tauri::command]
+pub fn app_cli_version() -> Option<String> {
+    bundled()?;
+    Some(include_str!("../jucode-cli.version").trim().to_string())
+}
+
+/// Ends the daemon listening on the app's daemon port right away: for
+/// daemons too old to restart themselves once idle (`restart_when_idle`). The
+/// app starts its own on the next connection.
+#[tauri::command]
+pub fn replace_daemon() -> Result<(), String> {
+    let port = crate::DAEMON_ADDR.rsplit(':').next().unwrap_or("7788");
+    // A login service would only start the old one again.
+    if daemon_service_installed() {
+        return Err("the jucode daemon runs as a login service (jucode daemon install); reinstall it with this version".to_string());
+    }
+    #[cfg(unix)]
+    let status = std::process::Command::new("sh")
+        .args([
+            "-c",
+            &format!("kill -TERM $(lsof -nP -t -iTCP:{port} -sTCP:LISTEN) 2>/dev/null"),
+        ])
+        .status();
+    #[cfg(windows)]
+    let status = {
+        use std::os::windows::process::CommandExt;
+        std::process::Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                &format!(
+                    "Get-NetTCPConnection -LocalPort {port} -State Listen -ErrorAction SilentlyContinue | \
+                     ForEach-Object {{ Stop-Process -Id $_.OwningProcess -Force }}"
+                ),
+            ])
+            .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+            .status()
+    };
+    status.map(|_| ()).map_err(|e| e.to_string())
+}
+
 /// Whether the user installed the daemon as a login service
 /// (`jucode daemon install`); the app then leaves the running daemon alone.
-pub fn daemon_service_installed() -> bool {
+fn daemon_service_installed() -> bool {
     let Some(home) = home() else {
         return false;
     };

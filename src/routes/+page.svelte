@@ -41,6 +41,8 @@
 	import { caps } from '$lib/backends';
 	import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
 	import { updater } from '$lib/updater.svelte';
+	import { checkDaemonVersion } from '$lib/daemonVersion';
+	import UpdatePrompt from '$lib/UpdatePrompt.svelte';
 	import { browser, type WebRef } from '$lib/browser.svelte';
 	import { prefs } from '$lib/prefs.svelte';
 	import { t } from '$lib/i18n';
@@ -853,6 +855,13 @@
 				sync.handle(frame);
 			};
 			daemon.onDisconnect = () => agentDirectory.disconnected();
+			daemon.onHello = (version) => {
+				checkDaemonVersion(version).then((outcome) => {
+					if (outcome.kind === 'restart-when-idle')
+						toast.info(t('shell.daemonUpdate.idle', { version: outcome.version }));
+					else if (outcome.kind === 'failed') toast.error(t('shell.daemonUpdate.failed', { error: outcome.error }));
+				});
+			};
 			// The client outlives this page: release the sessions it claimed for
 			// this page's tabs when the page goes (see detachAll).
 			cleanups.push(() => daemon.detachAll());
@@ -908,9 +917,12 @@
 				for (const u of urls) handleDeepLink(u);
 			});
 			cleanups.push(undeep);
-			// Check GitHub after startup and install updates; relaunch stays user-controlled.
+			// Updates install in the background shortly after startup and every
+			// 10 minutes after that; the relaunch is the user's (UpdatePrompt),
+			// unless the server requires the version.
 			const updateTimer = setTimeout(() => updater.check(true, true), 5000);
-			cleanups.push(() => clearTimeout(updateTimer));
+			const updateEvery = setInterval(() => updater.check(true, true), 10 * 60 * 1000);
+			cleanups.push(() => clearTimeout(updateTimer), () => clearInterval(updateEvery));
 			loadProviders();
 			readAuthProviders()
 				.then((p) => {
@@ -1138,6 +1150,7 @@
 		<Marketplace backend={active?.backendId ?? 'jucode'} onClose={() => (showMarket = false)} />
 	{/if}
 
+	<UpdatePrompt />
 	{#if showSetup && activeId}
 		<Setup
 			sessionId={activeId}
