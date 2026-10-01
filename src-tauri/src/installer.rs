@@ -13,6 +13,7 @@
 //!     macOS/Linux curl|bash) — no sudo, user-local.
 
 use serde::Serialize;
+use std::path::Path;
 
 /// A tool the setup / dependencies UI can install.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -27,6 +28,10 @@ pub enum Dep {
     Jucode,
     /// Claude Code CLI (native installer).
     Claude,
+    /// git — the Git panel, worktree tasks and the engines' repo tools.
+    Git,
+    /// GitHub CLI — the Git panel's pull requests.
+    Gh,
 }
 
 impl Dep {
@@ -37,6 +42,8 @@ impl Dep {
             "codex" => Some(Self::Codex),
             "jucode" => Some(Self::Jucode),
             "claude" => Some(Self::Claude),
+            "git" => Some(Self::Git),
+            "gh" => Some(Self::Gh),
             _ => None,
         }
     }
@@ -49,6 +56,8 @@ impl Dep {
             Self::Codex => "codex",
             Self::Jucode => "jucode",
             Self::Claude => "claude",
+            Self::Git => "git",
+            Self::Gh => "gh",
         }
     }
 
@@ -70,6 +79,9 @@ pub enum Plan {
     /// Show a copyable command — Linux system packages need sudo, which the GUI
     /// never runs itself.
     Manual { command: String },
+    /// The app starts an OS installer that runs in its own window (macOS
+    /// `xcode-select --install`); nothing to stream, the user re-checks after.
+    SystemDialog { program: String, args: Vec<String> },
     /// No automated path here; open the official download page.
     OpenUrl { url: String },
     /// A prerequisite is missing (e.g. npm for the npm tools) — install it first.
@@ -78,6 +90,9 @@ pub enum Plan {
 
 const NODE_URL: &str = "https://nodejs.org/en/download";
 const FFMPEG_URL: &str = "https://ffmpeg.org/download.html";
+const GIT_URL: &str = "https://git-scm.com/downloads";
+const GH_URL: &str = "https://cli.github.com";
+const GH_LINUX_URL: &str = "https://github.com/cli/cli/blob/trunk/docs/install_linux.md";
 
 /// Copyable `sudo` install command for the detected Linux package manager.
 fn linux_pkg_command(pkgs: &str, has: &dyn Fn(&str) -> bool) -> Option<String> {
@@ -173,6 +188,17 @@ pub fn plan(dep: Dep, os: &str, has: &dyn Fn(&str) -> bool) -> Plan {
     match dep {
         Dep::Node => system_plan(os, "OpenJS.NodeJS.LTS", "node", "nodejs npm", NODE_URL, has),
         Dep::Ffmpeg => system_plan(os, "Gyan.FFmpeg", "ffmpeg", "ffmpeg", FFMPEG_URL, has),
+        // macOS git comes with the Command Line Tools (Homebrew needs them too).
+        Dep::Git if os == "macos" => Plan::SystemDialog {
+            program: "xcode-select".to_string(),
+            args: vec!["--install".to_string()],
+        },
+        Dep::Git => system_plan(os, "Git.Git", "git", "git", GIT_URL, has),
+        // Linux distributions name and carry gh differently: their own guide.
+        Dep::Gh if os == "linux" => Plan::OpenUrl {
+            url: GH_LINUX_URL.to_string(),
+        },
+        Dep::Gh => system_plan(os, "GitHub.cli", "gh", "gh", GH_URL, has),
         Dep::Codex => {
             if has("npm") {
                 npm_global("@openai/codex")
@@ -219,6 +245,73 @@ pub fn plan(dep: Dep, os: &str, has: &dyn Fn(&str) -> bool) -> Plan {
     }
 }
 
+/// `major.minor.patch` from a `--version` line ("2.1.286 (Claude Code)",
+/// "codex-cli 0.159.3"); a pre-release suffix is ignored.
+pub fn parse_version(s: &str) -> Option<(u64, u64, u64)> {
+    s.split(|c: char| !(c.is_ascii_digit() || c == '.'))
+        .find_map(|token| {
+            let mut parts = token.split('.');
+            let mut next = || parts.next()?.parse::<u64>().ok();
+            Some((next()?, next()?, next()?))
+        })
+}
+
+/// The npm package an agent CLI is published as. The native installers ship
+/// the same versions, so its dist-tags give the latest release whatever the
+/// install method.
+pub fn npm_package(dep: Dep) -> Option<&'static str> {
+    match dep {
+        Dep::Claude => Some("@anthropic-ai/claude-code"),
+        Dep::Codex => Some("@openai/codex"),
+        _ => None,
+    }
+}
+
+/// `codex update` exists from this release on; before it, `codex update`
+/// starts a session with "update" as the prompt.
+const CODEX_UPDATE_SINCE: (u64, u64, u64) = (0, 126, 0);
+
+/// How to upgrade the installed Claude Code / Codex at `bin` (whose
+/// `--version` printed `version`) in place. Both update themselves and know
+/// how they were installed (native, npm, Homebrew…): `claude update`, and
+/// `codex update` from 0.126. An older Codex installed by npm is reinstalled
+/// through npm; any other old one gets the download page.
+pub fn upgrade_plan(
+    dep: Dep,
+    bin: &Path,
+    version: &str,
+    has: &dyn Fn(&str) -> bool,
+) -> Option<Plan> {
+    let update = || Plan::Run {
+        program: bin.display().to_string(),
+        args: vec!["update".to_string()],
+    };
+    match dep {
+        Dep::Claude => Some(update()),
+        Dep::Codex if parse_version(version).is_some_and(|v| v >= CODEX_UPDATE_SINCE) => {
+            Some(update())
+        }
+        Dep::Codex if npm_installed(bin) => Some(plan(Dep::Codex, std::env::consts::OS, has)),
+        Dep::Codex => Some(Plan::OpenUrl {
+            url: "https://developers.openai.com/codex/cli/".to_string(),
+        }),
+        _ => None,
+    }
+}
+
+/// Whether npm put the Codex at `bin` there: on Unix the command links into
+/// `node_modules`, on Windows the `.cmd` shim sits next to it.
+fn npm_installed(bin: &Path) -> bool {
+    let real = bin.canonicalize().unwrap_or_else(|_| bin.to_path_buf());
+    real.components().any(|c| c.as_os_str() == "node_modules")
+        || bin.parent().is_some_and(|dir| {
+            dir.join("node_modules")
+                .join("@openai")
+                .join("codex")
+                .is_dir()
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -236,10 +329,12 @@ mod tests {
             ("codex", Dep::Codex),
             ("jucode", Dep::Jucode),
             ("claude", Dep::Claude),
+            ("git", Dep::Git),
+            ("gh", Dep::Gh),
         ] {
             assert_eq!(Dep::parse(s), Some(d));
         }
-        assert_eq!(Dep::parse("git"), None);
+        assert_eq!(Dep::parse("svn"), None);
         assert_eq!(Dep::parse(""), None);
     }
 
@@ -337,5 +432,83 @@ mod tests {
                 other => panic!("expected Run on {os}, got {other:?}"),
             }
         }
+    }
+
+    #[test]
+    fn parses_cli_version_lines() {
+        assert_eq!(parse_version("2.1.286 (Claude Code)"), Some((2, 1, 286)));
+        assert_eq!(parse_version("codex-cli 0.159.3"), Some((0, 159, 3)));
+        assert_eq!(
+            parse_version("codex-cli 0.161.0-alpha.8"),
+            Some((0, 161, 0))
+        );
+        assert_eq!(parse_version("jucode 0.4.0\n"), Some((0, 4, 0)));
+        assert_eq!(parse_version("1.2"), None);
+        assert_eq!(parse_version(""), None);
+    }
+
+    #[test]
+    fn agents_update_themselves_except_old_codex() {
+        let bin = Path::new("/home/u/.local/bin/claude");
+        assert_eq!(
+            upgrade_plan(Dep::Claude, bin, "2.1.0 (Claude Code)", &avail(&[])),
+            Some(Plan::Run {
+                program: bin.display().to_string(),
+                args: vec!["update".to_string()]
+            })
+        );
+        let codex = Path::new("/home/u/.local/bin/codex");
+        assert!(matches!(
+            upgrade_plan(Dep::Codex, codex, "codex-cli 0.126.0", &avail(&[])),
+            Some(Plan::Run { args, .. }) if args == ["update"]
+        ));
+        // Too old for `codex update`: npm reinstalls it, else the download page.
+        let npm = Path::new("/usr/local/lib/node_modules/@openai/codex/bin/codex.js");
+        assert_eq!(
+            upgrade_plan(Dep::Codex, npm, "codex-cli 0.98.0", &avail(&["npm"])),
+            Some(npm_global("@openai/codex"))
+        );
+        assert!(matches!(
+            upgrade_plan(Dep::Codex, codex, "codex-cli 0.98.0", &avail(&["npm"])),
+            Some(Plan::OpenUrl { .. })
+        ));
+        assert_eq!(
+            upgrade_plan(Dep::Jucode, bin, "jucode 0.4.0", &avail(&[])),
+            None
+        );
+    }
+
+    #[test]
+    fn git_and_gh_map_per_platform() {
+        assert_eq!(
+            plan(Dep::Git, "macos", &avail(&["brew"])),
+            Plan::SystemDialog {
+                program: "xcode-select".to_string(),
+                args: vec!["--install".to_string()]
+            }
+        );
+        assert_eq!(
+            plan(Dep::Git, "windows", &avail(&["winget"])),
+            winget("Git.Git")
+        );
+        assert_eq!(
+            plan(Dep::Git, "linux", &avail(&["apt-get"])),
+            Plan::Manual {
+                command: "sudo apt-get install -y git".to_string()
+            }
+        );
+        assert_eq!(plan(Dep::Gh, "macos", &avail(&["brew"])), brew("gh"));
+        assert_eq!(
+            plan(Dep::Gh, "windows", &avail(&["winget"])),
+            winget("GitHub.cli")
+        );
+        assert!(matches!(
+            plan(Dep::Gh, "macos", &avail(&[])),
+            Plan::OpenUrl { .. }
+        ));
+        assert!(matches!(
+            plan(Dep::Gh, "linux", &avail(&["apt-get"])),
+            Plan::OpenUrl { .. }
+        ));
     }
 }

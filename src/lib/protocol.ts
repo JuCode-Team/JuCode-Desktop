@@ -421,7 +421,7 @@ export function installDependency(name: string): Promise<InstallOutcome> {
 	return invoke('install_dependency', { name });
 }
 
-// --- external tool dependencies (node/npm, ffmpeg, codex, jucode, claude) ---
+// --- external tool dependencies (node/npm, ffmpeg, git, gh, codex, jucode, claude) ---
 
 // What installing a tool entails on this machine (mirrors installer::Plan).
 export type InstallPlan =
@@ -431,6 +431,7 @@ export type InstallPlan =
 	| { kind: 'needs-prereq'; prereq: string };
 export interface DepReport {
 	id: string;
+	| { kind: 'system-dialog'; program: string; args: string[] }
 	present: boolean;
 	detail: string;
 	plan: InstallPlan;
@@ -444,14 +445,28 @@ export type InstallStart =
 	| { kind: 'running' }
 	| { kind: 'manual-command'; command: string }
 	| { kind: 'open-url'; url: string }
+// 'system-dialog' → an OS installer window opened; the user re-checks after.
 	| { kind: 'needs-prereq'; prereq: string };
 export function runInstall(name: string): Promise<InstallStart> {
+	| { kind: 'system-dialog' }
 	return invoke('run_install', { name });
 }
 export interface InstallOutputEvent {
 	id: string;
 	line: string;
 	stream: 'stdout' | 'stderr';
+// Claude Code / Codex: the latest release and whether the installed one is
+// older; run_upgrade streams like run_install (same events, same id).
+export interface AgentUpdate {
+	latest: string;
+	available: boolean;
+}
+export function checkAgentUpdate(backend: string, binOverride?: string): Promise<AgentUpdate> {
+	return invoke('check_agent_update', { backend, binOverride });
+}
+export function runUpgrade(backend: string, binOverride?: string): Promise<InstallStart> {
+	return invoke('run_upgrade', { backend, binOverride });
+}
 }
 export interface InstallDoneEvent {
 	id: string;

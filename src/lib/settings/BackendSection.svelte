@@ -1,6 +1,7 @@
 <script lang="ts">
 	// Settings → 所有智能体 → 智能体: per-backend availability (check_backend), a
-	// one-click install when missing, a binary-path override and extra env
+	// one-click install when missing, a one-click upgrade when Claude Code /
+	// Codex has a newer release, a binary-path override and extra env
 	// (folded away), and the default backend for new sessions. All preferences
 	// persist to localStorage immediately.
 	import { onMount } from 'svelte';
@@ -8,11 +9,15 @@
 	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
 	import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon';
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
+	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
+	import ArrowCircleUpIcon from 'phosphor-svelte/lib/ArrowCircleUpIcon';
 	import {
 		checkBackend,
+		checkAgentUpdate,
 		installCliCommand,
 		shellEnvStatus,
 		refreshShellEnv,
+		type AgentUpdate,
 		type BackendStatus,
 		type ShellEnvStatus
 	} from '$lib/protocol';
@@ -28,7 +33,8 @@
 	import BackendIcon from '$lib/BackendIcon.svelte';
 	import DepAction from '$lib/DepAction.svelte';
 	import DepDetails from '$lib/DepDetails.svelte';
-	import { deps, recheckDeps } from '$lib/deps.svelte';
+	import { deps, recheckDeps, upgradeDep } from '$lib/deps.svelte';
+	import Button from '$lib/ui/Button.svelte';
 	import Select from '$lib/ui/Select.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import { t } from '$lib/i18n';
@@ -37,6 +43,7 @@
 
 	let settings = $state<BackendSettings>(loadBackendSettings());
 	let status = $state<Partial<Record<BackendId, BackendStatus | 'checking'>>>({});
+	let updates = $state<Partial<Record<BackendId, AgentUpdate>>>({});
 	let shellEnv = $state<ShellEnvStatus | null>(null);
 	let refreshing = $state(false);
 	let advOpen = $state<Partial<Record<BackendId, boolean>>>({});
@@ -76,16 +83,45 @@
 		return Object.keys(settings.env[id] ?? {}).length + (settings.paths[id]?.trim() ? 1 : 0);
 	}
 
+	// Claude Code and Codex can be upgraded from here; the app's jucode comes
+	// with the app.
+	const upgradable = (id: BackendId) => id === 'claude' || id === 'codex';
+
 	function check(id: BackendId) {
 		status[id] = 'checking';
-		checkBackend(id, settings.paths[id]?.trim() || undefined)
-			.then((s) => (status[id] = s))
+		delete updates[id];
+		const bin = settings.paths[id]?.trim() || undefined;
+		checkBackend(id, bin)
+			.then((s) => {
+				status[id] = s;
+				// No version means nothing to compare; a failed lookup (offline)
+				// just shows no update.
+				if (s.found && s.version && upgradable(id))
+					checkAgentUpdate(id, bin)
+						.then((u) => (updates[id] = u))
+						.catch(() => {});
+			})
 			.catch(() => (status[id] = { found: false }));
 	}
 
+	// Re-probe once an upgrade from this page ends, to show the new version.
+	let upgrading = $state<Partial<Record<BackendId, boolean>>>({});
+	function upgrade(id: BackendId) {
+		upgrading[id] = true;
+		upgradeDep(id, settings.paths[id]?.trim() || undefined);
+	}
+	$effect(() => {
+		for (const id of NATIVE_BACKEND_IDS) {
+			if (upgrading[id] && !deps.installing[id]) {
+				upgrading[id] = false;
+				check(id);
+			}
+		}
+	});
+
 	// The app's own jucode (a release build's, kept in ~/.jucode/bin) can
 	// become a terminal command.
-	const appCli = (path?: string) => !!path && /[\\/]\.jucode[\\/]bin[\\/]jucode(\.exe)?$/.test(path);
+	const appCli = (path?: string | null) => !!path && /[\\/]\.jucode[\\/]bin[\\/]jucode(\.exe)?$/.test(path);
 	let cliCommand = $state<{ ok: boolean; text: string } | null>(null);
 	function addCliCommand() {
 		installCliCommand()
@@ -176,6 +212,11 @@
 							<span class="bstate dim">{t('settings.backend.checking')}</span>
 						{:else if st?.found}
 							<span class="bstate ok"><CheckCircleIcon size={12} /> {versionLabel(st) || t('settings.backend.found')}</span>
+							{#if updates[id]?.available}
+								<span class="bstate up">{t('settings.backend.updateAvailable', { version: updates[id]!.latest })}</span>
+							{:else if id === 'jucode' && appCli(st.path)}
+								<span class="bstate dim">{t('settings.backend.bundled')}</span>
+							{/if}
 						{:else if st}
 							<span class="bstate warn"><WarningCircleIcon size={12} /> {t('settings.backend.notFound')}</span>
 						{/if}
@@ -192,6 +233,16 @@
 				</div>
 				{#if st && st !== 'checking' && !st.found && dep && !dep.present}
 					<DepAction {dep} />
+				{:else if updates[id]?.available}
+					{#if deps.installing[id]}
+						<Button variant="secondary" size="sm" disabled>
+							<CircleNotchIcon size={14} class="spin" /> {t('settings.backend.upgrading')}
+						</Button>
+					{:else}
+						<Button variant="primary" size="sm" onclick={() => upgrade(id)}>
+							<ArrowCircleUpIcon size={14} /> {t('settings.backend.upgrade')}
+						</Button>
+					{/if}
 				{/if}
 				<IconButton onclick={() => check(id)} label="re-check backend" title={t('settings.backend.recheck')}>
 					<ArrowClockwiseIcon size={14} />
@@ -299,6 +350,9 @@
 	}
 	.bstate.dim {
 		color: var(--dim2);
+	}
+	.bstate.up {
+		color: var(--accent);
 	}
 	.bpath {
 		font-size: var(--fs-2xs);

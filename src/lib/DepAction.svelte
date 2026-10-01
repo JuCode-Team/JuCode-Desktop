@@ -20,7 +20,7 @@
 	<Button variant="secondary" size="sm" disabled>
 		<CircleNotchIcon size={14} class="spin" /> {t('setup.deps.installing')}
 	</Button>
-{:else if dep.plan.kind === 'run'}
+{:else if dep.plan.kind === 'run' || dep.plan.kind === 'system-dialog'}
 	<Button variant="primary" size="sm" onclick={() => installDep(dep)}>
 		<DownloadSimpleIcon size={14} /> {deps.msgs[dep.id] && !deps.msgs[dep.id]?.ok ? t('setup.deps.retry') : t('setup.deps.install')}
 	</Button>

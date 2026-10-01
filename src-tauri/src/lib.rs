@@ -503,6 +503,17 @@ fn write_auth(auth: &mut serde_json::Value) -> Result<(), String> {
     AuthStore::app_local().write(auth)
 }
 
+/// The native frost under the main window, set once at startup: `vibrancy`
+/// (macOS), `mica` or `acrylic` (Windows); unset where none applied.
+static WINDOW_EFFECT: std::sync::OnceLock<&'static str> = std::sync::OnceLock::new();
+
+/// Which native frost the window has, if any (the frontend's translucent
+/// chrome needs one behind it).
+#[tauri::command]
+fn window_effect() -> Option<&'static str> {
+    WINDOW_EFFECT.get().copied()
+}
+
 #[tauri::command]
 fn read_config() -> serde_json::Value {
     read_json(&jucode_dir().join("config.json"))
@@ -1523,9 +1534,11 @@ struct DepReport {
 
 /// The tools reported to the dependencies panel, in install order (node first —
 /// it provides npm for codex/jucode).
-const DEPS: [installer::Dep; 5] = [
+const DEPS: [installer::Dep; 7] = [
     installer::Dep::Node,
     installer::Dep::Ffmpeg,
+    installer::Dep::Git,
+    installer::Dep::Gh,
     installer::Dep::Claude,
     installer::Dep::Codex,
     installer::Dep::Jucode,
@@ -1546,6 +1559,17 @@ fn check_dependencies() -> Vec<DepReport> {
             installer::Dep::Jucode => BackendKind::Jucode,
             installer::Dep::Claude => BackendKind::Claude,
             installer::Dep::Codex => BackendKind::Codex,
+            // Without the Command Line Tools, macOS's /usr/bin/git is only a
+            // stub that offers to install them.
+            installer::Dep::Git if cfg!(target_os = "macos") => {
+                return which("git").filter(|path| {
+                    path != Path::new("/usr/bin/git")
+                        || Command::new("xcode-select")
+                            .arg("-p")
+                            .output()
+                            .is_ok_and(|out| out.status.success())
+                })
+            }
             _ => return which(dep.bin()),
         };
         let bin = backend::resolve_backend_bin(kind, None);
@@ -1574,6 +1598,8 @@ fn check_dependencies() -> Vec<DepReport> {
 enum InstallStart {
     /// The app spawned the installer; watch `install-output` / `install-done`.
     Running,
+    /// The app opened an OS installer window; the user re-checks once it is done.
+    SystemDialog,
     /// Linux system package — show this copyable command (GUI never runs sudo).
     ManualCommand { command: String },
     /// No automated path; open this download page.
@@ -1635,10 +1661,28 @@ fn pump_install_stream<R: Read + Send + 'static>(
 fn run_install(name: String, app: AppHandle) -> Result<InstallStart, String> {
     let dep = installer::Dep::parse(&name).ok_or_else(|| format!("unknown dependency: {name}"))?;
     let plan = installer::plan(dep, std::env::consts::OS, &|c| which(c).is_some());
+    start_plan(dep, plan, app)
+}
+
+/// Runs a run-capable plan for `dep`, streaming its output under the dep's
+/// id; the other plans go back to the UI as they are.
+fn start_plan(
+    dep: installer::Dep,
+    plan: installer::Plan,
+    app: AppHandle,
+) -> Result<InstallStart, String> {
+    let name = dep.id();
     let (program, args) = match plan {
         installer::Plan::Manual { command } => return Ok(InstallStart::ManualCommand { command }),
         installer::Plan::OpenUrl { url } => return Ok(InstallStart::OpenUrl { url }),
         installer::Plan::NeedsPrereq { prereq } => return Ok(InstallStart::NeedsPrereq { prereq }),
+        installer::Plan::SystemDialog { program, args } => {
+            Command::new(&program)
+                .args(&args)
+                .spawn()
+                .map_err(|e| format!("failed to start installer for {name}: {e}"))?;
+            return Ok(InstallStart::SystemDialog);
+        }
         installer::Plan::Run { program, args } => (program, args),
     };
     // Resolve the logical program name through PATH (e.g. `npm` → `npm.cmd`).
@@ -1671,6 +1715,86 @@ fn run_install(name: String, app: AppHandle) -> Result<InstallStart, String> {
         let _ = app.emit("install-done", InstallDone { id, success, code });
     });
     Ok(InstallStart::Running)
+}
+
+/// The newest release of Claude Code / Codex and whether the one sessions
+/// would use (see `check_backend`) is older.
+#[derive(Serialize)]
+struct AgentUpdate {
+    latest: String,
+    available: bool,
+}
+
+/// Looks up the latest release of an agent CLI on the npm registry (its
+/// mirror when the registry is unreachable). Claude Code follows the
+/// release channel set in its settings (`autoUpdatesChannel`), as
+/// `claude update` does.
+#[tauri::command(async)]
+fn check_agent_update(
+    backend: String,
+    bin_override: Option<String>,
+) -> Result<AgentUpdate, String> {
+    let dep = installer::Dep::parse(&backend)
+        .filter(|&d| installer::npm_package(d).is_some())
+        .ok_or_else(|| format!("no update check for {backend}"))?;
+    let package = installer::npm_package(dep).unwrap_or_default();
+    let tag = match dep {
+        installer::Dep::Claude => {
+            let settings = read_json(&backend::home_dir().join(".claude").join("settings.json"));
+            match settings["autoUpdatesChannel"].as_str() {
+                Some("stable") => "stable",
+                _ => "latest",
+            }
+        }
+        _ => "latest",
+    };
+    let agent = ureq::AgentBuilder::new()
+        .timeout(std::time::Duration::from_secs(8))
+        .build();
+    let fetch = |registry: &str| -> Result<String, String> {
+        let body: serde_json::Value = agent
+            .get(&format!("{registry}/{package}/{tag}"))
+            .call()
+            .map_err(|e| e.to_string())?
+            .into_json()
+            .map_err(|e| e.to_string())?;
+        body["version"]
+            .as_str()
+            .map(str::to_string)
+            .ok_or_else(|| format!("{registry}: no version for {package}@{tag}"))
+    };
+    let latest =
+        fetch("https://registry.npmjs.org").or_else(|_| fetch("https://registry.npmmirror.com"))?;
+    let current = check_backend(backend, bin_override)?
+        .version
+        .and_then(|v| installer::parse_version(&v));
+    let available = matches!(
+        (current, installer::parse_version(&latest)),
+        (Some(current), Some(latest)) if latest > current
+    );
+    Ok(AgentUpdate { latest, available })
+}
+
+/// Upgrades the Claude Code / Codex that sessions would use (see
+/// `installer::upgrade_plan`), streaming output like `run_install`. Running
+/// sessions keep the version they started with.
+#[tauri::command(async)]
+fn run_upgrade(
+    backend: String,
+    bin_override: Option<String>,
+    app: AppHandle,
+) -> Result<InstallStart, String> {
+    let dep =
+        installer::Dep::parse(&backend).ok_or_else(|| format!("unknown backend: {backend}"))?;
+    let status = check_backend(backend.clone(), bin_override)?;
+    let (Some(path), Some(version)) = (status.path, status.version) else {
+        return Err(format!(
+            "{backend} is not installed or did not report a version"
+        ));
+    };
+    let plan = installer::upgrade_plan(dep, Path::new(&path), &version, &|c| which(c).is_some())
+        .ok_or_else(|| format!("no upgrade for {backend}"))?;
+    start_plan(dep, plan, app)
 }
 
 #[derive(Serialize)]
@@ -2874,19 +2998,34 @@ pub fn run() {
             shell_env::init_async();
             // Claude Code / Codex files an earlier version overwrote go back.
             tool_switch::restore_leftovers();
-            // macOS：给主窗口铺一层原生磨砂（NSVisualEffectView）。前端把主区域画成
-            // 不透明、只让侧栏半透明，于是磨砂只在侧栏透出（见 app.css 的 [data-vibrancy]）。
+            // 给主窗口铺一层原生磨砂：macOS 的 NSVisualEffectView，Windows 11 的 Mica
+            //（Windows 10 退回 Acrylic）。前端把主区域画成不透明、只让侧栏和窗框半透明，
+            // 于是磨砂只在那里透出（见 app.css 的 [data-vibrancy]）。前端按 window_effect
+            // 的结果决定是否半透明：没铺上时窗口是透明的，半透明会直接透出桌面。
             #[cfg(target_os = "macos")]
             if let Some(win) = app.get_webview_window("main") {
                 use window_vibrancy::{
                     apply_vibrancy, NSVisualEffectMaterial, NSVisualEffectState,
                 };
-                let _ = apply_vibrancy(
+                if apply_vibrancy(
                     &win,
                     NSVisualEffectMaterial::Sidebar,
                     Some(NSVisualEffectState::Active),
                     None,
-                );
+                )
+                .is_ok()
+                {
+                    let _ = WINDOW_EFFECT.set("vibrancy");
+                }
+            }
+            #[cfg(target_os = "windows")]
+            if let Some(win) = app.get_webview_window("main") {
+                // None: follows the window's light / dark appearance (theme.svelte.ts).
+                if window_vibrancy::apply_mica(&win, None).is_ok() {
+                    let _ = WINDOW_EFFECT.set("mica");
+                } else if window_vibrancy::apply_acrylic(&win, None).is_ok() {
+                    let _ = WINDOW_EFFECT.set("acrylic");
+                }
             }
             #[cfg(desktop)]
             {
@@ -2916,8 +3055,11 @@ pub fn run() {
         .manage(Ptys::default())
         .manage(capture::Recorder::default())
         .invoke_handler(tauri::generate_handler![
+            window_effect,
             daemon_endpoint,
             check_backend,
+            check_agent_update,
+            run_upgrade,
             acp_registry::acp_agents_list,
             acp_registry::acp_agent_upsert,
             acp_registry::acp_agent_remove,
