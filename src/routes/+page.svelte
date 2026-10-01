@@ -46,6 +46,7 @@
 	import UpdatePrompt from '$lib/UpdatePrompt.svelte';
 	import { browser, type WebRef } from '$lib/browser.svelte';
 	import { prefs } from '$lib/prefs.svelte';
+	import { cloudSync } from '$lib/cloudSync.svelte';
 	import { t } from '$lib/i18n';
 	import { SessionStore, listedSessions } from '$lib/session.svelte';
 	import { workspaces } from '$lib/workbench/workspaceStore.svelte';
@@ -818,6 +819,7 @@
 	}
 
 	onMount(() => {
+		cloudSync.start();
 		const savedSb = Number(localStorage.getItem('jucode-sidebar-width'));
 		if (savedSb >= 240 && savedSb <= 460) sidebarWidth = savedSb;
 		if (localStorage.getItem('jucode-sidebar-visible') === '0') showSidebar = false;

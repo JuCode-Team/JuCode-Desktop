@@ -713,13 +713,31 @@ fn jucode_session() -> Result<(String, String), String> {
 }
 
 fn jucode_get(path: &str) -> Result<serde_json::Value, String> {
+    jucode_send("GET", path, None)
+}
+
+fn jucode_send(
+    method: &str,
+    path: &str,
+    body: Option<&serde_json::Value>,
+) -> Result<serde_json::Value, String> {
     let (api, token) = jucode_session()?;
     let url = format!("{api}{path}");
-    ureq::get(&url)
+    let request = ureq::request(method, &url)
         .timeout(std::time::Duration::from_secs(30))
-        .set("Authorization", &format!("Bearer {token}"))
-        .call()
-        .map_err(|e| e.to_string())?
+        .set("Authorization", &format!("Bearer {token}"));
+    let response = match body {
+        Some(body) => request.send_json(body),
+        None => request.call(),
+    };
+    response
+        .map_err(|e| match e {
+            ureq::Error::Status(code, response) => {
+                let text = response.into_string().unwrap_or_default();
+                format!("{code}: {}", text.trim())
+            }
+            other => other.to_string(),
+        })?
         .into_json::<serde_json::Value>()
         .map_err(|e| e.to_string())
 }
@@ -750,10 +768,31 @@ fn fetch_usage() -> Result<serde_json::Value, String> {
     jucode_get("/v1/oauth/usage")
 }
 
-/// Recent call details (调用详情).
+/// This account's coding-agent usage across its computers (uploaded by each
+/// daemon; see JuCode-CLI crates/daemon/src/usage.rs).
 #[tauri::command(async)]
-fn fetch_usage_logs() -> Result<serde_json::Value, String> {
-    jucode_get("/v1/oauth/usage-logs?limit=10")
+fn fetch_agent_usage_summary(days: u32, tz_offset: i32) -> Result<serde_json::Value, String> {
+    jucode_get(&format!(
+        "/v1/oauth/agent-usage/summary?days={days}&tz_offset={tz_offset}"
+    ))
+}
+
+/// The latest coding-agent turns, every computer on the account.
+#[tauri::command(async)]
+fn fetch_agent_usage_recent(limit: u32) -> Result<serde_json::Value, String> {
+    jucode_get(&format!("/v1/oauth/agent-usage/recent?limit={limit}"))
+}
+
+/// The settings this account syncs between computers.
+#[tauri::command(async)]
+fn fetch_cloud_settings() -> Result<serde_json::Value, String> {
+    jucode_get("/v1/oauth/settings")
+}
+
+/// Saves synced settings (`settings`: key → value, null removes).
+#[tauri::command(async)]
+fn put_cloud_settings(settings: serde_json::Value) -> Result<serde_json::Value, String> {
+    jucode_send("PUT", "/v1/oauth/settings", Some(&serde_json::json!({ "settings": settings })))
 }
 
 /// DeepSeek account balance (https://api.deepseek.com/user/balance), using the
@@ -2894,7 +2933,10 @@ pub fn run() {
             remove_auth_key,
             fetch_account_info,
             fetch_usage,
-            fetch_usage_logs,
+            fetch_agent_usage_summary,
+            fetch_agent_usage_recent,
+            fetch_cloud_settings,
+            put_cloud_settings,
             fetch_jucode_models,
             fetch_jucode_groups,
             fetch_deepseek_balance,

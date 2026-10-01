@@ -1,198 +1,57 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import type { DayUsage } from './usageStats';
+import { describe, it, expect, vi } from 'vitest';
+import { dayRange, groupChannels, importLegacyUsage, EMPTY_TOKENS } from './usageStats';
 
-// usageStats 持有模块级内存缓存，因此每个用例都通过 resetModules + 动态导入
-// 拿到一份全新的模块；localStorage 在 node 环境下不存在，这里注入内存实现。
 function makeStorage(initial: Record<string, string> = {}) {
 	const store = new Map(Object.entries(initial));
 	return {
 		getItem: (k: string) => store.get(k) ?? null,
 		setItem: (k: string, v: string) => void store.set(k, v),
-		removeItem: (k: string) => void store.delete(k),
-		clear: () => store.clear(),
-		key: (i: number) => [...store.keys()][i] ?? null,
-		get length() {
-			return store.size;
-		}
+		removeItem: (k: string) => void store.delete(k)
 	} as Storage;
 }
 
-async function fresh(initial?: Record<string, string>) {
-	vi.resetModules();
-	(globalThis as { localStorage: Storage }).localStorage = makeStorage(initial);
-	return import('./usageStats');
-}
+const tokens = (input: number, output: number, cost?: string) => ({ ...EMPTY_TOKENS, input_tokens: input, output_tokens: output, turns: 1, ...(cost ? { cost } : {}) });
 
-beforeEach(() => {
-	vi.useFakeTimers();
-});
-
-afterEach(() => {
-	vi.useRealTimers();
-});
-
-describe('recordUsage', () => {
-	it('increments day totals and all three dimension maps', async () => {
-		const m = await fresh();
-		m.recordUsage(100, 20, { provider: 'anthropic', model: 'opus-4.8', agent: 'claude' });
-		m.recordUsage(50, 5, { provider: 'anthropic', model: 'opus-4.8', agent: 'claude' });
-		const day = m.getDailyUsage()[m.dayKey(new Date())];
-		expect(day).toEqual({
-			in: 150,
-			out: 25,
-			prov: { anthropic: { in: 150, out: 25 } },
-			models: { 'opus-4.8': { in: 150, out: 25 } },
-			agents: { claude: { in: 150, out: 25 } }
-		});
-	});
-
-	it('falls back to the other bucket when meta is missing or blank', async () => {
-		const m = await fresh();
-		m.recordUsage(10, 1);
-		m.recordUsage(5, 2, { provider: '  ', model: '', agent: undefined });
-		const day = m.getDailyUsage()[m.dayKey(new Date())];
-		expect(day.prov).toEqual({ other: { in: 15, out: 3 } });
-		expect(day.models).toEqual({ other: { in: 15, out: 3 } });
-		expect(day.agents).toEqual({ other: { in: 15, out: 3 } });
-	});
-
-	it('ignores zero-token events', async () => {
-		const m = await fresh();
-		m.recordUsage(0, 0, { provider: 'openai' });
-		expect(m.getDailyUsage()).toEqual({});
-	});
-
-	it('ignores invalid token counts without poisoning valid totals', async () => {
-		const m = await fresh();
-		m.recordUsage(Number.NaN, 4, { provider: 'openai', model: 'gpt-6', agent: 'codex' });
-		m.recordUsage(Number.POSITIVE_INFINITY, -2, {
-			provider: 'invalid',
-			model: 'invalid',
-			agent: 'invalid'
-		});
-		const day = m.getDailyUsage()[m.dayKey(new Date())];
-		expect(day).toEqual({
-			in: 0,
-			out: 4,
-			prov: { openai: { in: 0, out: 4 } },
-			models: { 'gpt-6': { in: 0, out: 4 } },
-			agents: { codex: { in: 0, out: 4 } }
-		});
-	});
-
-	it('records keys that match object prototype properties', async () => {
-		const m = await fresh();
-		m.recordUsage(10, 1, { provider: 'constructor', model: '__proto__', agent: 'toString' });
-		const day = m.getDailyUsage()[m.dayKey(new Date())];
-		expect(Object.entries(day.prov!)).toEqual([['constructor', { in: 10, out: 1 }]]);
-		expect(Object.entries(day.models!)).toEqual([['__proto__', { in: 10, out: 1 }]]);
-		expect(Object.entries(day.agents!)).toEqual([['toString', { in: 10, out: 1 }]]);
-	});
-
-	it('stores agent display labels for stable keys', async () => {
-		const m = await fresh();
-		m.recordUsage(10, 1, { agent: 'acp:gemini-cli', agentLabel: 'Gemini CLI' });
-		m.recordUsage(10, 1, { agent: 'jucode' });
-		const day = m.getDailyUsage()[m.dayKey(new Date())];
-		expect(day.agentLabels).toEqual({ 'acp:gemini-cli': 'Gemini CLI' });
-		expect(Object.keys(day.agents!).sort()).toEqual(['acp:gemini-cli', 'jucode']);
-	});
-
-	it('persists to localStorage after the debounce window', async () => {
-		const m = await fresh();
-		m.recordUsage(7, 3, { provider: 'openai', model: 'gpt-6', agent: 'codex' });
-		vi.advanceTimersByTime(1000);
-		const raw = localStorage.getItem('jucode-usage-daily');
-		expect(raw).toBeTruthy();
-		const parsed = JSON.parse(raw!) as Record<string, unknown>;
-		expect(parsed[m.dayKey(new Date())]).toEqual({
-			in: 7,
-			out: 3,
-			prov: { openai: { in: 7, out: 3 } },
-			models: { 'gpt-6': { in: 7, out: 3 } },
-			agents: { codex: { in: 7, out: 3 } }
-		});
-	});
-});
-
-describe('load compatibility', () => {
-	it('parses old v1 days without models or agents', async () => {
-		const m = await fresh({
-			'jucode-usage-daily': JSON.stringify({
-				'2026-01-02': { in: 10, out: 5, prov: { openai: { in: 10, out: 5 } } },
-				'2026-01-03': { in: 4, out: 2 }
-			})
-		});
-		const usage = m.getDailyUsage();
-		expect(usage['2026-01-02']).toEqual({
-			in: 10,
-			out: 5,
-			prov: { openai: { in: 10, out: 5 } }
-		});
-		expect(usage['2026-01-03']).toEqual({ in: 4, out: 2 });
-	});
-
-	it('ignores malformed day keys and coerces bad values', async () => {
-		const m = await fresh({
-			'jucode-usage-daily': JSON.stringify({
-				'not-a-day': { in: 99, out: 99 },
-				'2026-1-2': { in: 99, out: 99 },
-				'2026-01-02': {
-					in: '1e400',
-					out: 5,
-					models: {
-						m1: { in: 'y', out: 1 },
-						'  ': { in: 20, out: 2 },
-						invalid: { in: 'Infinity', out: -1 }
-					},
-					agentLabels: { ' acp:x ': ' New name ', '': 'junk', 'acp:y': '   ' }
-				}
-			})
-		});
-		const usage = m.getDailyUsage();
-		expect(Object.keys(usage)).toEqual(['2026-01-02']);
-		expect(usage['2026-01-02']).toEqual({
-			in: 0,
-			out: 5,
-			models: { m1: { in: 0, out: 1 } },
-			agentLabels: { 'acp:x': 'New name' }
-		});
-	});
-
-	it('starts empty when the stored JSON is corrupt', async () => {
-		const m = await fresh({ 'jucode-usage-daily': '{oops' });
-		expect(m.getDailyUsage()).toEqual({});
-	});
-});
-
-describe('sumDimension', () => {
-	it('aggregates a dimension across days sorted by total desc', async () => {
-		const m = await fresh();
-		const days: DayUsage[] = [
-			{ in: 0, out: 0, models: { a: { in: 10, out: 1 }, b: { in: 1, out: 1 } } },
-			{ in: 0, out: 0, models: { b: { in: 100, out: 1 } } },
-			{ in: 0, out: 0 } // 旧数据无该维度：跳过
-		];
-		expect(m.sumDimension(days, 'models')).toEqual([
-			['b', { in: 101, out: 2 }],
-			['a', { in: 10, out: 1 }]
+describe('groupChannels', () => {
+	it('groups by kind, JuCode by group, the rest by provider', () => {
+		const groups = groupChannels([
+			{ channel_kind: 'jucode', channel: 'jucode', group: 'claude-max', ...tokens(10, 1, '0.5') },
+			{ channel_kind: 'jucode', channel: 'jucode', group: '', ...tokens(30, 3, '0.25') },
+			{ channel_kind: 'local', channel: 'anthropic', ...tokens(5, 5) },
+			{ channel_kind: 'third_party', channel: 'kimi-code', ...tokens(7, 0) },
+			{ channel_kind: 'legacy', channel: 'anthropic', ...tokens(2, 0) }
 		]);
-	});
-
-	it('returns empty for days without the dimension', async () => {
-		const m = await fresh();
-		expect(m.sumDimension([{ in: 5, out: 5 }], 'agents')).toEqual([]);
+		expect(groups.map((g) => g.kind)).toEqual(['jucode', 'third_party', 'local', 'legacy']);
+		const jucode = groups[0];
+		expect(jucode.rows.map((r) => r.key)).toEqual(['', 'claude-max']);
+		expect(jucode.usage.input_tokens).toBe(40);
+		expect(Number(jucode.usage.cost)).toBeCloseTo(0.75);
+		expect(jucode.usage.turns).toBe(2);
+		expect(groups[2].rows[0].key).toBe('anthropic');
 	});
 });
 
-describe('collectAgentLabels', () => {
-	it('merges labels across days with later days winning', async () => {
-		const m = await fresh();
-		const days: DayUsage[] = [
-			{ in: 0, out: 0, agentLabels: { 'acp:x': 'Old name' } },
-			{ in: 0, out: 0 },
-			{ in: 0, out: 0, agentLabels: { 'acp:x': 'New name', 'acp:y': 'Why' } }
-		];
-		expect(m.collectAgentLabels(days)).toEqual({ 'acp:x': 'New name', 'acp:y': 'Why' });
+describe('dayRange', () => {
+	it('lists every day oldest first', () => {
+		expect(dayRange(3, new Date(2026, 0, 2))).toEqual(['2025-12-31', '2026-01-01', '2026-01-02']);
+	});
+});
+
+describe('importLegacyUsage', () => {
+	it('hands the old counts to the daemon once and forgets them', async () => {
+		const days = { '2026-09-30': { in: 10, out: 2, prov: { jucode: { in: 10, out: 2 } } } };
+		(globalThis as { localStorage: Storage }).localStorage = makeStorage({ 'jucode-usage-daily': JSON.stringify(days) });
+		const request = vi.fn(async () => ({ imported: true }));
+		await importLegacyUsage(request);
+		expect(request).toHaveBeenCalledWith({ op: 'usage_import_legacy', days });
+		expect(localStorage.getItem('jucode-usage-daily')).toBeNull();
+		await importLegacyUsage(request);
+		expect(request).toHaveBeenCalledTimes(1);
+	});
+
+	it('keeps the old counts when the daemon cannot take them', async () => {
+		(globalThis as { localStorage: Storage }).localStorage = makeStorage({ 'jucode-usage-daily': '{"2026-09-30":{"in":1,"out":1}}' });
+		await expect(importLegacyUsage(async () => Promise.reject(new Error('offline')))).rejects.toThrow('offline');
+		expect(localStorage.getItem('jucode-usage-daily')).not.toBeNull();
 	});
 });

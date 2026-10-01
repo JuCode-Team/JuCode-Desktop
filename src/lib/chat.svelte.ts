@@ -12,7 +12,6 @@ import {
 	type EngineApprovalMode,
 	type Question
 } from './approval';
-import { recordUsage } from './usageStats';
 import { t } from './i18n';
 import { costUsd } from './pricing';
 import { parseMcpServersEvent, type McpServerView } from './mcp';
@@ -969,19 +968,6 @@ export class ChatState {
 					this.#lastTurn.outTokens += out;
 					this.#lastTurn.cost = this.cost - this.#turnCostStart;
 				}
-				recordUsage(inn, out, {
-					provider: this.provider,
-					model: this.model,
-					// Stable agent keys: native backend ids as-is; acp sessions keyed
-					// by registry id so renames don't split history.
-					agent:
-						this.backendId === 'acp'
-							? this.acpAgentId
-								? `acp:${this.acpAgentId}`
-								: 'acp'
-							: this.backendId,
-					agentLabel: this.backendId === 'acp' ? this.acpAgentName : undefined
-				});
 				// Prefer the active assistant message (jucode reports usage per
 				// message, mid-turn). When it's already reset — e.g. claude reports
 				// one usage at the end of the turn, after the assistant finished —

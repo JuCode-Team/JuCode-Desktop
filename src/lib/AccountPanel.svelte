@@ -7,10 +7,10 @@
 	import {
 		fetchAccountInfo,
 		fetchUsage,
-		fetchUsageLogs,
+		fetchAgentUsageRecent,
 		type AccountInfo,
-		type PlanUsage,
-		type UsageLogRow
+		type AgentTurnRow,
+		type PlanUsage
 	} from '$lib/protocol';
 	import { t } from '$lib/i18n';
 	import { fmtBalance } from '$lib/money';
@@ -20,7 +20,7 @@
 	let error = $state<string | null>(null);
 	let account = $state<AccountInfo | null>(null);
 	let usage = $state<PlanUsage | null>(null);
-	let logs = $state<UsageLogRow[]>([]);
+	let logs = $state<AgentTurnRow[]>([]);
 
 	async function load() {
 		loading = true;
@@ -29,7 +29,7 @@
 			const [a, u, l] = await Promise.all([
 				fetchAccountInfo(),
 				fetchUsage().catch(() => null),
-				fetchUsageLogs().catch(() => [])
+				fetchAgentUsageRecent(8).catch(() => [])
 			]);
 			account = a;
 			usage = u;
@@ -42,10 +42,8 @@
 	}
 
 	const fmtNum = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
-	function relTime(v?: string): string {
-		if (!v) return '';
-		const ts = new Date(v).getTime();
-		if (Number.isNaN(ts)) return '';
+	function relTime(ts: number | null): string {
+		if (!ts) return '';
 		const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
 		if (s < 60) return t('settings.usage.justNow');
 		const m = Math.floor(s / 60);
@@ -53,7 +51,7 @@
 		const h = Math.floor(m / 60);
 		if (h < 24) return t('settings.usage.hoursAgo', { n: h });
 		const d = Math.floor(h / 24);
-		return d < 7 ? t('settings.usage.daysAgo', { n: d }) : new Date(v).toLocaleDateString();
+		return d < 7 ? t('settings.usage.daysAgo', { n: d }) : new Date(ts).toLocaleDateString();
 	}
 
 	function pct(used?: string, quota?: string): string {
@@ -112,12 +110,12 @@
 			{#if logs.length === 0}
 				<p class="hint">{t('settings.usage.noCalls')}</p>
 			{:else}
-				{#each logs.slice(0, 8) as l, i (l.created_at ?? i)}
+				{#each logs as l (l.turn_id)}
 					<div class="logrow">
-						<span class="lm">{l.model ?? '-'}</span>
-						<span class="lt">↑{fmtNum(l.tokens_in ?? 0)} ↓{fmtNum(l.tokens_out ?? 0)}</span>
-						<span class="lc">{l.cost_final ?? '0'}</span>
-						<span class="ld">{relTime(l.created_at)}</span>
+						<span class="lm">{l.model || '-'}</span>
+						<span class="lt">↑{fmtNum(l.input_tokens)} ↓{fmtNum(l.output_tokens)}{l.device ? ` · ${l.device.name}` : ''}</span>
+						<span class="lc">{l.channel_kind === 'jucode' ? (l.cost ?? '0') : '—'}</span>
+						<span class="ld">{relTime(l.started_at)}</span>
 					</div>
 				{/each}
 			{/if}

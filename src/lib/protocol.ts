@@ -255,13 +255,44 @@ export interface PlanUsage {
 	quota_monthly?: string;
 	used_monthly?: string;
 }
-export interface UsageLogRow {
-	created_at?: string;
-	model?: string;
-	tokens_in?: number;
-	tokens_out?: number;
-	cost_final?: string;
-	status?: string;
+/** Token counts of a usage row: cached ⊆ input, reasoning ⊆ output. */
+export interface UsageTokens {
+	input_tokens: number;
+	cached_input_tokens: number;
+	cache_write_tokens: number;
+	output_tokens: number;
+	reasoning_tokens: number;
+	turns: number;
+	/** Gateway cost (account currency), cloud rows only. */
+	cost?: string;
+}
+/** jucode: the JuCode gateway; third_party: a built-in catalog provider;
+ *  local: the user's own logins and providers; legacy: older local counts
+ *  that cannot be told apart. */
+export type ChannelKind = 'jucode' | 'third_party' | 'local' | 'legacy';
+/** Coding-agent usage over a range: the account's (cloud, every computer)
+ *  or this computer's (the daemon's `usage_local`, with projects). */
+export interface UsageSummary {
+	totals: UsageTokens;
+	days: (UsageTokens & { day: string })[];
+	by_channel: (UsageTokens & { channel_kind: ChannelKind; channel: string; group?: string })[];
+	by_model: (UsageTokens & { model: string })[];
+	by_engine: (UsageTokens & { engine: string })[];
+	by_device?: (UsageTokens & { authorization_id: string | null; name: string })[];
+	by_project?: (UsageTokens & { cwd: string })[];
+}
+/** One coding-agent turn as the account recorded it. */
+export interface AgentTurnRow extends Omit<UsageTokens, 'turns'> {
+	turn_id: string;
+	engine: string;
+	channel_kind: ChannelKind;
+	channel: string;
+	group: string;
+	model: string;
+	requests: number;
+	device: { id: string; name: string } | null;
+	started_at: number | null;
+	ended_at: number | null;
 }
 /** A model the JuCode account can use (GET /v1/models). */
 export type JucodeModel = {
@@ -301,10 +332,26 @@ export function fetchDeepseekBalance(): Promise<DeepseekBalance> {
 export function fetchUsage(): Promise<PlanUsage> {
 	return invoke('fetch_usage');
 }
-export async function fetchUsageLogs(): Promise<UsageLogRow[]> {
-	const v = await invoke<{ logs?: unknown[]; items?: unknown[] }>('fetch_usage_logs');
-	const rows = Array.isArray(v.logs) ? v.logs : Array.isArray(v.items) ? v.items : [];
-	return rows.map((r) => r as UsageLogRow);
+export function fetchAgentUsageSummary(days: number): Promise<UsageSummary> {
+	return invoke('fetch_agent_usage_summary', { days, tzOffset: new Date().getTimezoneOffset() });
+}
+export async function fetchAgentUsageRecent(limit = 10): Promise<AgentTurnRow[]> {
+	const v = await invoke<{ items?: AgentTurnRow[] }>('fetch_agent_usage_recent', { limit });
+	return Array.isArray(v.items) ? v.items : [];
+}
+/** This computer's usage, from the daemon, with the project of each turn. */
+export async function fetchLocalUsage(days: number): Promise<UsageSummary> {
+	const reply = await daemon.request({ op: 'usage_local', days, tz_offset: new Date().getTimezoneOffset() });
+	return reply as unknown as UsageSummary;
+}
+export type CloudSettings = Record<string, { value: unknown; updated_at: number }>;
+export async function fetchCloudSettings(): Promise<CloudSettings> {
+	const v = await invoke<{ settings?: CloudSettings }>('fetch_cloud_settings');
+	return v.settings ?? {};
+}
+export async function putCloudSettings(settings: Record<string, unknown>): Promise<CloudSettings> {
+	const v = await invoke<{ settings?: CloudSettings }>('put_cloud_settings', { settings });
+	return v.settings ?? {};
 }
 
 // IDE features (Tauri layer, operating on the project working directory).

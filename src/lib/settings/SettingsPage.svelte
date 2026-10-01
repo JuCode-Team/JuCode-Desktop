@@ -52,6 +52,7 @@
 	import Vendor from '$lib/Vendor.svelte';
 	import AccountPanel from '$lib/AccountPanel.svelte';
 	import OverviewPanel from '$lib/OverviewPanel.svelte';
+	import { cloudSync } from '$lib/cloudSync.svelte';
 	import Dependencies from '$lib/Dependencies.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import TextField from '$lib/ui/TextField.svelte';
@@ -309,8 +310,12 @@
 		clearTimeout(timer);
 		timer = setTimeout(flush, 500);
 	});
-	// Leaving settings mid-debounce still saves.
-	onDestroy(flush);
+	// Leaving settings mid-debounce still saves; then the synced settings
+	// go to the account (after the config write lands).
+	onDestroy(() => {
+		flush();
+		setTimeout(() => void cloudSync.sync(), 1000);
+	});
 
 	onMount(async () => {
 		cfg = (await readConfig()) ?? {};
@@ -629,6 +634,16 @@
 						{#if jucodeAuthed}
 							<SettingsRow id="account-models" title={t('shell.modelSetup.manage')} description={t('settings.page.manageModelsDesc')}>
 								<Button size="sm" onclick={() => (modelSetup.open = true)}><ListChecksIcon size={14} /> {t('settings.page.manage')}</Button>
+							</SettingsRow>
+							<SettingsRow id="account-sync" title={t('settings.sync.title')} description={t('settings.sync.desc')}>
+								<span class="sync-state">
+									{cloudSync.error
+										? t('settings.sync.failed', { msg: cloudSync.error })
+										: cloudSync.lastSync
+											? t('settings.sync.at', { time: new Date(cloudSync.lastSync).toLocaleTimeString() })
+											: ''}
+								</span>
+								<Button size="sm" onclick={() => void cloudSync.sync()}>{t('settings.sync.now')}</Button>
 							</SettingsRow>
 						{/if}
 					</SettingsSection>
@@ -1169,4 +1184,8 @@
 		flex-shrink: 0;
 	}
 
+	.sync-state {
+		color: var(--dim);
+		font-size: var(--fs-xs);
+	}
 </style>

@@ -97,7 +97,15 @@ export const LEGAL: Record<LegalDocId, Record<'zh' | 'en', LegalText>> = {
 				{
 					heading: '保存在本机的数据',
 					body: [
-						'会话记录、设置和登录凭据保存在你的电脑上（~/.jucode 等目录）。应用不收集使用统计，也不上传崩溃报告。'
+						'会话记录、项目、文件和登录凭据保存在你的电脑上（~/.jucode 等目录）。应用不收集产品使用分析，也不上传崩溃报告。'
+					]
+				},
+				{
+					heading: '登录后同步到账号的数据',
+					body: [
+						'登录 JuCode 账号后，编码智能体每一轮对话的用量会上传到你的账号，用于在你的各台电脑上查看用量。内容包括：时间、后端、渠道、模型、各类 Token 数、请求次数、会话编号和所在电脑。使用你自己的密钥或账号时也会记录用量，但不上传密钥。对话内容、文件、项目名称和路径不上传，各项目的用量只保存在本机。',
+						'语言、主题、默认后端、模型默认值、网络和语音设置会保存到账号，在你登录的电脑之间同步。密钥、自定义渠道、MCP、技能、Agent 和定时任务不上传。',
+						'这些数据在账号存续期间保留。退出登录后，这台电脑不再上传。'
 					]
 				},
 				{
@@ -110,7 +118,10 @@ export const LEGAL: Record<LegalDocId, Record<'zh' | 'en', LegalText>> = {
 				},
 				{
 					heading: '账号信息',
-					body: ['注册和登录时提供的邮箱或手机号，以及充值订单信息，用于提供服务和处理付款。']
+					body: [
+						'注册和登录时提供的邮箱或手机号，以及充值订单信息，用于提供服务和处理付款。',
+						'每台登录的电脑会显示在「授权设备管理」中，名称包括应用名、主机名、操作系统，以及由本机标识计算出的一段短代码，用于区分同名电脑。'
+					]
 				},
 				{
 					heading: '远程控制与更新',
@@ -138,7 +149,15 @@ export const LEGAL: Record<LegalDocId, Record<'zh' | 'en', LegalText>> = {
 				{
 					heading: 'Data on your machine',
 					body: [
-						'Sessions, settings and sign-in credentials are stored on your computer (in ~/.jucode and similar folders). The app collects no usage analytics and sends no crash reports.'
+						'Sessions, projects, files and sign-in credentials are stored on your computer (in ~/.jucode and similar folders). The app collects no product analytics and sends no crash reports.'
+					]
+				},
+				{
+					heading: 'Data synced to your account when signed in',
+					body: [
+						'When you are signed in to JuCode, the usage of each coding agent turn is uploaded to your account so you can see it on all your computers: time, backend, channel, model, token counts, request count, session ID and the computer. Usage on your own keys or accounts is recorded too, but the keys are not uploaded. Conversation content, files, project names and paths are not uploaded; per-project usage stays on your computer.',
+						'Language, theme, default backend, model defaults, network and voice settings are saved to your account and synced between the computers you sign in on. Keys, custom providers, MCP, skills, agents and schedules are not uploaded.',
+						'This data is kept while your account exists. After you sign out, the computer stops uploading.'
 					]
 				},
 				{
@@ -152,7 +171,8 @@ export const LEGAL: Record<LegalDocId, Record<'zh' | 'en', LegalText>> = {
 				{
 					heading: 'Account information',
 					body: [
-						'The email address or phone number you sign up with, and your top-up orders, are used to provide the service and process payments.'
+						'The email address or phone number you sign up with, and your top-up orders, are used to provide the service and process payments.',
+						'Each computer you sign in on is listed under authorized devices, named by the app, host name, operating system and a short code derived from the computer’s ID, so computers with the same name can be told apart.'
 					]
 				},
 				{
