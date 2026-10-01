@@ -1,6 +1,6 @@
 // Pure logic for the Settings → 扩展 (Extensions & MCP) section: form values ↔
-// engine config entry conversion, client-side validation mirroring the engine
-// rules (see JuCode docs/mcp.md), and merging the persisted config list with
+// engine config entry conversion, form validation (the line-oriented fields
+// the engine never sees; it validates the entry again), and merging the persisted config list with
 // the live `mcp_servers` engine view. Framework-free so it's unit-testable.
 
 export type McpTransport = 'stdio' | 'http';
@@ -116,7 +116,7 @@ export type McpFormErrors = Partial<
 	Record<'name' | 'command' | 'url' | 'env' | 'headers' | 'timeout', string>
 >;
 
-/** Client-side validation mirroring the engine's `parse_mcp_server_value`.
+/** Form validation, for errors at the field before the daemon's answer.
  *  Returns i18n sub-keys under `settings.mcp.err.*` keyed by field; an empty
  *  object means the form is valid. */
 export function validateMcpForm(v: McpFormValues): McpFormErrors {

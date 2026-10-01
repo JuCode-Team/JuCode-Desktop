@@ -1,8 +1,8 @@
 <script lang="ts">
 	// Settings → 扩展 → MCP 服务器: server management + read-only extensions info.
-	// List/mutations go through the active session's engine (the MCP config is
-	// global, so any live engine is authoritative); with no live session the
-	// config.json entries render read-only.
+	// Changes go to the daemon, which saves them and applies them to every open
+	// JuCode session; the live view (connection state, tools) comes from the
+	// active session's engine when there is one.
 	import { onMount } from 'svelte';
 	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
 	import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon';
@@ -12,7 +12,7 @@
 	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
 	import XCircleIcon from 'phosphor-svelte/lib/XCircleIcon';
 	import CircleDashedIcon from 'phosphor-svelte/lib/CircleDashedIcon';
-	import { readConfig, type Op } from '$lib/protocol';
+	import { changeMcpServers, readConfig, type Op } from '$lib/protocol';
 	import { dispatch } from '$lib/backends/router';
 	import type { ChatState } from '$lib/chat.svelte';
 	import {
@@ -43,8 +43,8 @@
 
 	let { sessionId, chat }: { sessionId: string; chat?: ChatState } = $props();
 
-	// A live engine is required for MCP ops; an exited one can't answer, and
-	// a draft has none (asking would start it).
+	// A live engine reports the servers' state; an exited one can't, and a
+	// draft has none (asking would start it).
 	const live = $derived(!!chat && !!sessionId && chat.engineState !== 'exited' && !isDraft(sessionId));
 
 	// Persisted config entries (edit-form source + no-session fallback), kept in
@@ -73,12 +73,12 @@
 			.catch(() => (configEntries = []));
 		// Ask the engine for the current view; it also pushes updates after
 		// every mutation/state change, which land in chat.mcpServers.
-		if (live) send({ op: 'mcp_list' });
+		if (live) dispatch(sessionId, { op: 'mcp_list' }, (e) => (opError = String(e)));
 	});
 
 	function send(op: Op) {
 		opError = '';
-		dispatch(sessionId, op, (e) => (opError = String(e)));
+		changeMcpServers(op).catch((e) => (opError = String(e)));
 	}
 
 	function upsertLocal(entry: McpServerEntry) {
@@ -139,7 +139,7 @@
 	{#if rows.length === 0 && editing !== '__new__'}
 		<div class="mcp-empty">
 			<p>{t('settings.mcp.empty')}</p>
-			<Button variant="primary" size="sm" disabled={!live} onclick={openCreate}>
+			<Button variant="primary" size="sm" onclick={openCreate}>
 				<PlusIcon size={14} /> {t('settings.mcp.addServer')}
 			</Button>
 		</div>
@@ -175,16 +175,15 @@
 								<ArrowClockwiseIcon size={14} />
 							</IconButton>
 						{/if}
-						<span class="swwrap" class:off={!live}>
+						<span class="swwrap">
 							<Switch bind:checked={() => row.enabled, (v) => toggle(row, v)} label={row.name} />
 						</span>
-						<IconButton size="sm" title={t('settings.mcp.edit')} disabled={!live} onclick={() => openEdit(row)}>
+						<IconButton size="sm" title={t('settings.mcp.edit')} onclick={() => openEdit(row)}>
 							<PencilSimpleIcon size={14} />
 						</IconButton>
 						<IconButton
 							size="sm"
 							title={t('common.delete')}
-							disabled={!live}
 							onclick={() => (confirmDelete = confirmDelete === row.name ? null : row.name)}
 						>
 							<TrashIcon size={14} />
@@ -288,7 +287,7 @@
 			</div>
 		</div>
 	{:else if rows.length > 0}
-		<button class="addsrv" disabled={!live} onclick={openCreate}>
+		<button class="addsrv" onclick={openCreate}>
 			<PlusIcon size={15} /> {t('settings.mcp.addServer')}
 		</button>
 	{/if}
@@ -395,10 +394,6 @@
 	.swwrap {
 		display: inline-flex;
 		margin: 0 3px;
-	}
-	.swwrap.off {
-		pointer-events: none;
-		opacity: 0.45;
 	}
 	.sconfirm {
 		display: flex;

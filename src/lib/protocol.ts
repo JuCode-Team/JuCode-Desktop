@@ -67,6 +67,13 @@ export type Op =
 	| { op: 'mcp_remove'; name: string }
 	| { op: 'mcp_toggle'; name: string; enabled: boolean };
 
+/** Saves an MCP server change (`mcp_set` / `mcp_remove` / `mcp_toggle`) for
+ *  every session; open JuCode sessions apply it at once. */
+export async function changeMcpServers(op: Op): Promise<void> {
+	await daemon.connect();
+	await daemon.request(op);
+}
+
 export function closeSession(session: string): Promise<void> {
 	return daemon.close(session);
 }

@@ -247,7 +247,7 @@ const settings = {
 			hint: '管理 Model Context Protocol 服务器。更改会写入 ~/.jucode/config.json，对所有会话生效。',
 			empty: 'MCP 让智能体接入外部工具（文件、搜索、数据库等标准化服务器）。',
 			addServer: '添加服务器',
-			noSession: '需要一个打开的会话才能连接与修改 MCP 服务器，当前仅展示 config.json 中的配置。',
+			noSession: '打开一个 JuCode 会话后，这里会显示各服务器的连接状态和工具。',
 			state: {
 				connecting: '连接中',
 				connected: '已连接',
@@ -617,7 +617,7 @@ const settings = {
 			hint: 'Manage Model Context Protocol servers. Changes are written to ~/.jucode/config.json and apply to all sessions.',
 			empty: 'MCP lets the agent use external tools (files, search, databases and other standardized servers).',
 			addServer: 'Add server',
-			noSession: 'An open session is required to connect to and modify MCP servers; showing the config.json entries read-only.',
+			noSession: 'Open a JuCode session to see each server’s connection state and tools here.',
 			state: {
 				connecting: 'Connecting',
 				connected: 'Connected',
