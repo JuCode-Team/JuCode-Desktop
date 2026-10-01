@@ -1,125 +1,29 @@
 <script lang="ts">
+	// Runtime tools with detection and one-click install. `ids` limits the list
+	// (settings shows only the non-engine tools; the engine rows carry their
+	// own install button).
 	import { onMount } from 'svelte';
-	import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-	import { openUrl } from '@tauri-apps/plugin-opener';
-	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
-	import XIcon from 'phosphor-svelte/lib/XIcon';
-	import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon';
 	import ArrowsClockwiseIcon from 'phosphor-svelte/lib/ArrowsClockwiseIcon';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import CopyIcon from 'phosphor-svelte/lib/CopyIcon';
-	import ArrowSquareOutIcon from 'phosphor-svelte/lib/ArrowSquareOutIcon';
-	import HexagonIcon from 'phosphor-svelte/lib/HexagonIcon';
-	import FilmStripIcon from 'phosphor-svelte/lib/FilmStripIcon';
-	import SparkleIcon from 'phosphor-svelte/lib/SparkleIcon';
-	import TerminalWindowIcon from 'phosphor-svelte/lib/TerminalWindowIcon';
-	import CpuIcon from 'phosphor-svelte/lib/CpuIcon';
-	import {
-		checkDependencies, runInstall,
-		type DepReport, type InstallOutputEvent, type InstallDoneEvent
-	} from '$lib/protocol';
+	import BackendIcon from '$lib/BackendIcon.svelte';
+	import DepAction from '$lib/DepAction.svelte';
+	import DepDetails from '$lib/DepDetails.svelte';
+	import { deps, recheckDeps } from '$lib/deps.svelte';
 	import Button from '$lib/ui/Button.svelte';
-	import IconButton from '$lib/ui/IconButton.svelte';
-	import Notice from '$lib/ui/Notice.svelte';
 	import { t } from '$lib/i18n';
 
-	const ICONS: Record<string, typeof HexagonIcon> = {
-		node: HexagonIcon,
-		ffmpeg: FilmStripIcon,
-		claude: SparkleIcon,
-		codex: TerminalWindowIcon,
-		jucode: CpuIcon
+	let { ids }: { ids?: string[] } = $props();
+
+	// Brand marks (Simple Icons, CC0) for the tools that are not engines.
+	const MARKS: Record<string, string> = {
+		node: 'M11.998,24c-0.321,0-0.641-0.084-0.922-0.247l-2.936-1.737c-0.438-0.245-0.224-0.332-0.08-0.383 c0.585-0.203,0.703-0.25,1.328-0.604c0.065-0.037,0.151-0.023,0.218,0.017l2.256,1.339c0.082,0.045,0.197,0.045,0.272,0l8.795-5.076 c0.082-0.047,0.134-0.141,0.134-0.238V6.921c0-0.099-0.053-0.192-0.137-0.242l-8.791-5.072c-0.081-0.047-0.189-0.047-0.271,0 L3.075,6.68C2.99,6.729,2.936,6.825,2.936,6.921v10.15c0,0.097,0.054,0.189,0.139,0.235l2.409,1.392 c1.307,0.654,2.108-0.116,2.108-0.89V7.787c0-0.142,0.114-0.253,0.256-0.253h1.115c0.139,0,0.255,0.112,0.255,0.253v10.021 c0,1.745-0.95,2.745-2.604,2.745c-0.508,0-0.909,0-2.026-0.551L2.28,18.675c-0.57-0.329-0.922-0.945-0.922-1.604V6.921 c0-0.659,0.353-1.275,0.922-1.603l8.795-5.082c0.557-0.315,1.296-0.315,1.848,0l8.794,5.082c0.57,0.329,0.924,0.944,0.924,1.603 v10.15c0,0.659-0.354,1.273-0.924,1.604l-8.794,5.078C12.643,23.916,12.324,24,11.998,24z M19.099,13.993 c0-1.9-1.284-2.406-3.987-2.763c-2.731-0.361-3.009-0.548-3.009-1.187c0-0.528,0.235-1.233,2.258-1.233 c1.807,0,2.473,0.389,2.747,1.607c0.024,0.115,0.129,0.199,0.247,0.199h1.141c0.071,0,0.138-0.031,0.186-0.081 c0.048-0.054,0.074-0.123,0.067-0.196c-0.177-2.098-1.571-3.076-4.388-3.076c-2.508,0-4.004,1.058-4.004,2.833 c0,1.925,1.488,2.457,3.895,2.695c2.88,0.282,3.103,0.703,3.103,1.269c0,0.983-0.789,1.402-2.642,1.402 c-2.327,0-2.839-0.584-3.011-1.742c-0.02-0.124-0.126-0.215-0.253-0.215h-1.137c-0.141,0-0.254,0.112-0.254,0.253 c0,1.482,0.806,3.248,4.655,3.248C17.501,17.007,19.099,15.91,19.099,13.993z',
+		ffmpeg: 'M21.72 17.91V6.5l-.53-.49L9.05 18.52l-1.29-.06L24 1.53l-.33-.95-11.93 1-5.75 6.6v-.23l4.7-5.39-1.38-.77-9.11.77v2.85l1.91.46v.01l.19-.01-.56.66v10.6c.609-.126 1.22-.241 1.83-.36L14.12 5.22l.83-.04L0 21.44l9.67.82 1.35-.77 6.82-6.74v2.15l-5.72 5.57 11.26.95.35-.94v-3.16l-3.29-.18c.434-.403.858-.816 1.28-1.23z'
 	};
+	const ENGINES = new Set(['jucode', 'claude', 'codex']);
 
-	let deps = $state<DepReport[]>([]);
-	let loading = $state(true);
-	// Per-tool transient state, keyed by dep id.
-	let installing = $state<Record<string, boolean>>({});
-	let logs = $state<Record<string, string[]>>({});
-	let msgs = $state<Record<string, { text: string; ok: boolean } | null>>({});
-	let manualCmd = $state<Record<string, string>>({});
-	let copied = $state<string | null>(null);
+	const shown = $derived(ids ? deps.list.filter((d) => ids.includes(d.id)) : deps.list);
 
-	let unlisteners: UnlistenFn[] = [];
-
-	async function recheck() {
-		loading = true;
-		try {
-			deps = await checkDependencies();
-		} catch {
-			/* ignore — leave the previous list */
-		} finally {
-			loading = false;
-		}
-	}
-
-	onMount(() => {
-		recheck();
-		(async () => {
-			unlisteners.push(
-				await listen<InstallOutputEvent>('install-output', (e) => {
-					const { id, line } = e.payload;
-					const prev = logs[id] ?? [];
-					// Cap the buffer so a chatty installer can't grow it unbounded.
-					logs[id] = [...prev, line].slice(-400);
-				})
-			);
-			unlisteners.push(
-				await listen<InstallDoneEvent>('install-done', (e) => {
-					const { id, success, code } = e.payload;
-					installing[id] = false;
-					if (success) {
-						msgs[id] = { text: t('setup.deps.doneOk'), ok: true };
-						recheck();
-					} else {
-						msgs[id] = {
-							text: t('setup.deps.doneFail', { code: code ?? -1 }),
-							ok: false
-						};
-					}
-				})
-			);
-		})();
-		return () => {
-			for (const u of unlisteners) u();
-			unlisteners = [];
-		};
-	});
-
-	async function install(dep: DepReport) {
-		installing[dep.id] = true;
-		logs[dep.id] = [];
-		msgs[dep.id] = null;
-		manualCmd[dep.id] = '';
-		try {
-			const start = await runInstall(dep.id);
-			if (start.kind === 'running') return; // install-done event finishes it
-			installing[dep.id] = false;
-			if (start.kind === 'manual-command') {
-				manualCmd[dep.id] = start.command;
-			} else if (start.kind === 'open-url') {
-				await openUrl(start.url);
-			} else if (start.kind === 'needs-prereq') {
-				msgs[dep.id] = { text: t('setup.deps.needsNode'), ok: false };
-			}
-		} catch (e) {
-			installing[dep.id] = false;
-			msgs[dep.id] = { text: t('setup.deps.startFailed', { e: String(e) }), ok: false };
-		}
-	}
-
-	function copyCmd(id: string, cmd: string) {
-		navigator.clipboard?.writeText(cmd).catch(() => {});
-		copied = id;
-		setTimeout(() => (copied = copied === id ? null : copied), 1400);
-	}
-
-	// The command a 'manual' plan wants shown (from the plan, or from run_install).
-	function planCommand(dep: DepReport): string | null {
-		if (manualCmd[dep.id]) return manualCmd[dep.id];
-		if (dep.plan.kind === 'manual') return dep.plan.command;
-		return null;
-	}
+	onMount(recheckDeps);
 </script>
 
 <div class="deps">
@@ -128,88 +32,50 @@
 			<h3>{t('setup.deps.title')}</h3>
 			<p class="sub">{t('setup.deps.sub')}</p>
 		</div>
-		<Button variant="ghost" size="sm" onclick={recheck} disabled={loading}>
-			{#if loading}<CircleNotchIcon size={14} class="spin" />{:else}<ArrowsClockwiseIcon size={14} />{/if}
+		<Button variant="ghost" size="sm" onclick={recheckDeps} disabled={deps.loading}>
+			{#if deps.loading}<CircleNotchIcon size={14} class="spin" />{:else}<ArrowsClockwiseIcon size={14} />{/if}
 			{t('setup.deps.recheck')}
 		</Button>
 	</div>
 
-	<div class="list">
-		{#each deps as dep (dep.id)}
-			{@const Icon = ICONS[dep.id] ?? TerminalWindowIcon}
-			{@const cmd = planCommand(dep)}
-			<div class="dep" class:on={dep.present}>
-				<span class="dep-ico"><Icon size={17} /></span>
-				<div class="dep-txt">
-					<span class="dep-name">{t(`setup.deps.tools.${dep.id}.name`)}</span>
-					<span class="dep-detail">
-						{dep.present ? dep.detail : t(`setup.deps.tools.${dep.id}.desc`)}
-					</span>
-				</div>
-
-				<div class="dep-action">
-					{#if dep.present}
-						<span class="badge ok"><CheckIcon size={14} /> {t('setup.deps.installed')}</span>
-					{:else if installing[dep.id]}
-						<Button variant="secondary" size="sm" disabled>
-							<CircleNotchIcon size={14} class="spin" /> {t('setup.deps.installing')}
-						</Button>
-					{:else if dep.plan.kind === 'run'}
-						<Button variant="primary" size="sm" onclick={() => install(dep)}>
-							<DownloadSimpleIcon size={14} /> {msgs[dep.id] && !msgs[dep.id]?.ok ? t('setup.deps.retry') : t('setup.deps.install')}
-						</Button>
-					{:else if dep.plan.kind === 'open-url'}
-						<Button variant="secondary" size="sm" onclick={() => dep.plan.kind === 'open-url' && openUrl(dep.plan.url)}>
-							<ArrowSquareOutIcon size={14} /> {t('setup.deps.openPage')}
-						</Button>
-					{:else if dep.plan.kind === 'needs-prereq'}
-						<span class="badge warn">{t('setup.deps.needsNode')}</span>
-					{:else}
-						<span class="badge">{t('setup.deps.notInstalled')}</span>
-					{/if}
-				</div>
-			</div>
-
-			<!-- copyable command (Linux sudo) -->
-			{#if !dep.present && cmd}
-				<div class="cmdrow">
-					<p class="hint">{t('setup.deps.manualHint')}</p>
-					<div class="cmd">
-						<code>{cmd}</code>
-						<IconButton size="sm" onclick={() => copyCmd(dep.id, cmd)} label="copy" title={t('setup.deps.copy')}>
-							{#if copied === dep.id}<CheckIcon size={14} />{:else}<CopyIcon size={14} />{/if}
-						</IconButton>
+	{#if shown.length}
+		<div class="list">
+			{#each shown as dep (dep.id)}
+				<div class="item">
+					<div class="dep">
+						<span class="tile">
+							{#if ENGINES.has(dep.id)}
+								<BackendIcon backend={dep.id as 'jucode' | 'claude' | 'codex'} size={16} />
+							{:else if MARKS[dep.id]}
+								<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d={MARKS[dep.id]} /></svg>
+							{/if}
+						</span>
+						<div class="dep-txt">
+							<span class="dep-name">{t(`setup.deps.tools.${dep.id}.name`)}</span>
+							<span class="dep-detail" class:mono={dep.present} title={dep.present ? dep.detail : undefined}>
+								{dep.present ? dep.detail : t(`setup.deps.tools.${dep.id}.desc`)}
+							</span>
+						</div>
+						<DepAction {dep} />
 					</div>
+					<DepDetails {dep} />
 				</div>
-			{/if}
-
-			<!-- live install log -->
-			{#if logs[dep.id]?.length}
-				<div class="logbox">
-					<div class="log-head">{t('setup.deps.logTitle')}</div>
-					<pre class="log">{logs[dep.id].join('\n')}</pre>
-				</div>
-			{/if}
-
-			{#if msgs[dep.id]?.ok}
-				<p class="donemsg">{msgs[dep.id]?.text}</p>
-			{:else if msgs[dep.id]}
-				<Notice>{msgs[dep.id]?.text}</Notice>
-			{/if}
-		{/each}
-	</div>
+			{/each}
+		</div>
+	{/if}
 </div>
 
 <style>
 	.deps {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: 10px;
 	}
 	.head {
 		display: flex;
-		align-items: flex-start;
+		align-items: flex-end;
 		gap: 12px;
+		margin: 0 2px;
 	}
 	.htext {
 		flex: 1;
@@ -217,133 +83,73 @@
 	}
 	h3 {
 		margin: 0;
-		font-family: var(--font-sans);
-		font-size: var(--fs-lg);
+		font-size: var(--fs-md);
 		font-weight: 600;
+		color: var(--text);
 	}
 	.sub {
-		margin: 4px 0 0;
-		font-size: var(--fs-sm);
-		line-height: 1.5;
+		margin: 3px 0 0;
+		font-size: var(--fs-xs);
+		line-height: 1.45;
 		color: var(--dim);
 	}
+	/* One card with hairline-divided rows, like a settings section. */
 	.list {
+		background: var(--panel);
+		border: 1px solid var(--hairline);
+		border-radius: var(--r-lg);
+	}
+	:global([data-theme='light']) .list {
+		background: var(--surface);
+		border-color: var(--border);
+	}
+	.item {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: 10px;
+		padding: 12px 18px;
+	}
+	.item + .item {
+		border-top: 1px solid var(--hairline);
 	}
 	.dep {
 		display: flex;
 		align-items: center;
 		gap: 12px;
-		padding: 11px 14px;
-		border: 1px solid var(--hairline);
-		border-radius: var(--r-md);
-		background: var(--surface);
 	}
-	.dep.on {
-		background: color-mix(in oklab, var(--ok) 6%, var(--surface));
-		border-color: color-mix(in oklab, var(--ok) 22%, var(--hairline));
-	}
-	.dep-ico {
+	.tile {
 		display: inline-flex;
-		color: var(--dim);
+		align-items: center;
+		justify-content: center;
+		width: 30px;
+		height: 30px;
+		border-radius: var(--r-sm);
+		background: var(--surface2);
+		border: 1px solid var(--hairline);
+		color: var(--text);
 		flex-shrink: 0;
-	}
-	.dep.on .dep-ico {
-		color: var(--ok);
 	}
 	.dep-txt {
 		flex: 1;
 		display: flex;
 		flex-direction: column;
+		gap: 2px;
 		min-width: 0;
 	}
 	.dep-name {
 		font-size: var(--fs-sm);
-		font-weight: 600;
+		font-weight: 500;
 	}
 	.dep-detail {
-		font-family: var(--font-mono);
 		font-size: var(--fs-xs);
-		color: var(--dim2);
+		color: var(--dim);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
-	.dep-action {
-		flex-shrink: 0;
-	}
-	.badge {
-		display: inline-flex;
-		align-items: center;
-		gap: 5px;
-		font-size: var(--fs-xs);
+	.dep-detail.mono {
+		font-family: var(--font-mono);
+		font-size: var(--fs-2xs);
 		color: var(--dim2);
-	}
-	.badge.ok {
-		color: var(--ok);
-	}
-	.badge.warn {
-		color: var(--warn);
-		font-size: var(--fs-xs);
-	}
-	.cmdrow {
-		margin: -2px 0 2px;
-		padding: 0 2px;
-	}
-	.hint {
-		margin: 0 0 6px;
-		font-size: var(--fs-xs);
-		line-height: 1.5;
-		color: var(--dim);
-	}
-	.cmd {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		padding: 8px 8px 8px 12px;
-		background: var(--sidebar);
-		border: 1px solid var(--hairline);
-		border-radius: var(--r-sm);
-	}
-	.cmd code {
-		flex: 1;
-		font-family: var(--font-mono);
-		font-size: var(--fs-xs);
-		color: var(--text);
-		white-space: nowrap;
-		overflow-x: auto;
-	}
-	.logbox {
-		border: 1px solid var(--hairline);
-		border-radius: var(--r-sm);
-		overflow: hidden;
-		background: var(--sidebar);
-	}
-	.log-head {
-		padding: 6px 10px;
-		font-size: var(--fs-2xs);
-		font-weight: 600;
-		color: var(--dim);
-		border-bottom: 1px solid var(--hairline);
-	}
-	.log {
-		margin: 0;
-		padding: 8px 10px;
-		max-height: 180px;
-		overflow: auto;
-		font-family: var(--font-mono);
-		font-size: var(--fs-2xs);
-		line-height: 1.5;
-		color: var(--dim);
-		white-space: pre-wrap;
-		word-break: break-word;
-	}
-	.donemsg {
-		margin: 2px 2px 4px;
-		font-size: var(--fs-xs);
-		line-height: 1.5;
-		color: var(--ok);
 	}
 </style>

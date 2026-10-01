@@ -1,7 +1,8 @@
 <script lang="ts">
 	// Settings → 所有智能体 → 智能体: per-backend availability (check_backend), a
-	// binary-path override, and the default backend for new sessions. All
-	// preferences persist to localStorage immediately.
+	// one-click install when missing, a binary-path override and extra env
+	// (folded away), and the default backend for new sessions. All preferences
+	// persist to localStorage immediately.
 	import { onMount } from 'svelte';
 	import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon';
 	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
@@ -24,6 +25,9 @@
 		type BackendSettings
 	} from '$lib/backends/settings';
 	import BackendIcon from '$lib/BackendIcon.svelte';
+	import DepAction from '$lib/DepAction.svelte';
+	import DepDetails from '$lib/DepDetails.svelte';
+	import { deps, recheckDeps } from '$lib/deps.svelte';
 	import Select from '$lib/ui/Select.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import { t } from '$lib/i18n';
@@ -34,7 +38,7 @@
 	let status = $state<Partial<Record<BackendId, BackendStatus | 'checking'>>>({});
 	let shellEnv = $state<ShellEnvStatus | null>(null);
 	let refreshing = $state(false);
-	let envOpen = $state<Partial<Record<BackendId, boolean>>>({});
+	let advOpen = $state<Partial<Record<BackendId, boolean>>>({});
 	let envText = $state<Partial<Record<BackendId, string>>>({});
 	let envInvalid = $state<Partial<Record<BackendId, string[]>>>({});
 
@@ -66,8 +70,9 @@
 		persist();
 	}
 
-	function envCount(id: BackendId): number {
-		return Object.keys(settings.env[id] ?? {}).length;
+	// Overrides set under 路径与环境变量: a pinned path counts as one.
+	function overrideCount(id: BackendId): number {
+		return Object.keys(settings.env[id] ?? {}).length + (settings.paths[id]?.trim() ? 1 : 0);
 	}
 
 	function check(id: BackendId) {
@@ -95,6 +100,17 @@
 		shellEnvStatus()
 			.then((s) => (shellEnv = s))
 			.catch(() => {});
+		recheckDeps();
+	});
+
+	// The install probe (deps) and the backend probe are separate: once an
+	// install lands, re-probe the backend that was missing.
+	$effect(() => {
+		for (const dep of deps.list) {
+			const id = dep.id as BackendId;
+			const st = status[id];
+			if (dep.present && st && st !== 'checking' && !st.found) check(id);
+		}
 	});
 
 	const defaultOpts = $derived(NATIVE_BACKEND_IDS.map((id) => ({ value: id, label: BACKEND_LABELS[id] })));
@@ -138,54 +154,67 @@
 
 	{#each NATIVE_BACKEND_IDS as id (id)}
 		{@const st = status[id]}
+		{@const dep = deps.list.find((d) => d.id === id)}
 		<div class="brow">
-			<span class="btile"><BackendIcon backend={id} size={16} /></span>
-			<div class="bmain">
-				<div class="bhead">
-					<span class="bname">{BACKEND_LABELS[id]}</span>
-					{#if st === 'checking'}
-						<span class="bstate dim">{t('settings.backend.checking')}</span>
-					{:else if st?.found}
-						<span class="bstate ok"><CheckCircleIcon size={12} /> {versionLabel(st) || t('settings.backend.found')}</span>
-					{:else if st}
-						<span class="bstate warn"><WarningCircleIcon size={12} /> {t('settings.backend.notFound')}</span>
+			<div class="bline">
+				<span class="btile"><BackendIcon backend={id} size={16} /></span>
+				<div class="bmain">
+					<div class="bhead">
+						<span class="bname">{BACKEND_LABELS[id]}</span>
+						{#if st === 'checking'}
+							<span class="bstate dim">{t('settings.backend.checking')}</span>
+						{:else if st?.found}
+							<span class="bstate ok"><CheckCircleIcon size={12} /> {versionLabel(st) || t('settings.backend.found')}</span>
+						{:else if st}
+							<span class="bstate warn"><WarningCircleIcon size={12} /> {t('settings.backend.notFound')}</span>
+						{/if}
+					</div>
+					{#if st && st !== 'checking' && st.found && st.path}
+						<span class="bpath" title={st.path}>{st.path}</span>
 					{/if}
 				</div>
-				{#if st && st !== 'checking' && st.found && st.path}
-					<span class="bpath" title={st.path}>{st.path}</span>
+				{#if st && st !== 'checking' && !st.found && dep && !dep.present}
+					<DepAction {dep} />
 				{/if}
-				<div class="boverride">
-					<!-- persisted on change (blur / Enter), then re-probed -->
-					<input
-						class="tf"
-						bind:value={settings.paths[id]}
-						placeholder={t('settings.backend.pathPlaceholder', { bin: id })}
-						onchange={() => onPathChange(id)}
-					/>
-				</div>
-				<button class="envhead" onclick={() => (envOpen[id] = !envOpen[id])}>
-					<span class="chev" class:open={envOpen[id]}><CaretRightIcon size={12} /></span>
-					{t('settings.backend.envLabel')}
-					{#if envCount(id)}<span class="envcount">{envCount(id)}</span>{/if}
+				<IconButton onclick={() => check(id)} label="re-check backend" title={t('settings.backend.recheck')}>
+					<ArrowClockwiseIcon size={14} />
+				</IconButton>
+			</div>
+			{#if dep}<div class="bindent"><DepDetails {dep} /></div>{/if}
+			<div class="bindent">
+				<button class="advhead" onclick={() => (advOpen[id] = !advOpen[id])} aria-expanded={!!advOpen[id]}>
+					<span class="chev" class:open={advOpen[id]}><CaretRightIcon size={12} /></span>
+					{t('settings.backend.advanced')}
+					{#if overrideCount(id)}<span class="envcount">{overrideCount(id)}</span>{/if}
 				</button>
-				{#if envOpen[id]}
-					<div class="envbox">
-						<textarea
-							class="tf envta"
-							rows="3"
-							bind:value={envText[id]}
-							placeholder={t('settings.backend.envPlaceholder')}
-							onchange={() => onEnvChange(id)}
-						></textarea>
+				{#if advOpen[id]}
+					<div class="advbox">
+						<label class="field">
+							<span>{t('settings.backend.pathLabel')}</span>
+							<!-- persisted on change (blur / Enter), then re-probed -->
+							<input
+								class="tf"
+								bind:value={settings.paths[id]}
+								placeholder={t('settings.backend.pathPlaceholder', { bin: id })}
+								onchange={() => onPathChange(id)}
+							/>
+						</label>
+						<label class="field">
+							<span>{t('settings.backend.envLabel')}</span>
+							<textarea
+								class="tf envta"
+								rows="3"
+								bind:value={envText[id]}
+								placeholder={t('settings.backend.envPlaceholder')}
+								onchange={() => onEnvChange(id)}
+							></textarea>
+						</label>
 						{#if envInvalid[id]?.length}
 							<span class="envwarn">{t('settings.backend.envInvalid', { lines: envInvalid[id]!.join(', ') })}</span>
 						{/if}
 					</div>
 				{/if}
 			</div>
-			<IconButton onclick={() => check(id)} label="re-check backend" title={t('settings.backend.recheck')}>
-				<ArrowClockwiseIcon size={14} />
-			</IconButton>
 		</div>
 	{/each}
 </SettingsSection>
@@ -193,9 +222,19 @@
 <style>
 	.brow {
 		display: flex;
-		align-items: flex-start;
-		gap: 12px;
+		flex-direction: column;
+		gap: 8px;
 		padding: 14px 18px;
+	}
+	.bline {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+	/* Under the name column: tile width + gap. */
+	.bindent {
+		padding-left: 42px;
+		min-width: 0;
 	}
 	.selw {
 		width: 220px;
@@ -210,14 +249,13 @@
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
 		flex-shrink: 0;
-		margin-top: 2px;
 	}
 	.bmain {
 		flex: 1;
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 5px;
+		gap: 3px;
 	}
 	.bhead {
 		display: flex;
@@ -253,9 +291,6 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
-	.boverride {
-		max-width: 420px;
-	}
 	.tf {
 		width: 100%;
 		min-width: 0;
@@ -284,7 +319,7 @@
 	.sestate.dim {
 		color: var(--dim2);
 	}
-	.envhead {
+	.advhead {
 		display: inline-flex;
 		align-items: center;
 		gap: 5px;
@@ -296,7 +331,7 @@
 		color: var(--dim);
 		cursor: pointer;
 	}
-	.envhead:hover {
+	.advhead:hover {
 		color: var(--text);
 	}
 	.chev {
@@ -314,11 +349,21 @@
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
 	}
-	.envbox {
+	.advbox {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		max-width: 460px;
+		margin-top: 8px;
+	}
+	.field {
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
-		max-width: 420px;
+	}
+	.field > span {
+		font-size: var(--fs-2xs);
+		color: var(--dim);
 	}
 	.envta {
 		resize: vertical;

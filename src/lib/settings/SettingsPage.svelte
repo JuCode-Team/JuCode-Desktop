@@ -770,7 +770,7 @@
 					</SettingsSection>
 				{:else if current === 'agents'}
 					<BackendSection />
-					<div class="deps" id="set-dependencies"><Dependencies /></div>
+					<div class="deps" id="set-dependencies"><Dependencies ids={['node', 'ffmpeg']} /></div>
 				{:else if current === 'acp'}
 					<AcpSection />
 				{:else if current === 'daemon'}

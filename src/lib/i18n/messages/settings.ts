@@ -170,6 +170,8 @@ const settings = {
 			shellEnvRefresh: '重新捕获终端环境',
 			shellEnvHint:
 				'后台服务启动时使用登录 shell 的环境快照（PATH、代理、证书等），所有引擎的行为与终端一致。重新捕获后，后台服务下次启动时生效。',
+			advanced: '路径与环境变量',
+			pathLabel: '可执行文件路径',
 			envLabel: '环境变量',
 			envPlaceholder: 'KEY=VALUE，每行一条（在终端环境快照之上追加）',
 			envInvalid: '以下行无效已忽略：{lines}'
@@ -540,6 +542,8 @@ const settings = {
 			shellEnvRefresh: 'Re-capture terminal environment',
 			shellEnvHint:
 				'The background service starts with a login-shell environment snapshot (PATH, proxies, certificates, …), so every engine behaves exactly like in your terminal. A re-capture applies the next time the service starts.',
+			advanced: 'Path and environment',
+			pathLabel: 'Binary path',
 			envLabel: 'Environment variables',
 			envPlaceholder: 'KEY=VALUE, one per line (applied on top of the snapshot)',
 			envInvalid: 'Invalid lines ignored: {lines}'
