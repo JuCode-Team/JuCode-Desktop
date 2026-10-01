@@ -16,13 +16,14 @@
 	import type { ModelRow } from './modelRows';
 	import { defaultEffort, effortLabel } from './effort';
 	import EffortSlider from './EffortSlider.svelte';
-	import GroupPicker from './GroupPicker.svelte';
+	import GroupPicker, { type ToolProvider } from './GroupPicker.svelte';
+	import PlanQuota from './PlanQuota.svelte';
 	import { modelColor, isTopEffort } from '$lib/modelColor';
 
 	// The composer's model menu, opened from the model button: everything about
 	// "who answers and how hard it thinks" in one place. The first page shows
 	// the current model (a row that opens the model list), the thinking effort,
-	// the gateway group and, while the session can still switch, the coding
+	// the provider (gateway group or this machine) and, while the session can still switch, the coding
 	// agent. The second page is the model list, searchable when it is long.
 	let {
 		chat,
@@ -30,6 +31,7 @@
 		rows = [],
 		showSearch = false,
 		backendLocked = true,
+		toolProvider,
 		effortDisabled = false,
 		anchor,
 		query = $bindable(''),
@@ -47,6 +49,9 @@
 		showSearch?: boolean;
 		/** Locked sessions (restored / first user turn sent) can't change agent. */
 		backendLocked?: boolean;
+		/** A Claude Code / Codex session: where its model runs (`model` is the
+		 *  gateway's name for it) and how to change that. */
+		toolProvider?: ToolProvider & { model: string };
 		effortDisabled?: boolean;
 		anchor?: HTMLElement;
 		query?: string;
@@ -189,7 +194,11 @@
 
 		{#if chat.backendId === 'jucode' && chat.provider === 'jucode' && chat.model}
 			{#key chat.model}<GroupPicker model={chat.model} />{/key}
+		{:else if toolProvider}
+			{#key toolProvider.model}<GroupPicker model={toolProvider.model} tool={toolProvider} />{/key}
 		{/if}
+
+		{#if chat.planUsage}<PlanQuota usage={chat.planUsage} />{/if}
 
 		{#if !backendLocked}
 			<section class="agents" role="group" aria-label={t('chat.switchBackend')}>

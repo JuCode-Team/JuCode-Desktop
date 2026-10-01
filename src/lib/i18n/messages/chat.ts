@@ -63,6 +63,23 @@ const chat = {
 		groupTitle: '分组',
 		groupAuto: '自动',
 		groupAutoDesc: '优先走最低倍率，不可用时换组',
+		groupSession: '本会话分组',
+		provider: '提供商',
+		providerLocal: '本机',
+		providerLocalDesc: '用这台电脑上 {tool} 的登录或配置',
+		providerAuto: 'JuCode 自动',
+		quota: {
+			title: '套餐额度',
+			hours: '{n} 小时',
+			days: '{n} 天',
+			week: '每周',
+			weekOverage: '每周（含超额）',
+			resetSoon: '即将重置',
+			resetMinutes: '{n} 分钟后重置',
+			resetHours: '{h} 小时 {m} 分后重置',
+			resetDays: '{n} 天后重置'
+		},
+		groupSessionAutoDesc: '用该模型的默认分组，没有设置则自动选择',
 		groupPlan: '套餐',
 		groupBalance: '余额',
 		groupSaveFailed: '分组保存失败：{error}',
@@ -96,6 +113,41 @@ const chat = {
 		unsupportedImage: '不支持的图片',
 		toolRunning: 'running',
 		toolError: 'error',
+		toolGroup: '调用了 {n} 个工具',
+		imageToken: '图片 #{n}',
+		toolGroupFailed: '{n} 个失败',
+		err: {
+			raw: '原始信息',
+			hideRaw: '收起',
+			requestId: '请求 ID',
+			thisTool: '该工具',
+			action: { restart: '重启会话', login: '去登录', account: '查看账户', compact: '压缩对话', model: '换个模型' },
+			jucodeAuth: {
+				title: 'JuCode 登录凭据已过期',
+				hint: '会话启动时拿到的登录凭据有效期约 1 小时，现在已经失效。重启会话会换上新凭据，对话内容保留。'
+			},
+			jucodeLogin: { title: 'JuCode 未登录或登录已过期', hint: '在设置中重新登录 JuCode 后再试。' },
+			toolAuth: {
+				title: '{subject} 的账号登录已失效',
+				hint: '这个会话使用 {subject} 自己的账号。在终端重新登录后再试：Codex 运行 codex login，Claude Code 运行 claude 并按提示登录。'
+			},
+			balance: { title: '账户余额不足', hint: '充值或换用有额度的套餐后再试。' },
+			context: { title: '对话超出模型的上下文上限', hint: '压缩对话腾出空间，或新开一个会话继续。' },
+			rateLimit: { title: '请求太频繁，暂时被限流', hint: '稍等一会儿再发送。一直出现的话，换一个模型或分组。' },
+			model: { title: '模型不可用', hint: '当前账号或分组下没有这个模型，换一个模型再试。' },
+			upstream: { title: '模型服务暂时不可用', hint: '上游服务繁忙或出错。稍后重试，或换一个模型。' },
+			network: { title: '网络连接中断', hint: '请求没有完成。检查网络或代理后重试。' },
+			forbidden: { title: '没有权限', hint: '当前账号不能使用这个模型或功能。' },
+			badRequest: { title: '请求被服务拒绝', hint: '服务不接受这次请求。反复出现的话，把原始信息发给我们排查。' },
+			foreignHistory: {
+				title: '对话历史属于另一个账号',
+				hint: '这段对话含有只有原账号能验证的内容，当前账号无法继续。在历史会话里重新导入即可，导入会清理这些内容。'
+			},
+			providerMissing: {
+				title: 'Codex 找不到模型服务商 {subject}',
+				hint: '这段对话记录的服务商没有在 ~/.codex/config.toml 中配置。重启会话，或在历史会话里重新导入。'
+			}
+		},
 		toolDone: 'done',
 		partialApply: '部分应用 {n}/{m} 块',
 		// ApprovalCard
@@ -177,6 +229,23 @@ const chat = {
 		groupTitle: 'Group',
 		groupAuto: 'Auto',
 		groupAutoDesc: 'Lowest multiplier first, other groups as fallback',
+		groupSession: 'Session group',
+		provider: 'Provider',
+		providerLocal: 'This machine',
+		providerLocalDesc: 'The login or config of {tool} on this computer',
+		providerAuto: 'JuCode auto',
+		quota: {
+			title: 'Plan usage',
+			hours: '{n} hours',
+			days: '{n} days',
+			week: 'Weekly',
+			weekOverage: 'Weekly (incl. overage)',
+			resetSoon: 'Resets soon',
+			resetMinutes: 'Resets in {n} min',
+			resetHours: 'Resets in {h} h {m} min',
+			resetDays: 'Resets in {n} days'
+		},
+		groupSessionAutoDesc: 'The model’s default group, else automatic',
 		groupPlan: 'Plan',
 		groupBalance: 'Balance',
 		groupSaveFailed: 'Could not save the group: {error}',
@@ -210,6 +279,41 @@ const chat = {
 		unsupportedImage: 'Unsupported image',
 		toolRunning: 'running',
 		toolError: 'error',
+		toolGroup: 'Used {n} tools',
+		imageToken: 'Image #{n}',
+		toolGroupFailed: '{n} failed',
+		err: {
+			raw: 'Raw message',
+			hideRaw: 'Hide',
+			requestId: 'Request ID',
+			thisTool: 'the tool',
+			action: { restart: 'Restart session', login: 'Sign in', account: 'View account', compact: 'Compact', model: 'Change model' },
+			jucodeAuth: {
+				title: 'JuCode credential expired',
+				hint: 'The credential this session started with lasts about an hour and has run out. Restarting the session takes a new one and keeps the conversation.'
+			},
+			jucodeLogin: { title: 'Not signed in to JuCode', hint: 'Sign in to JuCode in Settings, then try again.' },
+			toolAuth: {
+				title: '{subject} sign-in expired',
+				hint: 'This session uses {subject}’s own account. Sign in again in a terminal (Codex: codex login; Claude Code: run claude and log in), then retry.'
+			},
+			balance: { title: 'Insufficient balance', hint: 'Top up or switch to a plan with quota, then retry.' },
+			context: { title: 'Conversation exceeds the context window', hint: 'Compact the conversation to free space, or continue in a new session.' },
+			rateLimit: { title: 'Rate limited', hint: 'Wait a moment before sending. If it keeps happening, switch model or group.' },
+			model: { title: 'Model unavailable', hint: 'This model is not available to your account or group. Pick another one.' },
+			upstream: { title: 'Model service unavailable', hint: 'The upstream service is busy or failing. Retry later or switch model.' },
+			network: { title: 'Connection lost', hint: 'The request did not finish. Check your network or proxy and retry.' },
+			forbidden: { title: 'Not permitted', hint: 'Your account cannot use this model or feature.' },
+			badRequest: { title: 'Request rejected', hint: 'The service did not accept the request. If it repeats, send us the raw message.' },
+			foreignHistory: {
+				title: 'History belongs to another account',
+				hint: 'Parts of this conversation can only be verified by the account that wrote them. Re-import it from session history, which removes those parts.'
+			},
+			providerMissing: {
+				title: 'Codex cannot find provider {subject}',
+				hint: 'The provider this conversation recorded is not configured in ~/.codex/config.toml. Restart the session or re-import it.'
+			}
+		},
 		toolDone: 'done',
 		partialApply: 'Partially applied {n}/{m} hunks',
 		// ApprovalCard

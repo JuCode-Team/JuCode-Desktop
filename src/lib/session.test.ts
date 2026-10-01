@@ -255,6 +255,8 @@ describe('SessionStore lifecycle', () => {
 		expect(chat.picker).toEqual({
 			kind: 'resume',
 			backend: 'jucode',
+			history: true,
+			source: 'jucode',
 			items: [{ id: 's6old', label: 'old chat', detail: new Date(1_700_000_000_000).toLocaleString(), active: false }]
 		});
 	});
@@ -1161,6 +1163,20 @@ describe('sessions in the jucode daemon', () => {
 			engine: 'acp',
 			options: { command: 'gemini', args: ['--experimental-acp'], env: {} }
 		});
+	});
+
+	it('a gateway draft takes a group, and hands it over once the daemon names it', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p, undefined, 'codex');
+		await store.applyToolProfile(id, 'jucode', 'gpt-5.5');
+		expect(store.takesSessionGroup(p.sessions[0])).toBe(true);
+		store.setSessionGroup(id, 'GPT · Azure');
+		expect(sessionMeta).not.toHaveBeenCalled();
+		begin(id);
+		await flush();
+		expect(sessionMeta).toHaveBeenCalledWith(`conv-${id}`, { group: 'GPT · Azure' });
 	});
 
 	it('claude sessions are named by the daemon and translated by it', async () => {

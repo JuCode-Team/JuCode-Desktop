@@ -43,6 +43,9 @@ export interface Session {
 	 *  JuCode login (only this session's process; their own config is left
 	 *  alone). Unset: as it last ran (the daemon remembers it). */
 	gateway?: boolean;
+	/** Gateway sessions: the JuCode group its requests route to, applied by
+	 *  the daemon's local gateway (unset: the model's default, else automatic). */
+	group?: string;
 	/** Claude Code: the model a restored session last ran on, until its engine
 	 *  reports one (see SessionStore.#keepModel). */
 	model?: string;

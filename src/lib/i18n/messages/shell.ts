@@ -23,16 +23,16 @@ const shell = {
 			checkpoint: '回退到历史回合'
 		},
 		modelGroup: {
-			codex: 'Codex 官方',
-			claude: 'Claude 官方',
 			jucode: 'JuCode 内置',
-			byok: '自定义 / BYOK',
-			system: '系统配置'
+			byok: '自定义 / BYOK'
 		},
 		toolSwitch: {
-			system: '使用系统配置',
 			toJucode: '已切换到 JuCode，正在重启引擎…',
-			toSystem: '已恢复系统配置，正在重启引擎…'
+			toSystem: '已切换到本机，正在重启引擎…',
+			confirmJucode: '换到 JuCode 继续这段对话？',
+			confirmSystem: '换到本机继续这段对话？',
+			confirmBody: '对话里的思考内容带有原账号的签名，换到另一个账号后可能被拒绝。被拒时换回原来的提供商即可继续。',
+			confirm: '切换'
 		},
 		notConfigured: '未配置',
 		pickerSearchPlaceholder: '筛选…',
@@ -100,6 +100,7 @@ const shell = {
 		showLess: '收起',
 		awaitShort: '待确认',
 		unread: '有新回复',
+		status: { approve: '待确认', answer: '待回答', running: '运行中', failed: '运行失败' },
 		updateShort: '可更新',
 		newChat: '新对话',
 
@@ -370,6 +371,13 @@ const shell = {
 		},
 		accountSettings: '账户与设置',
 		notLoggedIn: '未登录',
+		account: {
+			title: '账号',
+			signIn: '登录 JuCode 账号',
+			signInHint: '登录后可查看余额和套餐额度',
+			manage: '账号设置',
+			expires: '{date} 到期'
+		},
 		settings: '设置',
 		updateAvailable: '有新版本可用',
 		deepLinkBadPath: '路径不存在或无法访问：{path}',
@@ -453,6 +461,11 @@ const shell = {
 		autoRestarting: '引擎已退出，正在自动重启…',
 		daemonReconnecting: '连不上 jucode daemon，正在重连…',
 		historyFail: '读取历史会话失败：{msg}',
+		historySource: {
+			imported: '已导入',
+			importing: '正在导入 {title}…',
+			importFail: '导入失败：{msg}'
+		},
 		claudeYoloRefused: 'Claude Code 没有进入全自动模式（可能被策略禁用），已按它当前的模式继续',
 		autoRestartingWhy: '引擎已退出（{reason}），正在自动重启…',
 		restartExhausted: '引擎多次退出，已暂停自动重启。点「重启引擎」重试。',
@@ -480,16 +493,16 @@ const shell = {
 			checkpoint: 'Rewind to a turn'
 		},
 		modelGroup: {
-			codex: 'Codex official',
-			claude: 'Claude official',
 			jucode: 'JuCode built-in',
-			byok: 'Custom / BYOK',
-			system: 'System config'
+			byok: 'Custom / BYOK'
 		},
 		toolSwitch: {
-			system: 'Use system config',
 			toJucode: 'Switched to JuCode, restarting engine…',
-			toSystem: 'Restored system config, restarting engine…'
+			toSystem: 'Switched to this machine, restarting engine…',
+			confirmJucode: 'Continue this conversation on JuCode?',
+			confirmSystem: 'Continue this conversation on this machine?',
+			confirmBody: 'Its thinking carries the original account’s signature, which another account may reject. If it does, switch back to continue.',
+			confirm: 'Switch'
 		},
 		notConfigured: 'not configured',
 		pickerSearchPlaceholder: 'Filter…',
@@ -557,6 +570,7 @@ const shell = {
 		showLess: 'Show less',
 		awaitShort: 'Needs you',
 		unread: 'New reply',
+		status: { approve: 'Approve', answer: 'Answer', running: 'Running', failed: 'Failed' },
 		updateShort: 'Update',
 		newChat: 'New chat',
 
@@ -827,6 +841,13 @@ const shell = {
 		},
 		accountSettings: 'Account & settings',
 		notLoggedIn: 'Not signed in',
+		account: {
+			title: 'Account',
+			signIn: 'Sign in to JuCode',
+			signInHint: 'Sign in to see your balance and plan quota',
+			manage: 'Account settings',
+			expires: 'Expires {date}'
+		},
 		settings: 'Settings',
 		updateAvailable: 'Update available',
 		deepLinkBadPath: 'Path does not exist or is not accessible: {path}',
@@ -910,6 +931,11 @@ const shell = {
 		autoRestarting: 'Engine exited, auto-restarting…',
 		daemonReconnecting: 'Cannot reach the jucode daemon; reconnecting…',
 		historyFail: 'Failed to read session history: {msg}',
+		historySource: {
+			imported: 'Imported',
+			importing: 'Importing {title}…',
+			importFail: 'Import failed: {msg}'
+		},
 		claudeYoloRefused: 'Claude Code did not enter full-auto mode (a policy may forbid it); continuing in its current mode',
 		autoRestartingWhy: 'Engine exited ({reason}), auto-restarting…',
 		restartExhausted: 'Engine exited repeatedly; auto-restart paused. Click "Restart engine" to retry.',

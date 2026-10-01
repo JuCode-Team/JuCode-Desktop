@@ -32,7 +32,7 @@ export const daemon = new DaemonClient(() => daemonEndpoint(), (url) => openSock
 /** Renames, (un)archives or hides a daemon session for every client. */
 export function sessionMeta(
 	session: string,
-	changes: { title?: string; archived?: boolean; hidden?: boolean }
+	changes: { title?: string; archived?: boolean; hidden?: boolean; group?: string }
 ): Promise<void> {
 	return daemon.post({ op: 'session_meta', session, ...changes });
 }
@@ -134,6 +134,24 @@ export function shellEnvStatus(): Promise<ShellEnvStatus> {
 }
 export function refreshShellEnv(): Promise<ShellEnvStatus> {
 	return invoke('refresh_shell_env');
+}
+
+// Conversations Claude Code / Codex saved in their own apps, imported as a
+// cleaned copy that JuCode resumes (src-tauri/src/native_import.rs).
+export type NativeSource = 'claude' | 'codex';
+export interface NativeSession {
+	id: string;
+	title: string;
+	mtime_ms: number;
+	origin: string;
+	/** The JuCode copy when it was imported before. */
+	imported: string | null;
+}
+export function nativeSessions(source: NativeSource, cwd: string): Promise<NativeSession[]> {
+	return invoke('native_sessions', { source, cwd });
+}
+export function importNativeSession(source: NativeSource, cwd: string, id: string): Promise<{ id: string; title: string }> {
+	return invoke('import_native_session', { source, cwd, id });
 }
 
 /** One conversation saved in a directory, by any engine, as the daemon

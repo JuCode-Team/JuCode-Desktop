@@ -11,6 +11,8 @@ mod acp_registry;
 mod backend;
 mod browser;
 mod capture;
+mod claude_history;
+mod native_import;
 mod installer;
 mod plugins;
 mod secrets;
@@ -2863,6 +2865,8 @@ pub fn run() {
             git,
             plugins::github_pr::gh,
             worktree_base,
+            native_import::native_sessions,
+            native_import::import_native_session,
             pty_open,
             pty_write,
             pty_resize,

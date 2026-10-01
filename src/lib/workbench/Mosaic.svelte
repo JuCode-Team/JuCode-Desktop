@@ -36,9 +36,11 @@
 		addOptions = [],
 		onAdd,
 		emptyText = '',
+		emptyHint = '',
 		focused = null,
 		onFocus,
 		decorate,
+		tabMark,
 		actions,
 		onTabContext,
 		onTabRename
@@ -52,16 +54,20 @@
 		 *  (so e.g. terminals survive tab switches). */
 		panel: Snippet<[TileTab]>;
 		label: (tab: TileTab) => string;
-		/** Panel kinds offered by each leaf's + menu. */
-		addOptions?: { key: string; label: string }[];
+		/** Panel kinds offered by each leaf's + menu. On the empty canvas a
+		 *  `primary` option leads as the main action; the rest form a grid. */
+		addOptions?: { key: string; label: string; icon?: typeof PlusIcon; primary?: boolean }[];
 		onAdd?: (leafId: string | null, key: string) => void;
 		emptyText?: string;
+		emptyHint?: string;
 		/** The focused leaf (owned by the caller; drives engine-action targeting). */
 		focused?: string | null;
 		/** Pointer went down inside a leaf — report it as the focused one. */
 		onFocus?: (leafId: string) => void;
 		/** Per-tab chrome (session tag color / icon); null keeps the plain dot. */
 		decorate?: (tab: TileTab) => { color?: string; icon?: TabIcon } | null;
+		/** Trailing mark after a tab's label (a chat's status). */
+		tabMark?: Snippet<[TileTab]>;
 		/** Optional controls for the active tab, rendered at the right of its bar. */
 		actions?: Snippet<[TileTab]>;
 		/** Right-click on a tab (the caller decides whether to open a menu). */
@@ -195,10 +201,22 @@
 		{@render node(layout.root)}
 	{:else}
 		<div class="mo-empty">
-			{#if emptyText}<p>{emptyText}</p>{/if}
+			{#if emptyText || emptyHint}
+				<div class="mo-empty-head">
+					{#if emptyText}<p class="mo-empty-title">{emptyText}</p>{/if}
+					{#if emptyHint}<p class="mo-empty-hint">{emptyHint}</p>{/if}
+				</div>
+			{/if}
+			{#each addOptions.filter((o) => o.primary) as o (o.key)}
+				<button class="mo-empty-primary" onclick={() => onAdd?.(null, o.key)}>
+					{#if o.icon}<o.icon size={16} />{/if}{o.label}
+				</button>
+			{/each}
 			<div class="mo-empty-opts">
-				{#each addOptions as o (o.key)}
-					<button class="mo-empty-btn" onclick={() => onAdd?.(null, o.key)}>{o.label}</button>
+				{#each addOptions.filter((o) => !o.primary) as o (o.key)}
+					<button class="mo-empty-btn" onclick={() => onAdd?.(null, o.key)}>
+						{#if o.icon}<o.icon size={16} />{/if}<span>{o.label}</span>
+					</button>
 				{/each}
 			</div>
 		</div>
@@ -266,6 +284,7 @@
 							<TabGlyph icon={chrome.icon} color={chrome.color} active={leaf.active === tab.id} size={12} />
 						{/if}
 						<span class="llabel" style:color={chrome?.color && leaf.active === tab.id ? chrome.color : undefined}>{label(tab)}</span>
+						{#if tabMark}{@render tabMark(tab)}{/if}
 						<button
 							class="lclose"
 							aria-label="close tab"
@@ -593,25 +612,59 @@
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		gap: 10px;
-		color: var(--dim2);
+		gap: 14px;
 		padding: 24px;
+	}
+	.mo-empty > * {
+		width: min(360px, 100%);
+	}
+	.mo-empty-head {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		margin-bottom: 6px;
 		text-align: center;
 	}
-	.mo-empty p {
+	.mo-empty-head p {
 		margin: 0;
+	}
+	.mo-empty-title {
+		font-size: var(--fs-md);
+		color: var(--text);
+	}
+	.mo-empty-hint {
+		font-size: var(--fs-xs);
+		color: var(--dim2);
+	}
+	.mo-empty-primary {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 8px;
+		height: 40px;
 		font-size: var(--fs-sm);
-		color: var(--dim);
+		border: none;
+		border-radius: var(--r-md);
+		background: var(--accent);
+		color: var(--on-accent);
+		cursor: pointer;
+		transition: background var(--t-fast) var(--ease-out);
+	}
+	.mo-empty-primary:hover {
+		background: var(--accent-bright);
 	}
 	.mo-empty-opts {
-		display: flex;
-		flex-wrap: wrap;
-		justify-content: center;
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
 		gap: 6px;
-		max-width: 280px;
 	}
 	.mo-empty-btn {
-		padding: 5px 11px;
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		min-width: 0;
+		height: 36px;
+		padding: 0 12px;
 		font-size: var(--fs-xs);
 		border: 1px solid var(--border);
 		border-radius: var(--r-sm);
@@ -620,10 +673,25 @@
 		cursor: pointer;
 		transition:
 			color var(--t-fast) var(--ease-out),
+			background var(--t-fast) var(--ease-out),
 			border-color var(--t-fast) var(--ease-out);
+	}
+	.mo-empty-btn span {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.mo-empty-btn :global(svg) {
+		flex-shrink: 0;
+		color: var(--dim2);
+		transition: color var(--t-fast) var(--ease-out);
 	}
 	.mo-empty-btn:hover {
 		color: var(--text);
-		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
+		background: var(--surface2);
+		border-color: var(--border-strong);
+	}
+	.mo-empty-btn:hover :global(svg) {
+		color: var(--text);
 	}
 </style>

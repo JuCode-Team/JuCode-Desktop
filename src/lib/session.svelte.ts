@@ -204,7 +204,11 @@ export class SessionStore {
 			.then((spec) =>
 				hostSession(s.id, cwd ?? '', resume ?? (s.chat.sessionId || undefined), agent, chat, spec).then(() => {
 					// A new session is named by the daemon (the engine's conversation id).
-					if (!s.chat.sessionId) s.chat.sessionId = daemon.sessionOf(s.id) ?? '';
+					if (!s.chat.sessionId) {
+						s.chat.sessionId = daemon.sessionOf(s.id) ?? '';
+						// A group picked while it was a draft goes in with its id.
+						if (s.group) this.#share(s, { group: s.group });
+					}
 				})
 			)
 			.then(() => {
@@ -382,6 +386,22 @@ export class SessionStore {
 		}
 	}
 
+	/** Route a gateway session's requests to `group` ('' : automatic); its
+	 *  next request goes there (the daemon's local gateway applies it). */
+	/** Whether a session has a gateway group of its own: Claude Code / Codex,
+	 *  whose requests the daemon's local gateway routes (a draft shares its
+	 *  pick when it starts). */
+	takesSessionGroup(s: Session): boolean {
+		return s.backendId === 'claude' || s.backendId === 'codex';
+	}
+
+	setSessionGroup(id: string, group: string) {
+		const s = this.allSessions.find((x) => x.id === id);
+		if (!s) return;
+		s.group = group || undefined;
+		this.#share(s, { group });
+	}
+
 	/** Restore an archived thread to the normal list. */
 	unarchiveSession(id: string) {
 		const s = this.allSessions.find((x) => x.id === id);
@@ -392,7 +412,7 @@ export class SessionStore {
 
 	/** A session's title, archive state or removal goes to the daemon, which
 	 *  every other client follows. */
-	#share(s: Session, changes: { title?: string; archived?: boolean; hidden?: boolean }) {
+	#share(s: Session, changes: { title?: string; archived?: boolean; hidden?: boolean; group?: string }) {
 		if (s.chat.sessionId) sessionMeta(s.chat.sessionId, changes).catch(() => {});
 	}
 
@@ -400,7 +420,14 @@ export class SessionStore {
 	 *  when it is first shown. Returns the desktop id. */
 	listDormant(
 		project: Project,
-		rec: { session: string; title?: string | null; archived?: boolean; engine?: string; gateway?: boolean },
+		rec: {
+			session: string;
+			title?: string | null;
+			archived?: boolean;
+			engine?: string;
+			group?: string | null;
+			gateway?: boolean;
+		},
 		reuseId?: string
 	): string {
 		const s = this.#newSession(normalizeBackendId(rec.engine), undefined, reuseId);
@@ -408,6 +435,8 @@ export class SessionStore {
 		s.dormant = true;
 		s.restored = true;
 		s.archived = !!rec.archived;
+		s.group = rec.group || undefined;
+		if (rec.gateway) s.gateway = true;
 		s.chat.sessionId = rec.session;
 		if (rec.title) s.chat.title = rec.title;
 		s.chat.engineState = 'ready';
@@ -870,20 +899,21 @@ export class SessionStore {
 		const chat = this.allSessions.find((s) => s.id === id)?.chat;
 		if (!chat) return;
 		try {
-			const sessions = (await sessionHistory(p.path)).filter((x) => x.engine === 'jucode');
-			chat.handle({
-				type: 'resume_view',
-				backend: 'jucode',
-				items: sessions.map((x) => ({
-					id: x.session,
-					label: x.title || x.session,
-					detail: new Date(x.updated_at).toLocaleString(),
-					active: x.session === chat.sessionId
-				}))
-			});
+			chat.handle({ type: 'resume_view', backend: 'jucode', history: true, items: await this.historyItems(p, chat) });
 		} catch (e) {
 			chat.messages.push({ kind: 'system', text: t('shell.historyFail', { msg: String(e) }) });
 		}
+	}
+
+	/** The JuCode conversations saved for the project, as history picker rows. */
+	async historyItems(p: Project, chat: ChatState) {
+		const sessions = (await sessionHistory(p.path)).filter((x) => x.engine === 'jucode');
+		return sessions.map((x) => ({
+			id: x.session,
+			label: x.title || x.session,
+			detail: new Date(x.updated_at).toLocaleString(),
+			active: x.session === chat.sessionId
+		}));
 	}
 
 	/** Open a saved conversation from a history picker in a new tab. */

@@ -121,6 +121,13 @@ export class DaemonClient {
 		this.#write({ op: 'watch', session });
 	}
 
+	/** Detaches every session: their desktop tabs are gone (the page was torn
+	 *  down — a dev hot update re-creates it with a new store, which must find
+	 *  these sessions unclaimed to list them again). */
+	detachAll() {
+		for (const desktopId of [...this.#toDaemon.keys()]) this.detach(desktopId);
+	}
+
 	/** Stops showing a session here without ending it: unwatch, and forget
 	 *  the desktop id. */
 	detach(desktopId: string) {

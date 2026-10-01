@@ -7,6 +7,7 @@
 	import { t } from '$lib/i18n';
 	import Vendor from '$lib/Vendor.svelte';
 	import type { ChatState } from '$lib/chat.svelte';
+	import type { Snippet } from 'svelte';
 
 	type Row = {
 		id: string;
@@ -30,7 +31,8 @@
 		selIdx = $bindable(),
 		onClose,
 		onSelect,
-		onEffort
+		onEffort,
+		header
 	}: {
 		chat: ChatState;
 		title: string;
@@ -45,6 +47,8 @@
 		onClose: () => void;
 		onSelect: (command: string) => void;
 		onEffort: (effort: string) => void;
+		/** Above the search box (e.g. the history picker's source tabs). */
+		header?: Snippet;
 	} = $props();
 </script>
 
@@ -63,6 +67,7 @@
 			{/each}
 		</div>
 	{/if}
+	{#if header}<div class="pheader">{@render header()}</div>{/if}
 	{#if showSearch}
 		<div class="psearch">
 			<MagnifyingGlassIcon size={14} />
@@ -100,6 +105,9 @@
 {/if}
 
 <style>
+	.pheader {
+		padding: 4px 14px 10px;
+	}
 	.modal {
 		display: flex;
 		flex-direction: column;

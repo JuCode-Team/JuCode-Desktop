@@ -32,12 +32,16 @@
 	import {
 		processVideo,
 		sessionHistory,
+		nativeSessions,
+		importNativeSession,
 		git,
 		gitCheckpointCapture,
 		gitCheckpointRestore,
 		type Op
 	} from '$lib/protocol';
-	import { buildModelRows } from '$lib/composer/modelRows';
+	import { buildModelRows, toolModels, type ToolModel } from '$lib/composer/modelRows';
+	import { confirm } from '$lib/ui/confirm.svelte';
+	import { BACKEND_LABELS } from '$lib/backends';
 	import { defaultEffort } from '$lib/composer/effort';
 	import { dispatch } from '$lib/backends/router';
 	import { browser } from '$lib/browser.svelte';
@@ -55,6 +59,9 @@
 	import Modal from '$lib/ui/Modal.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
 	import Picker from '$lib/shell/Picker.svelte';
+	import Segmented from '$lib/ui/Segmented.svelte';
+	import type { SectionKey } from '$lib/settings/nav';
+	import type { ErrorAction } from '$lib/errorInfo';
 	import FindBar from '$lib/shell/FindBar.svelte';
 
 	// One full conversation (transcript + composer + approvals + pickers) for a
@@ -68,7 +75,8 @@
 		providersList = [],
 		isActive = false,
 		onRegister,
-		onUnregister
+		onUnregister,
+		onOpenSettings
 	}: {
 		session: Session;
 		store: SessionStore;
@@ -81,6 +89,7 @@
 		onRegister?: (id: string, api: ChatPaneApi) => void;
 		/** Passes the api back so a remount (tile drag) can't drop the fresh one. */
 		onUnregister?: (id: string, api: ChatPaneApi) => void;
+		onOpenSettings?: (section: SectionKey) => void;
 	} = $props();
 
 	const chat = $derived(session.chat);
@@ -98,6 +107,10 @@
 	type PickedRef = WebRef & { id: number };
 	let webRefs = $state<PickedRef[]>([]);
 	let refSeq = 0;
+	// Images sit in the text as [图片 #N] tokens where they were added; on submit
+	// the images whose token is still there are sent, in token order.
+	let images = $state<{ n: number; path: string }[]>([]);
+	let imageSeq = 0;
 	let scroller = $state<HTMLElement | null>(null);
 	let composerEl = $state<HTMLElement | null>(null);
 	let composerRef = $state<{ insertToken: (t: string) => void } | undefined>();
@@ -156,8 +169,58 @@
 				return;
 			}
 		}
+		// Writing in an archived thread brings it back to the list.
+		if (op.op === 'user_message' && session.archived) store.unarchiveSession(session.id);
 		if (!dispatch(session.id, op)) {
 			chat.messages.push({ kind: 'system', text: t('shell.backend.opUnsupported', { op: op.op }) });
+		}
+	}
+
+	// An error notice's fix button.
+	function fixError(action: ErrorAction) {
+		if (action === 'restart') store.restartSession(session.id, true);
+		else if (action === 'login' || action === 'account') onOpenSettings?.('account');
+		else if (action === 'compact') send({ op: 'command', input: '/compact' });
+		else if (action === 'model') openModelPicker();
+	}
+
+	// The project history picker's sources: JuCode's own conversations, or the
+	// ones Claude Code / Codex saved in their own apps (picking one imports it).
+	const historySources = [
+		{ value: 'jucode', label: 'JuCode' },
+		{ value: 'claude', label: 'Claude Code' },
+		{ value: 'codex', label: 'Codex' }
+	];
+	// The selected tab follows the list shown (each opening starts on JuCode);
+	// a switch applies only if it is still the latest and the picker is open.
+	let historyTab = $state('jucode');
+	let historyReq = 0;
+	$effect(() => {
+		if (chat.picker?.kind === 'resume' && chat.picker.history) historyTab = chat.picker.source ?? 'jucode';
+	});
+	async function showHistorySource(source: string) {
+		const proj = project;
+		if (!proj) return;
+		const req = ++historyReq;
+		const current = () => req === historyReq && chat.picker?.kind === 'resume' && !!chat.picker.history;
+		const from = source === 'claude' || source === 'codex' ? source : 'jucode';
+		try {
+			const items =
+				from === 'jucode'
+					? await store.historyItems(proj, chat)
+					: (await nativeSessions(from, proj.path)).map((s) => ({
+							id: s.id,
+							label: s.title || s.id.slice(0, 8),
+							detail: [s.origin, new Date(s.mtime_ms).toLocaleString(), s.imported ? t('shell.historySource.imported') : '']
+								.filter(Boolean)
+								.join(' · '),
+							active: false
+						}));
+			if (current()) chat.picker = { kind: 'resume', history: true, source: from, backend: from, items };
+		} catch (e) {
+			if (!current()) return;
+			toast.error(t('shell.historyFail', { msg: String(e) }));
+			historyTab = chat.picker?.kind === 'resume' ? (chat.picker.source ?? 'jucode') : 'jucode';
 		}
 	}
 
@@ -327,16 +390,65 @@
 			providersList,
 			configured: providers,
 			groups: {
-				codex: t('shell.modelGroup.codex'),
-				claude: t('shell.modelGroup.claude'),
 				jucode: t('shell.modelGroup.jucode'),
-				byok: t('shell.modelGroup.byok'),
-				system: t('shell.modelGroup.system')
+				byok: t('shell.modelGroup.byok')
 			},
 			toolMode,
-			systemLabel: t('shell.toolSwitch.system')
+			localLabel: t('chat.providerLocal')
 		});
 	});
+
+	// Claude Code / Codex: the current model and where it can run, for the
+	// menu's provider row.
+	const toolModel = $derived.by((): ToolModel | undefined => {
+		if ((chat.backendId !== 'claude' && chat.backendId !== 'codex') || !chat.model) return undefined;
+		const served = providers.includes('jucode')
+			? (providersList.find((p) => p.id === 'jucode')?.models ?? [])
+			: [];
+		const id = chat.model;
+		const found = toolModels(chat.modelCatalog, served, toolMode === 'jucode').find(
+			(m) => m.key === id || m.local === id || m.jucode === id
+		);
+		return (
+			found ?? {
+				key: id,
+				label: id,
+				vendor: id,
+				active: true,
+				...(toolMode === 'jucode' ? { jucode: id } : { local: id })
+			}
+		);
+	});
+
+	/** Moves this Claude Code / Codex session between this machine and the
+	 *  gateway. A conversation under way may not carry over (its thinking is
+	 *  signed for the account that wrote it): asked first. */
+	async function switchTool(mode: 'system' | 'jucode', model?: string): Promise<boolean> {
+		if (!session.draft && chat.messages.some((m) => m.kind === 'user')) {
+			const ok = await confirm({
+				title: t(mode === 'jucode' ? 'shell.toolSwitch.confirmJucode' : 'shell.toolSwitch.confirmSystem'),
+				message: t('shell.toolSwitch.confirmBody'),
+				confirmLabel: t('shell.toolSwitch.confirm')
+			});
+			if (!ok) return false;
+		}
+		void store.applyToolProfile(session.id, mode, model);
+		return true;
+	}
+
+	async function pickProvider(m: ToolModel, choice: { local: true } | { group: string }) {
+		if (toolMode === 'jucode' && !('local' in choice)) {
+			store.setSessionGroup(session.id, choice.group);
+			return;
+		}
+		chat.closePicker();
+		if ('local' in choice) {
+			if (toolMode === 'jucode' && m.local) await switchTool('system', m.local);
+			return;
+		}
+		// Set once the switch is confirmed; the gateway reads it per request.
+		if (m.jucode && (await switchTool('jucode', m.jucode))) store.setSessionGroup(session.id, choice.group);
+	}
 
 	// Whether to offer a filter box (history and other long lists).
 	const showPickerSearch = $derived(
@@ -377,7 +489,16 @@
 			attachVideo(path);
 			return;
 		}
-		if (!attachments.some((a) => a.path === path)) attachments.push({ path, image: isImage(path) });
+		if (isImage(path)) addImage(path);
+		else if (!attachments.some((a) => a.path === path)) attachments.push({ path, image: false });
+	}
+	function addImage(path: string) {
+		if (images.some((i) => i.path === path)) return;
+		const n = ++imageSeq;
+		images.push({ n, path });
+		const token = `[图片 #${n}]`;
+		if (composerRef) composerRef.insertToken(token);
+		else input = input && !/\s$/.test(input) ? `${input} ${token} ` : `${input}${token} `;
 	}
 	async function pickFiles() {
 		const sel = await open({ multiple: true, title: t('shell.attachTitle') });
@@ -433,7 +554,12 @@
 		if (text.startsWith('/')) {
 			send({ op: 'command', input: text });
 		} else {
-			const images = attachments.filter((a) => a.image).map((a) => a.path);
+			const sent = [...new Set(
+				[...text.matchAll(/\[图片 #(\d+)\]/g)]
+					.map((m) => images.find((i) => i.n === Number(m[1]))?.path)
+					.filter((p): p is string => !!p)
+			)];
+			const imagePaths = [...sent];
 			const files = attachments.filter((a) => !a.image).map((a) => a.path);
 			let content = text;
 			// Expand each web-element token in place (order = its position in the
@@ -447,7 +573,7 @@
 			if (files.length)
 				content += `${content ? '\n\n' : ''}Attached files (read these):\n${files.join('\n')}`;
 			for (const v of videos) {
-				images.push(...v.frames);
+				imagePaths.push(...v.frames);
 				content += `${content ? '\n\n' : ''}[视频附件] ${base(v.path)}（时长 ${v.duration.toFixed(1)} 秒）：已按时间等间隔抽取 ${v.frames.length} 个关键帧，随消息以图片附上（按时间先后排序），请结合这些关键帧理解视频内容。`;
 			}
 			// Echo the message instantly when it starts a turn now (a busy session
@@ -455,14 +581,16 @@
 			// A restarting engine holds the message and starts the turn once up.
 			if (!chat.busy || chat.restarting) {
 				captureCheckpoint(); // snapshot files before this turn (for rewind)
-				chat.optimisticUser(content);
+				chat.optimisticUser(content, sent);
 			}
-			send({ op: 'user_message', content, images: images.length ? images : undefined });
+			send({ op: 'user_message', content, images: imagePaths.length ? imagePaths : undefined });
 		}
 		input = '';
 		attachments = [];
 		videos = [];
 		webRefs = [];
+		images = [];
+		imageSeq = 0;
 	}
 	function stop() {
 		send({ op: 'interrupt' });
@@ -534,9 +662,7 @@
 		if (command.startsWith('@tool ')) {
 			const [mode, name] = command.slice('@tool '.length).trim().split(/\s+/);
 			chat.closePicker();
-			if (mode === 'system' || mode === 'jucode') {
-				store.applyToolProfile(session.id, mode, name);
-			}
+			if (mode === 'system' || mode === 'jucode') void switchTool(mode, name);
 			return;
 		}
 		// Resuming a history item opens it in a fresh session so the current chat
@@ -550,6 +676,18 @@
 			const backend = picker?.backend ?? chat.backendId;
 			const item = picker?.items.find((i) => i.id === sid);
 			chat.closePicker();
+			// A Claude Code / Codex conversation continues from a cleaned copy.
+			const source = picker?.source;
+			if (source === 'claude' || source === 'codex') {
+				const proj = project;
+				const title = item?.label ?? '';
+				const notice = toast.info(t('shell.historySource.importing', { title }), { duration: 0 });
+				importNativeSession(source, proj.path, sid)
+					.then((copy) => store.openSaved(proj, copy.id, copy.title || title, source))
+					.catch((e) => toast.error(t('shell.historySource.importFail', { msg: String(e) })))
+					.finally(() => toast.dismiss(notice));
+				return;
+			}
 			if (backend === 'codex' || backend === 'claude' || backend === 'jucode') {
 				store.openSaved(project, sid, item?.label ?? '', backend);
 				return;
@@ -776,7 +914,7 @@
 
 	<main bind:this={scroller} onscroll={onScroll}>
 		<div bind:this={contentEl}>
-			<MessageList messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} compactionTokens={chat.compactionTokens} {findActive} {scroller} onEdit={editMessage} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} />
+			<MessageList messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} compactionTokens={chat.compactionTokens} {findActive} {scroller} onEdit={editMessage} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} />
 		</div>
 		{#if chat.booting && chat.engineState !== 'exited'}
 			<div class="welcome spawning">
@@ -829,6 +967,8 @@
 			bind:this={composerRef}
 			bind:input
 			bind:attachments
+			{images}
+			onImage={addImage}
 			bind:videos
 			bind:el={composerEl}
 			onSubmit={submit}
@@ -841,6 +981,18 @@
 			modelRows={filteredRows}
 			modelSearch={showPickerSearch}
 			{backendLocked}
+			toolProvider={toolModel
+				? {
+						model: toolModel.jucode ?? toolModel.key,
+						name: BACKEND_LABELS[chat.backendId],
+						local: toolModel.local !== undefined,
+						jucode: toolModel.jucode !== undefined,
+						onJucode: toolMode === 'jucode',
+						group: session.group ?? '',
+						groups: store.takesSessionGroup(session),
+						onPick: (choice) => pickProvider(toolModel, choice)
+					}
+				: undefined}
 			{gitBranch}
 			onBackend={(b, acpAgent) => store.switchBackend(session.id, b, acpAgent)}
 			bind:pickerQuery
@@ -881,8 +1033,13 @@
 		onClose={() => chat.closePicker()}
 		onSelect={selectRow}
 		onEffort={setEffort}
+		header={chat.picker.kind === 'resume' && chat.picker.history ? historyTabs : undefined}
 	/>
 {/if}
+
+{#snippet historyTabs()}
+	<Segmented bind:value={historyTab} options={historySources} onChange={showHistorySource} />
+{/snippet}
 
 {#if isActive && chat.pendingRewind}
 	<Modal title={t('shell.rewindQuestion')} onClose={() => (chat.pendingRewind = null)}>

@@ -23,10 +23,12 @@
 	import { VoiceRecorder } from '$lib/audio';
 	import { buildEntries, mentionMatches, type AtEntry } from '$lib/mention';
 	import { t } from '$lib/i18n';
+	import { convertFileSrc } from '@tauri-apps/api/core';
 	import MentionMenu from '$lib/composer/MentionMenu.svelte';
 	import AttachmentChips from '$lib/composer/AttachmentChips.svelte';
 	import ContextIndicator from '$lib/composer/ContextIndicator.svelte';
 	import ModelMenu from '$lib/composer/ModelMenu.svelte';
+	import type { ToolProvider } from '$lib/composer/GroupPicker.svelte';
 	import Vendor from '$lib/Vendor.svelte';
 	import { modelColor, isTopEffort } from '$lib/modelColor';
 	import ComposerTray, { type TrayItem, type TraySection } from '$lib/composer/ComposerTray.svelte';
@@ -48,12 +50,15 @@
 		modelRows = [],
 		modelSearch = false,
 		backendLocked = true,
+		toolProvider,
 		gitBranch = '',
 		onBackend,
 		onSubmit,
 		onStop,
 		onSteer,
 		onPick,
+		images = [],
+		onImage,
 		onModel,
 		onModelSelect,
 		onModelClose,
@@ -74,6 +79,8 @@
 		/** False only while the session is still virgin (no user turn) — the
 		 *  agent rail in the model popover shows then and disappears afterwards. */
 		backendLocked?: boolean;
+		/** A gateway session's group (see ModelMenu). */
+		toolProvider?: ToolProvider & { model: string };
 		/** Current git branch for the footer strip ('' hides the chip). */
 		gitBranch?: string;
 		onBackend?: (b: BackendId, acpAgent?: { id: string; name: string }) => void | Promise<void>;
@@ -81,6 +88,10 @@
 		onStop: () => void;
 		onSteer: () => void;
 		onPick: () => void;
+		/** Images placed in the text as [图片 #N] tokens (N → file). */
+		images?: { n: number; path: string }[];
+		/** A pasted image, saved to a temp file: the pane adds it and its token. */
+		onImage: (path: string) => void;
 		onModel: () => void;
 		onModelSelect?: (command: string) => void;
 		onModelClose?: () => void;
@@ -151,7 +162,7 @@
 	// programmatically (completion / refill / cleared on send) — never mid-typing.
 	let composing = $state(false);
 	let lastSync = '';
-	const TOKEN_RE = /\[网页元素#(\d+)(?::([^\]]*))?\]/g;
+	const TOKEN_RE = /\[网页元素#(\d+)(?::([^\]]*))?\]|\[图片 #(\d+)\]/g;
 
 	const tokenLabel = (token: string) => {
 		const m = /^\[网页元素#(\d+)(?::([^\]]*))?\]$/.exec(token);
@@ -162,7 +173,18 @@
 		span.className = 'refchip';
 		span.contentEditable = 'false';
 		span.dataset.token = token;
-		span.textContent = tokenLabel(token);
+		const img = /^\[图片 #(\d+)\]$/.exec(token);
+		const path = img ? images.find((i) => i.n === Number(img[1]))?.path : undefined;
+		if (img) {
+			span.classList.add('imgchip');
+			if (path) {
+				const thumb = document.createElement('img');
+				thumb.src = convertFileSrc(path);
+				thumb.alt = '';
+				span.appendChild(thumb);
+			}
+			span.appendChild(document.createTextNode(t('chat.imageToken', { n: img[1]! })));
+		} else span.textContent = tokenLabel(token);
 		return span;
 	}
 	// DOM → plain text: chips become their token, <br> becomes a newline.
@@ -607,7 +629,7 @@
 			try {
 				const buf = new Uint8Array(await file.arrayBuffer());
 				const path = await saveTempImage(buf, ext);
-				if (!attachments.some((a) => a.path === path)) attachments.push({ path, image: true });
+				onImage(path);
 			} catch {
 				/* ignore */
 			}
@@ -795,6 +817,7 @@
 					rows={bcaps.modelPicker ? modelRows : []}
 					showSearch={modelSearch}
 					{backendLocked}
+					{toolProvider}
 					{effortDisabled}
 					anchor={modelButton}
 					bind:query={pickerQuery}
@@ -896,7 +919,23 @@
 		user-select: none;
 		cursor: default;
 	}
-	.rich :global(.refchip)::before {
+	.rich :global(.refchip.imgchip) {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		padding: 1px 6px 1px 2px;
+		vertical-align: -3px;
+		color: var(--text);
+		background: var(--surface2);
+		box-shadow: inset 0 0 0 1px var(--border-strong);
+	}
+	.rich :global(.refchip.imgchip img) {
+		width: 18px;
+		height: 18px;
+		border-radius: 3px;
+		object-fit: cover;
+	}
+	.rich :global(.refchip:not(.imgchip))::before {
 		content: '🌐';
 		margin-right: 3px;
 		font-size: var(--fs-2xs);

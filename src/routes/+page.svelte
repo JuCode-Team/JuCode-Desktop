@@ -4,6 +4,17 @@
 	import { listen } from '@tauri-apps/api/event';
 	import { getCurrentWebview } from '@tauri-apps/api/webview';
 	import TerminalWindowIcon from 'phosphor-svelte/lib/TerminalWindowIcon';
+	import SessionMark from '$lib/SessionMark.svelte';
+	import { sessionStatus } from '$lib/sessionStatus';
+	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
+	import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon';
+	import TargetIcon from 'phosphor-svelte/lib/TargetIcon';
+	import GitDiffIcon from 'phosphor-svelte/lib/GitDiffIcon';
+	import ClockCounterClockwiseIcon from 'phosphor-svelte/lib/ClockCounterClockwiseIcon';
+	import FilesIcon from 'phosphor-svelte/lib/FilesIcon';
+	import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon';
+	import GlobeIcon from 'phosphor-svelte/lib/GlobeIcon';
+	import PulseIcon from 'phosphor-svelte/lib/PulseIcon';
 	import Toaster from '$lib/ui/Toaster.svelte';
 	import ModelSetup from '$lib/ModelSetup.svelte';
 	import { modelSetup } from '$lib/modelSetupState.svelte';
@@ -238,9 +249,13 @@
 	// One agent-session type only: the coding agent is picked INSIDE the
 	// session (model popup), never at tab creation. Persisted `tui:*` tabs
 	// still render, but TUI tabs are no longer offered as new options.
+	const PANEL_ICONS: Record<(typeof ALL_PANELS)[number], typeof PlusIcon> = {
+		plan: ListChecksIcon, goal: TargetIcon, changes: GitDiffIcon, turns: ClockCounterClockwiseIcon,
+		files: FilesIcon, git: GitBranchIcon, term: TerminalWindowIcon, browser: GlobeIcon, diag: PulseIcon
+	};
 	const addOptions = $derived([
-		{ key: 'chat', label: t('shell.agentSession') },
-		...panelKeys.map((k) => ({ key: k, label: t(`dock.tabs.${k}`) }))
+		{ key: 'chat', label: t('shell.agentSession'), icon: PlusIcon, primary: true },
+		...panelKeys.map((k) => ({ key: k, label: t(`dock.tabs.${k}`), icon: PANEL_ICONS[k] }))
 	]);
 
 	function tileLabel(tab: TileTab): string {
@@ -468,6 +483,7 @@
 			}
 			c.optimisticUser(content);
 		}
+		if (active?.archived) store.unarchiveSession(activeId);
 		return dispatch(activeId, { op: 'user_message', content });
 	}
 
@@ -837,6 +853,9 @@
 				sync.handle(frame);
 			};
 			daemon.onDisconnect = () => agentDirectory.disconnected();
+			// The client outlives this page: release the sessions it claimed for
+			// this page's tabs when the page goes (see detachAll).
+			cleanups.push(() => daemon.detachAll());
 			agentDirectory.start();
 			const undrop = await getCurrentWebview().onDragDropEvent((e) => {
 				if (e.payload.type === 'drop')
@@ -914,6 +933,13 @@
 
 <svelte:window onkeydown={onWindowKey} />
 
+<!-- A chat tab's status, the same marks as its sidebar row. -->
+{#snippet tabMark(tab: TileTab)}
+	{@const sid = chatSessionOf(tab.panel)}
+	{@const s = sid ? sessionMap.get(sid) : undefined}
+	{#if s}<SessionMark status={sessionStatus(s.chat)} compact />{/if}
+{/snippet}
+
 <Toaster />
 <ConfirmHost />
 
@@ -955,10 +981,10 @@
 			onRename={(id, name) => workspaces.rename(id, name)}
 			onChrome={(id, chrome) => workspaces.setChrome(id, chrome)}
 			onDelete={deleteWorkspace}
-			accountLabel={loggedIn ? chat?.provider || 'JuCode' : t('shell.notLoggedIn')}
+			loggedIn={providers.includes('jucode')}
 			updateAvailable={updater.available}
 			settingsOpen={showSettings}
-			onAccount={() => openSettings('account')}
+			onManageAccount={() => openSettings('account')}
 			onSettings={() => (showSettings ? closeSettings() : openSettings())}
 			onUpdate={() => openSettings('updates')}
 		/>
@@ -1019,9 +1045,11 @@
 							{addOptions}
 							onAdd={mosaicAdd}
 							emptyText={t('dock.dock.empty')}
+							emptyHint={t('dock.dock.hint')}
 							focused={focusedLeaf}
 							onFocus={onLeafFocus}
 							decorate={tileChrome}
+							{tabMark}
 							onTabContext={openTileChrome}
 							onTabRename={openTileChrome}
 						>
@@ -1066,6 +1094,7 @@
 												isActive={sid === activeId}
 												onRegister={registerPane}
 												onUnregister={unregisterPane}
+												onOpenSettings={openSettings}
 											/>
 										{/if}
 									{:else}

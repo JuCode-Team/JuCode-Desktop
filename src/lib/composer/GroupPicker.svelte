@@ -10,13 +10,29 @@
 		});
 		return cached;
 	}
+
+	export type ToolProvider = {
+		/** "Claude Code" / "Codex", named in the local row. */
+		name: string;
+		/** The model runs on this machine / on the gateway. */
+		local: boolean;
+		jucode: boolean;
+		onJucode: boolean;
+		group: string;
+		/** The session's group reaches its requests (it runs in the daemon). */
+		groups: boolean;
+		onPick: (choice: { local: true } | { group: string }) => void;
+	};
 </script>
 
 <script lang="ts">
 	// Which JuCode group serves the current model. "Auto" leaves routing to
 	// the gateway (lowest multiplier first, then the others); a group pins
 	// requests for this model to it (`jucode_groups` in config.json, sent as
-	// X-JuCode-Group by the engine from the next turn).
+	// X-JuCode-Group by the engine from the next turn). With `tool` it is the
+	// provider of one Claude Code / Codex session instead: this machine (the
+	// tool's own login or config) or the gateway, on a group of its own that
+	// the daemon's local gateway applies to its next request.
 	import { onMount } from 'svelte';
 	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
 	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
@@ -24,34 +40,58 @@
 	import { toast } from '$lib/ui/toast.svelte';
 	import { t } from '$lib/i18n';
 
-	let { model }: { model: string } = $props();
+	let {
+		model,
+		tool
+	}: {
+		/** The gateway's name for the model. */
+		model: string;
+		tool?: ToolProvider;
+	} = $props();
 
 	let groups = $state<JucodeGroup[]>([]);
-	let chosen = $state('');
+	let configured = $state('');
+	// Claude Code reports a long-context model as `name[1m]`.
+	const base = $derived(model.replace(/\[[^\]]*\]$/, ''));
 	let open = $state(false);
 
 	const served = $derived(
-		groups.filter((g) => g.models?.includes(model)).sort((a, b) => a.rate_multiplier - b.rate_multiplier)
+		!tool || (tool.jucode && tool.groups)
+			? groups.filter((g) => g.models?.includes(base)).sort((a, b) => a.rate_multiplier - b.rate_multiplier)
+			: []
 	);
-	const current = $derived(served.find((g) => g.id === chosen));
+	const chosen = $derived(tool ? tool.group : configured);
+	const local = $derived(!!tool && !tool.onJucode);
+	const current = $derived(local ? undefined : served.find((g) => g.id === chosen));
+	// One group is what "auto" picks anyway: no rows of its own.
+	const listed = $derived(served.length > 1 ? served : []);
+	const shown = $derived(
+		tool ? (tool.local ? 1 : 0) + (tool.jucode ? 1 : 0) + listed.length > 1 : listed.length > 0
+	);
 	const mult = (n: number) => `×${Number(n.toFixed(3))}`;
 	const billing = (g: JucodeGroup) =>
 		g.billing_source === 'plan_only' ? t('chat.groupPlan') : g.billing_source === 'balance_only' ? t('chat.groupBalance') : '';
+	const autoLabel = $derived(tool ? t('chat.providerAuto') : t('chat.groupAuto'));
+	const currentLabel = $derived(local ? t('chat.providerLocal') : current ? current.name : autoLabel);
 
 	onMount(() => {
-		Promise.all([loadGroups(), readConfig()])
+		Promise.all([loadGroups(), tool ? null : readConfig()])
 			.then(([list, cfg]) => {
 				groups = list;
-				const map = (cfg.jucode_groups ?? {}) as Record<string, string>;
-				chosen = map[model] ?? '';
+				const map = (cfg?.jucode_groups ?? {}) as Record<string, string>;
+				configured = map[model] ?? '';
 			})
 			.catch(() => {});
 	});
 
 	async function pick(id: string) {
-		const prev = chosen;
-		chosen = id;
 		open = false;
+		if (tool) {
+			tool.onPick({ group: id });
+			return;
+		}
+		const prev = configured;
+		configured = id;
 		try {
 			const cfg = await readConfig();
 			const map = { ...((cfg.jucode_groups ?? {}) as Record<string, string>) };
@@ -59,31 +99,48 @@
 			else delete map[model];
 			await writeConfig({ jucode_groups: map });
 		} catch (e) {
-			chosen = prev;
+			configured = prev;
 			toast.error(t('chat.groupSaveFailed', { error: String(e) }));
 		}
 	}
+	function pickLocal() {
+		open = false;
+		tool?.onPick({ local: true });
+	}
 </script>
 
-<!-- Nothing to choose when one group (or none) serves the model. -->
-{#if served.length > 1}
+<!-- Nothing to choose when one option (or none) serves the model. -->
+{#if shown}
 	<section class="groups">
 		<button class="head" aria-expanded={open} onclick={() => (open = !open)}>
-			<span class="label">{t('chat.groupTitle')}</span>
-			<span class="cur">{current ? current.name : t('chat.groupAuto')}</span>
-			<span class="mult">{mult(current ? current.rate_multiplier : served[0].rate_multiplier)}</span>
+			<span class="label">{tool ? t('chat.provider') : t('chat.groupTitle')}</span>
+			<span class="cur">{currentLabel}</span>
+			{#if !local && served.length}
+				<span class="mult">{mult(current ? current.rate_multiplier : served[0].rate_multiplier)}</span>
+			{/if}
 			<span class="caret" class:open><CaretDownIcon size={13} /></span>
 		</button>
 		{#if open}
-			<div class="list" role="listbox" aria-label={t('chat.groupTitle')}>
-				<button class="pop-row" role="option" aria-selected={!current} onclick={() => pick('')}>
-					<span class="pop-txt">
-						<span class="pop-label">{t('chat.groupAuto')}</span>
-						<span class="pop-desc">{t('chat.groupAutoDesc')}</span>
-					</span>
-					<span class="pop-check" class:off={!!current}><CheckIcon size={16} /></span>
-				</button>
-				{#each served as g (g.id)}
+			<div class="list" role="listbox" aria-label={tool ? t('chat.provider') : t('chat.groupTitle')}>
+				{#if tool?.local}
+					<button class="pop-row" role="option" aria-selected={local} onclick={pickLocal}>
+						<span class="pop-txt">
+							<span class="pop-label">{t('chat.providerLocal')}</span>
+							<span class="pop-desc">{t('chat.providerLocalDesc', { tool: tool.name })}</span>
+						</span>
+						<span class="pop-check" class:off={!local}><CheckIcon size={16} /></span>
+					</button>
+				{/if}
+				{#if !tool || tool.jucode}
+					<button class="pop-row" role="option" aria-selected={!local && !current} onclick={() => pick('')}>
+						<span class="pop-txt">
+							<span class="pop-label">{autoLabel}</span>
+							<span class="pop-desc">{tool ? t('chat.groupSessionAutoDesc') : t('chat.groupAutoDesc')}</span>
+						</span>
+						<span class="pop-check" class:off={local || !!current}><CheckIcon size={16} /></span>
+					</button>
+				{/if}
+				{#each listed as g (g.id)}
 					{@const tag = billing(g)}
 					<button class="pop-row" role="option" aria-selected={current?.id === g.id} onclick={() => pick(g.id)}>
 						<span class="pop-txt">

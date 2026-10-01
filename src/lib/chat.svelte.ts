@@ -38,7 +38,7 @@ export interface TurnStats {
 }
 
 export type Msg =
-	| { kind: 'user'; text: string; state?: SendState }
+	| { kind: 'user'; text: string; state?: SendState; images?: string[] }
 	| { kind: 'assistant'; text: string; tokens?: number; elapsed?: number; uuid?: string; turn?: TurnStats }
 	| { kind: 'reasoning'; text: string; collapsed: boolean }
 	| { kind: 'tool'; callId: string; name: string; output: string; running: boolean; isError: boolean }
@@ -64,6 +64,8 @@ export interface ModelOption {
 	context_window: number;
 	max_output_tokens: number;
 	reasoning_efforts: string[];
+	/** false: not in the engine's catalog, only marking what runs. */
+	listed?: boolean;
 }
 export interface ResumeItem {
 	id: string;
@@ -76,7 +78,15 @@ export type Picker =
 	| { kind: 'model'; models: ModelOption[]; activeEffort: string }
 	// `backend`: whose conversations the items are, when not this chat's own
 	// (the project history lists JuCode conversations in any chat).
-	| { kind: 'resume'; items: ResumeItem[]; backend?: BackendId }
+	| {
+			kind: 'resume';
+			items: ResumeItem[];
+			backend?: BackendId;
+			/** The project's history picker (source tabs), not an engine's /resume. */
+			history?: boolean;
+			/** Whose saved conversations are listed; claude / codex ones import. */
+			source?: 'jucode' | 'claude' | 'codex';
+	  }
 	| { kind: 'checkpoint'; items: ResumeItem[] }
 	| null;
 
@@ -202,6 +212,12 @@ export class ChatState {
 	// Latest engine rate-limit / quota notice, shown as a persistent banner until
 	// the engine reports the limit cleared (status back to normal). null = no limit.
 	rateLimit = $state<{ level: 'warning' | 'limited'; message: string; resetsAt: number | null } | null>(null);
+	/** The official plan's usage (Claude subscription, ChatGPT plan) as the
+	 *  engine last reported it; null for API-key and gateway sessions. */
+	planUsage = $state<{
+		plan: string | null;
+		windows: { key: string; used: number; resetsAt: number | null; minutes: number | null }[];
+	} | null>(null);
 	// Compact ring buffer of the most recent raw engine frames (summarized), for the
 	// diagnostics trace — lets a mis-parsed / dropped tool frame be inspected.
 	frameTrace = $state<string[]>([]);
@@ -209,6 +225,8 @@ export class ChatState {
 	totalIn = $state(0);
 	totalOut = $state(0);
 	unseen = $state(false);
+	/** The last turn ended in an error (its message); cleared by the next one. */
+	lastError = $state<string | null>(null);
 	compactionTokens = $state(0);
 	// Files the agent edited this session (drives the Changes panel).
 	changedFiles = $state<string[]>([]);
@@ -302,8 +320,9 @@ export class ChatState {
 
 	/** Show a just-sent user message immediately, before the engine echoes it.
 	 *  The echo is de-duplicated in the `user_message` handler. */
-	optimisticUser(content: string) {
-		this.#trackSend({ kind: 'user', text: content, state: 'sending' });
+	optimisticUser(content: string, images?: string[]) {
+		this.lastError = null;
+		this.#trackSend({ kind: 'user', text: content, state: 'sending', ...(images?.length ? { images } : {}) });
 		this.#pendingUserEcho = content;
 		this.#resetCurrent();
 	}
@@ -592,6 +611,9 @@ export class ChatState {
 				// An engine that recovered from a failed resume in-process (codex
 				// opens a fresh thread) is fine: its new id is resumable.
 				this.resumeBroken = false;
+				// A new engine reports its own plan, if any (a switch to the gateway
+				// has none).
+				this.planUsage = null;
 				this.model = str(ev.model);
 				this.cwd = str(ev.cwd);
 				if (str(ev.session_id)) this.sessionId = str(ev.session_id);
@@ -650,6 +672,7 @@ export class ChatState {
 				// never shown optimistically) — clear any stale echo so it can't
 				// later swallow an identical message.
 				this.#pendingUserEcho = null;
+				this.lastError = null;
 				// No send state: claude echoes after the reply, when it would stick.
 				this.messages.push({ kind: 'user', text });
 				this.#resetCurrent();
@@ -703,7 +726,10 @@ export class ChatState {
 						isError: false
 					};
 					this.messages.push(toolMsg);
-					if (callId) this.#toolsByCallId.set(callId, toolMsg);
+					// Index the proxied copy: writes to the raw object would not render
+					// once the card has read it (tool_update / tool_output never showed).
+					const pushed = this.messages[this.messages.length - 1];
+					if (callId && pushed?.kind === 'tool') this.#toolsByCallId.set(callId, pushed);
 				}
 				break;
 			case 'tool_update': {
@@ -806,7 +832,8 @@ export class ChatState {
 				this.picker = {
 					kind: 'resume',
 					items: arr<ResumeItem>(ev.items),
-					...(isBackendId(str(ev.backend)) ? { backend: str(ev.backend) as BackendId } : {})
+					...(isBackendId(str(ev.backend)) ? { backend: str(ev.backend) as BackendId } : {}),
+					...(ev.history === true ? { history: true, source: 'jucode' as const } : {})
 				};
 				break;
 			case 'checkpoint_view': {
@@ -969,6 +996,18 @@ export class ChatState {
 				if (path) this.subagents[path] = { status: str(ev.status), message: str(ev.message) };
 				break;
 			}
+			case 'plan_usage': {
+				const windows = arr<Record<string, unknown>>(ev.windows)
+					.filter((w) => typeof w.used === 'number')
+					.map((w) => ({
+						key: str(w.key),
+						used: w.used as number,
+						resetsAt: typeof w.resets_at === 'number' ? w.resets_at : null,
+						minutes: typeof w.minutes === 'number' ? w.minutes : null
+					}));
+				this.planUsage = windows.length ? { plan: typeof ev.plan === 'string' ? ev.plan : null, windows } : null;
+				break;
+			}
 			case 'rate_limit': {
 				const level = ev.level === 'limited' ? 'limited' : ev.level === 'warning' ? 'warning' : null;
 				if (!level) {
@@ -1035,14 +1074,19 @@ export class ChatState {
 					})
 				});
 				break;
-			case 'error':
+			case 'error': {
+				const last = this.messages[this.messages.length - 1];
+				this.lastError = str(ev.message);
 				this.pendingApproval = null;
 				this.#setSend('failed');
 				this.#sending = null;
-				this.messages.push({ kind: 'error', text: str(ev.message) });
+				// The engines can report one failure twice (the item, then the turn).
+				if (!(last?.kind === 'error' && last.text === str(ev.message)))
+					this.messages.push({ kind: 'error', text: str(ev.message) });
 				this.#endTurn();
 				this.#resetCurrent();
 				break;
+			}
 		}
 	}
 }

@@ -9,6 +9,7 @@
 	import type { WorkspaceEntry } from './workspaces';
 	import TabGlyph from './TabGlyph.svelte';
 	import TabChromePopover from './TabChromePopover.svelte';
+	import AccountCard from './AccountCard.svelte';
 
 	// The outermost column: one entry per workspace (the top-level context —
 	// switching it swaps the sidebar's projects and the canvas layout) and + to
@@ -23,10 +24,10 @@
 		onRename,
 		onChrome,
 		onDelete,
-		accountLabel,
+		loggedIn,
 		updateAvailable = false,
 		settingsOpen = false,
-		onAccount,
+		onManageAccount,
 		onSettings,
 		onUpdate
 	}: {
@@ -39,12 +40,13 @@
 		onRename: (id: string, name: string) => void;
 		onChrome: (id: string, chrome: { color?: string | null; icon?: TabIcon | null }) => void;
 		onDelete: (id: string) => void;
-		/** Signed-in account (or the not-signed-in text), shown on hover. */
-		accountLabel: string;
+		/** Signed in to the JuCode account (not tied to any one chat). */
+		loggedIn: boolean;
 		updateAvailable?: boolean;
 		/** The settings page is in front: the gear shows as selected. */
 		settingsOpen?: boolean;
-		onAccount: () => void;
+		/** Settings → Account: the card's sign-in / manage row. */
+		onManageAccount: () => void;
 		onSettings: () => void;
 		/** Open settings at the update section. */
 		onUpdate: () => void;
@@ -52,6 +54,37 @@
 
 	let menuFor = $state<{ id: string; x: number; y: number } | null>(null);
 	const menuWs = $derived(menuFor ? (workspaces.find((w) => w.id === menuFor!.id) ?? null) : null);
+
+	// Account card: hover opens it and leaving closes it after a short grace (so
+	// the pointer can cross the gap); a click pins it until Esc or a click outside.
+	let accountBtn = $state<HTMLButtonElement | null>(null);
+	let card = $state<{ left: number; bottom: number } | null>(null);
+	let pinned = $state(false);
+	let closeTimer: ReturnType<typeof setTimeout> | undefined;
+	function showCard() {
+		clearTimeout(closeTimer);
+		if (card || !accountBtn) return;
+		const r = accountBtn.getBoundingClientRect();
+		card = { left: r.right + 8, bottom: window.innerHeight - r.bottom };
+	}
+	function hideCardSoon() {
+		clearTimeout(closeTimer);
+		if (!pinned) closeTimer = setTimeout(() => (card = null), 160);
+	}
+	function closeCard() {
+		clearTimeout(closeTimer);
+		card = null;
+		pinned = false;
+	}
+	function toggleCard() {
+		if (card && pinned) return closeCard();
+		showCard();
+		pinned = true;
+	}
+	function outsideDown(e: PointerEvent) {
+		const el = e.target as Element;
+		if (card && !accountBtn?.contains(el) && !el.closest?.('.acct-card')) closeCard();
+	}
 
 	function openMenu(w: WorkspaceEntry, ev: MouseEvent) {
 		ev.preventDefault();
@@ -91,14 +124,40 @@
 				<span class="tile"><ArrowCircleDownIcon size={20} /></span>
 			</button>
 		{/if}
-		<button class="ws" title={accountLabel} aria-label={accountLabel} onclick={onAccount}>
-			<span class="tile"><UserCircleIcon size={20} /></span>
+		<button
+			bind:this={accountBtn}
+			class="ws"
+			class:on={!!card}
+			aria-label={t('shell.account.title')}
+			aria-haspopup="dialog"
+			aria-expanded={!!card}
+			onmouseenter={showCard}
+			onmouseleave={hideCardSoon}
+			onclick={toggleCard}
+		>
+			<span class="tile"><UserCircleIcon size={20} weight={card ? 'fill' : 'regular'} /></span>
 		</button>
 		<button class="ws" class:on={settingsOpen} title={t('shell.settings')} aria-label={t('shell.settings')} aria-pressed={settingsOpen} onclick={onSettings}>
 			<span class="tile"><GearIcon size={20} weight={settingsOpen ? 'fill' : 'regular'} /></span>
 		</button>
 	</div>
 </nav>
+
+<svelte:window onpointerdown={outsideDown} onkeydown={(e) => e.key === 'Escape' && card && closeCard()} />
+
+{#if card}
+	<AccountCard
+		{loggedIn}
+		left={card.left}
+		bottom={card.bottom}
+		onEnter={() => clearTimeout(closeTimer)}
+		onLeave={hideCardSoon}
+		onManage={() => {
+			closeCard();
+			onManageAccount();
+		}}
+	/>
+{/if}
 
 {#if menuFor && menuWs}
 	<TabChromePopover

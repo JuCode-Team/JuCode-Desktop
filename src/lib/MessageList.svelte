@@ -8,12 +8,17 @@
 	import { fade, slide } from 'svelte/transition';
 	import Markdown from '$lib/Markdown.svelte';
 	import ToolCard from '$lib/ToolCard.svelte';
+	import { parseToolOutput, toolIcon, toolTarget, toolVerb } from '$lib/toolSummary';
 	import Indicator from '$lib/Indicator.svelte';
-	import Notice from '$lib/ui/Notice.svelte';
+	import ErrorNotice from '$lib/ErrorNotice.svelte';
+	import type { ErrorAction } from '$lib/errorInfo';
 	import { t } from '$lib/i18n';
 	import type { Msg, TurnStats } from '$lib/chat.svelte';
 	import { prefs } from '$lib/prefs.svelte';
 	import { fmtTokens } from '$lib/usageStats';
+	import { SvelteSet } from 'svelte/reactivity';
+	import { convertFileSrc } from '@tauri-apps/api/core';
+	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 
 	let {
 		messages,
@@ -26,7 +31,9 @@
 		onEdit,
 		onRewind,
 		onFile,
-		onDismiss
+		onDismiss,
+		backend = '',
+		onErrorAction
 	}: {
 		messages: Msg[];
 		streamingMsg: Msg | null;
@@ -43,6 +50,10 @@
 		onFile?: (href: string) => void;
 		/** Remove a message the user closed (error notices). */
 		onDismiss?: (m: Msg) => void;
+		/** The session's engine, for reading its errors. */
+		backend?: string;
+		/** An error notice's fix (restart, sign in, compact …). */
+		onErrorAction?: (action: ErrorAction) => void;
 	} = $props();
 
 	// ── Virtual list (dynamic-height windowing) ─────────────────────────────
@@ -276,12 +287,69 @@
 		return i < 0 ? 0 : i + 2;
 	}
 
+	// A user message's text with its [图片 #N] placeholders split out.
+	function userSegments(text: string): { text: string; image?: string }[] {
+		const out: { text: string; image?: string }[] = [];
+		let last = 0;
+		for (const m of text.matchAll(/\[图片 #(\d+)\]/g)) {
+			if (m.index > last) out.push({ text: text.slice(last, m.index) });
+			out.push({ text: m[0], image: m[1] });
+			last = m.index + m[0].length;
+		}
+		if (last < text.length) out.push({ text: text.slice(last) });
+		return out;
+	}
+
 	// Skip empty placeholders (e.g. an assistant message before its first delta).
-	function shown(m: Msg): boolean {
+	function hasContent(m: Msg): boolean {
 		// Meta/status notices render in the collapsible status strip, not inline.
 		if (m.kind === 'system') return false;
 		if (m.kind === 'tool') return !!(m.name || m.output);
 		return !!m.text && m.text.trim().length > 0;
+	}
+
+	// A run of consecutive tool calls (rows that show nothing don't break it)
+	// renders as one row on its first call: a header naming the count and the
+	// latest call, then — expanded — the calls in a tight list. The other calls
+	// of the run render no row of their own.
+	const GROUP_MIN = 2;
+	const toolGroups = $derived.by(() => {
+		const members = new Map<Msg, Msg[]>(); // first call → the run
+		const headOf = new Map<Msg, Msg>();
+		let run: Msg[] = [];
+		const flush = () => {
+			if (run.length >= GROUP_MIN) {
+				members.set(run[0]!, run);
+				for (const x of run) headOf.set(x, run[0]!);
+			}
+			run = [];
+		};
+		for (const m of messages) {
+			if (!hasContent(m)) continue;
+			if (m.kind === 'tool') run.push(m);
+			else flush();
+		}
+		flush();
+		return { members, headOf };
+	});
+	const openGroups = new SvelteSet<Msg>();
+	function shown(m: Msg): boolean {
+		return hasContent(m) && (!toolGroups.headOf.has(m) || toolGroups.members.has(m));
+	}
+	function groupInfo(run: Msg[]) {
+		let running = false;
+		let failed = 0;
+		for (const x of run) {
+			if (x.kind !== 'tool') continue;
+			if (x.running) running = true;
+			if (x.isError) failed++;
+		}
+		const last = run[run.length - 1];
+		const latest =
+			last?.kind === 'tool'
+				? { Icon: toolIcon(last.name), verb: toolVerb(last.name), target: toolTarget(last.name, parseToolOutput(last.output)) }
+				: null;
+		return { running, failed, latest };
 	}
 </script>
 
@@ -298,7 +366,8 @@
 				</button>
 				<button class="uedit" onclick={() => onEdit(m.text)} aria-label="quote" title={t('chat.quoteTitle')}><PencilSimpleIcon size={12} /></button>
 				<div class="ucol">
-					<div class="bubble" class:pending={m.state === 'sending'}>{m.text}</div>
+					<!-- One line: the bubble is pre-wrap, so template whitespace would show. -->
+					<div class="bubble" class:pending={m.state === 'sending'}>{#if m.images?.length}<div class="uimgs">{#each m.images as p (p)}<img src={convertFileSrc(p)} alt="" />{/each}</div>{/if}{#each userSegments(m.text) as seg, j (j)}{#if seg.image}<span class="utoken">{t('chat.imageToken', { n: seg.image })}</span>{:else}{seg.text}{/if}{/each}</div>
 					{#if m.state}
 						{#key m.state}
 							<div class="sendstate {m.state}" in:fade={{ duration: 160 }}>
@@ -352,9 +421,35 @@
 				{/if}
 			</div>
 		{:else if m.kind === 'tool'}
-			<ToolCard name={m.name} output={m.output} running={m.running} isError={m.isError} />
+			{@const run = toolGroups.members.get(m)}
+			{#if run}
+				{@const g = groupInfo(run)}
+				{@const open = openGroups.has(m)}
+				<button class="tgroup" class:open onclick={() => (open ? openGroups.delete(m) : openGroups.add(m))}>
+					<span class="tg-count">{t('chat.toolGroup', { n: run.length })}</span>
+					{#if g.failed}<span class="tg-fail">{t('chat.toolGroupFailed', { n: g.failed })}</span>{/if}
+					{#if g.latest && !open}
+						<span class="tg-latest">
+							<g.latest.Icon size={13} />
+							<span class="tg-verb">{g.latest.verb}</span>
+							{#if g.latest.target}<span class="tg-target">{g.latest.target}</span>{/if}
+						</span>
+					{/if}
+					{#if g.running}<CircleNotchIcon size={12} class="spin" />{/if}
+					<span class="rchev"><CaretRightIcon size={13} /></span>
+				</button>
+				{#if open}
+					<div class="tg-list">
+						{#each run as x (x)}
+							{#if x.kind === 'tool'}<ToolCard name={x.name} output={x.output} running={x.running} isError={x.isError} />{/if}
+						{/each}
+					</div>
+				{/if}
+			{:else}
+				<ToolCard name={m.name} output={m.output} running={m.running} isError={m.isError} />
+			{/if}
 		{:else if m.kind === 'error'}
-			<Notice mono onDismiss={onDismiss ? () => onDismiss(m) : undefined}>{m.text}</Notice>
+			<ErrorNotice text={m.text} {backend} onAction={onErrorAction} onDismiss={onDismiss ? () => onDismiss(m) : undefined} />
 				{/if}
 			</div>
 		{/if}
@@ -521,6 +616,27 @@
 		word-break: break-word;
 		max-width: 100%;
 	}
+	.uimgs {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+		margin-bottom: 8px;
+	}
+	.uimgs img {
+		max-width: 220px;
+		max-height: 160px;
+		border-radius: var(--r-md);
+		object-fit: cover;
+		display: block;
+	}
+	.utoken {
+		padding: 0 5px;
+		border-radius: var(--r-xs);
+		background: var(--surface2);
+		box-shadow: inset 0 0 0 1px var(--border-strong);
+		font-size: var(--fs-sm);
+		white-space: nowrap;
+	}
 	.answer {
 		line-height: 1.65;
 		word-break: break-word;
@@ -588,8 +704,74 @@
 		color: var(--dim2);
 		transition: transform var(--t-med) var(--ease-spring);
 	}
-	.reason.open .rchev {
+	.reason.open .rchev,
+	.tgroup.open .rchev {
 		transform: rotate(90deg);
+	}
+	.tgroup {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		max-width: 100%;
+		min-height: 26px;
+		text-align: left;
+		padding: 2px 0;
+		border: none;
+		background: none;
+		color: var(--dim);
+		font-size: var(--fs-sm);
+		font-weight: 500;
+		cursor: pointer;
+		transition: color var(--t-fast) var(--ease-out);
+	}
+	.tgroup:hover {
+		color: var(--text);
+	}
+	.tg-count {
+		flex-shrink: 0;
+	}
+	/* The latest call, in the card's own format, trailing the count. */
+	.tg-latest {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		min-width: 0;
+		padding-left: 8px;
+		border-left: 1px solid var(--border);
+		color: var(--dim2);
+		font-weight: 400;
+	}
+	.tg-latest :global(svg) {
+		flex-shrink: 0;
+	}
+	.tg-verb {
+		flex-shrink: 0;
+	}
+	.tg-target {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-family: var(--font-mono);
+		font-size: var(--fs-xs);
+	}
+	.tgroup .rchev,
+	.tgroup :global(.spin) {
+		flex-shrink: 0;
+	}
+	.tg-fail {
+		font-size: var(--fs-2xs);
+		font-weight: 400;
+		color: var(--err);
+	}
+	/* The group's calls hang under its header behind a hairline rule. */
+	.tg-list {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		margin: 6px 0 0 6px;
+		padding-left: 12px;
+		border-left: 1px solid var(--border);
 	}
 	.reason-body {
 		margin-top: 4px;

@@ -24,6 +24,8 @@
 	import { BACKEND_LABELS } from '$lib/backends';
 	import BackendIcon from '$lib/BackendIcon.svelte';
 	import TabGlyph from '$lib/workbench/TabGlyph.svelte';
+	import SessionMark from '$lib/SessionMark.svelte';
+	import { sessionStatus } from '$lib/sessionStatus';
 	import type { Project } from '$lib/types';
 	import type { AgentView } from '$lib/agents.svelte';
 
@@ -201,6 +203,7 @@
 
 
 	{#snippet sessRow(s: Project['sessions'][number], nested = false, selectable = false)}
+		{@const status = sessionStatus(s.chat)}
 		<button
 			class="sess"
 			class:nested
@@ -232,22 +235,19 @@
 					ondblclick={(e) => e.stopPropagation()}
 				/>
 			{:else}
-				<span class="sess-title" ondblclick={(e) => { e.stopPropagation(); startRename(s); }} role="presentation">{s.chat.title}</span>
+				<span
+					class="sess-title"
+					class:running={status?.kind === 'running'}
+					class:unread={status?.kind === 'unread'}
+					ondblclick={(e) => { e.stopPropagation(); startRename(s); }}
+					role="presentation">{s.chat.title}</span
+				>
 			{/if}
 			<!-- A draft belongs to no backend until its first message. -->
 			{#if s.backendId && s.backendId !== 'jucode' && !s.draft}
 				<span class="backend-chip" title={BACKEND_LABELS[s.backendId]}><BackendIcon backend={s.backendId} size={12} /></span>
 			{/if}
-			{#if s.chat.pendingApproval || s.chat.trustPrompt}
-				<span class="tag" title={t('shell.awaitConfirm')}>{t('shell.awaitShort')}</span>
-			{:else if s.chat.busy}
-				<CircleNotchIcon size={16} class="spin state" />
-			{:else if s.chat.engineState === 'exited'}
-				<span class="state err"><WarningCircleIcon size={16} /></span>
-			{:else if s.chat.unseen}
-				<!-- A reply arrived while this session was not in view: the one place a dot is used. -->
-				<span class="unread" aria-label={t('shell.unread')}></span>
-			{/if}
+			<SessionMark status={status} />
 			{#if !selectable}
 			<span
 				class="act"
@@ -676,18 +676,6 @@
 		color: var(--dim);
 		flex-shrink: 0;
 	}
-	.state.err {
-		display: inline-flex;
-		color: var(--err);
-	}
-	.unread {
-		width: 7px;
-		height: 7px;
-		margin: 0 4px;
-		border-radius: 50%;
-		background: var(--text);
-		flex-shrink: 0;
-	}
 	.tag {
 		flex-shrink: 0;
 		padding: 1px 7px;
@@ -695,6 +683,35 @@
 		border-radius: var(--r-full);
 		color: var(--dim);
 		font-size: var(--fs-2xs);
+	}
+	/* A reply not seen yet: the title stands out with the dot. */
+	.sess-title.unread {
+		color: var(--text);
+		font-weight: 600;
+	}
+	/* Working: a highlight sweeps across the title. */
+	.sess-title.running {
+		/* Only as wide as the text, so the sweep crosses it (the marks stay right). */
+		flex: 0 1 auto;
+		margin-right: auto;
+		background: linear-gradient(100deg, var(--dim) 42%, var(--text) 50%, var(--dim) 58%) 0 0 / 250% 100%;
+		-webkit-background-clip: text;
+		background-clip: text;
+		-webkit-text-fill-color: transparent;
+		animation: title-sweep 2.2s linear infinite;
+	}
+	@keyframes title-sweep {
+		from {
+			background-position: 100% 0;
+		}
+		to {
+			background-position: -150% 0;
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.sess-title.running {
+			animation: none;
+		}
 	}
 	.backend-chip {
 		display: inline-flex;

@@ -1,7 +1,8 @@
 // Pure packing of the in-chat model picker rows: the current engine's
 // model_view catalog plus (for jucode sessions) the models of every other
-// provider that has credentials, grouped for display. Framework-free so the row shape
-// stays unit-testable.
+// provider that has credentials, grouped for display; for Claude Code / Codex,
+// one list of what runs on this machine and on the JuCode gateway. Kept
+// free of Svelte so the row shape stays unit-testable.
 
 export interface ModelRow {
 	id: string;
@@ -20,6 +21,8 @@ export interface EngineModel {
 	vendor?: string;
 	active: boolean;
 	context_window?: number;
+	/** false: not in the engine's catalog, only marking what runs. */
+	listed?: boolean;
 }
 
 export interface CatalogProvider {
@@ -28,11 +31,8 @@ export interface CatalogProvider {
 }
 
 export interface ModelGroupLabels {
-	codex: string;
-	claude: string;
 	jucode: string;
 	byok: string;
-	system: string;
 }
 
 /** Context window as shown beside a model: 272K, 1M; empty when unknown. */
@@ -43,13 +43,101 @@ export const fmtContext = (n?: number) =>
 const detailOf = (provider: string | null, ctx?: number) => [provider, fmtContext(ctx)].filter(Boolean).join(' · ');
 
 /**
+ * A Claude Code / Codex model and where it runs: `local` is the engine's own
+ * id for it (its catalog, on this machine's login or config), `jucode` the
+ * gateway's name. A model both offer is one entry (the engine's catalog
+ * resolves aliases: "opus" is `claude-opus-5-5`).
+ */
+export interface ToolModel {
+	key: string;
+	label: string;
+	vendor: string;
+	context_window?: number;
+	local?: string;
+	jucode?: string;
+	active: boolean;
+}
+
+/** "claude-opus-4-8" → "Opus 4.8", as the daemon names Claude Code's models
+ *  ("claude-haiku-4-5-20251001" → "Haiku 4.5": a date suffix is dropped). */
+function claudeLabel(id: string): string {
+	const [family = '', ...rest] = id.replace(/^claude-/, '').split('-');
+	const version: string[] = [];
+	for (const part of rest) {
+		if (!/^\d+$/.test(part) || part.length === 8) break;
+		version.push(part);
+	}
+	const name = family.charAt(0).toUpperCase() + family.slice(1);
+	return version.length ? `${name} ${version.join('.')}` : name;
+}
+
+export function toolModels(
+	models: EngineModel[],
+	served: { name: string; context_window?: number }[],
+	onJucode: boolean
+): ToolModel[] {
+	const keyOf = (m: EngineModel) => m.vendor || m.model;
+	const running = models.find((m) => m.active);
+	const byKey = new Map<string, ToolModel>();
+	for (const m of models) {
+		// A model the engine only marks as running runs here when the session
+		// is on this machine; on the gateway it is the gateway's.
+		if (m.listed === false && onJucode) continue;
+		const key = keyOf(m);
+		if (byKey.has(key)) continue;
+		byKey.set(key, {
+			key,
+			label: m.label || m.model,
+			vendor: key,
+			context_window: m.context_window,
+			local: m.model,
+			active: false
+		});
+	}
+	for (const g of served) {
+		const known = byKey.get(g.name);
+		if (known) {
+			known.jucode = g.name;
+			known.context_window ||= g.context_window;
+			continue;
+		}
+		byKey.set(g.name, {
+			key: g.name,
+			label: g.name.startsWith('claude-') ? claudeLabel(g.name) : g.name,
+			vendor: g.name,
+			context_window: g.context_window,
+			jucode: g.name,
+			active: false
+		});
+	}
+	const list = [...byKey.values()];
+	if (running) {
+		const key = keyOf(running);
+		const known = byKey.get(key);
+		if (known) known.active = true;
+		else
+			list.unshift({
+				key,
+				label: running.label || running.model,
+				vendor: key,
+				context_window: running.context_window,
+				...(onJucode ? { jucode: running.model } : { local: running.model }),
+				active: true
+			});
+	}
+	return list;
+}
+
+/**
  * The active provider's rows come from the engine's model_view (already
  * filtered and flagged with the active model — the running engine resolved
  * its credentials, possibly from an env var); other providers come from the
  * client-side catalog, limited to the ones with credentials, so a jucode
  * session can switch to any of them.
  * Same-provider picks use /model (instant); cross-provider picks switch via
- * @switch (config rewrite + engine restart).
+ * @switch (config rewrite + engine restart). Claude Code / Codex list
+ * toolModels: a model the current side lacks switches sides (@tool, an
+ * engine restart).
  */
 export function buildModelRows(input: {
 	models: EngineModel[];
@@ -61,32 +149,36 @@ export function buildModelRows(input: {
 	 *  rows for any other provider are dropped — the engine can't run them. */
 	configured: string[];
 	groups: ModelGroupLabels;
-	/** Claude/Codex live overlay. Ignored for the jucode backend. */
+	/** Claude/Codex: on this machine's config or the JuCode gateway. */
 	toolMode?: 'system' | 'jucode';
-	/** Shown as a switch-back row when the overlay is on. */
-	systemLabel?: string;
+	/** Claude/Codex: what "this machine" is called beside a model. */
+	localLabel?: string;
 }): ModelRow[] {
-	const {
-		models,
-		backendId,
-		provider: cur,
-		providersList,
-		configured,
-		groups,
-		toolMode,
-		systemLabel
-	} = input;
-	const overlay = backendId === 'claude' || backendId === 'codex';
-	const onJucode = overlay && toolMode === 'jucode';
-	const activeGroup = onJucode
-		? groups.jucode
-		: backendId === 'codex'
-			? groups.codex
-			: backendId === 'claude'
-				? groups.claude
-				: cur === 'jucode'
-					? groups.jucode
-					: groups.byok;
+	const { models, backendId, provider: cur, providersList, configured, groups, toolMode, localLabel = '' } = input;
+	if (backendId === 'claude' || backendId === 'codex') {
+		const onJucode = toolMode === 'jucode';
+		const served = configured.includes('jucode')
+			? (providersList.find((p) => p.id === 'jucode')?.models ?? [])
+			: [];
+		return toolModels(models, served, onJucode).map((m) => ({
+			id: m.key,
+			label: m.label,
+			vendor: m.vendor,
+			detail: [m.local !== undefined && localLabel, m.jucode !== undefined && 'JuCode', fmtContext(m.context_window)]
+				.filter(Boolean)
+				.join(' · '),
+			active: m.active,
+			command: onJucode
+				? m.jucode !== undefined
+					? `/model ${m.jucode}`
+					: `@tool system ${m.local}`
+				: m.local !== undefined
+					? `/model ${m.local}`
+					: `@tool jucode ${m.jucode}`,
+			depth: undefined
+		}));
+	}
+	const activeGroup = cur === 'jucode' ? groups.jucode : groups.byok;
 	const activeRows: ModelRow[] = models.map((m) => ({
 		id: `${cur}::${m.model}`,
 		label: m.label || m.model,
@@ -101,47 +193,18 @@ export function buildModelRows(input: {
 		.filter((pv) => pv.id !== cur && configured.includes(pv.id))
 		.flatMap((pv) =>
 			pv.models.map((m) => ({
-					id: `${pv.id}::${m.name}`,
-					label: m.name,
-					vendor: m.name,
-					detail: detailOf(pv.id === 'jucode' ? null : pv.id, m.context_window),
-					active: false,
-					command: `@switch ${pv.id} ${m.name}`,
-					depth: undefined,
-					group: pv.id === 'jucode' ? groups.jucode : groups.byok
-				}))
-		);
-	const toolRows: ModelRow[] = [];
-	if (overlay && configured.includes('jucode')) {
-		if (onJucode && systemLabel) {
-			toolRows.push({
-				id: 'tool::system',
-				label: systemLabel,
-				detail: groups.system,
+				id: `${pv.id}::${m.name}`,
+				label: m.name,
+				vendor: m.name,
+				detail: detailOf(pv.id === 'jucode' ? null : pv.id, m.context_window),
 				active: false,
-				command: '@tool system',
+				command: `@switch ${pv.id} ${m.name}`,
 				depth: undefined,
-				group: groups.system
-			});
-		}
-		if (!onJucode) {
-			const catalog = providersList.find((p) => p.id === 'jucode')?.models ?? [];
-			for (const m of catalog) {
-				toolRows.push({
-					id: `tool::jucode::${m.name}`,
-					label: m.name,
-					vendor: m.name,
-					detail: groups.jucode,
-					active: false,
-					command: `@tool jucode ${m.name}`,
-					depth: undefined,
-					group: groups.jucode
-				});
-			}
-		}
-	}
-	const order = [groups.system, groups.codex, groups.claude, groups.jucode, groups.byok];
-	return [...toolRows, ...activeRows, ...otherRows].sort(
+				group: pv.id === 'jucode' ? groups.jucode : groups.byok
+			}))
+		);
+	const order = [groups.jucode, groups.byok];
+	return [...activeRows, ...otherRows].sort(
 		(a, b) => order.indexOf(a.group ?? '') - order.indexOf(b.group ?? '')
 	);
 }

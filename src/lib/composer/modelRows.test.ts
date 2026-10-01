@@ -47,17 +47,6 @@ describe('buildModelRows', () => {
 			detail: 'byo'
 		});
 		expect(rows.find((r) => r.id === 'jucode::gpt-5.5')?.command).toBe('@switch jucode gpt-5.5');
-
-		// Non-jucode backends never list cross-provider @switch rows.
-		const codexRows = buildModelRows({
-			...base,
-			backendId: 'codex',
-			models: [{ model: 'gpt-5.3-codex', active: true }],
-			providersList
-		});
-		expect(codexRows.filter((r) => r.command.startsWith('/model'))).toHaveLength(1);
-		expect(codexRows.every((r) => !r.command.startsWith('@switch'))).toBe(true);
-		expect(codexRows.find((r) => r.command.startsWith('/model'))?.group).toBe('Codex');
 	});
 
 	it('lists every jucode model the user chose to show', () => {
@@ -121,46 +110,57 @@ describe('buildModelRows', () => {
 		expect(rows.map((r) => r.group)).toEqual(['JuCode', 'BYOK']);
 	});
 
-	it('offers JuCode overlay rows on claude/codex when logged in', () => {
-		const rows = buildModelRows({
-			...base,
-			backendId: 'claude',
-			provider: 'anthropic',
-			models: [{ model: 'claude-sonnet', active: true }],
-			toolMode: 'system',
-			systemLabel: 'Use system config',
-			providersList: [{ id: 'jucode', models: [{ name: 'gpt-5.5' }, { name: 'claude-opus' }] }]
-		});
-		expect(rows.find((r) => r.command === '@tool jucode gpt-5.5')).toMatchObject({
-			group: 'JuCode'
-		});
-		expect(rows.find((r) => r.command === '/model claude-sonnet')?.group).toBe('Claude');
+	// Claude Code / Codex: one list of this machine's catalog and the gateway's.
+	const claude = {
+		...base,
+		backendId: 'claude',
+		provider: 'anthropic',
+		localLabel: 'Local',
+		models: [
+			{ model: 'opus', label: 'Opus 5.5', vendor: 'claude-opus-5-5', active: true },
+			{ model: 'claude-fable-5[1m]', label: 'Fable 5 (1M)', vendor: 'claude-fable-5[1m]', active: false }
+		],
+		providersList: [{ id: 'jucode', models: [{ name: 'claude-opus-5-5', context_window: 200_000 }, { name: 'claude-fable-5-1' }] }]
+	};
+
+	it('lists a model both sides run once, and says where each runs', () => {
+		const rows = buildModelRows({ ...claude, toolMode: 'system' });
+		expect(rows.map((r) => [r.label, r.detail, r.active])).toEqual([
+			['Opus 5.5', 'Local · JuCode · 200K', true],
+			['Fable 5 (1M)', 'Local', false],
+			['Fable 5.1', 'JuCode', false]
+		]);
+		expect(rows.every((r) => r.group === undefined)).toBe(true);
 	});
 
-	it('offers a system restore row when the overlay is on', () => {
-		const rows = buildModelRows({
-			...base,
-			backendId: 'codex',
-			provider: 'openai',
-			models: [{ model: 'gpt-5.5', active: true }],
+	it('picks on the current side, and switches sides for a model only the other has', () => {
+		const local = buildModelRows({ ...claude, toolMode: 'system' });
+		expect(local.map((r) => r.command)).toEqual(['/model opus', '/model claude-fable-5[1m]', '@tool jucode claude-fable-5-1']);
+		const gateway = buildModelRows({
+			...claude,
 			toolMode: 'jucode',
-			systemLabel: 'Use system config',
-			providersList: [{ id: 'jucode', models: [{ name: 'gpt-5.5' }] }]
+			models: [{ model: 'claude-opus-5-5', active: true, listed: false }, ...claude.models.map((m) => ({ ...m, active: false }))]
 		});
-		expect(rows.find((r) => r.command === '@tool system')).toMatchObject({ group: 'System' });
-		expect(rows.find((r) => r.command === '/model gpt-5.5')?.group).toBe('JuCode');
-		expect(rows.some((r) => r.command.startsWith('@tool jucode'))).toBe(false);
+		expect(gateway.map((r) => r.command)).toEqual([
+			'/model claude-opus-5-5',
+			'@tool system claude-fable-5[1m]',
+			'/model claude-fable-5-1'
+		]);
+		expect(gateway[0].active).toBe(true);
 	});
 
-	it('hides overlay rows when JuCode is not logged in', () => {
+	it('a model the engine only marks as running is the gateway\'s while on it', () => {
 		const rows = buildModelRows({
-			...base,
-			backendId: 'claude',
-			configured: [],
-			models: [{ model: 'claude-sonnet', active: true }],
-			toolMode: 'system',
-			providersList: [{ id: 'jucode', models: [{ name: 'gpt-5.5' }] }]
+			...claude,
+			toolMode: 'jucode',
+			models: [{ model: 'glm-5.3', active: true, listed: false }, ...claude.models.map((m) => ({ ...m, active: false }))],
+			providersList: [{ id: 'jucode', models: [{ name: 'glm-5.3' }] }]
 		});
-		expect(rows.every((r) => !r.command.startsWith('@tool'))).toBe(true);
+		expect(rows.find((r) => r.active)).toMatchObject({ command: '/model glm-5.3', detail: 'JuCode' });
+	});
+
+	it('lists only this machine when not logged in to JuCode', () => {
+		const rows = buildModelRows({ ...claude, configured: [], toolMode: 'system' });
+		expect(rows.map((r) => r.command)).toEqual(['/model opus', '/model claude-fable-5[1m]']);
 	});
 });

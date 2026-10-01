@@ -36,6 +36,15 @@
 		footer?: Snippet;
 	} = $props();
 
+	// A pane that animates in with a transform would make `position: fixed`
+	// relative to the pane (the dialog showed in the chat area, then jumped to
+	// the window). The scrim lives under <body>; the wrapper stays in the tree
+	// so Svelte removes its own node, and the action takes the moved one.
+	function portal(node: HTMLElement) {
+		document.body.appendChild(node);
+		return { destroy: () => node.remove() };
+	}
+
 	function onKey(e: KeyboardEvent) {
 		if (e.key === 'Escape' && dismissible) {
 			e.stopPropagation();
@@ -44,7 +53,9 @@
 	}
 </script>
 
+<div class="modal-root">
 <div
+	use:portal
 	class="scrim {placement}"
 	role="presentation"
 	transition:scrim|global
@@ -71,8 +82,12 @@
 		{#if footer}<div class="foot">{@render footer()}</div>{/if}
 	</div>
 </div>
+</div>
 
 <style>
+	.modal-root {
+		display: contents;
+	}
 	.scrim {
 		position: fixed;
 		inset: 0;

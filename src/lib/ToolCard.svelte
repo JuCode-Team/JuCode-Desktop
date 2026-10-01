@@ -1,60 +1,32 @@
 <script lang="ts">
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
+	import { untrack } from 'svelte';
 	import { slide } from 'svelte/transition';
 	import { t } from '$lib/i18n';
 	import Notice from '$lib/ui/Notice.svelte';
+	import { parseToolOutput, toolIcon, toolTarget, toolVerb, unwrapShell } from '$lib/toolSummary';
 
 	let { name, output, running, isError }: { name: string; output: string; running: boolean; isError: boolean } =
 		$props();
 
-	let collapsed = $state(false);
-	// Auto-expand while the tool runs, auto-collapse once it finishes. Re-runs only
-	// when `running` flips, so a manual toggle on a finished card still sticks.
+	// Auto-expand while the tool runs, auto-collapse once it finishes. Starts in
+	// that state (a card remounting — windowed back in, its group reopened — must
+	// not flash open) and follows only flips of `running`, so a manual toggle on a
+	// finished card still sticks.
+	let collapsed = $state(untrack(() => !running));
+	let wasRunning = untrack(() => running);
 	$effect(() => {
+		if (running === wasRunning) return;
+		wasRunning = running;
 		collapsed = !running;
 	});
 
-	const parsed = $derived.by<Record<string, unknown> | null>(() => {
-		try {
-			const v = JSON.parse(output);
-			return v && typeof v === 'object' ? v : null;
-		} catch {
-			return null;
-		}
-	});
-
+	const parsed = $derived(parseToolOutput(output));
 	const s = (v: unknown) => (typeof v === 'string' ? v : '');
-	const base = (p: string) => p.split('/').pop() || p;
-
-	const verb = $derived(
-		(
-			{
-				read: 'Read',
-				write: 'Wrote',
-				str_replace: 'Edited',
-				hashline_edit: 'Edited',
-				apply_patch: 'Edited',
-				bash: 'Ran',
-				exec_command: 'Ran',
-				write_stdin: 'Wrote stdin',
-				ls: 'Listed',
-				ripgrep: 'Searched',
-				outline: 'Outlined'
-			} as Record<string, string>
-		)[name] ?? name
-	);
-
-	const target = $derived.by(() => {
-		const p = parsed;
-		if (!p) return '';
-		if (name === 'bash' || name === 'exec_command' || name === 'ripgrep') {
-			const cmd = s(p.command) || s(p.pattern);
-			return cmd.length > 64 ? cmd.slice(0, 64) + '…' : cmd;
-		}
-		if (typeof p.path === 'string') return base(p.path);
-		return '';
-	});
+	const verb = $derived(toolVerb(name));
+	const Icon = $derived(toolIcon(name));
+	const target = $derived(toolTarget(name, parsed));
 
 	const kind = $derived(s(parsed?.kind));
 	const errorText = $derived(s(parsed?.error));
@@ -101,7 +73,7 @@
 
 	const entries = $derived(Array.isArray(parsed?.entries) ? (parsed!.entries as string[]) : []);
 	const hasEntries = $derived(Array.isArray(parsed?.entries));
-	const command = $derived(s(parsed?.command) || s(parsed?.cmd));
+	const command = $derived(unwrapShell(s(parsed?.command) || s(parsed?.cmd)));
 	const stdout = $derived(s(parsed?.stdout));
 	const stderr = $derived(s(parsed?.stderr));
 	const content = $derived(s(parsed?.content));
@@ -145,6 +117,7 @@
 
 <div class="tool" class:err={isError || !!errorText}>
 	<button class="head" class:static={isRead} onclick={() => !isRead && (collapsed = !collapsed)}>
+		<span class="ico"><Icon size={14} /></span>
 		<span class="verb">{verb}</span>
 		{#if target}<span class="target">{target}</span>{/if}
 		{#if exitCode !== null && exitCode !== 0}
@@ -205,8 +178,9 @@
 	.head {
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
+		gap: 7px;
 		max-width: 100%;
+		min-height: 26px;
 		text-align: left;
 		padding: 2px 0;
 		font-size: var(--fs-sm);
@@ -230,6 +204,18 @@
 	}
 	.chev.open {
 		transform: rotate(90deg);
+	}
+	.ico {
+		display: inline-flex;
+		flex-shrink: 0;
+		color: var(--dim2);
+		transition: color var(--t-fast) var(--ease-out);
+	}
+	.head:hover:not(.static) .ico {
+		color: var(--text);
+	}
+	.tool.err .ico {
+		color: color-mix(in oklab, var(--err) 70%, var(--dim));
 	}
 	.verb {
 		font-weight: 500;
@@ -259,7 +245,7 @@
 		color: color-mix(in oklab, var(--err) 70%, var(--dim));
 	}
 	.body {
-		margin-top: 4px;
+		margin: 2px 0 6px 6px;
 		border-left: 2px solid var(--hairline);
 		padding-left: 12px;
 	}

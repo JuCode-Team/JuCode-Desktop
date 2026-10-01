@@ -16,7 +16,7 @@ const dock = {
 		},
 		dock: {
 			empty: '没有打开的面板',
-			hint: '选一个面板打开，或点右上角'
+			hint: '新建一个 Agent 会话，或打开工具面板'
 		},
 		mosaic: {
 			stackHere: '叠放到这里',
@@ -204,7 +204,7 @@ const dock = {
 		},
 		dock: {
 			empty: 'No open panels',
-			hint: 'Pick a panel to open, or click the top-right'
+			hint: 'Start an agent session, or open a tool panel'
 		},
 		mosaic: {
 			stackHere: 'Stack here',
