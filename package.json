@@ -6,7 +6,7 @@
   "packageManager": "pnpm@11.5.1",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
+    "build": "pnpm notices && vite build",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
@@ -14,7 +14,8 @@
     "tauri": "tauri",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:relay-interop": "node scripts/relay-interop.mjs"
+    "test:relay-interop": "node scripts/relay-interop.mjs",
+    "notices": "node scripts/third-party-notices.mjs --cargo src-tauri/Cargo.toml --pnpm . --title \"JuCode Desktop: third-party software\" --out static/third-party-notices.txt"
   },
   "license": "Apache-2.0",
   "dependencies": {

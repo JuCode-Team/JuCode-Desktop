@@ -68,6 +68,7 @@
 	import DaemonSection from './DaemonSection.svelte';
 	import McpSection from './McpSection.svelte';
 	import UpdateCard from './UpdateCard.svelte';
+	import ThirdPartyNotices from './ThirdPartyNotices.svelte';
 	import ProviderAccountCard from './ProviderAccountCard.svelte';
 	import ProviderCatalogPicker from './ProviderCatalogPicker.svelte';
 	import CustomProviderForm from './CustomProviderForm.svelte';
@@ -836,6 +837,7 @@
 					</DaemonSection>
 				{:else if current === 'updates'}
 					<UpdateCard />
+					<ThirdPartyNotices />
 				{/if}
 			</div>
 		</div>

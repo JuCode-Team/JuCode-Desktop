@@ -22,8 +22,9 @@ The beta builds are not code-signed yet, so macOS and Windows warn on first
 launch. [docs/install.md](docs/install.md) shows how to open the app and grant
 the permissions it asks for. The app updates itself after that.
 
-On first launch a setup guide checks for git and the JuCode CLI, installs what
-is missing, and signs you in to JuCode. Claude Code and Codex are optional;
+The app ships its own JuCode CLI (kept in `~/.jucode/bin`, updated with the
+app; Settings → Agents can make it a `jucode` terminal command). On first
+launch a setup guide checks for git and signs you in to JuCode. Claude Code and Codex are optional;
 the guide installs them from their official sources when you want them.
 
 ## What it does
@@ -59,11 +60,12 @@ list · `⌘,` settings (Ctrl on Windows and Linux).
   is turned on in settings ([docs/secrets.md](docs/secrets.md)).
 - Prompts and code go to the model provider of the session: the JuCode gateway,
   the provider of your own key, or the tool's own service.
-- The daemon keeps a connection to `wss://app.jucode.net/relay/v1` for remote
-  access. Conversation content is
+- With remote access turned on in settings, the daemon keeps a connection to
+  `wss://app.jucode.net/relay/v1`. Conversation content is
   end-to-end encrypted; the relay sees connection metadata only.
 - Voice input sends the recording to the configured speech-to-text service.
-- The app checks GitHub Releases for updates. It has no analytics.
+- The app checks GitHub Releases for updates, and the JuCode server when
+  GitHub is unreachable or slow. It has no analytics.
 
 ## Architecture
 
@@ -105,7 +107,10 @@ Environment variables:
 - `JUCODE_CWD`: the directory the agent works in when none is given (default:
   where the app was launched).
 
-Releases and updates: [docs/updater.md](docs/updater.md).
+Release builds bundle the JuCode CLI release named in
+`src-tauri/jucode-cli.version` (`--config src-tauri/tauri.bundle.conf.json`);
+development builds use `JUCODE_BIN` or the sibling checkout. Releases and
+updates: [docs/updater.md](docs/updater.md).
 
 ### Provider catalog
 
