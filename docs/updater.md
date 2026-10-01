@@ -62,7 +62,8 @@ tauri-action 会自动：
 
 安装包内置 JuCode CLI：Release workflow 从 JuCode-CLI 的 GitHub Release 下载
 `src-tauri/jucode-cli.version` 指定版本的二进制（`jucode-<target>`）和
-`jucode-third-party-notices.txt`，作为 sidecar 打进安装包。所以先发 CLI，再发桌面端：
+`jucode-third-party-notices.txt`，作为 sidecar `jucode-cli` 打进安装包（不能叫 `jucode`：
+macOS、Windows 文件名不区分大小写，会和应用自身的 `JuCode` 可执行文件重名）。所以先发 CLI，再发桌面端：
 
 1. JuCode-CLI：改 `Cargo.toml` 版本号，打 tag 推送，等两个 Release workflow 跑完；
 2. 把 `src-tauri/jucode-cli.version` 改成这个 CLI 版本；
@@ -76,8 +77,8 @@ tauri-action 会自动：
 ```sh
 export TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/jucode-desktop.key)"
 export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="<密码，若无则空>"
-# 内置 CLI：放一个本平台的 jucode 到 src-tauri/binaries/jucode-<target>
-cp ../JuCode-CLI/target/release/jucode src-tauri/binaries/jucode-aarch64-apple-darwin
+# 内置 CLI：放一个本平台的 jucode 到 src-tauri/binaries/jucode-cli-<target>
+cp ../JuCode-CLI/target/release/jucode src-tauri/binaries/jucode-cli-aarch64-apple-darwin
 pnpm tauri build --config src-tauri/tauri.bundle.conf.json
 ```
 

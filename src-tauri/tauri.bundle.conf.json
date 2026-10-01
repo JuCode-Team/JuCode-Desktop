@@ -1,7 +1,7 @@
 {
   "bundle": {
     "externalBin": [
-      "binaries/jucode"
+      "binaries/jucode-cli"
     ],
     "macOS": {
       "hardenedRuntime": false

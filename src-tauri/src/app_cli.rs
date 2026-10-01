@@ -34,12 +34,14 @@ pub fn managed_path() -> Option<PathBuf> {
 
 /// The sidecar inside this build, when it has one. A debug build has none:
 /// a `jucode` left in target/debug by an older build is not the app's own.
+/// It is named `jucode-cli`: a `jucode` would be the same file as the app's
+/// own `JuCode` executable on case-insensitive file systems (macOS, Windows).
 fn bundled() -> Option<PathBuf> {
     if cfg!(debug_assertions) {
         return None;
     }
     let dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
-    let path = dir.join(exe_name());
+    let path = dir.join(if cfg!(windows) { "jucode-cli.exe" } else { "jucode-cli" });
     path.is_file().then_some(path)
 }
 

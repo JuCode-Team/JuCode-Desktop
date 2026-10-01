@@ -298,7 +298,8 @@ fn stale_daemon() -> Option<(i32, String)> {
         run("ps", &["-o", "comm=", "-p", &pid.to_string()])?
     };
     let exe = PathBuf::from(exe);
-    if exe.file_name()?.to_string_lossy() != "jucode" {
+    // jucode-cli: the app's sidecar, run in place when its copy can't be written.
+    if !matches!(exe.file_name()?.to_str()?, "jucode" | "jucode-cli") {
         return None; // not a jucode daemon: leave it alone
     }
     let Ok(meta) = std::fs::metadata(&exe) else {

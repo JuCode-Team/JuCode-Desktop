@@ -61,11 +61,14 @@ jobs:
           [ -n "$version" ] || version="$(tr -d '[:space:]' < src-tauri/jucode-cli.version)"
           ext=""; [ "${{ matrix.target }}" = "x86_64-pc-windows-msvc" ] && ext=".exe"
           name="jucode-${{ matrix.target }}${ext}"
+          # Bundled as jucode-cli: on macOS and Windows a jucode would collide
+          # with the app's own JuCode executable.
+          bin="src-tauri/binaries/jucode-cli-${{ matrix.target }}${ext}"
           mkdir -p src-tauri/binaries
-          curl -fsSL --retry 3 -o "src-tauri/binaries/${name}" \
+          curl -fsSL --retry 3 -o "$bin" \
             "https://github.com/JuCode-Team/JuCode-CLI/releases/download/v${version}/${name}"
-          chmod +x "src-tauri/binaries/${name}"
-          reported="$("src-tauri/binaries/${name}" --version | awk '{print $NF}' | tr -d '\r')"
+          chmod +x "$bin"
+          reported="$("$bin" --version | awk '{print $NF}' | tr -d '\r')"
           [ "$reported" = "$version" ] || { echo "::error::bundled jucode reports $reported, expected $version"; exit 1; }
           curl -fsSL --retry 3 -o static/jucode-cli-third-party-notices.txt \
             "https://github.com/JuCode-Team/JuCode-CLI/releases/download/v${version}/jucode-third-party-notices.txt" \
