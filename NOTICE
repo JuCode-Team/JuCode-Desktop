@@ -3,3 +3,7 @@ Copyright 2026 Jucode Innovations INC.
 
 src/lib/providers/catalog.json is derived from models.dev, used under the MIT
 License; see src/lib/providers/models.dev.LICENSE.
+
+Model and vendor logos come from @lobehub/icons (MIT License). Product names
+and logos are trademarks of their respective owners and are used only to
+identify their products; their use implies no affiliation or endorsement.

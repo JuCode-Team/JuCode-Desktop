@@ -14,6 +14,7 @@
 	import ListIcon from 'phosphor-svelte/lib/ListIcon';
 	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
 	import SignOutIcon from 'phosphor-svelte/lib/SignOutIcon';
+	import ScrollIcon from 'phosphor-svelte/lib/ScrollIcon';
 	import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon';
 	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
 	import ChatsCircleIcon from 'phosphor-svelte/lib/ChatsCircleIcon';
@@ -369,10 +370,14 @@
 				: t('shell.remote.disconnected')
 	);
 	let connMenu = $state(false);
+	// The licenses of the code this page ships (written at build time by
+	// scripts/third-party-notices.mjs).
+	const LICENSES_URL = '/third-party-notices.txt';
 	function connAction(key: string) {
 		connMenu = false;
 		if (key === 'forget') forget();
 		else if (key === 'repair') repair();
+		else if (key === 'licenses') window.open(LICENSES_URL, '_blank', 'noopener');
 	}
 
 	/** The session on top of the pages, highlighted in the list. */
@@ -419,9 +424,12 @@
 			<PopMenu
 				title={relayStatus.text}
 				placement="down-right"
-				items={mode === 'relay'
-					? [{ key: 'forget', label: t('shell.remote.forget'), icon: SignOutIcon, tone: 'warn' }]
-					: [{ key: 'repair', label: t('shell.remote.repair'), icon: ArrowClockwiseIcon, tone: 'warn' }]}
+				items={[
+					mode === 'relay'
+						? { key: 'forget', label: t('shell.remote.forget'), icon: SignOutIcon, tone: 'warn' }
+						: { key: 'repair', label: t('shell.remote.repair'), icon: ArrowClockwiseIcon, tone: 'warn' },
+					{ key: 'licenses', label: t('shell.remote.licenses'), icon: ScrollIcon }
+				]}
 				onSelect={connAction}
 				onClose={() => (connMenu = false)}
 			/>
@@ -463,6 +471,7 @@
 			<h1>{t('shell.remote.scanTitle')}</h1>
 			<p>{t('shell.remote.scanHint')}</p>
 			{@render linkEntry()}
+			<a class="licenses" href={LICENSES_URL} target="_blank" rel="noopener">{t('shell.remote.licenses')}</a>
 		</div>
 	{:else if mode === 'relay' && relayError?.fatal}
 		<div class="pair">
@@ -784,6 +793,11 @@
 		font-weight: 600;
 	}
 	/* Pairing, connecting and error screens: one centered column. */
+	.licenses {
+		margin-top: 24px;
+		color: var(--dim2);
+		font-size: var(--fs-xs);
+	}
 	.pair {
 		display: flex;
 		flex-direction: column;

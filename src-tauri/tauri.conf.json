@@ -57,7 +57,8 @@
     "active": true,
     "targets": "all",
     "createUpdaterArtifacts": true,
-    "publisher": "JuCode",
+    "publisher": "Jucode Innovations INC.",
+    "license": "Apache-2.0",
     "copyright": "Copyright © 2026 Jucode Innovations INC. Licensed under the Apache License 2.0.",
     "icon": [
       "icons/32x32.png",

@@ -103,7 +103,9 @@ export const LEGAL: Record<LegalDocId, Record<'zh' | 'en', LegalText>> = {
 				{
 					heading: '通过 JuCode 网关的请求',
 					body: [
-						'使用 JuCode 托管的模型时，请求内容经我们的服务器转发给相应的模型服务商处理。我们记录每次调用的模型、用量、费用和时间，用于计费和账单查询，账号存续期间保留。'
+						'使用 JuCode 托管的模型时，请求内容经我们的服务器转发给相应的模型服务商处理。',
+						'为排查故障、处理争议和满足合规要求，请求内容会加密存档，一般保留 14 天后删除；因违反使用规则被拦截的请求，相关记录保留时间更长。',
+						'每次调用的模型、用量、费用和时间用于计费和账单查询，在账号存续期间保留。'
 					]
 				},
 				{
@@ -142,7 +144,9 @@ export const LEGAL: Record<LegalDocId, Record<'zh' | 'en', LegalText>> = {
 				{
 					heading: 'Requests through the JuCode gateway',
 					body: [
-						'When you use JuCode-hosted models, your requests pass through our servers to the corresponding model provider. We record the model, usage, cost and time of each call for billing and your usage history, and keep these records while your account exists.'
+						'When you use JuCode-hosted models, your requests pass through our servers to the corresponding model provider.',
+						'To troubleshoot, resolve disputes and meet legal obligations, request content is archived encrypted and normally deleted after 14 days; records of requests blocked for breaking our usage rules are kept longer.',
+						'The model, usage, cost and time of each call are kept while your account exists, for billing and your usage history.'
 					]
 				},
 				{
