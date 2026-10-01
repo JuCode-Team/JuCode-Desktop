@@ -345,8 +345,9 @@ const settings = {
 			installed: '已安装',
 			installDir: '安装到 {path}',
 			sourceAvailable: '仅源码可见 · 不可再分发',
+			notOffered: '不提供安装',
 			licenseNotice:
-				'Anthropic 的 docx、pdf、pptx 与 xlsx 技能仅源码可见且不可再分发。Claude Code 不提供 API 的预置文档技能；此处安装的是仓库中的自定义技能副本，并受 Anthropic 条款约束。'
+				'Anthropic 的 docx、pdf、pptx 与 xlsx 技能仅源码可见且不可再分发，JuCode 不提供安装，可在 Anthropic 的仓库查看。'
 		},
 		overview: {
 			dailyHint: '聚合所有 Provider，统计本机会话消耗，随使用逐日累计。',
@@ -715,8 +716,9 @@ const settings = {
 			installed: 'Installed',
 			installDir: 'Installing to {path}',
 			sourceAvailable: 'Source-available · redistribution prohibited',
+			notOffered: 'Not offered',
 			licenseNotice:
-				'Anthropic’s docx, pdf, pptx, and xlsx skills are source-available and not for redistribution. Claude Code does not include the API’s preset document skills; installs here are custom repository copies governed by Anthropic’s terms.'
+				'Anthropic’s docx, pdf, pptx, and xlsx skills are source-available and not for redistribution; JuCode does not install them. See them in Anthropic’s repository.'
 		},
 		overview: {
 			dailyHint: 'Aggregated across all providers from local session usage, accumulated day by day.',

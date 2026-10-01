@@ -135,10 +135,10 @@
 									<Button
 										variant={s.installed ? 'secondary' : 'primary'}
 										size="sm"
-										disabled={s.installed || installing[`${s.source}:${s.id}`]}
+										disabled={s.installed || !s.redistributable || installing[`${s.source}:${s.id}`]}
 										onclick={() => install(s)}
 									>
-										{#if installing[`${s.source}:${s.id}`]}<CircleNotchIcon size={14} class="spin" /> {t('settings.marketplace.installing')}{:else if s.installed}<CheckIcon size={14} /> {t('settings.marketplace.installed')}{:else}<DownloadSimpleIcon size={14} /> {t('settings.marketplace.install')}{/if}
+										{#if !s.redistributable && !s.installed}{t('settings.marketplace.notOffered')}{:else if installing[`${s.source}:${s.id}`]}<CircleNotchIcon size={14} class="spin" /> {t('settings.marketplace.installing')}{:else if s.installed}<CheckIcon size={14} /> {t('settings.marketplace.installed')}{:else}<DownloadSimpleIcon size={14} /> {t('settings.marketplace.install')}{/if}
 									</Button>
 								</div>
 							</div>
