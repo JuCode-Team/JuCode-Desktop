@@ -53,7 +53,7 @@ tauri-action 会自动：
   GitHub 同步（后台「版本发布」也可手动同步），签名与 GitHub 上的完全相同；
 - 从 GitHub 下载中途失败时，再从镜像重试一次。
 
-应用启动约 5 秒后会自动检查，
+启动约 5 秒后检查一次，之后每 10 分钟检查一次。
 发现更新后自动下载并安装到待应用状态；为了避免中断未保存工作，应用不会自动退出，
 用户可在设置 → 概览 →「应用更新」中点击「重启并安装」完成切换。手动点击「检查更新」
 仍只检查版本，不会自动下载。
@@ -90,3 +90,34 @@ pnpm tauri build --config src-tauri/tauri.bundle.conf.json
   与首次安装的限制一致。
 - 更新界面入口：设置 → 概览 →「应用更新」，另有启动约 5 秒后的静默后台检查，
   发现新版本时侧栏设置入口会显示小圆点。
+
+## 强制更新
+
+后台「版本发布」页可以把某个版本设为强制更新。客户端每次检查时读取
+`{jucode_api_url}/v1/public/releases/desktop/policy` 的 `min_version`：当前版本低于它，
+就自动下载更新，并弹出不能关闭的对话框，装好后只能重启。服务器连不上时不强制
+（不会因为网络问题把应用锁住）。
+
+## 更新提示与后台服务
+
+- 更新装好后弹窗提示「已就绪」，可以「稍后」；下次启动自动生效。会话在后台服务里，
+  重启应用不会中断任务。
+- 新版应用自带新版 CLI。连上后台服务时比较版本：不同就请它在没有任务运行时退出，
+  应用随后启动新版（`restart_when_idle`）；旧到不支持这个请求的后台服务直接结束进程
+  （macOS、Linux、Windows 都适用）。
+
+## macOS 签名（固定自签名证书）
+
+macOS 包用一张固定的自签名证书签名（未公证，首次打开仍需在「隐私与安全性」里放行）。
+签名身份固定后，系统记住的麦克风、录屏等授权在更新后仍然有效；ad-hoc 签名每次构建都不同，
+每次更新都要重新授权。
+
+- 证书：`JuCode Self-Signed`，有效期到 2036 年，公钥证书在 `src-tauri/macos-signing-cert.pem`。
+- 私钥与 p12：维护者本机 `~/.tauri/macos-signing/`（`jucode-macos-signing.p12`、
+  `p12-password.txt`），**务必备份**。丢失后换新证书，用户需要重新授权一次。
+- CI secret：`APPLE_CERTIFICATE`（p12 的 base64）、`APPLE_CERTIFICATE_PASSWORD`。
+  Release workflow 在 macOS 上把它导入临时钥匙串并设为代码签名可信，再由 tauri-action 签名
+  （`APPLE_SIGNING_IDENTITY`）。不开 hardened runtime（不做公证就不需要，也免去麦克风等
+  entitlement 配置）。
+- 手动运行 Release workflow 只构建 macOS 包，不发布，用来检查签名：
+  `codesign -d -r- JuCode.app` 应显示 `certificate leaf = H"..."`，而不是 `cdhash`。

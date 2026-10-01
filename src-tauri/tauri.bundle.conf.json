@@ -1,5 +1,10 @@
 {
   "bundle": {
-    "externalBin": ["binaries/jucode"]
+    "externalBin": [
+      "binaries/jucode"
+    ],
+    "macOS": {
+      "hardenedRuntime": false
+    }
   }
 }
