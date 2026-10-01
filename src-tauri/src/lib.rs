@@ -505,7 +505,7 @@ fn write_auth(auth: &mut serde_json::Value) -> Result<(), String> {
 }
 
 /// The native frost under the main window, set once at startup: `vibrancy`
-/// (macOS), `mica` or `acrylic` (Windows); unset where none applied.
+/// (macOS); unset where none applied.
 static WINDOW_EFFECT: std::sync::OnceLock<&'static str> = std::sync::OnceLock::new();
 
 /// Which native frost the window has, if any (the frontend's translucent
@@ -2999,8 +2999,8 @@ pub fn run() {
             shell_env::init_async();
             // Claude Code / Codex files an earlier version overwrote go back.
             tool_switch::restore_leftovers();
-            // 给主窗口铺一层原生磨砂：macOS 的 NSVisualEffectView，Windows 11 的 Mica
-            //（Windows 10 退回 Acrylic）。前端把主区域画成不透明、只让侧栏和窗框半透明，
+            // 给主窗口铺一层原生磨砂（macOS 的 NSVisualEffectView，Windows 不做，见 Cargo.toml）。
+            // 前端把主区域画成不透明、只让侧栏和窗框半透明，
             // 于是磨砂只在那里透出（见 app.css 的 [data-vibrancy]）。前端按 window_effect
             // 的结果决定是否半透明：没铺上时窗口是透明的，半透明会直接透出桌面。
             #[cfg(target_os = "macos")]
@@ -3017,15 +3017,6 @@ pub fn run() {
                 .is_ok()
                 {
                     let _ = WINDOW_EFFECT.set("vibrancy");
-                }
-            }
-            #[cfg(target_os = "windows")]
-            if let Some(win) = app.get_webview_window("main") {
-                // None: follows the window's light / dark appearance (theme.svelte.ts).
-                if window_vibrancy::apply_mica(&win, None).is_ok() {
-                    let _ = WINDOW_EFFECT.set("mica");
-                } else if window_vibrancy::apply_acrylic(&win, None).is_ok() {
-                    let _ = WINDOW_EFFECT.set("acrylic");
                 }
             }
             #[cfg(desktop)]
