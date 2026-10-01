@@ -1,12 +1,13 @@
 <script lang="ts">
 	// The desk's content: questions and pending actions waiting for the user,
-	// which agents are working, and their reports. Everything comes from the
+	// which agents are working, the next scheduled runs, and their reports. Everything comes from the
 	// jucode daemon through agentDirectory. Shown in the desktop's desk sheet
 	// and on the remote page.
 	import QuestionIcon from 'phosphor-svelte/lib/QuestionIcon';
 	import ShieldCheckIcon from 'phosphor-svelte/lib/ShieldCheckIcon';
 	import FileTextIcon from 'phosphor-svelte/lib/FileTextIcon';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
+	import ClockIcon from 'phosphor-svelte/lib/ClockIcon';
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import {
@@ -30,6 +31,12 @@
 	let expanded = $state<Record<string, boolean>>({});
 
 	const working = $derived(agentDirectory.agents.filter((a) => a.busy));
+	const upcoming = $derived(
+		agentDirectory.schedules
+			.filter((s) => s.enabled && s.next_run_at)
+			.sort((a, b) => a.next_run_at! - b.next_run_at!)
+			.slice(0, 3)
+	);
 
 	function when(ms: number): string {
 		return new Date(ms).toLocaleString(undefined, {
@@ -147,6 +154,14 @@
 		<div class="working">
 			{#each working as agent (agent.id)}
 				<span class="chip"><CircleNotchIcon size={14} class="spin" />{agent.name}</span>
+			{/each}
+		</div>
+	{/if}
+	{#if upcoming.length}
+		<div class="upcoming">
+			<span>{t('shell.schedule.upcoming')}</span>
+			{#each upcoming as s (s.id)}
+				<span class="chip"><ClockIcon size={14} />{when(s.next_run_at! * 1000)} {agentDirectory.agentName(s.agent)} · {s.name}</span>
 			{/each}
 		</div>
 	{/if}
@@ -301,6 +316,15 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 6px;
+	}
+	.upcoming {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px;
+		margin-top: 8px;
+		font-size: var(--fs-xs);
+		color: var(--dim);
 	}
 	.chip {
 		display: inline-flex;

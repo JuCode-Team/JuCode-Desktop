@@ -1,8 +1,8 @@
 // The long-lived agents hosted by the local `jucode daemon`, kept current
-// from its `agents` / `sessions` broadcasts. Only active while the
-// background service setting is on.
+// from its `agents` / `sessions` / `schedules` broadcasts.
 
 import { daemon } from './protocol';
+import { toWire, upsert, type Schedule, type ScheduleDraft } from './schedules';
 
 export interface AgentView {
 	id: string;
@@ -21,13 +21,14 @@ export interface AgentView {
 	command_rules: { prefix: string; action: 'allow' | 'ask' | 'forbid' }[];
 }
 
-/** Settings `agent_update` accepts; omitted fields stay as they are. */
+/** Settings `agent_update` accepts; omitted fields stay as they are.
+ *  `role` rewrites its role.md. */
 export type AgentChanges = Partial<
 	Pick<
 		AgentView,
 		'name' | 'enabled' | 'approval_mode' | 'sandbox' | 'network' | 'directories' | 'command_rules'
 	>
->;
+> & { role?: string };
 
 export interface DaemonSessionView {
 	session: string;
@@ -88,6 +89,16 @@ export interface AgentDetail {
 	sessions: DaemonSessionView[];
 }
 
+/** A reminder the agent set itself with its `timer` tool. */
+export interface TimerView {
+	timer: string;
+	agent: string;
+	session: string;
+	/** ms */
+	fire_at: number;
+	body: string;
+}
+
 export interface NewAgent {
 	id: string;
 	name: string;
@@ -108,6 +119,7 @@ export class AgentDirectory {
 	questions = $state<QuestionView[]>([]);
 	actions = $state<ActionView[]>([]);
 	reports = $state<ReportView[]>([]);
+	schedules = $state<Schedule[]>([]);
 	/** Items waiting for the user: open questions and pending actions. */
 	pending = $derived(this.questions.length + this.actions.length);
 	/** `off` until started; `unreachable` while the daemon cannot be reached. */
@@ -117,6 +129,11 @@ export class AgentDirectory {
 	#keepalive: ReturnType<typeof setInterval> | null = null;
 	#delay = RETRY_MIN_MS;
 	#nextAttempt = 0;
+	/** Lists received at least once: later items in them are new arrivals. */
+	#seen = new Set<string>();
+	/** Called for a new question, pending action or report (the desktop shows
+	 *  an OS notification while it is in the background). */
+	onArrival: ((kind: 'question' | 'action' | 'report', agent: string, text: string) => void) | null = null;
 
 	/** Connects now and keeps reconnecting, with backoff, while the daemon is
 	 *  unreachable. */
@@ -152,12 +169,32 @@ export class AgentDirectory {
 		} else if (frame.type === 'message_delivered') {
 			void this.refreshSessions();
 		} else if (frame.type === 'questions' && Array.isArray(frame.questions)) {
-			this.questions = frame.questions as QuestionView[];
+			const list = frame.questions as QuestionView[];
+			for (const q of this.#arrived('questions', this.questions, list))
+				this.onArrival?.('question', this.agentName(q.agent), q.title);
+			this.questions = list;
 		} else if (frame.type === 'actions' && Array.isArray(frame.actions)) {
-			this.actions = frame.actions as ActionView[];
+			const list = frame.actions as ActionView[];
+			for (const a of this.#arrived('actions', this.actions, list))
+				this.onArrival?.('action', this.agentOfSession(a.session_id)?.name ?? a.cwd, a.summary || a.name);
+			this.actions = list;
 		} else if (frame.type === 'report_posted' && frame.report) {
-			this.reports = [frame.report as ReportView, ...this.reports];
+			const report = frame.report as ReportView;
+			this.reports = [report, ...this.reports];
+			this.onArrival?.('report', this.agentName(report.agent), report.title);
+		} else if (frame.type === 'schedules' && Array.isArray(frame.schedules)) {
+			this.schedules = frame.schedules as Schedule[];
 		}
+	}
+
+	/** Items of `next` not in `prev`; none for the first list of a kind (what
+	 *  was already waiting at connect is not new). */
+	#arrived<T extends { id: string }>(kind: string, prev: T[], next: T[]): T[] {
+		if (!this.#seen.has(kind)) {
+			this.#seen.add(kind);
+			return [];
+		}
+		return next.filter((item) => !prev.some((p) => p.id === item.id));
 	}
 
 	agentName(id: string): string {
@@ -206,6 +243,58 @@ export class AgentDirectory {
 		return reply.agent as AgentView;
 	}
 
+	/** Refused while the agent is working. Its sessions stay; its schedules go. */
+	async remove(agent: string) {
+		await daemon.request({ op: 'agent_delete', agent });
+		this.agents = this.agents.filter((a) => a.id !== agent);
+		this.schedules = this.schedules.filter((s) => s.agent !== agent);
+	}
+
+	async readMemory(agent: string, file: string): Promise<string> {
+		const reply = await daemon.request({ op: 'agent_memory_read', agent, file });
+		return String(reply.content ?? '');
+	}
+
+	/** The daemon delivers it to the agent's latest session or starts one. */
+	async message(agent: string, body: string) {
+		await daemon.request({ op: 'message_send', agent, body });
+	}
+
+	/** The agent's own pending reminders, soonest first. */
+	async timers(agent: string): Promise<TimerView[]> {
+		const reply = await daemon.request({ op: 'timer_list', agent });
+		return ((reply.timers ?? []) as TimerView[])
+			.filter((timer) => timer.agent === agent)
+			.sort((a, b) => a.fire_at - b.fire_at);
+	}
+
+	async loadSchedules() {
+		const reply = await daemon.request({ op: 'schedule_list' });
+		if (Array.isArray(reply.schedules)) this.schedules = reply.schedules as Schedule[];
+	}
+
+	async saveSchedule(draft: ScheduleDraft): Promise<Schedule> {
+		const reply = await daemon.request({ op: 'schedule_save', schedule: toWire(draft) });
+		const saved = reply.schedule as Schedule;
+		this.schedules = upsert(this.schedules, saved);
+		return saved;
+	}
+
+	async setScheduleEnabled(id: string, enabled: boolean) {
+		const reply = await daemon.request({ op: 'schedule_save', schedule: { id, enabled } });
+		this.schedules = upsert(this.schedules, reply.schedule as Schedule);
+	}
+
+	// The schedule's id travels as `schedule`: `id` is the request id.
+	async deleteSchedule(id: string) {
+		await daemon.request({ op: 'schedule_delete', schedule: id });
+		this.schedules = this.schedules.filter((s) => s.id !== id);
+	}
+
+	async runSchedule(id: string) {
+		await daemon.request({ op: 'schedule_run', schedule: id });
+	}
+
 	disconnected() {
 		if (this.status !== 'off') this.status = 'unreachable';
 	}
@@ -250,6 +339,8 @@ export class AgentDirectory {
 			this.#delay = RETRY_MIN_MS;
 			this.#nextAttempt = 0;
 			await this.loadReports();
+			// An older daemon has no schedules.
+			this.loadSchedules().catch(() => {});
 		} catch (e) {
 			// Stopped while connecting: stay off.
 			if (!this.#retry) return;

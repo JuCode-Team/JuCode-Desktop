@@ -243,6 +243,11 @@ export class ChatState {
 	// with this value and clear it. Re-armed on every engine `startup` event, so
 	// crash auto-restarts / provider switches re-push the mode too.
 	pendingModeSync = $state<EngineApprovalMode | null>(null);
+	// The long-lived agent this session belongs to (empty for other sessions).
+	// It runs in the agent's approval mode, set on the Agent page: the startup
+	// sync never pushes the desktop's mode over it, and its mode is not
+	// persisted as the desktop's.
+	agent = $state('');
 	// Whether this engine incarnation's startup approval_mode was processed;
 	// later approval_mode events are engine-driven changes (e.g. /approvals).
 	#modeSynced = false;
@@ -625,6 +630,10 @@ export class ChatState {
 				break;
 			case 'approval_mode': {
 				const engineMode = str(ev.mode);
+				if (this.agent) {
+					this.approvalMode = reconcileMode(this.approvalMode, engineMode);
+					break;
+				}
 				if (!this.#modeSynced) {
 					// Startup announcement: the desktop's persisted mode wins — ask the
 					// page to push it if the engine (default read-only) differs.

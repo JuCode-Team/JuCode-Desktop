@@ -120,15 +120,22 @@
 
 	let providers = $state<string[]>([]);
 
-	async function notifyDone(title: string) {
+	async function notify(title: string, body: string) {
 		try {
 			let granted = await isPermissionGranted();
 			if (!granted) granted = (await requestPermission()) === 'granted';
-			if (granted) sendNotification({ title: 'JuCode', body: t('shell.notifyDone', { title: title || t('shell.untitled') }) });
+			if (granted) sendNotification({ title, body });
 		} catch {
 			/* ignore */
 		}
 	}
+	const notifyDone = (title: string) =>
+		notify('JuCode', t('shell.notifyDone', { title: title || t('shell.untitled') }));
+	// An agent's question, pending action or report while the window is in
+	// the background.
+	agentDirectory.onArrival = (kind, agent, text) => {
+		if (!document.hasFocus()) void notify(agent, t(`shell.notify.${kind}`, { text }));
+	};
 	let showSettings = $state(false);
 	let settingsSection = $state<SectionKey>('general');
 	function openSettings(section: SectionKey = 'general') {
@@ -519,6 +526,15 @@
 		void workspaces.activeId;
 		if (!store.loaded || wsBusy) return;
 		untrack(() => sync.reconcile(list));
+	});
+	// Tabs of an agent's sessions (restored ones too) keep the agent's
+	// approval mode: see ChatState.agent.
+	$effect(() => {
+		for (const s of store.allSessions) {
+			if (s.chat.agent || !s.chat.sessionId) continue;
+			const agent = agentDirectory.sessions.find((d) => d.session === s.chat.sessionId)?.agent;
+			if (agent) s.chat.agent = agent;
+		}
 	});
 	// A session listed from the daemon opens when it is first shown.
 	$effect(() => {
@@ -1028,7 +1044,11 @@
 				onHistory={(p) => store.openHistory(p)}
 				agents={agentDirectory.agents}
 				agentsStatus={agentDirectory.status}
-				onOpenAgent={(a) => store.openAgentSession(a, agentDirectory.latestSession(a.id)?.session)}
+				onOpenAgent={(a) =>
+					// The daemon refuses a disabled agent's sessions: show its page to enable it.
+					a.enabled
+						? store.openAgentSession(a, agentDirectory.latestSession(a.id)?.session)
+						: (agentPageFor = a.id)}
 				onNewAgent={() => (showAgentDialog = true)}
 				onAgentPage={(a) => (agentPageFor = a.id)}
 				pendingCount={agentDirectory.pending}

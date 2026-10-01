@@ -1,11 +1,14 @@
 <script lang="ts">
-	// One long-lived agent: its settings, brief, memory and sessions.
+	// One long-lived agent: its settings, scheduled tasks, brief, memory and
+	// sessions.
 	import { onMount } from 'svelte';
 	import XIcon from 'phosphor-svelte/lib/XIcon';
 	import RobotIcon from 'phosphor-svelte/lib/RobotIcon';
 	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import FolderPlusIcon from 'phosphor-svelte/lib/FolderPlusIcon';
+	import PaperPlaneRightIcon from 'phosphor-svelte/lib/PaperPlaneRightIcon';
+	import TrashIcon from 'phosphor-svelte/lib/TrashIcon';
 	import { open } from '@tauri-apps/plugin-dialog';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -13,7 +16,15 @@
 	import Switch from '$lib/ui/Switch.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
-	import { agentDirectory, type AgentChanges, type AgentDetail, type AgentView } from '$lib/agents.svelte';
+	import { confirm } from '$lib/ui/confirm.svelte';
+	import AgentSchedules from '$lib/AgentSchedules.svelte';
+	import {
+		agentDirectory,
+		type AgentChanges,
+		type AgentDetail,
+		type AgentView,
+		type TimerView
+	} from '$lib/agents.svelte';
 	import { t } from '$lib/i18n';
 
 	let {
@@ -31,11 +42,26 @@
 	let detail = $state<AgentDetail | null>(null);
 	let error = $state('');
 
-	const MODES = ['manual', 'auto-edit', 'auto', 'full-access'];
+	// The agent's modes under the labels the composer uses for the same ones.
+	const MODES = $derived(
+		(
+			[
+				['manual', 'Ask'],
+				['auto-edit', 'Edits'],
+				['auto', 'Auto'],
+				['full-access', 'All']
+			] as const
+		).map(([value, key]) => ({
+			value,
+			label: t(`chat.approval${key}`),
+			desc: t(`chat.approval${key}Desc`)
+		}))
+	);
 	const sessions = $derived(
 		[...(detail?.sessions ?? [])].sort((a, b) => b.created_at - a.created_at)
 	);
 
+	let timers = $state<TimerView[]>([]);
 	async function load() {
 		try {
 			detail = await agentDirectory.detail(agentId);
@@ -44,7 +70,10 @@
 			error = e instanceof Error ? e.message : String(e);
 		}
 	}
-	onMount(load);
+	onMount(() => {
+		void load();
+		agentDirectory.timers(agentId).then((list) => (timers = list), () => {});
+	});
 
 	async function change(changes: AgentChanges) {
 		if (!detail) return;
@@ -92,6 +121,74 @@
 	function when(ms: number): string {
 		return new Date(ms).toLocaleString();
 	}
+
+	function rename(e: Event & { currentTarget: HTMLInputElement }) {
+		const name = e.currentTarget.value.trim();
+		if (name && name !== detail?.agent.name) void change({ name });
+		else e.currentTarget.value = detail?.agent.name ?? '';
+	}
+
+	// role.md is the user's to edit; the other brief files are the agent's.
+	let role = $state<string | null>(null);
+	async function saveRole() {
+		if (!detail || role === null) return;
+		const text = role.trim();
+		error = '';
+		await change({ role: text });
+		if (!error) {
+			detail.brief['role.md'] = text;
+			role = null;
+		}
+	}
+
+	let memoryOpen = $state('');
+	/** null while it loads. */
+	let memoryText = $state<string | null>(null);
+	async function showMemory(file: string) {
+		if (memoryOpen === file) return void (memoryOpen = '');
+		memoryOpen = file;
+		memoryText = null;
+		try {
+			memoryText = await agentDirectory.readMemory(agentId, file);
+		} catch (e) {
+			memoryText = e instanceof Error ? e.message : String(e);
+		}
+	}
+
+	let messageText = $state('');
+	let messageState = $state<'' | 'sending' | 'sent'>('');
+	let messageError = $state('');
+	async function sendMessage() {
+		const body = messageText.trim();
+		if (!body || messageState === 'sending') return;
+		messageState = 'sending';
+		messageError = '';
+		try {
+			await agentDirectory.message(agentId, body);
+			messageText = '';
+			messageState = 'sent';
+		} catch (e) {
+			messageError = e instanceof Error ? e.message : String(e);
+			messageState = '';
+		}
+	}
+
+	let deleteError = $state('');
+	async function deleteAgent() {
+		const ok = await confirm({
+			title: t('shell.agentPage.deleteTitle', { name: detail?.agent.name ?? agentId }),
+			message: t('shell.agentPage.deleteHint'),
+			confirmLabel: t('shell.agentPage.deleteAgent'),
+			danger: true
+		});
+		if (!ok) return;
+		try {
+			await agentDirectory.remove(agentId);
+			onClose();
+		} catch (e) {
+			deleteError = e instanceof Error ? e.message : String(e);
+		}
+	}
 </script>
 
 <Modal label={agentId} width={720} padded={false} {onClose}>
@@ -101,7 +198,7 @@
 				<h2><RobotIcon size={18} /> {detail?.agent.name ?? agentId}</h2>
 				<p><code>{agentId}</code>{#if detail} · <code>{detail.agent.cwd}</code>{/if}</p>
 			</div>
-			<IconButton onclick={onClose} label="close"><XIcon size={18} /></IconButton>
+			<IconButton onclick={onClose} label={t('common.close')}><XIcon size={18} /></IconButton>
 		</div>
 
 		<div class="body">
@@ -109,8 +206,13 @@
 			{#if !detail}
 				{#if !error}<div class="loading"><CircleNotchIcon size={18} class="spin" /></div>{/if}
 			{:else}
+				{#if !detail.agent.enabled}<div class="err"><Notice tone="warn">{t('shell.agentPage.stopped')}</Notice></div>{/if}
 				<section>
 					<h3>{t('shell.agentPage.settings')}</h3>
+					<div class="row">
+						<span>{t('shell.agentPage.name')}</span>
+						<input class="name" value={detail.agent.name} onchange={rename} />
+					</div>
 					<div class="row">
 						<span>{t('shell.agentPage.enabled')}</span>
 						<Switch
@@ -121,13 +223,49 @@
 					</div>
 					<div class="row">
 						<span>{t('shell.agentPage.approvalMode')}</span>
-						<Select
-							value={detail.agent.approval_mode}
-							options={MODES.map((m) => ({ value: m, label: m }))}
-							onChange={(approval_mode) => change({ approval_mode })}
-						/>
+						<div class="pick">
+							<Select
+								value={detail.agent.approval_mode}
+								options={MODES}
+								onChange={(approval_mode) => change({ approval_mode })}
+							/>
+						</div>
 					</div>
+					<p class="hint">{MODES.find((m) => m.value === detail!.agent.approval_mode)?.desc ?? ''}</p>
 				</section>
+
+				<section>
+					<h3>{t('shell.agentPage.message')}</h3>
+					<p class="hint">{t('shell.agentPage.messageHint')}</p>
+					<div class="item">
+						<input
+							class="grow msg"
+							bind:value={messageText}
+							placeholder={t('shell.agentPage.messagePlaceholder')}
+							oninput={() => (messageState = '')}
+							onkeydown={(e) => e.key === 'Enter' && !e.isComposing && (e.preventDefault(), sendMessage())}
+						/>
+						<Button size="sm" disabled={!messageText.trim() || messageState === 'sending'} onclick={sendMessage}>
+							{#if messageState === 'sending'}<CircleNotchIcon size={13} class="spin" />{:else}<PaperPlaneRightIcon size={13} />{/if}
+							{messageState === 'sent' ? t('shell.agentPage.sent') : t('shell.agentPage.send')}
+						</Button>
+					</div>
+					{#if messageError}<Notice>{messageError}</Notice>{/if}
+				</section>
+
+				<AgentSchedules {agentId} {onOpenSession} />
+
+				{#if timers.length}
+					<section>
+						<h3>{t('shell.agentPage.timers')}</h3>
+						{#each timers as timer (timer.timer)}
+							<div class="timer">
+								<span class="when">{when(timer.fire_at)}</span>
+								<span class="timer-body">{timer.body}</span>
+							</div>
+						{/each}
+					</section>
+				{/if}
 
 				<section>
 					<h3>{t('shell.agentPage.sandbox')}</h3>
@@ -216,7 +354,7 @@
 				<section>
 					<div class="section-head">
 						<h3>{t('shell.agentPage.sessions')}</h3>
-						<Button size="sm" onclick={onNewSession}><PlusIcon size={13} /> {t('shell.agentPage.newSession')}</Button>
+						<Button size="sm" disabled={!detail.agent.enabled} onclick={onNewSession}><PlusIcon size={13} /> {t('shell.agentPage.newSession')}</Button>
 					</div>
 					{#if sessions.length === 0}
 						<p class="empty">{t('shell.agentPage.noSessions')}</p>
@@ -232,12 +370,28 @@
 
 				<section>
 					<h3>{t('shell.agentPage.brief')}</h3>
+					<p class="hint">{t('shell.agentPage.roleHint')}</p>
 					{#each Object.entries(detail.brief) as [file, text] (file)}
 						<div class="file">
-							<div class="file-name">{file}</div>
-							<div class="file-text" class:none={!text.trim()}>
-								{text.trim() || t('shell.agentPage.empty')}
+							<div class="file-name">
+								{file}
+								{#if file === 'role.md' && role === null}
+									<button class="link" onclick={() => (role = text)}>{t('shell.agentPage.edit')}</button>
+								{/if}
 							</div>
+							{#if file === 'role.md' && role !== null}
+								<textarea class="file-text" rows="6" bind:value={role}></textarea>
+								<div class="file-actions">
+									<Button size="sm" onclick={() => (role = null)}>{t('common.cancel')}</Button>
+									<Button size="sm" variant="primary" disabled={!role.trim()} onclick={saveRole}>
+										{t('shell.agentPage.save')}
+									</Button>
+								</div>
+							{:else}
+								<div class="file-text" class:none={!text.trim()}>
+									{text.trim() || t('shell.agentPage.empty')}
+								</div>
+							{/if}
 						</div>
 					{/each}
 				</section>
@@ -247,10 +401,31 @@
 					{#if detail.memory.length === 0}
 						<p class="empty">{t('shell.agentPage.noMemory')}</p>
 					{:else}
+						<p class="hint">{t('shell.agentPage.memoryHint')}</p>
 						<div class="memory">
-							{#each detail.memory as file (file)}<code>{file}</code>{/each}
+							{#each detail.memory as file (file)}
+								<button class:on={memoryOpen === file} onclick={() => showMemory(file)}>{file}</button>
+							{/each}
 						</div>
+						{#if memoryOpen}
+							<div class="file-text memory-text">
+								{#if memoryText === null}<CircleNotchIcon size={14} class="spin" />{:else}{memoryText.trim() || t('shell.agentPage.empty')}{/if}
+							</div>
+						{/if}
 					{/if}
+				</section>
+
+				<section class="danger">
+					<div class="row">
+						<span class="col">
+							{t('shell.agentPage.deleteAgent')}
+							<small>{t('shell.agentPage.deleteHint')}</small>
+						</span>
+						<Button size="sm" variant="danger" onclick={deleteAgent}>
+							<TrashIcon size={13} /> {t('shell.agentPage.deleteAgent')}
+						</Button>
+					</div>
+					{#if deleteError}<Notice>{deleteError}</Notice>{/if}
 				</section>
 			{/if}
 		</div>
@@ -407,10 +582,101 @@
 		flex-wrap: wrap;
 		gap: 6px;
 	}
-	.memory code {
+	.memory button {
 		padding: 2px 8px;
+		border: 1px solid transparent;
 		border-radius: var(--r-sm);
 		background: var(--surface2);
+		color: var(--text);
+		font-family: var(--font-mono);
+		font-size: var(--fs-xs);
+		cursor: pointer;
+	}
+	.memory button:hover,
+	.memory button.on {
+		border-color: var(--border);
+	}
+	.memory-text {
+		margin-top: 8px;
+		max-height: 260px;
+		overflow-y: auto;
+	}
+	textarea.file-text {
+		width: 100%;
+		box-sizing: border-box;
+		font-family: var(--font-sans);
+		outline: none;
+		resize: vertical;
+	}
+	textarea.file-text:focus {
+		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
+	}
+	.file-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 8px;
+		margin-top: 6px;
+	}
+	.link {
+		margin-left: 8px;
+		padding: 0;
+		border: none;
+		background: none;
+		color: var(--accent-bright);
+		font: inherit;
+		cursor: pointer;
+	}
+	.link:hover {
+		text-decoration: underline;
+	}
+	.pick {
+		width: 180px;
+	}
+	input.name {
+		width: 180px;
+		border: 1px solid var(--border);
+		border-radius: var(--r-sm);
+		background: var(--surface2);
+		color: var(--text);
+		font-size: var(--fs-sm);
+		padding: 6px 9px;
+		outline: none;
+	}
+	.item input.msg {
+		font-family: var(--font-sans);
+		font-size: var(--fs-sm);
+	}
+	input.name:focus,
+	.item input:focus {
+		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
+	}
+	.timer {
+		display: flex;
+		gap: 10px;
+		padding: 4px 0;
+		font-size: var(--fs-sm);
+	}
+	.timer .when {
+		flex: none;
+	}
+	.timer-body {
+		flex: 1;
+		min-width: 0;
+		color: var(--text);
+	}
+	.col {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+	.col small {
+		font-size: var(--fs-xs);
+		color: var(--dim2);
+	}
+	.danger {
+		margin-top: 24px;
+		padding-top: 12px;
+		border-top: 1px solid var(--hairline);
 	}
 	.err {
 		margin-top: 12px;

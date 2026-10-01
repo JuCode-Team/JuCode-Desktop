@@ -4,13 +4,24 @@ vi.mock('./protocol', () => ({
 	daemon: {
 		connect: vi.fn(() => Promise.resolve()),
 		post: vi.fn(() => Promise.resolve()),
-		request: vi.fn((op: { op: string }) =>
+		request: vi.fn((op: { op: string; schedule?: Record<string, unknown> }) =>
 			Promise.resolve(
 				op.op === 'session_list'
 					? { type: 'sessions', sessions: [] }
 					: op.op === 'report_list'
 						? { type: 'reports', reports: [] }
-						: { type: 'agent_created', agent: { id: 'ops' } }
+						: op.op === 'schedule_save'
+							? { type: 'schedule_saved', schedule: { id: 'sch-new', ...op.schedule } }
+							: op.op === 'timer_list'
+								? {
+										type: 'timers',
+										timers: [
+											{ timer: 't2', agent: 'ops', fire_at: 20 },
+											{ timer: 't1', agent: 'ops', fire_at: 10 },
+											{ timer: 't3', agent: 'web', fire_at: 5 }
+										]
+									}
+								: { type: 'agent_created', agent: { id: 'ops' } }
 			)
 		)
 	}
@@ -135,5 +146,71 @@ describe('desk state', () => {
 		expect(dir.agentOfSession('s1')?.name).toBe('Ops');
 		expect(dir.agentOfSession('nope')).toBeUndefined();
 		expect(dir.agentName('ghost')).toBe('ghost');
+	});
+});
+
+describe('schedules', () => {
+	const schedule = (id: string, agent = 'ops') => ({ id, agent, name: id, enabled: true }) as never;
+
+	it('keeps the list the daemon broadcasts', () => {
+		const dir = new AgentDirectory();
+		dir.handle({ type: 'schedules', schedules: [schedule('a'), schedule('b', 'web')] });
+		expect(dir.schedules.map((s) => s.id)).toEqual(['a', 'b']);
+		dir.handle({ type: 'schedules', schedules: [] });
+		expect(dir.schedules).toEqual([]);
+	});
+
+	it('saves, runs and deletes by the schedule id, never the request id', async () => {
+		const dir = new AgentDirectory();
+		const saved = await dir.saveSchedule({
+			agent: 'ops',
+			name: 'Check',
+			prompt: 'go',
+			enabled: true,
+			repeat: 'daily',
+			time: '09:00',
+			days: [],
+			date: '',
+			new_session: true
+		});
+		expect(saved.id).toBe('sch-new');
+		expect(dir.schedules.map((s) => s.id)).toEqual(['sch-new']);
+		await dir.runSchedule('sch-new');
+		expect(daemon.request).toHaveBeenCalledWith({ op: 'schedule_run', schedule: 'sch-new' });
+		await dir.deleteSchedule('sch-new');
+		expect(daemon.request).toHaveBeenCalledWith({ op: 'schedule_delete', schedule: 'sch-new' });
+		expect(dir.schedules).toEqual([]);
+	});
+
+	it("drops a deleted agent's schedules", async () => {
+		const dir = new AgentDirectory();
+		dir.agents = [{ id: 'ops' } as never, { id: 'web' } as never];
+		dir.handle({ type: 'schedules', schedules: [schedule('a'), schedule('b', 'web')] });
+		await dir.remove('ops');
+		expect(daemon.request).toHaveBeenCalledWith({ op: 'agent_delete', agent: 'ops' });
+		expect(dir.agents.map((a) => a.id)).toEqual(['web']);
+		expect(dir.schedules.map((s) => s.id)).toEqual(['b']);
+	});
+
+	it("lists only this agent's reminders, soonest first", async () => {
+		const dir = new AgentDirectory();
+		expect((await dir.timers('ops')).map((x) => x.timer)).toEqual(['t1', 't2']);
+	});
+});
+
+describe('arrivals', () => {
+	it('reports new questions, actions and reports, not what waited at connect', () => {
+		const dir = new AgentDirectory();
+		const seen: string[] = [];
+		dir.onArrival = (kind, _agent, text) => seen.push(`${kind}:${text}`);
+		const q = (id: string) => ({ id, agent: 'ops', title: id });
+		const a = (id: string) => ({ id, session_id: 's', cwd: '/w', name: 'bash', summary: id });
+		dir.handle({ type: 'questions', questions: [q('q1')] });
+		dir.handle({ type: 'actions', actions: [a('a1')] });
+		expect(seen).toEqual([]);
+		dir.handle({ type: 'questions', questions: [q('q1'), q('q2')] });
+		dir.handle({ type: 'actions', actions: [a('a2')] });
+		dir.handle({ type: 'report_posted', report: { id: 'r1', agent: 'ops', title: 'done' } });
+		expect(seen).toEqual(['question:q2', 'action:a2', 'report:done']);
 	});
 });

@@ -619,6 +619,7 @@ export class SessionStore {
 		}
 		const s = this.#newSession('jucode');
 		s.chat.title = agent.name;
+		s.chat.agent = agent.id;
 		if (sid) {
 			// The daemon holds the conversation; the backend stays jucode.
 			s.restored = true;

@@ -30,8 +30,8 @@ const settings = {
 			plugins: '插件',
 			mcp: 'MCP 服务器',
 			market: '技能市场',
-			agents: '智能体',
-			acp: 'ACP',
+			agents: '后端',
+			acp: '外部智能体（ACP）',
 			daemon: '后台服务',
 			updates: '更新'
 		},
@@ -179,7 +179,7 @@ const settings = {
 			envInvalid: '以下行无效已忽略：{lines}'
 		},
 		acp: {
-			groupLabel: 'ACP 智能体',
+			groupLabel: '外部智能体（ACP）',
 			hint: '注册通过 Agent Client Protocol 通信的智能体 CLI（如 jucode acp、gemini --experimental-acp）。注册后可在新会话的引擎选择器中选用。',
 			checking: '检测中…',
 			found: '已安装',
@@ -412,8 +412,8 @@ const settings = {
 			plugins: 'Plugins',
 			mcp: 'MCP servers',
 			market: 'Skills marketplace',
-			agents: 'Agents',
-			acp: 'ACP',
+			agents: 'Backends',
+			acp: 'External agents (ACP)',
 			daemon: 'Background service',
 			updates: 'Updates'
 		},
@@ -561,7 +561,7 @@ const settings = {
 			envInvalid: 'Invalid lines ignored: {lines}'
 		},
 		acp: {
-			groupLabel: 'ACP agents',
+			groupLabel: 'External agents (ACP)',
 			hint: 'Register agent CLIs that speak the Agent Client Protocol (e.g. jucode acp, gemini --experimental-acp). Registered agents appear in the engine picker for new sessions.',
 			checking: 'Checking…',
 			found: 'Installed',

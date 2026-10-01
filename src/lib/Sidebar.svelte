@@ -74,7 +74,7 @@
 		/** Right-click on a session row: the page opens the chrome popover. */
 		onSessionMenu: (id: string, ev: MouseEvent) => void;
 		onHistory: (p: Project) => void;
-		/** Long-lived agents of the local jucode daemon (background service on). */
+		/** Long-lived agents of the local jucode daemon. */
 		agents?: AgentView[];
 		agentsStatus?: 'off' | 'connecting' | 'on' | 'unreachable';
 		onOpenAgent?: (agent: AgentView) => void;
@@ -325,13 +325,19 @@
 				<button class="sess ghost" onclick={onNewAgent}><PlusIcon size={16} /><span class="sess-title">{t('shell.agents.add')}</span></button>
 			{/if}
 			{#each agents as a (a.id)}
-				<button class="sess agent" onclick={() => onOpenAgent(a)} title={t('shell.agents.open', { name: a.name })}>
+				<button
+					class="sess agent"
+					class:off={!a.enabled}
+					onclick={() => onOpenAgent(a)}
+					title={a.enabled ? t('shell.agents.open', { name: a.name }) : t('shell.agents.details')}
+				>
 					<RobotIcon size={18} />
 					<span class="agent-text">
 						<span class="sess-title">{a.name}</span>
 						{#if a.summary}<span class="agent-summary">{a.summary}</span>{/if}
 					</span>
 					{#if a.busy}<CircleNotchIcon size={16} class="spin state" />{/if}
+					{#if !a.enabled}<span class="tag">{t('shell.agents.disabled')}</span>{/if}
 					<span
 						class="act"
 						role="button"
@@ -732,6 +738,10 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+	.sess.agent.off .sess-title,
+	.sess.agent.off > :global(svg) {
+		color: var(--dim2);
 	}
 	.note {
 		padding: 6px 10px;

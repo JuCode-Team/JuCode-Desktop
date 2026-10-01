@@ -293,10 +293,18 @@
 		edits: { key: 'edits', label: t('chat.approvalEdits'), desc: t('chat.approvalEditsDesc'), icon: NotePencilIcon },
 		all: { key: 'all', label: t('chat.approvalAll'), desc: t('chat.approvalAllDesc'), icon: ShieldWarningIcon, tone: 'warn' }
 	};
+	// An agent's session shows the agent's four modes, read-only: they are
+	// changed on its Agent page.
 	const APPROVAL = $derived(
-		(bcaps.extendedApprovalModes ? ['ask', 'plan', 'auto', 'edits', 'all'] : ['ask', 'edits', 'all']).map((k) => ({
+		(chat.agent
+			? ['ask', 'edits', 'auto', 'all']
+			: bcaps.extendedApprovalModes
+				? ['ask', 'plan', 'auto', 'edits', 'all']
+				: ['ask', 'edits', 'all']
+		).map((k) => ({
 			...APPROVAL_MODES[k],
-			checked: chat.approvalMode === k
+			checked: chat.approvalMode === k,
+			disabled: !!chat.agent
 		}))
 	);
 	const approvalCurrent = $derived(APPROVAL.find((a) => a.checked) ?? APPROVAL_MODES.ask);
@@ -609,7 +617,7 @@
 			e.stopPropagation();
 			return;
 		}
-		if (bcaps.approvalModes && matches(e, 'approvalMode')) {
+		if (bcaps.approvalModes && !chat.agent && matches(e, 'approvalMode')) {
 			e.preventDefault();
 			const i = APPROVAL.findIndex((a) => a.checked);
 			onApproval(APPROVAL[(i + 1) % APPROVAL.length].key as ApprovalMode);
@@ -784,7 +792,7 @@
 					</button>
 					{#if showApproval}
 						<PopMenu
-							title={t('chat.approvalQuestion')}
+							title={chat.agent ? t('chat.approvalAgent') : t('chat.approvalQuestion')}
 							items={APPROVAL}
 							placement="up-left"
 							onSelect={setApproval}

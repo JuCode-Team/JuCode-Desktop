@@ -23,7 +23,7 @@
 				<h2>{t('shell.desk.title')}</h2>
 				<p>{t('shell.desk.subtitle')}</p>
 			</div>
-			<IconButton onclick={onClose} label="close"><XIcon size={18} /></IconButton>
+			<IconButton onclick={onClose} label={t('common.close')}><XIcon size={18} /></IconButton>
 		</div>
 		<div class="body">
 			<DeskContent {onOpenSession} />
