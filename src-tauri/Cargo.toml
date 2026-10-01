@@ -18,6 +18,14 @@ edition = "2021"
 name = "desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+# The executable is named after the product: macOS shows an unbundled binary's
+# file name in the Dock (`tauri dev`), and the bundles use it as the main
+# binary. Windows upgrades from the old `desktop.exe` are handled by Tauri's
+# NSIS installer (it deletes the previous MainBinaryName and retargets shortcuts).
+[[bin]]
+name = "JuCode"
+path = "src/main.rs"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
