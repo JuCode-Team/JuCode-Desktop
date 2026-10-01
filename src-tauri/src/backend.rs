@@ -329,8 +329,16 @@ fn resolve_with(
     PathBuf::from(kind.bin_name())
 }
 
-/// Resolves the binary for a backend (see `resolve_with` for the order).
+/// Resolves the binary for a backend (see `resolve_with` for the order). A
+/// release build runs its own jucode unless an override names another.
 pub fn resolve_backend_bin(kind: BackendKind, bin_override: Option<&str>) -> PathBuf {
+    let overridden = bin_override.is_some()
+        || std::env::var(kind.env_override()).is_ok_and(|p| !p.trim().is_empty());
+    if kind == BackendKind::Jucode && !overridden {
+        if let Some(path) = crate::app_cli::path() {
+            return path;
+        }
+    }
     resolve_with(
         kind,
         bin_override,

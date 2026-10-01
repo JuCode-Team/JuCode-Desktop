@@ -18,8 +18,11 @@ jobs:
       matrix:
         include:
           - os: macos-latest # Apple Silicon (arm64)
+            target: aarch64-apple-darwin
           - os: ubuntu-22.04 # Linux x86_64
+            target: x86_64-unknown-linux-gnu
           - os: windows-latest # Windows x86_64
+            target: x86_64-pc-windows-msvc
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -44,9 +47,26 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # tauri-action runs beforeBuildCommand (pnpm build), bundles the app and
-      # uploads the installers to a release named after the tag. The engine is
-      # no longer bundled — the app drives the system-installed `jucode` CLI.
+      # The app ships the jucode CLI release named in src-tauri/jucode-cli.version
+      # (a sidecar, see src-tauri/src/app_cli.rs and tauri.bundle.conf.json).
+      - name: Bundle the jucode CLI
+        shell: bash
+        run: |
+          version="$(tr -d '[:space:]' < src-tauri/jucode-cli.version)"
+          ext=""; [ "${{ matrix.target }}" = "x86_64-pc-windows-msvc" ] && ext=".exe"
+          name="jucode-${{ matrix.target }}${ext}"
+          mkdir -p src-tauri/binaries
+          curl -fsSL --retry 3 -o "src-tauri/binaries/${name}" \
+            "https://github.com/JuCode-Team/JuCode-CLI/releases/download/v${version}/${name}"
+          chmod +x "src-tauri/binaries/${name}"
+          reported="$("src-tauri/binaries/${name}" --version | awk '{print $NF}' | tr -d '\r')"
+          [ "$reported" = "$version" ] || { echo "::error::bundled jucode reports $reported, expected $version"; exit 1; }
+          curl -fsSL --retry 3 -o static/jucode-cli-third-party-notices.txt \
+            "https://github.com/JuCode-Team/JuCode-CLI/releases/download/v${version}/jucode-third-party-notices.txt"
+
+      # tauri-action runs beforeBuildCommand (pnpm build), bundles the app with
+      # the jucode sidecar and uploads the installers to a release named after
+      # the tag.
       #
       # Auto-update: with TAURI_SIGNING_PRIVATE_KEY set (repo secret) and
       # bundle.createUpdaterArtifacts enabled in tauri.conf.json, tauri-action
@@ -63,6 +83,8 @@ jobs:
           releaseName: ${{ github.ref_name }}
           releaseDraft: false
           prerelease: false
+          args: --config src-tauri/tauri.bundle.conf.json
           releaseBody: |
-            Automated build. macOS builds are unsigned — on first launch use
-            right-click → Open, or run `xattr -cr /Applications/JuCode.app`.
+            The beta builds are not code-signed yet. To open them the first
+            time and grant their permissions, see the install guide:
+            https://github.com/JuCode-Team/JuCode-Desktop/blob/main/docs/install.md

@@ -1,64 +1,69 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { UpdaterState } from './updater.svelte';
 
-const { check, relaunch } = vi.hoisted(() => ({ check: vi.fn(), relaunch: vi.fn() }));
+const { invoke, relaunch } = vi.hoisted(() => ({ invoke: vi.fn(), relaunch: vi.fn() }));
 
-vi.mock('@tauri-apps/plugin-updater', () => ({ check }));
+vi.mock('@tauri-apps/api/core', () => ({
+	invoke,
+	Channel: class {
+		onmessage: (message: unknown) => void = () => {};
+	}
+}));
 vi.mock('@tauri-apps/plugin-process', () => ({ relaunch }));
+
+/** `update_check` finds 0.3.2 on `source`; `install` answers `update_install`. */
+function commands(install: () => Promise<void> = () => Promise.resolve(), source = 'github') {
+	invoke.mockImplementation((cmd: string) => {
+		if (cmd === 'update_check') return Promise.resolve({ version: '0.3.2', notes: null, source });
+		if (cmd === 'update_install') return install();
+		return Promise.reject(new Error(`unexpected ${cmd}`));
+	});
+}
+const calls = (cmd: string) => invoke.mock.calls.filter(([c]) => c === cmd).length;
 
 describe('UpdaterState', () => {
 	beforeEach(() => {
-		check.mockReset();
+		invoke.mockReset();
 		relaunch.mockReset();
 	});
 
-	const update = () => ({
-		version: '0.3.2',
-		downloadAndInstall: vi.fn().mockResolvedValue(undefined)
-	});
-
 	it('automatically downloads and installs a silent startup update', async () => {
-		const u = update();
-		check.mockResolvedValue(u);
+		commands(undefined, 'jucode');
 		const state = new UpdaterState();
 
 		await state.check(true, true);
 
-		expect(u.downloadAndInstall).toHaveBeenCalledOnce();
+		expect(calls('update_install')).toBe(1);
 		expect(state.phase).toBe('ready');
 		expect(state.version).toBe('0.3.2');
+		expect(state.source).toBe('jucode');
 	});
 
 	it('keeps manual checks download-free until the user starts the download', async () => {
-		const u = update();
-		check.mockResolvedValue(u);
+		commands();
 		const state = new UpdaterState();
 
 		await state.check();
 
-		expect(u.downloadAndInstall).not.toHaveBeenCalled();
+		expect(calls('update_install')).toBe(0);
 		expect(state.phase).toBe('available');
 	});
 
 	it('does not start a second check while an update is downloading', async () => {
-		const u = update();
 		let resolveDownload!: () => void;
-		u.downloadAndInstall.mockReturnValue(new Promise<void>((resolve) => (resolveDownload = resolve)));
-		check.mockResolvedValue(u);
+		commands(() => new Promise<void>((resolve) => (resolveDownload = resolve)));
 		const state = new UpdaterState();
 
 		const first = state.check(true, true);
 		await vi.waitFor(() => expect(state.phase).toBe('downloading'));
 		await state.check(true, true);
-		expect(check).toHaveBeenCalledOnce();
+		expect(calls('update_check')).toBe(1);
 		resolveDownload();
 		await first;
 	});
 
 	it('surfaces an automatic install failure without pretending it is ready', async () => {
-		const u = update();
-		u.downloadAndInstall.mockRejectedValue(new Error('signature mismatch'));
-		check.mockResolvedValue(u);
+		commands(() => Promise.reject(new Error('signature mismatch')));
 		const state = new UpdaterState();
 
 		await state.check(true, true);

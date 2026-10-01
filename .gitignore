@@ -9,8 +9,12 @@ node_modules
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
-# staged engine sidecar (built by scripts/prepare-engine.sh)
+# the jucode CLI sidecar a release bundles (see .github/workflows/release.yml)
 src-tauri/binaries/
+
+# third-party license texts, written at build time
+static/third-party-notices.txt
+static/jucode-cli-third-party-notices.txt
 
 # jucode CLI runtime cache, created when the engine runs inside this repo
 .jucode/

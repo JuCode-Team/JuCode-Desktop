@@ -1,7 +1,14 @@
-// 应用自动更新状态（tauri-plugin-updater）。模块级 runes 单例：设置页的更新卡片
+// 应用自动更新状态。模块级 runes 单例：设置页的更新卡片
 // 与侧栏设置入口的小圆点共享同一份状态，启动时的静默检查也写到这里。
-import { check, type Update } from '@tauri-apps/plugin-updater';
+// 检查和下载在 Rust 侧（src-tauri/src/app_update.rs）：先走 GitHub，
+// 不通或太慢时换 JuCode 服务器上的同一份签名安装包。
+import { Channel, invoke } from '@tauri-apps/api/core';
 import { relaunch } from '@tauri-apps/plugin-process';
+
+type Progress =
+	| { event: 'Started'; data: { contentLength?: number | null } }
+	| { event: 'Progress'; data: { chunkLength: number } }
+	| { event: 'Finished' };
 
 export type UpdatePhase = 'idle' | 'checking' | 'latest' | 'available' | 'downloading' | 'ready' | 'error';
 
@@ -12,7 +19,8 @@ export class UpdaterState {
 	/** 下载进度 0–100。 */
 	progress = $state(0);
 	error = $state('');
-	#update: Update | null = null;
+	/** 这次更新从哪里下载：GitHub 或 JuCode 服务器。 */
+	source = $state<'github' | 'jucode' | ''>('');
 
 	/** 是否有可用更新（侧栏小圆点据此显示）。 */
 	get available() {
@@ -27,10 +35,12 @@ export class UpdaterState {
 		if (this.phase === 'checking' || this.phase === 'downloading' || this.phase === 'ready') return;
 		this.phase = 'checking';
 		try {
-			const u = await check();
+			const u = await invoke<{ version: string; notes: string | null; source: 'github' | 'jucode' } | null>(
+				'update_check'
+			);
 			if (u) {
-				this.#update = u;
 				this.version = u.version;
+				this.source = u.source;
 				this.phase = 'available';
 				if (autoInstall) await this.download();
 			} else {
@@ -49,14 +59,15 @@ export class UpdaterState {
 
 	/** 下载并安装更新，完成后进入 ready（由「重启并安装」按钮触发 relaunch）。 */
 	async download() {
-		const u = this.#update;
-		if (!u || this.phase === 'downloading' || this.phase === 'ready') return;
+		// The check that found it holds the update on the Rust side.
+		if (this.phase !== 'available') return;
 		this.phase = 'downloading';
 		this.progress = 0;
 		let total = 0;
 		let received = 0;
 		try {
-			await u.downloadAndInstall((ev) => {
+			const onEvent = new Channel<Progress>();
+			onEvent.onmessage = (ev) => {
 				if (ev.event === 'Started') {
 					total = ev.data.contentLength ?? 0;
 				} else if (ev.event === 'Progress') {
@@ -65,7 +76,8 @@ export class UpdaterState {
 				} else if (ev.event === 'Finished') {
 					this.progress = 100;
 				}
-			});
+			};
+			await invoke('update_install', { onEvent });
 			this.phase = 'ready';
 		} catch (e) {
 			this.error = String(e);

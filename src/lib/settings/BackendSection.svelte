@@ -10,6 +10,7 @@
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
 	import {
 		checkBackend,
+		installCliCommand,
 		shellEnvStatus,
 		refreshShellEnv,
 		type BackendStatus,
@@ -80,6 +81,16 @@
 		checkBackend(id, settings.paths[id]?.trim() || undefined)
 			.then((s) => (status[id] = s))
 			.catch(() => (status[id] = { found: false }));
+	}
+
+	// The app's own jucode (a release build's, kept in ~/.jucode/bin) can
+	// become a terminal command.
+	const appCli = (path?: string) => !!path && /[\\/]\.jucode[\\/]bin[\\/]jucode(\.exe)?$/.test(path);
+	let cliCommand = $state<{ ok: boolean; text: string } | null>(null);
+	function addCliCommand() {
+		installCliCommand()
+			.then((where) => (cliCommand = { ok: true, text: t('settings.backend.cliCommandDone', { path: where }) }))
+			.catch((e) => (cliCommand = { ok: false, text: String(e) }));
 	}
 
 	function onPathChange(id: BackendId) {
@@ -171,6 +182,12 @@
 					</div>
 					{#if st && st !== 'checking' && st.found && st.path}
 						<span class="bpath" title={st.path}>{st.path}</span>
+						{#if id === 'jucode' && appCli(st.path)}
+							<div class="clicmd">
+								<button class="linkbtn" onclick={addCliCommand}>{t('settings.backend.cliCommand')}</button>
+								{#if cliCommand}<span class="clires" class:bad={!cliCommand.ok}>{cliCommand.text}</span>{/if}
+							</div>
+						{/if}
 					{/if}
 				</div>
 				{#if st && st !== 'checking' && !st.found && dep && !dep.present}
@@ -384,5 +401,31 @@
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
 		flex-shrink: 0;
+	}
+	.clicmd {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 8px;
+		margin-top: 4px;
+		font-size: var(--fs-xs);
+	}
+	.linkbtn {
+		padding: 0;
+		border: none;
+		background: none;
+		color: var(--accent);
+		font: inherit;
+		cursor: pointer;
+	}
+	.linkbtn:hover {
+		text-decoration: underline;
+	}
+	.clires {
+		color: var(--dim);
+		overflow-wrap: anywhere;
+	}
+	.clires.bad {
+		color: var(--err);
 	}
 </style>

@@ -136,6 +136,8 @@ const settings = {
 			found: '已安装',
 			notFound: '未检测到，请安装或填写路径',
 			recheck: '重新检测',
+			cliCommand: '在终端中使用 jucode 命令',
+			cliCommandDone: '已添加：{path}。新开的终端窗口生效。',
 			pathPlaceholder: '{bin} 可执行文件路径（可选，覆盖自动查找）',
 			defaultLabel: '新会话默认后端',
 			defaultHint: '新建会话时默认使用的引擎；每个项目会记住其上次选择。',
@@ -314,6 +316,14 @@ const settings = {
 			restart: '重启并安装',
 			readyHint: '更新已下载完成，重启后生效。',
 			error: '检查更新失败：{msg}'
+		},
+		licenses: {
+			groupLabel: '许可证',
+			title: '第三方许可证',
+			hint: 'JuCode 使用的开源组件及其许可证全文。JuCode 本身以 Apache License 2.0 发布。',
+			open: '查看',
+			loading: '加载中…',
+			missing: '这个版本没有附带第三方许可证文件。'
 		},
 		usage: {
 			groupLabel: '账户用量',
@@ -508,6 +518,8 @@ const settings = {
 			found: 'Installed',
 			notFound: 'Not found — install it or set a path',
 			recheck: 'Re-check',
+			cliCommand: 'Use the jucode command in a terminal',
+			cliCommandDone: 'Added: {path}. New terminal windows pick it up.',
 			pathPlaceholder: '{bin} binary path (optional, overrides auto-detection)',
 			defaultLabel: 'Default backend for new sessions',
 			defaultHint: 'The engine new sessions use by default; each project remembers its last choice.',
@@ -686,6 +698,14 @@ const settings = {
 			restart: 'Restart & install',
 			readyHint: 'Update downloaded; it takes effect after restart.',
 			error: 'Update check failed: {msg}'
+		},
+		licenses: {
+			groupLabel: 'Licenses',
+			title: 'Third-party licenses',
+			hint: 'The open-source components JuCode uses and their license texts. JuCode itself is released under the Apache License 2.0.',
+			open: 'View',
+			loading: 'Loading…',
+			missing: 'This build ships no third-party license file.'
 		},
 		usage: {
 			groupLabel: 'Account usage',

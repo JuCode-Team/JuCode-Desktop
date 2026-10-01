@@ -8,6 +8,9 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager};
 
 mod acp_registry;
+mod app_cli;
+#[cfg(desktop)]
+mod app_update;
 mod backend;
 mod browser;
 mod capture;
@@ -297,6 +300,18 @@ fn stale_daemon() -> Option<(i32, String)> {
     let exe = PathBuf::from(exe);
     if exe.file_name()?.to_string_lossy() != "jucode" {
         return None; // not a jucode daemon: leave it alone
+    }
+    // A release build runs its own jucode; a daemon another one started (an
+    // older install on PATH) is replaced, unless it is the user's login
+    // service, which would only start it again.
+    if let Some(app) = app_cli::path() {
+        let same = |a: &Path, b: &Path| match (a.canonicalize(), b.canonicalize()) {
+            (Ok(a), Ok(b)) => a == b,
+            _ => a == b,
+        };
+        if !same(&exe, &app) && !app_cli::daemon_service_installed() {
+            return Some((pid, format!("it runs {}, not the app's jucode", exe.display())));
+        }
     }
     let Ok(meta) = std::fs::metadata(&exe) else {
         return Some((pid, format!("{} was removed", exe.display())));
@@ -1463,9 +1478,27 @@ const DEPS: [installer::Dep; 5] = [
 fn check_dependencies() -> Vec<DepReport> {
     let os = std::env::consts::OS;
     let has = |c: &str| which(c).is_some();
+    // The agents are found the way sessions find them (settings aside): the
+    // app's own jucode, then PATH and the installers' usual directories
+    // (Claude Code's installer puts it in ~/.local/bin, often not on a GUI
+    // app's PATH).
+    let found = |dep: installer::Dep| {
+        let kind = match dep {
+            installer::Dep::Jucode => BackendKind::Jucode,
+            installer::Dep::Claude => BackendKind::Claude,
+            installer::Dep::Codex => BackendKind::Codex,
+            _ => return which(dep.bin()),
+        };
+        let bin = backend::resolve_backend_bin(kind, None);
+        if bin.components().count() == 1 {
+            which(&bin.to_string_lossy())
+        } else {
+            bin.is_file().then_some(bin)
+        }
+    };
     DEPS.iter()
         .map(|&dep| {
-            let path = which(dep.bin());
+            let path = found(dep);
             DepReport {
                 id: dep.id().to_string(),
                 present: path.is_some(),
@@ -2766,7 +2799,8 @@ pub fn run() {
             show_main_window(app);
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init());
+        .plugin(tauri_plugin_process::init())
+        .manage(app_update::Pending::default());
     builder
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
@@ -2866,6 +2900,11 @@ pub fn run() {
             plugins::github_pr::gh,
             worktree_base,
             native_import::native_sessions,
+            app_cli::install_cli_command,
+            #[cfg(desktop)]
+            app_update::update_check,
+            #[cfg(desktop)]
+            app_update::update_install,
             native_import::import_native_session,
             pty_open,
             pty_write,

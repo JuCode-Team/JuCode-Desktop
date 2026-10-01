@@ -136,6 +136,12 @@ export function refreshShellEnv(): Promise<ShellEnvStatus> {
 	return invoke('refresh_shell_env');
 }
 
+/** Makes `jucode` a terminal command running the app's bundled CLI; the
+ *  command's location. */
+export function installCliCommand(): Promise<string> {
+	return invoke('install_cli_command');
+}
+
 // Conversations Claude Code / Codex saved in their own apps, imported as a
 // cleaned copy that JuCode resumes (src-tauri/src/native_import.rs).
 export type NativeSource = 'claude' | 'codex';

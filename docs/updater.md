@@ -44,24 +44,41 @@ tauri-action 会自动：
    并生成对应的 `.sig` 签名文件；
 2. 汇总各平台的版本号、下载地址和签名，生成 `latest.json` 并上传到该 Release。
 
-之后已安装的客户端访问
-`releases/latest/download/latest.json` 即可发现新版本。应用启动约 5 秒后会自动检查，
+之后已安装的客户端即可发现新版本。检查和下载在 Rust 侧（`src-tauri/src/app_update.rs`）：
+
+- 先读 GitHub 的 `releases/latest/download/latest.json`，并试下载更新包开头 512 KB；
+- GitHub 不通，或 4 秒内下不完这 512 KB，就改用 JuCode 服务器的镜像
+  `{jucode_api_url}/v1/public/releases/desktop/latest.json`（`jucode_api_url` 取自
+  `~/.jucode/config.json`，默认 `https://api.jucode.net`）。镜像由后端每 10 分钟从
+  GitHub 同步（后台「版本发布」也可手动同步），签名与 GitHub 上的完全相同；
+- 从 GitHub 下载中途失败时，再从镜像重试一次。
+
+应用启动约 5 秒后会自动检查，
 发现更新后自动下载并安装到待应用状态；为了避免中断未保存工作，应用不会自动退出，
 用户可在设置 → 概览 →「应用更新」中点击「重启并安装」完成切换。手动点击「检查更新」
 仍只检查版本，不会自动下载。
 
 ## 3. 发布流程
 
-1. 更新 `package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml` 中的版本号；
-2. 打 tag 并推送（如 `git tag v0.2.0 && git push origin v0.2.0`）；
-3. Release workflow 构建、签名并上传安装包 + 更新包 + `latest.json`。
+安装包内置 JuCode CLI：Release workflow 从 JuCode-CLI 的 GitHub Release 下载
+`src-tauri/jucode-cli.version` 指定版本的二进制（`jucode-<target>`）和
+`jucode-third-party-notices.txt`，作为 sidecar 打进安装包。所以先发 CLI，再发桌面端：
+
+1. JuCode-CLI：改 `Cargo.toml` 版本号，打 tag 推送，等两个 Release workflow 跑完；
+2. 把 `src-tauri/jucode-cli.version` 改成这个 CLI 版本；
+3. 更新 `package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml` 中的版本号；
+4. 打 tag 并推送（如 `git tag v0.4.0 && git push origin v0.4.0`）；
+5. Release workflow 构建、签名并上传安装包 + 更新包 + `latest.json`；
+   10 分钟内后端镜像会同步这个版本。
 
 ## 4. 本地验证签名构建（可选）
 
 ```sh
 export TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/jucode-desktop.key)"
 export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="<密码，若无则空>"
-pnpm tauri build
+# 内置 CLI：放一个本平台的 jucode 到 src-tauri/binaries/jucode-<target>
+cp ../JuCode-CLI/target/release/jucode src-tauri/binaries/jucode-aarch64-apple-darwin
+pnpm tauri build --config src-tauri/tauri.bundle.conf.json
 ```
 
 构建产物旁会出现 `.sig` 文件；`latest.json` 只有 tauri-action（或手工拼装）才会生成。
