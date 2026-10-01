@@ -1,7 +1,8 @@
 // The long-lived agents hosted by the local `jucode daemon`, kept current
 // from its `agents` / `sessions` / `schedules` broadcasts.
 
-import { daemon } from './protocol';
+import { daemon as sharedDaemon } from './protocol';
+import type { DaemonClient } from './daemon';
 import { toWire, upsert, type Schedule, type ScheduleDraft } from './schedules';
 import type { TabIcon } from './workbench/tabChrome';
 
@@ -152,6 +153,13 @@ export class AgentDirectory {
 	/** Called for a new question, pending action or report (the desktop shows
 	 *  an OS notification while it is in the background). */
 	onArrival: ((kind: 'question' | 'action' | 'report', agent: string, text: string) => void) | null = null;
+	#daemon: DaemonClient;
+
+	/** `daemon`: the connection it lists; the app's shared one by default
+	 *  (the remote page keeps one directory per paired computer). */
+	constructor(daemon: DaemonClient = sharedDaemon) {
+		this.#daemon = daemon;
+	}
 
 	/** Connects now and keeps reconnecting, with backoff, while the daemon is
 	 *  unreachable. */
@@ -164,7 +172,7 @@ export class AgentDirectory {
 		}, RETRY_MIN_MS);
 		// An older daemon answers `ping` with an error, which is traffic too.
 		this.#keepalive = setInterval(() => {
-			if (this.status === 'on') daemon.request({ op: 'ping' }).catch(() => {});
+			if (this.status === 'on') this.#daemon.request({ op: 'ping' }).catch(() => {});
 		}, KEEPALIVE_MS);
 	}
 
@@ -176,7 +184,7 @@ export class AgentDirectory {
 		this.status = 'off';
 	}
 
-	/** A daemon-wide frame (wired to `daemon.onEvent`). */
+	/** A daemon-wide frame (wired to `this.#daemon.onEvent`). */
 	handle(frame: Record<string, unknown>) {
 		if (frame.type === 'agents' && Array.isArray(frame.agents)) {
 			this.agents = frame.agents as AgentView[];
@@ -226,13 +234,13 @@ export class AgentDirectory {
 	}
 
 	async answer(question: string, answer: string) {
-		await daemon.request({ op: 'question_answer', question, answer });
+		await this.#daemon.request({ op: 'question_answer', question, answer });
 	}
 
 	/** Allow or deny a pending action; the daemon reopens its session if
 	 *  needed. The updated `actions` list arrives as a broadcast. */
 	async decide(action: ActionView, allow: boolean) {
-		await daemon.post({
+		await this.#daemon.post({
 			op: 'decide_action',
 			session: action.session_id,
 			action: action.id,
@@ -242,75 +250,75 @@ export class AgentDirectory {
 	}
 
 	async loadReports() {
-		const reply = await daemon.request({ op: 'report_list', limit: 50 });
+		const reply = await this.#daemon.request({ op: 'report_list', limit: 50 });
 		if (Array.isArray(reply.reports)) this.reports = reply.reports as ReportView[];
 	}
 
 	async markRead(report: ReportView) {
 		if (report.read) return;
 		this.reports = this.reports.map((r) => (r.id === report.id ? { ...r, read: true } : r));
-		await daemon.request({ op: 'report_read', report: report.id });
+		await this.#daemon.request({ op: 'report_read', report: report.id });
 	}
 
 	async detail(agent: string): Promise<AgentDetail> {
-		return (await daemon.request({ op: 'agent_get', agent })) as unknown as AgentDetail;
+		return (await this.#daemon.request({ op: 'agent_get', agent })) as unknown as AgentDetail;
 	}
 
 	async update(agent: string, changes: AgentChanges): Promise<AgentView> {
-		const reply = await daemon.request({ op: 'agent_update', agent, ...changes });
+		const reply = await this.#daemon.request({ op: 'agent_update', agent, ...changes });
 		return reply.agent as AgentView;
 	}
 
 	/** Refused while the agent is working. Its sessions stay; its schedules go. */
 	async remove(agent: string) {
-		await daemon.request({ op: 'agent_delete', agent });
+		await this.#daemon.request({ op: 'agent_delete', agent });
 		this.agents = this.agents.filter((a) => a.id !== agent);
 		this.schedules = this.schedules.filter((s) => s.agent !== agent);
 	}
 
 	async readMemory(agent: string, file: string): Promise<string> {
-		const reply = await daemon.request({ op: 'agent_memory_read', agent, file });
+		const reply = await this.#daemon.request({ op: 'agent_memory_read', agent, file });
 		return String(reply.content ?? '');
 	}
 
 	/** The daemon delivers it to the agent's latest session or starts one. */
 	async message(agent: string, body: string) {
-		await daemon.request({ op: 'message_send', agent, body });
+		await this.#daemon.request({ op: 'message_send', agent, body });
 	}
 
 	/** The agent's own pending reminders, soonest first. */
 	async timers(agent: string): Promise<TimerView[]> {
-		const reply = await daemon.request({ op: 'timer_list', agent });
+		const reply = await this.#daemon.request({ op: 'timer_list', agent });
 		return ((reply.timers ?? []) as TimerView[])
 			.filter((timer) => timer.agent === agent)
 			.sort((a, b) => a.fire_at - b.fire_at);
 	}
 
 	async loadSchedules() {
-		const reply = await daemon.request({ op: 'schedule_list' });
+		const reply = await this.#daemon.request({ op: 'schedule_list' });
 		if (Array.isArray(reply.schedules)) this.schedules = reply.schedules as Schedule[];
 	}
 
 	async saveSchedule(draft: ScheduleDraft): Promise<Schedule> {
-		const reply = await daemon.request({ op: 'schedule_save', schedule: toWire(draft) });
+		const reply = await this.#daemon.request({ op: 'schedule_save', schedule: toWire(draft) });
 		const saved = reply.schedule as Schedule;
 		this.schedules = upsert(this.schedules, saved);
 		return saved;
 	}
 
 	async setScheduleEnabled(id: string, enabled: boolean) {
-		const reply = await daemon.request({ op: 'schedule_save', schedule: { id, enabled } });
+		const reply = await this.#daemon.request({ op: 'schedule_save', schedule: { id, enabled } });
 		this.schedules = upsert(this.schedules, reply.schedule as Schedule);
 	}
 
 	// The schedule's id travels as `schedule`: `id` is the request id.
 	async deleteSchedule(id: string) {
-		await daemon.request({ op: 'schedule_delete', schedule: id });
+		await this.#daemon.request({ op: 'schedule_delete', schedule: id });
 		this.schedules = this.schedules.filter((s) => s.id !== id);
 	}
 
 	async runSchedule(id: string) {
-		await daemon.request({ op: 'schedule_run', schedule: id });
+		await this.#daemon.request({ op: 'schedule_run', schedule: id });
 	}
 
 	disconnected() {
@@ -329,7 +337,7 @@ export class AgentDirectory {
 
 	async create(agent: NewAgent): Promise<AgentView> {
 		// `id` is the request id on the wire; the agent's id travels as `agent`.
-		const reply = await daemon.request({
+		const reply = await this.#daemon.request({
 			op: 'agent_create',
 			agent: agent.id,
 			name: agent.name,
@@ -342,7 +350,7 @@ export class AgentDirectory {
 
 	async refreshSessions() {
 		try {
-			const reply = await daemon.request({ op: 'session_list' });
+			const reply = await this.#daemon.request({ op: 'session_list' });
 			if (Array.isArray(reply.sessions)) this.sessions = reply.sessions as DaemonSessionView[];
 		} catch {
 			/* disconnected: the next connect sends the list again */
@@ -352,7 +360,7 @@ export class AgentDirectory {
 	async #connect() {
 		this.status = 'connecting';
 		try {
-			await daemon.connect();
+			await this.#daemon.connect();
 			this.status = 'on';
 			this.error = '';
 			this.#delay = RETRY_MIN_MS;

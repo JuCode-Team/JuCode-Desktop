@@ -1,8 +1,8 @@
 <script lang="ts">
 	// The desk's content: questions and pending actions waiting for the user,
 	// which agents are working, the next scheduled runs, and their reports. Everything comes from the
-	// jucode daemon through agentDirectory. Shown in the desktop's desk sheet
-	// and on the remote page.
+	// jucode daemon through agentDirectory (the shown computer's, on the remote
+	// page). Shown in the desktop's desk sheet and on the remote page.
 	import QuestionIcon from 'phosphor-svelte/lib/QuestionIcon';
 	import ShieldCheckIcon from 'phosphor-svelte/lib/ShieldCheckIcon';
 	import FileTextIcon from 'phosphor-svelte/lib/FileTextIcon';
@@ -11,13 +11,8 @@
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import AgentAvatar from '$lib/AgentAvatar.svelte';
-	import {
-		agentDirectory,
-		type AgentView,
-		type ActionView,
-		type QuestionView,
-		type ReportView
-	} from '$lib/agents.svelte';
+	import type { AgentView, ActionView, QuestionView, ReportView } from '$lib/agents.svelte';
+	import { useAgents } from '$lib/agentScope';
 	import { t } from '$lib/i18n';
 
 	let {
@@ -26,6 +21,9 @@
 		/** Show a daemon session. */
 		onOpenSession: (session: string) => void;
 	} = $props();
+
+	// The app's directory; on the remote page, the shown computer's.
+	const agentDirectory = useAgents();
 
 	let answers = $state<Record<string, string>>({});
 	let busy = $state<Record<string, boolean>>({});

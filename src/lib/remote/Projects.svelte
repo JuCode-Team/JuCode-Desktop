@@ -23,8 +23,9 @@
 	import AgentAvatar from '$lib/AgentAvatar.svelte';
 	import TabGlyph from '$lib/workbench/TabGlyph.svelte';
 	import { normalizeColor, parseTabIcon } from '$lib/workbench/tabChrome';
-	import { agentDirectory, type AgentView, type DaemonSessionView } from '$lib/agents.svelte';
-	import { baseName, remoteProjects, type ProjectView } from './store.svelte';
+	import type { AgentView, DaemonSessionView } from '$lib/agents.svelte';
+	import { baseName, type ProjectView } from './store.svelte';
+	import { useHost } from './connection.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
 	import { t } from '$lib/i18n';
 	import { CHATS_ENABLED } from '$lib/types';
@@ -50,6 +51,7 @@
 		onOpenAgent: (agent: AgentView) => void;
 	} = $props();
 
+	const { agents: agentDirectory, projects: remoteProjects } = useHost();
 	const SHOW_LIMIT = 6;
 	const trim = (path: string) => path.replace(/[\\/]+$/, '');
 

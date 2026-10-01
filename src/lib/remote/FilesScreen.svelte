@@ -8,10 +8,12 @@
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import Notice from '$lib/ui/Notice.svelte';
 	import RemoteScreen from './RemoteScreen.svelte';
-	import { baseName, remoteProjects, type DirListing, type FileContent } from './store.svelte';
+	import { baseName, type DirListing, type FileContent } from './store.svelte';
+	import { useHost } from './connection.svelte';
 	import { t } from '$lib/i18n';
 
 	let { root, title, onBack }: { root: string; title: string; onBack: () => void } = $props();
+	const remoteProjects = useHost().projects;
 
 	let listing = $state<DirListing | null>(null);
 	let file = $state<FileContent | null>(null);

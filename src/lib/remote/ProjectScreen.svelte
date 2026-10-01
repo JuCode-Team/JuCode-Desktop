@@ -7,10 +7,10 @@
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
-	import { agentDirectory } from '$lib/agents.svelte';
 	import RemoteScreen from './RemoteScreen.svelte';
 	import SessionRow from './SessionRow.svelte';
-	import { remoteProjects, shortPath, type HistoryItem, type ProjectView } from './store.svelte';
+	import { shortPath, type HistoryItem, type ProjectView } from './store.svelte';
+	import { useHost } from './connection.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
 	import { t } from '$lib/i18n';
 
@@ -29,6 +29,7 @@
 		onFiles: () => void;
 		onChanges: () => void;
 	} = $props();
+	const { agents: agentDirectory, projects: remoteProjects } = useHost();
 
 	let items = $state<HistoryItem[]>([]);
 	let loading = $state(true);

@@ -5,27 +5,15 @@ import { buildBackendOpts } from './backends/settings';
 
 // Started when needed with the jucode backend's binary and environment (the
 // daemon runs jucode sessions itself).
-let daemonEndpoint = () => {
+const daemonEndpoint = () => {
 	const opts = buildBackendOpts('jucode');
 	return invoke<DaemonEndpoint>('daemon_endpoint', { binOverride: opts?.bin_override, env: opts?.env });
 };
-let openSocket = (url: string): SocketLike => new WebSocket(url) as unknown as SocketLike;
 
-/** Where the daemon is and which token to present. The desktop asks the
- *  Tauri side (the local daemon's token file); the remote page, served by
- *  the daemon itself, sets its own origin and paired-device token; through
- *  the relay it also supplies the socket (`socket` ignores the URL then). */
-export function setDaemonEndpoint(
-	source: () => Promise<DaemonEndpoint>,
-	socket?: (url: string) => SocketLike
-) {
-	daemonEndpoint = source;
-	if (socket) openSocket = socket;
-}
-
-/** The shared connection to the local `jucode daemon`, which runs every
- *  session; the page wires its `onFrame` / `onExit` into the session store. */
-export const daemon = new DaemonClient(() => daemonEndpoint(), (url) => openSocket(url));
+/** The desktop's connection to the local `jucode daemon`, which runs every
+ *  session; the page wires its `onFrame` / `onExit` into the session store.
+ *  The remote page makes one connection per computer (remote/connection). */
+export const daemon = new DaemonClient(daemonEndpoint, (url) => new WebSocket(url) as unknown as SocketLike);
 
 /** Starts (or, with `resume`, reopens) a session hosted by the daemon;
  *  `agent` starts it as that long-lived agent, `chat` as a chat. */

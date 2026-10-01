@@ -6,7 +6,8 @@
 	import Button from '$lib/ui/Button.svelte';
 	import Select from '$lib/ui/Select.svelte';
 	import Segmented from '$lib/ui/Segmented.svelte';
-	import { remoteProjects, type ProjectView } from './store.svelte';
+	import type { ProjectView } from './store.svelte';
+	import { useHost } from './connection.svelte';
 	import { t } from '$lib/i18n';
 	import { CHATS_ENABLED } from '$lib/types';
 
@@ -20,6 +21,7 @@
 		onCreate: (project: ProjectView, engine: string) => void;
 		onClose: () => void;
 	} = $props();
+	const remoteProjects = useHost().projects;
 
 	const projects = $derived((remoteProjects.active?.projects ?? []).filter((p) => CHATS_ENABLED || !p.chats));
 	let projectId = $state(untrack(() => project?.id ?? ''));

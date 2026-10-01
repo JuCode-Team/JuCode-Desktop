@@ -12,6 +12,7 @@
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import FilesIcon from 'phosphor-svelte/lib/FilesIcon';
 	import GitDiffIcon from 'phosphor-svelte/lib/GitDiffIcon';
+	import DesktopIcon from 'phosphor-svelte/lib/DesktopIcon';
 	import ModelMenu from '$lib/remote/ModelMenu.svelte';
 	import MessageList from '$lib/MessageList.svelte';
 	import ApprovalCard from '$lib/ApprovalCard.svelte';
@@ -23,8 +24,8 @@
 	import { createJucodeAdapter } from '$lib/backends/jucode';
 	import { effortLabel } from '$lib/composer/effort';
 	import { modelColor, isTopEffort } from '$lib/modelColor';
-	import { daemon, type JucodeGroup, type Op } from '$lib/protocol';
-	import { agentDirectory } from '$lib/agents.svelte';
+	import type { JucodeGroup, Op } from '$lib/protocol';
+	import { useHost } from '$lib/remote/connection.svelte';
 	import { confirm } from '$lib/ui/confirm.svelte';
 	import { BACKEND_LABELS } from '$lib/backends';
 	import type { ApproveOp } from '$lib/approval';
@@ -37,6 +38,7 @@
 		chat: isChat = false,
 		engine,
 		title,
+		hostName,
 		register,
 		onBack,
 		onFiles,
@@ -53,6 +55,8 @@
 		/** Another engine the daemon runs the session on (`claude`). */
 		engine?: string;
 		title: string;
+		/** The computer the session runs on, when several are paired. */
+		hostName?: string;
 		/** Shows the project's files / changes. */
 		onFiles?: () => void;
 		onChanges?: () => void;
@@ -60,6 +64,7 @@
 		register: (id: string, onFrame: (raw: string) => void, onExit: () => void) => () => void;
 		onBack: () => void;
 	} = $props();
+	const { daemon, agents: agentDirectory } = useHost();
 
 	const id = `remote-${Math.random().toString(36).slice(2)}`;
 	const chat = new ChatState();
@@ -293,7 +298,10 @@
 <div class="session">
 	<header>
 		<button class="back" onclick={onBack} aria-label={t('shell.remote.back')}><ArrowLeftIcon size={18} /></button>
-		<span class="title">{title}</span>
+		<span class="heading">
+			<span class="title">{title}</span>
+			{#if hostName}<span class="host"><DesktopIcon size={11} /><span>{hostName}</span></span>{/if}
+		</span>
 		{#if chat.busy}<span class="busy pulse"></span>{/if}
 		{#if onFiles}<button class="back" onclick={onFiles} aria-label={t('shell.remote.files')}><FilesIcon size={18} /></button>{/if}
 		{#if onChanges}<button class="back" onclick={onChanges} aria-label={t('shell.remote.changes')}><GitDiffIcon size={18} /></button>{/if}
@@ -453,14 +461,34 @@
 	.back:active {
 		transform: scale(0.92);
 	}
-	.title {
+	.heading {
 		flex: 1;
 		min-width: 0;
+		display: flex;
+		flex-direction: column;
+	}
+	.title {
 		font-weight: 600;
 		font-size: var(--fs-lg);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+	.host {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		min-width: 0;
+		color: var(--dim);
+		font-size: var(--fs-xs);
+	}
+	.host span {
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.host :global(svg) {
+		flex-shrink: 0;
 	}
 	.busy {
 		width: 8px;

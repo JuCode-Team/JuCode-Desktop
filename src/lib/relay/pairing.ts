@@ -1,17 +1,32 @@
 // The PWA's relay pairing state (JuCode-CLI docs/relay-protocol.md §1, §2):
-// the computer it pairs with, read from the `#pair=` link fragment, and this
-// device's own X25519 key, both in localStorage.
+// the computers it is paired with, read from `#pair=` link fragments, and
+// this device's own X25519 key (one per browser, used for every computer),
+// all in localStorage.
 
 import { fromBase64Url, generateKeyPair, toBase64Url, type KeyPair } from './noise';
 
 export const RELAY_URL = 'wss://app.jucode.net/relay/v1';
-const HOST_KEY = 'jucode-relay-host';
+const HOSTS_KEY = 'jucode-relay-hosts';
+/** The single computer kept before there was a list; moved into it once. */
+const LEGACY_HOST_KEY = 'jucode-relay-host';
+const ACTIVE_KEY = 'jucode-relay-active';
 const DEVICE_KEY = 'jucode-relay-device';
 
 export interface RelayHost {
 	host_id: string;
 	host_static_pub: string;
 	relay: string;
+}
+
+/** A paired computer as this browser keeps it. The daemon does not tell
+ *  clients its machine name, so it is named here: `name` when the user
+ *  renamed it, else 「电脑 {seq}」. */
+export interface SavedHost extends RelayHost {
+	name: string;
+	/** Numbers the default name; stays with the computer. */
+	seq: number;
+	/** ms */
+	added_at: number;
 }
 
 export interface PairLink {
@@ -50,22 +65,102 @@ function read<T>(key: string): T | null {
 	}
 }
 
-export function loadHost(): RelayHost | null {
-	const host = read<RelayHost>(HOST_KEY);
-	return host?.host_id && host.host_static_pub && host.relay ? host : null;
-}
+const validHost = <T extends Partial<RelayHost>>(h: T | null | undefined): h is T & RelayHost =>
+	!!h?.host_id && !!h.host_static_pub && !!h.relay;
 
-export function saveHost(host: RelayHost) {
-	localStorage.setItem(HOST_KEY, JSON.stringify(host));
-}
-
-/** Forgets the paired computer and this device's key (a new pairing starts fresh). */
-export function forgetHost() {
+function write(key: string, value: unknown) {
 	try {
-		localStorage.removeItem(HOST_KEY);
+		localStorage.setItem(key, JSON.stringify(value));
+	} catch {
+		/* storage unavailable: lasts for this visit */
+	}
+}
+
+/** The paired computers, oldest first. Moves the single computer an older
+ *  version kept into the list. */
+export function loadHosts(): SavedHost[] {
+	const list = read<Partial<SavedHost>[]>(HOSTS_KEY);
+	if (Array.isArray(list)) {
+		return list.filter(validHost).map((h, i) => ({
+			host_id: h.host_id,
+			host_static_pub: h.host_static_pub,
+			relay: h.relay,
+			name: typeof h.name === 'string' ? h.name : '',
+			seq: Number.isInteger(h.seq) && h.seq! > 0 ? h.seq! : i + 1,
+			added_at: Number(h.added_at) || 0
+		}));
+	}
+	const legacy = read<RelayHost>(LEGACY_HOST_KEY);
+	const hosts = validHost(legacy)
+		? [{ host_id: legacy.host_id, host_static_pub: legacy.host_static_pub, relay: legacy.relay, name: '', seq: 1, added_at: Date.now() }]
+		: [];
+	if (hosts.length) write(HOSTS_KEY, hosts);
+	try {
+		localStorage.removeItem(LEGACY_HOST_KEY);
+	} catch {
+		/* storage unavailable */
+	}
+	return hosts;
+}
+
+/** The lowest default-name number no saved computer uses. */
+export function nextSeq(hosts: Pick<SavedHost, 'seq'>[]): number {
+	let seq = 1;
+	while (hosts.some((h) => h.seq === seq)) seq++;
+	return seq;
+}
+
+/** Adds a newly paired computer; pairing one already saved again updates its
+ *  key and relay and keeps its name. Returns the saved entry. */
+export function addHost(host: RelayHost): SavedHost {
+	const hosts = loadHosts();
+	const known = hosts.find((h) => h.host_id === host.host_id);
+	const saved: SavedHost = known
+		? { ...known, host_static_pub: host.host_static_pub, relay: host.relay }
+		: { ...host, name: '', seq: nextSeq(hosts), added_at: Date.now() };
+	write(
+		HOSTS_KEY,
+		known ? hosts.map((h) => (h.host_id === host.host_id ? saved : h)) : [...hosts, saved]
+	);
+	return saved;
+}
+
+/** Names a computer here; an empty name goes back to the default one. */
+export function renameHost(hostId: string, name: string) {
+	write(
+		HOSTS_KEY,
+		loadHosts().map((h) => (h.host_id === hostId ? { ...h, name: name.trim() } : h))
+	);
+}
+
+/** Forgets one computer. With none left, this device's key goes too, so a
+ *  new pairing starts fresh. */
+export function forgetHost(hostId: string) {
+	const hosts = loadHosts().filter((h) => h.host_id !== hostId);
+	write(HOSTS_KEY, hosts);
+	if (hosts.length) return;
+	try {
 		localStorage.removeItem(DEVICE_KEY);
+		localStorage.removeItem(ACTIVE_KEY);
 	} catch {
 		/* storage unavailable: nothing to forget */
+	}
+}
+
+/** The computer shown last (a host id, or `lan`). */
+export function loadActive(): string | null {
+	try {
+		return localStorage.getItem(ACTIVE_KEY);
+	} catch {
+		return null;
+	}
+}
+
+export function saveActive(id: string) {
+	try {
+		localStorage.setItem(ACTIVE_KEY, id);
+	} catch {
+		/* storage unavailable: the first computer next time */
 	}
 }
 

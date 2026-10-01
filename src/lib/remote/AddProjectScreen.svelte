@@ -7,10 +7,12 @@
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import RemoteScreen from './RemoteScreen.svelte';
-	import { remoteProjects, type DirListing } from './store.svelte';
+	import type { DirListing } from './store.svelte';
+	import { useHost } from './connection.svelte';
 	import { t } from '$lib/i18n';
 
 	let { onBack, onAdded }: { onBack: () => void; onAdded: () => void } = $props();
+	const remoteProjects = useHost().projects;
 
 	let listing = $state<DirListing | null>(null);
 	let home = $state('');

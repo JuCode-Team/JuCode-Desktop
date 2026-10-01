@@ -5,10 +5,12 @@
 	import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon';
 	import Notice from '$lib/ui/Notice.svelte';
 	import RemoteScreen from './RemoteScreen.svelte';
-	import { remoteProjects, type GitFile, type GitStatus } from './store.svelte';
+	import type { GitFile, GitStatus } from './store.svelte';
+	import { useHost } from './connection.svelte';
 	import { t } from '$lib/i18n';
 
 	let { root, title, onBack }: { root: string; title: string; onBack: () => void } = $props();
+	const remoteProjects = useHost().projects;
 
 	let status = $state<GitStatus | null>(null);
 	let file = $state<GitFile | null>(null);
