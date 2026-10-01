@@ -181,7 +181,8 @@ export function removeAuthKey(provider: string): Promise<void> {
 	return invoke('remove_auth_key', { provider });
 }
 
-// Skills marketplace (Tauri combines JuCode with github.com/anthropics/skills).
+// Skills marketplace: the daemon combines JuCode with github.com/anthropics/skills
+// and installs into the backend's personal skills directory.
 export type SkillSource = 'jucode' | 'anthropic';
 export interface MarketSkill {
 	id: string;
@@ -200,11 +201,14 @@ export interface SkillCatalog {
 	warnings: string[];
 	installDir: string;
 }
-export function fetchMarketplace(backend: string): Promise<SkillCatalog> {
-	return invoke('fetch_marketplace', { backend });
+export async function fetchMarketplace(backend: string): Promise<SkillCatalog> {
+	await daemon.connect();
+	return (await daemon.request({ op: 'skills_catalog', backend })) as unknown as SkillCatalog;
 }
-export function installMarketplaceSkill(source: SkillSource, id: string, backend: string): Promise<string> {
-	return invoke('install_marketplace_skill', { source, id, backend });
+export async function installMarketplaceSkill(source: SkillSource, id: string, backend: string): Promise<string> {
+	await daemon.connect();
+	const reply = await daemon.request({ op: 'skill_install', source, skill: id, backend });
+	return reply.path as string;
 }
 
 // JuCode account: plan / balance / usage / call-details, fetched via the

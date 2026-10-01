@@ -15,7 +15,6 @@ mod installer;
 mod plugins;
 mod secrets;
 mod shell_env;
-mod skills;
 mod tool_switch;
 
 use backend::BackendKind;
@@ -626,24 +625,6 @@ fn remove_auth_key(provider: String) -> Result<(), String> {
     write_auth(&mut current)
 }
 
-const DEFAULT_API_URL: &str = "https://api.jucode.net";
-
-fn jucode_api_url() -> String {
-    let url = read_json(&jucode_dir().join("config.json"))
-        .get("jucode_api_url")
-        .and_then(|v| v.as_str())
-        .unwrap_or(DEFAULT_API_URL)
-        .trim_end_matches('/')
-        .to_string();
-    // The gateway moved from api.jucode.cn; the engine rewrites the saved
-    // config the next time it writes it (config.rs migrate_jucode_host).
-    if url == "https://api.jucode.cn" {
-        DEFAULT_API_URL.to_string()
-    } else {
-        url
-    }
-}
-
 fn unix_now() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -704,51 +685,6 @@ fn jucode_get(path: &str) -> Result<serde_json::Value, String> {
         .map_err(|e| e.to_string())?
         .into_json::<serde_json::Value>()
         .map_err(|e| e.to_string())
-}
-
-/// Fetches the JuCode source payload. The endpoint is public; the access token
-/// (when present) is sent best-effort without forcing a refresh.
-fn fetch_jucode_marketplace() -> Result<serde_json::Value, String> {
-    let url = format!("{}/v1/skills/marketplace", jucode_api_url());
-    let key = read_auth()
-        .get("jucode")
-        .and_then(|j| j.get("access_token"))
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-    let mut req = ureq::get(&url).timeout(std::time::Duration::from_secs(30));
-    if let Some(k) = key.filter(|k| !k.trim().is_empty()) {
-        req = req.set("Authorization", &format!("Bearer {k}"));
-    }
-    req.call()
-        .map_err(|e| e.to_string())?
-        .into_json::<serde_json::Value>()
-        .map_err(|e| e.to_string())
-}
-
-/// Combines the official JuCode marketplace with the vendored public metadata
-/// index for github.com/anthropics/skills. A JuCode network failure is returned
-/// as a source warning so the independently installable Anthropic catalog stays
-/// available.
-#[tauri::command(async)]
-fn fetch_marketplace(backend: String) -> Result<skills::SkillCatalog, String> {
-    skills::catalog(fetch_jucode_marketplace(), &backend)
-}
-
-/// Installs directly into the active backend's personal skill directory. The
-/// source is re-fetched here instead of trusting package URLs or content sent by
-/// the webview.
-#[tauri::command(async)]
-fn install_marketplace_skill(
-    source: String,
-    id: String,
-    backend: String,
-) -> Result<String, String> {
-    let jucode = if source == "jucode" {
-        Some(fetch_jucode_marketplace()?)
-    } else {
-        None
-    };
-    skills::install(&source, &id, &backend, jucode.as_ref())
 }
 
 /// Account overview (profile + balance + active plan) for the GUI.
@@ -2900,8 +2836,6 @@ pub fn run() {
             read_auth_providers,
             set_auth_key,
             remove_auth_key,
-            fetch_marketplace,
-            install_marketplace_skill,
             fetch_account_info,
             fetch_usage,
             fetch_usage_logs,

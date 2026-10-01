@@ -50,7 +50,7 @@
 			warnings = catalog.warnings;
 			installDir = catalog.installDir;
 		} catch (e) {
-			error = String(e);
+			error = e instanceof Error ? e.message : String(e);
 		} finally {
 			loading = false;
 		}
@@ -65,7 +65,7 @@
 			await installMarketplaceSkill(s.source, s.id, backend);
 			s.installed = true;
 		} catch (e) {
-			error = String(e);
+			error = e instanceof Error ? e.message : String(e);
 		} finally {
 			installing[key] = false;
 		}
