@@ -83,6 +83,9 @@ fn confine_to_root(path: &Path, root: Option<&Path>) -> Result<PathBuf, String> 
     let canon_path = path
         .canonicalize()
         .map_err(|e| format!("failed to resolve path: {e}"))?;
+    if is_protected(&canon_path) {
+        return Err(format!("{} is protected", canon_path.display()));
+    }
     let ok = if explicit {
         canon_path.starts_with(&canon_root)
     } else {
@@ -93,6 +96,30 @@ fn confine_to_root(path: &Path, root: Option<&Path>) -> Result<PathBuf, String> 
     } else {
         Err("path is outside the project root".to_string())
     }
+}
+
+/// Credentials no file view or editor may touch, whatever the root: the same
+/// list the engine's sandbox and the daemon's file ops refuse
+/// (agent-core `sandbox::denied_reads`).
+fn is_protected(canon_path: &Path) -> bool {
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
+    is_protected_in(Path::new(&home.unwrap_or_default()), canon_path)
+}
+
+fn is_protected_in(home: &Path, canon_path: &Path) -> bool {
+    [
+        ".ssh",
+        ".gnupg",
+        ".aws",
+        ".jucode/auth.json",
+        ".jucode/daemon",
+    ]
+    .iter()
+    .map(|protected| {
+        let path = home.join(protected);
+        path.canonicalize().unwrap_or(path)
+    })
+    .any(|protected| canon_path.starts_with(protected))
 }
 
 /// Availability report for one backend binary (settings / new-session UI).
@@ -648,12 +675,21 @@ fn jucode_session() -> Result<(String, String), String> {
     }
     let session: serde_json::Value =
         serde_json::from_slice(&out.stdout).map_err(|e| format!("jucode token: {e}"))?;
-    let text = |key: &str| session.get(key).and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let text = |key: &str| {
+        session
+            .get(key)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string()
+    };
     let (api, token) = (text("api_url"), text("access_token"));
     if token.is_empty() {
         return Err("not logged in to JuCode".to_string());
     }
-    let expires_at = session.get("expires_at").and_then(|v| v.as_u64()).unwrap_or(0);
+    let expires_at = session
+        .get("expires_at")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
     *cache = Some((api.clone(), token.clone(), expires_at));
     Ok((api, token))
 }
@@ -2938,6 +2974,20 @@ mod tests {
             Some(Duration::from_secs(2 * 86_400 + 3907))
         );
         assert_eq!(super::parse_etime("x"), None);
+    }
+
+    #[test]
+    fn credentials_are_protected_wherever_they_are_reached_from() {
+        let home = std::env::temp_dir().join(format!("jucode-protected-{}", std::process::id()));
+        std::fs::create_dir_all(home.join(".ssh")).unwrap();
+        let home = home.canonicalize().unwrap();
+        assert!(super::is_protected_in(&home, &home.join(".ssh/id_ed25519")));
+        assert!(super::is_protected_in(
+            &home,
+            &home.join(".jucode/auth.json")
+        ));
+        assert!(!super::is_protected_in(&home, &home.join("project/.env")));
+        let _ = std::fs::remove_dir_all(home);
     }
 
     #[test]
