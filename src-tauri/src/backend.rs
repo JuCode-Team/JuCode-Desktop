@@ -1,18 +1,17 @@
-//! Multi-backend engine support: which agent CLI a session runs, how its
-//! binary is resolved and which argv it is started with.
+//! The agent CLIs the desktop knows: how their binaries are resolved, which
+//! argv their native TUI tabs may start with, and the custom environment a
+//! user may give them. Sessions themselves run in the jucode daemon.
 //!
-//! Safety model: the frontend never passes argv. It passes a `backend` name
-//! plus a small `backend_opts` JSON object that is validated here against a
-//! FIXED per-backend allowlist; every option value becomes a single argv
-//! entry (never shell-interpreted, never split), so option values containing
-//! spaces or dashes cannot smuggle extra flags.
+//! Safety model: the frontend never passes argv. TUI tabs take a fixed token
+//! allowlist per backend, and every value is one argv entry (never
+//! shell-interpreted, never split).
 
 use std::path::{Path, PathBuf};
 
 /// The agent engines the desktop can drive.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum BackendKind {
-    /// Native engine (`jucode serve`), the default — full protocol support.
+    /// Native engine, the default — full protocol support.
     Jucode,
     /// OpenAI Codex CLI in stdio JSON-RPC server mode (`codex app-server`).
     Codex,
@@ -56,79 +55,6 @@ impl BackendKind {
             Self::Acp => "JUCODE_ACP_BIN_UNUSED",
         }
     }
-
-    /// `backend_opts` keys accepted for this backend. Anything else is rejected.
-    fn allowed_opts(self) -> &'static [&'static str] {
-        match self {
-            Self::Jucode => &["bin_override", "use_shell_env", "env", "chat"],
-            // Codex app-server takes per-conversation config over JSON-RPC,
-            // not argv — only the binary path is configurable at spawn time.
-            Self::Codex => &["bin_override", "use_shell_env", "env", "jucode_gateway"],
-            Self::Claude => &[
-                "bin_override",
-                "permission_mode",
-                "resume",
-                "resume_session_at",
-                "session_id",
-                "model",
-                "use_shell_env",
-                "env",
-                "jucode_gateway",
-            ],
-            // ACP sessions select a registry entry — never a binary path or
-            // argv. Everything else about the spawn is fixed by the registry.
-            Self::Acp => &["agent", "use_shell_env", "env"],
-        }
-    }
-}
-
-/// Validated spawn options (a strict subset of keys per backend).
-#[derive(Debug, PartialEq)]
-pub struct BackendOpts {
-    /// Explicit binary path from the desktop settings (below the env override
-    /// in precedence, above PATH).
-    pub bin_override: Option<String>,
-    /// claude: `--permission-mode <mode>` (fixed enum).
-    pub permission_mode: Option<String>,
-    /// claude: `--resume <session-id>`.
-    pub resume: Option<String>,
-    /// claude: `--resume-session-at <message-uuid>` — resume a session truncated
-    /// at a given message (conversation rewind). Used together with `resume`.
-    pub resume_session_at: Option<String>,
-    /// claude: `--session-id <uuid>` (mutually exclusive with `resume`).
-    pub session_id: Option<String>,
-    /// claude: `--model <name>`.
-    pub model: Option<String>,
-    /// acp: registry entry id of the agent to launch (`acp_registry.rs`).
-    pub agent: Option<String>,
-    /// jucode: `serve --chat`, a chat session in `~/.jucode/chats`.
-    pub chat: bool,
-    /// claude / codex: talk to the JuCode gateway (`tool_switch::gateway_spawn`)
-    /// instead of the provider in the user's own config.
-    pub jucode_gateway: bool,
-    /// Build the child env from the login-shell snapshot (default true; see
-    /// `shell_env`). Off = inherit the GUI environment as before.
-    pub use_shell_env: bool,
-    /// Per-backend user-defined env vars, applied after the snapshot.
-    pub env: Vec<(String, String)>,
-}
-
-impl Default for BackendOpts {
-    fn default() -> Self {
-        Self {
-            bin_override: None,
-            permission_mode: None,
-            resume: None,
-            resume_session_at: None,
-            session_id: None,
-            model: None,
-            agent: None,
-            chat: false,
-            jucode_gateway: false,
-            use_shell_env: true,
-            env: Vec::new(),
-        }
-    }
 }
 
 /// Custom env var names: POSIX-style identifiers only, with dangerous
@@ -159,23 +85,6 @@ pub(crate) fn is_valid_acp_agent_id(s: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
 }
 
-/// Claude Code permission modes the desktop is allowed to request.
-const CLAUDE_PERMISSION_MODES: &[&str] = &[
-    "default",
-    "plan",
-    "auto",
-    "acceptEdits",
-    "bypassPermissions",
-];
-
-fn expect_string(key: &str, v: &serde_json::Value) -> Result<String, String> {
-    v.as_str()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
-        .ok_or_else(|| format!("backend option {key} must be a non-empty string"))
-}
-
 /// Session / resume ids: UUID-ish only (alphanumeric + dashes), so an id can
 /// never look like a flag or contain whitespace tricks.
 fn is_valid_session_id(s: &str) -> bool {
@@ -193,195 +102,31 @@ fn is_valid_value(s: &str) -> bool {
     !s.is_empty() && s.len() <= 300 && !s.starts_with('-') && !s.chars().any(|c| c.is_control())
 }
 
-/// Validates `backend_opts` against the backend's fixed option set. Unknown
-/// keys, non-string values and malformed values are all rejected; `None` /
-/// `null` means "no options".
-pub fn validate_opts(
-    kind: BackendKind,
-    raw: Option<&serde_json::Value>,
-) -> Result<BackendOpts, String> {
-    let mut opts = BackendOpts::default();
-    let Some(raw) = raw else { return Ok(opts) };
-    if raw.is_null() {
-        return Ok(opts);
-    }
-    let map = raw
+/// Validates a user-defined environment (`{NAME: value}`): plain names, no
+/// dynamic-linker variables, bounded size.
+pub fn validate_env(value: &serde_json::Value) -> Result<Vec<(String, String)>, String> {
+    let obj = value
         .as_object()
-        .ok_or_else(|| "backend_opts must be an object".to_string())?;
-    for (key, value) in map {
-        if !kind.allowed_opts().contains(&key.as_str()) {
-            return Err(format!(
-                "backend option not allowed for {}: {key}",
-                kind.bin_name()
-            ));
-        }
-        // Non-string options first.
-        match key.as_str() {
-            "use_shell_env" => {
-                opts.use_shell_env = value
-                    .as_bool()
-                    .ok_or_else(|| "use_shell_env must be a boolean".to_string())?;
-                continue;
-            }
-            "chat" => {
-                opts.chat = value
-                    .as_bool()
-                    .ok_or_else(|| "chat must be a boolean".to_string())?;
-                continue;
-            }
-            "jucode_gateway" => {
-                opts.jucode_gateway = value
-                    .as_bool()
-                    .ok_or_else(|| "jucode_gateway must be a boolean".to_string())?;
-                continue;
-            }
-            "env" => {
-                let obj = value
-                    .as_object()
-                    .ok_or_else(|| "env must be an object of string values".to_string())?;
-                if obj.len() > MAX_CUSTOM_ENV_VARS {
-                    return Err(format!(
-                        "env accepts at most {MAX_CUSTOM_ENV_VARS} variables"
-                    ));
-                }
-                let mut vars = Vec::with_capacity(obj.len());
-                for (name, val) in obj {
-                    if !is_valid_env_name(name) {
-                        return Err(format!("invalid env variable name: {name}"));
-                    }
-                    let val = val
-                        .as_str()
-                        .ok_or_else(|| format!("env value for {name} must be a string"))?;
-                    if val.len() > MAX_CUSTOM_ENV_VALUE_LEN || val.contains('\0') {
-                        return Err(format!("invalid env value for {name}"));
-                    }
-                    vars.push((name.clone(), val.to_string()));
-                }
-                opts.env = vars;
-                continue;
-            }
-            _ => {}
-        }
-        let s = expect_string(key, value)?;
-        match key.as_str() {
-            "bin_override" => {
-                if !is_valid_value(&s) {
-                    return Err(format!("invalid bin_override: {s}"));
-                }
-                opts.bin_override = Some(s);
-            }
-            "permission_mode" => {
-                if !CLAUDE_PERMISSION_MODES.contains(&s.as_str()) {
-                    return Err(format!("invalid permission_mode: {s}"));
-                }
-                opts.permission_mode = Some(s);
-            }
-            "resume" => {
-                if !is_valid_session_id(&s) {
-                    return Err(format!("invalid resume session id: {s}"));
-                }
-                opts.resume = Some(s);
-            }
-            "resume_session_at" => {
-                // A message uuid (UUID-shaped: alphanumeric + dashes).
-                if !is_valid_session_id(&s) {
-                    return Err(format!("invalid resume_session_at message id: {s}"));
-                }
-                opts.resume_session_at = Some(s);
-            }
-            "session_id" => {
-                if !is_valid_session_id(&s) {
-                    return Err(format!("invalid session id: {s}"));
-                }
-                opts.session_id = Some(s);
-            }
-            "model" => {
-                if !is_valid_value(&s) {
-                    return Err(format!("invalid model: {s}"));
-                }
-                opts.model = Some(s);
-            }
-            "agent" => {
-                if !is_valid_acp_agent_id(&s) {
-                    return Err(format!("invalid acp agent id: {s}"));
-                }
-                opts.agent = Some(s);
-            }
-            _ => unreachable!("key was checked against the allowlist"),
-        }
+        .ok_or_else(|| "env must be an object of string values".to_string())?;
+    if obj.len() > MAX_CUSTOM_ENV_VARS {
+        return Err(format!(
+            "env accepts at most {MAX_CUSTOM_ENV_VARS} variables"
+        ));
     }
-    if opts.resume.is_some() && opts.session_id.is_some() {
-        return Err("resume and session_id are mutually exclusive".to_string());
-    }
-    if opts.resume_session_at.is_some() && opts.resume.is_none() {
-        return Err("resume_session_at requires resume".to_string());
-    }
-    Ok(opts)
-}
-
-/// Fixed argv template per backend, extended only by validated option values —
-/// each value is one argv entry, exactly as validated.
-pub fn build_args(kind: BackendKind, opts: &BackendOpts) -> Vec<String> {
-    match kind {
-        BackendKind::Jucode if opts.chat => vec!["serve".to_string(), "--chat".to_string()],
-        BackendKind::Jucode => vec!["serve".to_string()],
-        BackendKind::Codex => vec!["app-server".to_string()],
-        // ACP argv comes from the registry entry, not from options —
-        // create_session never calls build_args for this kind.
-        BackendKind::Acp => Vec::new(),
-        BackendKind::Claude => {
-            let yolo = opts.permission_mode.as_deref() == Some("bypassPermissions");
-            let mut args: Vec<String> = [
-                "--print",
-                "--input-format",
-                "stream-json",
-                "--output-format",
-                "stream-json",
-                "--include-partial-messages",
-                "--verbose",
-                "--replay-user-messages",
-            ]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
-            if yolo {
-                // Full bypass: nothing prompts. This is honored only when launched
-                // with --dangerously-skip-permissions (a plain --permission-mode
-                // bypassPermissions, or a live set, is rejected). It also conflicts
-                // with --permission-prompt-tool (the CLI errors "error_during_
-                // execution"), so that flag is omitted here.
-                args.push("--dangerously-skip-permissions".to_string());
-            } else {
-                // Route interactive permission prompts over stdio as
-                // `control_request` frames (subtype can_use_tool). Verified against
-                // claude 2.1.208: without this flag the CLI silently auto-denies
-                // gated tools in --print mode instead of asking.
-                args.push("--permission-prompt-tool".to_string());
-                args.push("stdio".to_string());
-                if let Some(mode) = &opts.permission_mode {
-                    args.push("--permission-mode".to_string());
-                    args.push(mode.clone());
-                }
-            }
-            if let Some(sid) = &opts.resume {
-                args.push("--resume".to_string());
-                args.push(sid.clone());
-            }
-            if let Some(uuid) = &opts.resume_session_at {
-                args.push("--resume-session-at".to_string());
-                args.push(uuid.clone());
-            }
-            if let Some(sid) = &opts.session_id {
-                args.push("--session-id".to_string());
-                args.push(sid.clone());
-            }
-            if let Some(model) = &opts.model {
-                args.push("--model".to_string());
-                args.push(model.clone());
-            }
-            args
+    let mut vars = Vec::with_capacity(obj.len());
+    for (name, val) in obj {
+        if !is_valid_env_name(name) {
+            return Err(format!("invalid env variable name: {name}"));
         }
+        let val = val
+            .as_str()
+            .ok_or_else(|| format!("env value for {name} must be a string"))?;
+        if val.len() > MAX_CUSTOM_ENV_VALUE_LEN || val.contains('\0') {
+            return Err(format!("invalid env value for {name}"));
+        }
+        vars.push((name.clone(), val.to_string()));
     }
+    Ok(vars)
 }
 
 // --- native TUI tabs (pty-backed interactive CLI sessions) ---
@@ -440,8 +185,8 @@ pub fn validate_tui_args(kind: BackendKind, args: &[String]) -> Result<(), Strin
     }
 }
 
-/// Validates a settings-provided binary path for a TUI spawn (same rule as
-/// the `bin_override` backend option: no leading dash, no control chars).
+/// Validates a settings-provided binary path: no leading dash, no control
+/// chars.
 pub fn validate_bin_override(s: &str) -> Result<(), String> {
     if is_valid_value(s) {
         Ok(())
@@ -612,38 +357,6 @@ mod tests {
         assert!(BackendKind::parse("").is_err());
     }
 
-    // --- acp options ---
-
-    #[test]
-    fn acp_accepts_only_a_registry_agent_id() {
-        let opts =
-            validate_opts(BackendKind::Acp, Some(&json!({ "agent": "gemini-cli" }))).unwrap();
-        assert_eq!(opts.agent.as_deref(), Some("gemini-cli"));
-        // No binary override, no argv-shaped anything.
-        assert!(validate_opts(
-            BackendKind::Acp,
-            Some(&json!({ "bin_override": "/bin/sh" }))
-        )
-        .is_err());
-        assert!(validate_opts(BackendKind::Acp, Some(&json!({ "args": ["-x"] }))).is_err());
-        assert!(validate_opts(BackendKind::Acp, Some(&json!({ "command": "sh" }))).is_err());
-        // Ids are slugs: no flags, spaces, dots or uppercase.
-        for bad in ["--help", "a b", "../etc", "UPPER", ""] {
-            assert!(
-                validate_opts(BackendKind::Acp, Some(&json!({ "agent": bad }))).is_err(),
-                "{bad:?} must be rejected"
-            );
-        }
-        // Other backends don't take `agent`.
-        assert!(validate_opts(BackendKind::Jucode, Some(&json!({ "agent": "x" }))).is_err());
-        assert!(validate_opts(BackendKind::Claude, Some(&json!({ "agent": "x" }))).is_err());
-    }
-
-    #[test]
-    fn acp_build_args_is_empty_registry_supplies_argv() {
-        assert!(build_args(BackendKind::Acp, &BackendOpts::default()).is_empty());
-    }
-
     #[test]
     fn acp_program_resolution_keeps_explicit_paths_and_reuses_engine_resolution() {
         // A path with separators is used exactly as configured.
@@ -655,297 +368,24 @@ mod tests {
         assert!(!ju.as_os_str().is_empty());
     }
 
-    // --- arg templates ---
-
-    #[test]
-    fn jucode_and_codex_have_fixed_templates() {
-        assert_eq!(
-            build_args(BackendKind::Jucode, &BackendOpts::default()),
-            vec!["serve"]
-        );
-        assert_eq!(
-            build_args(BackendKind::Codex, &BackendOpts::default()),
-            vec!["app-server"]
-        );
-    }
-
-    #[test]
-    fn jucode_chat_option_starts_a_chat_session() {
-        let opts = validate_opts(
-            BackendKind::Jucode,
-            Some(&serde_json::json!({ "chat": true })),
-        )
-        .unwrap();
-        assert_eq!(
-            build_args(BackendKind::Jucode, &opts),
-            vec!["serve", "--chat"]
-        );
-        assert!(validate_opts(
-            BackendKind::Jucode,
-            Some(&serde_json::json!({ "chat": "yes" }))
-        )
-        .is_err());
-        assert!(validate_opts(
-            BackendKind::Codex,
-            Some(&serde_json::json!({ "chat": true }))
-        )
-        .is_err());
-    }
-
-    #[test]
-    fn claude_base_template_is_fixed() {
-        let args = build_args(BackendKind::Claude, &BackendOpts::default());
-        assert_eq!(
-            args,
-            vec![
-                "--print",
-                "--input-format",
-                "stream-json",
-                "--output-format",
-                "stream-json",
-                "--include-partial-messages",
-                "--verbose",
-                "--replay-user-messages",
-                "--permission-prompt-tool",
-                "stdio",
-            ]
-        );
-    }
-
-    #[test]
-    fn claude_options_map_to_flag_value_pairs() {
-        let opts = validate_opts(
-            BackendKind::Claude,
-            Some(&json!({
-                "permission_mode": "acceptEdits",
-                "resume": "0f3d7a1c-9e2b-4b7e-9d4d-2a1b3c4d5e6f",
-                "model": "claude-sonnet-4-5"
-            })),
-        )
-        .unwrap();
-        let args = build_args(BackendKind::Claude, &opts);
-        let tail = &args[args.len() - 6..];
-        assert_eq!(
-            tail,
-            [
-                "--permission-mode",
-                "acceptEdits",
-                "--resume",
-                "0f3d7a1c-9e2b-4b7e-9d4d-2a1b3c4d5e6f",
-                "--model",
-                "claude-sonnet-4-5",
-            ]
-        );
-    }
-
-    #[test]
-    fn bypass_permissions_maps_to_dangerously_skip_flag() {
-        // yolo must launch with --dangerously-skip-permissions, not
-        // --permission-mode bypassPermissions (which the CLI rejects).
-        let opts = validate_opts(
-            BackendKind::Claude,
-            Some(&json!({ "permission_mode": "bypassPermissions" })),
-        )
-        .unwrap();
-        let args = build_args(BackendKind::Claude, &opts);
-        assert!(args.iter().any(|a| a == "--dangerously-skip-permissions"));
-        assert!(!args.iter().any(|a| a == "bypassPermissions"));
-        // yolo omits --permission-prompt-tool: pairing it with the skip flag makes
-        // the CLI error "error_during_execution".
-        assert!(!args.iter().any(|a| a == "--permission-prompt-tool"));
-        // A normal mode still maps to --permission-mode <mode>.
-        let opts = validate_opts(
-            BackendKind::Claude,
-            Some(&json!({ "permission_mode": "acceptEdits" })),
-        )
-        .unwrap();
-        let args = build_args(BackendKind::Claude, &opts);
-        let i = args.iter().position(|a| a == "--permission-mode").unwrap();
-        assert_eq!(args[i + 1], "acceptEdits");
-    }
-
-    #[test]
-    fn resume_session_at_maps_to_flag_and_requires_resume() {
-        // Rewind respawn: --resume <sid> --resume-session-at <msg-uuid>.
-        let opts = validate_opts(
-            BackendKind::Claude,
-            Some(&json!({
-                "resume": "0f3d7a1c-9e2b-4b7e-9d4d-2a1b3c4d5e6f",
-                "resume_session_at": "aa11bb22-cc33-dd44-ee55-ff6677889900"
-            })),
-        )
-        .unwrap();
-        let args = build_args(BackendKind::Claude, &opts);
-        let ri = args.iter().position(|a| a == "--resume").unwrap();
-        assert_eq!(args[ri + 1], "0f3d7a1c-9e2b-4b7e-9d4d-2a1b3c4d5e6f");
-        let ai = args
-            .iter()
-            .position(|a| a == "--resume-session-at")
-            .unwrap();
-        assert_eq!(args[ai + 1], "aa11bb22-cc33-dd44-ee55-ff6677889900");
-        // resume_session_at without resume is rejected.
-        assert!(validate_opts(
-            BackendKind::Claude,
-            Some(&json!({ "resume_session_at": "aa11bb22-cc33-dd44-ee55-ff6677889900" })),
-        )
-        .is_err());
-    }
-
-    #[test]
-    fn option_values_with_spaces_or_dashes_stay_single_argv_entries() {
-        // A model name containing spaces and inner dashes must arrive as ONE
-        // argv entry — never split, never re-interpreted as flags.
-        let opts = validate_opts(
-            BackendKind::Claude,
-            Some(&json!({ "model": "sonnet 4.5 --latest" })),
-        )
-        .unwrap();
-        let args = build_args(BackendKind::Claude, &opts);
-        let i = args.iter().position(|a| a == "--model").unwrap();
-        assert_eq!(args[i + 1], "sonnet 4.5 --latest");
-        assert_eq!(args.iter().filter(|a| a.contains("--latest")).count(), 1);
-    }
-
-    // --- option validation ---
-
-    #[test]
-    fn unknown_keys_are_rejected_per_backend() {
-        // jucode / codex don't take claude's options.
-        for kind in [BackendKind::Jucode, BackendKind::Codex] {
-            let err = validate_opts(kind, Some(&json!({ "permission_mode": "plan" })));
-            assert!(err.is_err(), "{kind:?} must reject permission_mode");
-        }
-        assert!(validate_opts(BackendKind::Claude, Some(&json!({ "argv": ["-x"] }))).is_err());
-        assert!(validate_opts(
-            BackendKind::Claude,
-            Some(&json!({ "extra_flag": "--yolo" }))
-        )
-        .is_err());
-    }
-
-    #[test]
-    fn values_starting_with_a_dash_are_rejected() {
-        assert!(validate_opts(
-            BackendKind::Claude,
-            Some(&json!({ "model": "--dangerously-skip-permissions" }))
-        )
-        .is_err());
-        assert!(validate_opts(BackendKind::Claude, Some(&json!({ "resume": "--help" }))).is_err());
-        assert!(
-            validate_opts(BackendKind::Jucode, Some(&json!({ "bin_override": "-rf" }))).is_err()
-        );
-    }
-
-    #[test]
-    fn permission_mode_is_a_fixed_enum() {
-        for ok in CLAUDE_PERMISSION_MODES {
-            assert!(
-                validate_opts(BackendKind::Claude, Some(&json!({ "permission_mode": ok }))).is_ok()
-            );
-        }
-        assert!(validate_opts(
-            BackendKind::Claude,
-            Some(&json!({ "permission_mode": "bypassPermissions --verbose" }))
-        )
-        .is_err());
-        assert!(validate_opts(
-            BackendKind::Claude,
-            Some(&json!({ "permission_mode": "yolo" }))
-        )
-        .is_err());
-    }
-
-    #[test]
-    fn session_ids_must_be_uuid_like() {
-        assert!(validate_opts(
-            BackendKind::Claude,
-            Some(&json!({ "session_id": "0f3d7a1c-9e2b-4b7e-9d4d-2a1b3c4d5e6f" }))
-        )
-        .is_ok());
-        assert!(validate_opts(
-            BackendKind::Claude,
-            Some(&json!({ "session_id": "abc def" }))
-        )
-        .is_err());
-        assert!(validate_opts(
-            BackendKind::Claude,
-            Some(&json!({ "resume": "../etc/passwd" }))
-        )
-        .is_err());
-    }
-
-    #[test]
-    fn resume_and_session_id_are_mutually_exclusive() {
-        assert!(validate_opts(
-            BackendKind::Claude,
-            Some(&json!({ "resume": "aaa", "session_id": "bbb" }))
-        )
-        .is_err());
-    }
-
-    #[test]
-    fn non_string_and_empty_values_are_rejected() {
-        assert!(validate_opts(BackendKind::Claude, Some(&json!({ "model": 42 }))).is_err());
-        assert!(validate_opts(BackendKind::Claude, Some(&json!({ "model": "" }))).is_err());
-        assert!(validate_opts(BackendKind::Claude, Some(&json!({ "model": null }))).is_err());
-        assert!(validate_opts(BackendKind::Claude, Some(&json!("serve"))).is_err());
-    }
-
-    #[test]
-    fn null_or_missing_opts_mean_defaults() {
-        assert_eq!(
-            validate_opts(BackendKind::Jucode, None).unwrap(),
-            BackendOpts::default()
-        );
-        assert_eq!(
-            validate_opts(BackendKind::Codex, Some(&serde_json::Value::Null)).unwrap(),
-            BackendOpts::default()
-        );
-        assert_eq!(
-            validate_opts(BackendKind::Claude, Some(&json!({}))).unwrap(),
-            BackendOpts::default()
-        );
-    }
-
-    // --- shell-env / custom-env options ---
-
-    #[test]
-    fn use_shell_env_defaults_true_and_accepts_bool_only() {
-        for kind in [BackendKind::Jucode, BackendKind::Codex, BackendKind::Claude] {
-            assert!(validate_opts(kind, None).unwrap().use_shell_env);
-            assert!(
-                !validate_opts(kind, Some(&json!({ "use_shell_env": false })))
-                    .unwrap()
-                    .use_shell_env
-            );
-        }
-        assert!(validate_opts(
-            BackendKind::Jucode,
-            Some(&json!({ "use_shell_env": "yes" }))
-        )
-        .is_err());
-    }
+    // --- custom env ---
 
     #[test]
     fn custom_env_names_are_validated_and_dangerous_prefixes_rejected() {
-        let ok = validate_opts(
-            BackendKind::Claude,
-            Some(&json!({ "env": { "NODE_EXTRA_CA_CERTS": "/Users/x/.reclaude/ca.pem", "_UNDER": "1" } })),
+        let ok = validate_env(
+            &json!({ "NODE_EXTRA_CA_CERTS": "/Users/x/.reclaude/ca.pem", "_UNDER": "1" }),
         )
         .unwrap();
-        assert_eq!(ok.env.len(), 2);
+        assert_eq!(ok.len(), 2);
         for bad in [
-            json!({ "env": { "DYLD_INSERT_LIBRARIES": "/evil" } }),
-            json!({ "env": { "LD_PRELOAD": "/evil" } }),
-            json!({ "env": { "1BAD": "x" } }),
-            json!({ "env": { "SP ACE": "x" } }),
-            json!({ "env": { "A": 42 } }),
-            json!({ "env": "PATH=/x" }),
+            json!({ "DYLD_INSERT_LIBRARIES": "/evil" }),
+            json!({ "LD_PRELOAD": "/evil" }),
+            json!({ "1BAD": "x" }),
+            json!({ "SP ACE": "x" }),
+            json!({ "A": 42 }),
+            json!("PATH=/x"),
         ] {
-            assert!(
-                validate_opts(BackendKind::Claude, Some(&bad)).is_err(),
-                "{bad}"
-            );
+            assert!(validate_env(&bad).is_err(), "{bad}");
         }
     }
 
@@ -955,7 +395,7 @@ mod tests {
         for i in 0..51 {
             m.insert(format!("V{i}"), json!("x"));
         }
-        assert!(validate_opts(BackendKind::Jucode, Some(&json!({ "env": m }))).is_err());
+        assert!(validate_env(&serde_json::Value::Object(m)).is_err());
     }
 
     // --- resolution order ---
@@ -1057,13 +497,22 @@ mod tests {
         assert!(validate_tui_args(BackendKind::Jucode, &["resume".into(), sid.into()]).is_err());
         assert!(validate_tui_args(BackendKind::Jucode, &["--resume".into(), sid.into()]).is_err());
         // Only the resume flag takes a value.
-        assert!(validate_tui_args(BackendKind::Claude, &["--continue".into(), sid.into()]).is_err());
+        assert!(
+            validate_tui_args(BackendKind::Claude, &["--continue".into(), sid.into()]).is_err()
+        );
     }
 
     #[test]
     fn tui_resume_rejects_invalid_ids_and_extra_tokens() {
         let sid = "0f3d7a1c-9e2b-4b7e-9d4d-2a1b3c4d5e6f";
-        for bad_id in ["--help", "-x", "a b", "../etc/passwd", "", "a".repeat(65).as_str()] {
+        for bad_id in [
+            "--help",
+            "-x",
+            "a b",
+            "../etc/passwd",
+            "",
+            "a".repeat(65).as_str(),
+        ] {
             assert!(
                 validate_tui_args(BackendKind::Claude, &["--resume".into(), bad_id.into()])
                     .is_err(),

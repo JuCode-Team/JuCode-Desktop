@@ -24,8 +24,7 @@
 		listProviders,
 		listDir,
 		gitCheckpointCapture,
-		daemon,
-		type EventPayload
+		daemon
 	} from '$lib/protocol';
 	import { dispatch } from '$lib/backends/router';
 	import { caps } from '$lib/backends';
@@ -76,7 +75,6 @@
 	import Desk from '$lib/Desk.svelte';
 	import AgentPage from '$lib/AgentPage.svelte';
 	import { agentDirectory } from '$lib/agents.svelte';
-	import { loadBackendSettings } from '$lib/backends/settings';
 	import type { Project, WorktreeMeta } from '$lib/types';
 	import PlanPanel from '$lib/PlanPanel.svelte';
 	import GoalPanel from '$lib/GoalPanel.svelte';
@@ -785,8 +783,8 @@
 			// localStorage layout on first run): it has no dependency on the
 			// event listeners below, and the sidebar switcher can show early.
 			const wsEntry = await workspaces.load(t('shell.workspace.default'));
-			// One engine frame (a child's stdout line, or a frame from a session
-			// hosted by jucode daemon) into its session's adapter and ChatState.
+			// One engine frame from the daemon into its session's adapter and
+			// ChatState.
 			const deliver = (sessionId: string, data: string) => {
 				const s = sessionMap.get(sessionId);
 				if (!s) return;
@@ -794,9 +792,9 @@
 				// Capture the raw frame for the diagnostics trace so a mis-parsed or
 				// dropped tool frame is inspectable after the fact.
 				s.chat.captureFrame(data);
-				// Route the raw line through the session's backend adapter; jucode's is
-				// the identity, codex/claude translate to the jucode dialect. Parse,
-				// translate and each handle() are isolated so one bad frame or event
+				// Route the raw line through the session's adapter (the daemon already
+				// speaks the jucode dialect for every engine). Parse, translate and
+				// each handle() are isolated so one bad frame or event
 				// can't silently drop the sibling events that follow it (e.g. a tool's
 				// completion riding in the same frame as something that threw).
 				let frame: unknown;
@@ -832,7 +830,6 @@
 				// This session's tile (if any) sticks to the bottom while streaming.
 				panes.get(s.id)?.scrollToEnd();
 			};
-			const unlisten = await listen<EventPayload>('agent-event', (e) => deliver(e.payload.session, e.payload.data));
 			daemon.onFrame = deliver;
 			daemon.onExit = (id) => store.handleExit(id);
 			daemon.onEvent = (frame) => {
@@ -840,10 +837,7 @@
 				sync.handle(frame);
 			};
 			daemon.onDisconnect = () => agentDirectory.disconnected();
-			if (loadBackendSettings().daemon) agentDirectory.start();
-			const unexit = await listen<{ session: string; reason: string }>('agent-exit', (e) =>
-				store.handleExit(e.payload.session, e.payload.reason)
-			);
+			agentDirectory.start();
 			const undrop = await getCurrentWebview().onDragDropEvent((e) => {
 				if (e.payload.type === 'drop')
 					for (const p of e.payload.paths) panes.get(store.activeId)?.addAttachment(p);
@@ -872,7 +866,7 @@
 				const p = store.activeProject ?? store.projects[0];
 				if (p) store.addSession(p);
 			});
-			cleanups.push(unlisten, unexit, undrop, unbrowser, untray);
+			cleanups.push(undrop, unbrowser, untray);
 			// The agent's browser_open tool navigates the embedded browser.
 			ChatState.onBrowserOpen = (url) => browser.open(url);
 			cleanups.push(() => (ChatState.onBrowserOpen = null));

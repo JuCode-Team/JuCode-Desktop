@@ -26,9 +26,7 @@
 	import BackendIcon from '$lib/BackendIcon.svelte';
 	import Select from '$lib/ui/Select.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
-	import Switch from '$lib/ui/Switch.svelte';
 	import { t } from '$lib/i18n';
-	import { agentDirectory } from '$lib/agents.svelte';
 	import DevicePairing from './DevicePairing.svelte';
 	import SettingsSection from './SettingsSection.svelte';
 	import SettingsRow from './SettingsRow.svelte';
@@ -47,9 +45,7 @@
 			paths: Object.fromEntries(
 				Object.entries(settings.paths).filter(([, v]) => typeof v === 'string' && v.trim())
 			) as BackendSettings['paths'],
-			useShellEnv: settings.useShellEnv,
 			env: settings.env,
-			daemon: settings.daemon,
 			remoteAddress: settings.remoteAddress.trim()
 		});
 	}
@@ -74,19 +70,6 @@
 	function envCount(id: BackendId): number {
 		return Object.keys(settings.env[id] ?? {}).length;
 	}
-
-	// Switch 通过 bind:checked 直接改 settings —— 变化即持久化（初始一次无害）。
-	$effect(() => {
-		void settings.useShellEnv;
-		void settings.daemon;
-		persist();
-	});
-
-	// The sidebar's agent list follows the background-service switch.
-	$effect(() => {
-		if (settings.daemon) agentDirectory.start();
-		else agentDirectory.stop();
-	});
 
 	function check(id: BackendId) {
 		status[id] = 'checking';
@@ -151,7 +134,6 @@
 			>
 				<ArrowClockwiseIcon size={14} class={refreshing ? 'spin' : ''} />
 			</IconButton>
-			<Switch bind:checked={settings.useShellEnv} label={t('settings.backend.shellEnvToggle')} />
 		</SettingsRow>
 	{/if}
 
@@ -209,17 +191,9 @@
 	{/each}
 </SettingsSection>
 
-<SettingsSection title={t('settings.backend.daemonLabel')}>
-	<SettingsRow id="daemon" title={t('settings.backend.daemonToggle')} description={t('settings.backend.daemonHint')}>
-		<Switch bind:checked={settings.daemon} label={t('settings.backend.daemonToggle')} />
-	</SettingsRow>
+<SettingsSection id="remote" title={t('settings.backend.remoteGroup')} description={t('settings.backend.remoteGroupHint')}>
+	<DevicePairing bind:address={settings.remoteAddress} onAddressChange={persist} />
 </SettingsSection>
-
-{#if settings.daemon}
-	<SettingsSection id="remote" title={t('settings.backend.remoteGroup')} description={t('settings.backend.remoteGroupHint')}>
-		<DevicePairing bind:address={settings.remoteAddress} onAddressChange={persist} />
-	</SettingsSection>
-{/if}
 
 <style>
 	.brow {

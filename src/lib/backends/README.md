@@ -1,106 +1,60 @@
 # Engine backends
 
-The desktop drives three agent backends through one abstraction:
+Every session runs in the local `jucode daemon` (JuCode-CLI
+`docs/daemon-protocol.md`), whichever backend it uses:
 
-| id       | child process                                                                 | stdin frames            | stdout frames        |
-|----------|-------------------------------------------------------------------------------|-------------------------|----------------------|
-| `jucode` | `jucode serve` (env `JUCODE_DESKTOP=1`)                                       | jucode Ops (JSON lines) | jucode AgentEvents   |
-| `codex`  | `codex app-server`                                                            | JSON-RPC requests       | JSON-RPC responses/notifications |
-| `claude` | `claude --print --input-format stream-json --output-format stream-json --include-partial-messages --verbose --replay-user-messages --permission-prompt-tool stdio [--permission-mode m] [--resume sid \| --session-id uuid] [--model m]` | stream-json + control frames | stream-json events |
-| `acp`    | any registered ACP agent (`jucode acp`, `gemini --experimental-acp`, …) — command/args/env from the Rust-side registry, see `docs/acp.md` | JSON-RPC 2.0 requests/responses | JSON-RPC responses/notifications |
+| id       | what the daemon runs |
+|----------|----------------------|
+| `jucode` | the JuCode engine, in-process |
+| `claude` | `claude --print --input-format stream-json …` |
+| `codex`  | `codex app-server` |
+| `acp`    | a registered ACP agent (`jucode acp`, `gemini --experimental-acp`, …), command line from the registry (`docs/acp.md`) |
 
-`ChatState` (the reducer behind the whole chat UI) only understands the jucode
-event dialect. Adapters translate INTO that dialect and encode OUT of the
-desktop `Op` union — ChatState and the UI stay backend-agnostic.
+The daemon translates each engine into the jucode event protocol and client
+ops into the engine's own frames, so the desktop talks one protocol to all of
+them: `ChatState` (the reducer behind the chat UI) and every view are
+backend-agnostic, and each session's adapter is the jucode one.
 
-## Sessions hosted by `jucode daemon`
+## Sessions in the daemon
 
-With *Settings → Backends → Background service* on, new JuCode sessions run in
-the local `jucode daemon` (JuCode-CLI `docs/daemon-protocol.md`) instead of a
-`jucode serve` child. `src/lib/daemon.ts` keeps one WebSocket to the daemon and
-presents each hosted session like a child process: frames go through the same
-page handler as `agent-event`, `closeSession` / `sendOp` / `sendLine` route by
-`daemon.owns(id)`, and a stopped session or a dropped connection calls
-`store.handleExit`, whose restart reopens the same daemon session. The jucode
-adapter, `ChatState` and every view are unchanged.
+`src/lib/daemon.ts` keeps one WebSocket to the daemon, which the desktop
+starts on demand (`daemon_endpoint`, with the jucode backend's binary and
+environment from Settings). `SessionStore.#spawn` opens a session with
+`session_create`, or reopens one with `session_open` by its conversation id
+(restore, restart, provider or gateway switch). Claude Code and Codex
+sessions pass an engine spec: approval mode, the JuCode gateway switch, the
+binary and environment from Settings, and claude's `resume_at` for a rewind.
 
-- Closing the desktop only disconnects: hosted sessions keep running, and
-  deferred actions wait in the daemon.
-- Closing a tab ends its daemon session (`session_close`).
-- A hosted tab persists `hosted: true` and its daemon session id as `sid`;
-  restore, restart and provider switches reopen it by id (`session_open`)
-  instead of sending `/resume`.
+- Closing the desktop only disconnects: sessions keep running, and deferred
+  actions wait in the daemon.
+- Closing a tab ends its daemon session (`session_close`) and hides it for
+  every client.
+- A tab persists its conversation id as `sid`; restore lists it dormant and
+  opens it when it is first shown.
+- A daemon that can't be reached is retried with backoff for about 4.5
+  minutes before the tab shows an error.
 
-## The contract (`types.ts`)
+## The adapter (`types.ts`, `jucode.ts`)
 
 ```ts
 interface EngineAdapter {
-  readonly id: BackendId;          // 'jucode' | 'codex' | 'claude' | 'acp'
-  readonly caps: BackendCaps;      // static capability flags, see below
+  readonly id: BackendId;
+  readonly caps: BackendCaps;
   onStart(io: AdapterIO, ctx: SessionCtx): void;
   translate(raw: unknown): NormalizedEvent[];   // NormalizedEvent = jucode AgentEvent
-  encodeOp(op: Op): string[] | null;            // null = unsupported → caller notifies user
+  encodeOp(op: Op): string[] | null;
 }
 ```
 
-- **One adapter instance per session.** Adapters may (and for codex/claude
-  will) be stateful: JSON-RPC request-id counters, pending-approval maps,
-  partial-message assembly buffers. `createAdapter(id)` builds a fresh
-  instance; the `SessionStore` owns it for the session's lifetime and registers
-  it with `router.ts` so `dispatch(sessionId, op)` can find it.
-
-### How `onStart` is invoked
-
-`SessionStore` calls `adapter.onStart(io, ctx)` **after** `create_session`
-resolves (the child is spawned and its stdout listener is already pumping) —
-once for the initial spawn and once after **every** restart of the child
-(crash auto-restart, provider switch). Reset per-process state there (request
-counters, pending approvals — those requests died with the old process) and
-send any handshake frames (`initialize` / `newConversation` for codex).
-`ctx.sessionId` is the **desktop** session id (the routing key for
-`send_line`), not the engine's own conversation id.
-
-### Ordering guarantees
-
-- `translate(raw)` is called once per stdout line, in the order the child
-  wrote them. stderr lines (piped for codex/claude only) arrive as
-  `{ __stderr: "<line>" }` payloads interleaved on the same callback, but
-  ordering is only guaranteed *within* each stream, not across stdout/stderr.
-- The events returned from one `translate()` call are applied to ChatState in
-  array order, synchronously, before the next line is translated.
-- `encodeOp` returns frames that are written to stdin in array order; each
-  string is one line/frame (embedded newlines are rejected by `send_line`).
-- Rust forwards stdout **byte-dumb**: every non-empty line, unparsed. The
-  page JSON-parses the line and drops it if unparseable; adapters therefore
-  always receive parsed JSON (or the `__stderr` wrapper).
-
-### Approval bridging (codex / claude → jucode-style approvals)
-
-The approval UI is driven entirely by jucode-shaped events. Backends must
-surface their native permission prompts through it:
-
-1. When the backend asks for permission (claude: a `control_request` with
-   `subtype: "can_use_tool"` — only emitted when the child was spawned with
-   `--permission-prompt-tool stdio`, otherwise gated tools are silently
-   auto-denied; codex: an `execCommandApproval` /
-   `applyPatchApproval` JSON-RPC **server→client request**), the adapter
-   - allocates a **synthetic `call_id`** (e.g. `approval-<n>`),
-   - records `call_id → native request id (+ whatever the response needs)` in
-     its **pending-approval registry**,
-   - emits a jucode-style event:
-     `{ type: 'approval_request', call_id, name, summary, hunks?: null, subagent_id?: null }`.
-2. The UI answers with `encodeOp({ op: 'approve', call_id, decision, always?, hunks? })`.
-   The adapter looks the `call_id` up in its registry, encodes the native
-   response (claude: `control_response` with `behavior: "allow" | "deny"`;
-   codex: the JSON-RPC response `{ decision: "approved" | "denied" }` for the
-   recorded request id), removes the registry entry and returns the frame.
-   An unknown `call_id` (stale after a restart) should return `null`.
-3. `onStart` clears the registry — pending prompts do not survive the child.
-
-Only advertise `caps.hunkApproval` if the backend can actually apply a
-partial patch; otherwise the approval card hides hunk checkboxes.
+The jucode adapter passes events through, checks the `hello` protocol
+version and maps approval-mode names between the desktop's trio and the
+engine's (`read-only` ↔ `manual`, `full-auto` ↔ `full-access`).
+`router.ts` holds each session's adapter and its op queue while the engine
+is (re)starting; `dispatch(sessionId, op)` is how every UI call site sends.
 
 ### Capability flags → UI surfaces
+
+`caps.ts` says which protocol features each backend's engine supports.
 
 | cap             | gated surface(s) |
 |-----------------|------------------|
@@ -124,71 +78,30 @@ partial patch; otherwise the approval card hides hunk checkboxes.
 The single gating helper is `caps(chat)` from `$lib/backends` — components
 never test `backendId` directly.
 
-## Rust surface (fixed, do not extend per-adapter)
+### Claude specifics the desktop still drives
 
-- `create_session(session, cwd?, backend?, backend_opts?)` — validates
-  `backend_opts` against a fixed per-backend allowlist
-  (`src-tauri/src/backend.rs`):
-  - jucode: `{ bin_override? }`
-  - codex: `{ bin_override? }` (models etc. are per-conversation JSON-RPC)
-  - claude: `{ bin_override?, permission_mode?, resume?, session_id?, model? }`
-- `send_op(session, op)` — structured op, jucode compat path.
-- `send_line(session, line)` — raw single-frame write (what adapters use).
-- `check_backend(backend, bin_override?) → { found, path?, version? }`.
-- `claude_sessions(cwd)` / `claude_session_transcript(cwd, id)` — read-only,
-  bounded access to Claude Code's on-disk session store (`claude_history.rs`;
-  drives the claude /resume picker + transcript replay, page-side).
+- **Yolo** (`bypassPermissions`) can't be set live: `respawnClaudeYolo` closes
+  the daemon session and reopens it in that mode.
+- **Rewind**: the daemon reopens the conversation with
+  `--resume-session-at <assistant uuid>`; the desktop truncates its transcript
+  to match.
+- Reopening a claude conversation keeps the messages this tab already shows
+  (`ChatState.keepNextTranscript`): the daemon's replay is plain text, without
+  tool cards or message uuids.
+- `/resume` has no wire form in stream-json mode: ChatPane builds the picker
+  from the daemon's `session_history` for the project and opens a pick in a
+  new tab.
+
+## Rust surface
+
+- `daemon_endpoint(bin_override?, env?)` — the daemon's URL and token,
+  starting it first when needed.
+- `check_backend(backend, bin_override?) → { found, path?, version? }` —
+  Settings' availability probe.
+- `pty_open` — native TUI tabs, with a fixed per-backend argv allowlist
+  (`src-tauri/src/backend.rs`).
 
 Binary resolution order: `JUCODE_BIN`/`CODEX_BIN`/`CLAUDE_BIN` env override →
 settings path override → PATH → well-known dirs (`/opt/homebrew/bin`,
 `/usr/local/bin`, `~/.cargo/bin`, `~/.local/bin`, claude's `~/.claude/local`,
 Windows equivalents) → (jucode only) sibling dev build.
-
-Implementing the codex/claude adapters required **almost no per-adapter Rust
-surface**: fill in `translate` / `encodeOp` / `onStart` and widen the
-adapter's `caps`. The one exception is claude's /resume picker (below), which
-needs read-only filesystem access to Claude Code's session store.
-
-Claude's permission modes are pushed live over the control protocol
-(`set_permission_mode`). Model switching is live too (verified against claude
-2.1.208): `list_models` returns the picker catalog (`value` is what set_model
-accepts, `resolvedModel` the concrete id that system/init reports) and
-`set_model` switches in place, context preserved — onStart prefetches the
-catalog, a bare `/model` re-fetches it tagged `view` → `model_view`, a pick
-sends `set_model` and the ack emits `model_status`. There is no set-effort
-control request in stream-json mode, so `reasoning_efforts` stays empty and
-the effort submenu hidden. `/compact` is sent as plain stream-json user text
-(the CLI executes slash commands from stdin): `system/status
-{status:"compacting"}` → compaction_start, `system/compact_boundary` →
-compaction_end, a non-success `compact_result` → compaction_failed;
-slash-command echo frames (`<command-name>…`/`<local-command-stdout>…`) are
-suppressed.
-
-Claude resume passes the already-allowlisted `resume` spawn option through
-`SessionStore.#spawn` (crash auto-restart, saved-tab restore and picker
-picks). There is no session-listing protocol in stream-json mode; the /resume
-picker instead lists Claude Code's session files
-(`~/.claude/projects/<munged-cwd>/<session-id>.jsonl`, munging = every
-non-ASCII-alphanumeric char → `-`) via the read-only `claude_sessions(cwd)`
-Rust command (`src-tauri/src/claude_history.rs`) — the PAGE intercepts a bare
-`/resume` for claude sessions and synthesizes the `resume_view` itself, so
-the op never reaches `encodeOp`. Picking opens a fresh desktop session
-spawned with `--resume <id>`; `claude_session_transcript(cwd, id)` replays
-the session file's user/assistant text as a `transcript` event
-(`caps.transcriptReplay`).
-
-Codex resume is a **protocol call, not a spawn flag**: the thread id rides
-`SessionCtx.resume` (a `#spawn` parameter, so the codex `backend_opts`
-allowlist stays `{ bin_override? }`) and the adapter answers the initialize ack
-with `thread/resume {threadId, cwd, approvalPolicy, sandbox}` instead of
-`thread/start`. The response carries the persisted history
-(`thread.turns[].items`) which is replayed as a `transcript` event
-(`caps.transcriptReplay`). The /resume picker lists `thread/list {cwd}`;
-picking an item opens a new codex-backed desktop session, while a typed
-`/resume <id>` switches threads in place on the same child (the app-server
-hosts many threads per process). Model switching has no thread-level set RPC
-in codex-cli 0.144.x: `/model` builds the picker from `model/list` and a pick
-becomes `model`/`effort` overrides on every subsequent `turn/start` ("this
-turn and subsequent turns" — persisted into the rollout, so resumes keep it).
-`/compact` maps to `thread/compact/start` (compaction runs as its own turn
-wrapping a `contextCompaction` item) and `/goal` to the `thread/goal/*` RPCs.

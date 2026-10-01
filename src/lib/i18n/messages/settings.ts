@@ -138,9 +138,6 @@ const settings = {
 			pathPlaceholder: '{bin} 可执行文件路径（可选，覆盖自动查找）',
 			defaultLabel: '新会话默认后端',
 			defaultHint: '新建会话时默认使用的引擎；每个项目会记住其上次选择。',
-			daemonLabel: '后台服务',
-			daemonToggle: '在 jucode daemon 中运行新的 JuCode 会话',
-			daemonHint: '会话由本机的 jucode daemon 托管，关闭桌面端后继续工作，重新打开时接着显示。需要先在终端运行 jucode daemon。关闭标签页会结束该会话。',
 			remoteLabel: '手机访问地址',
 			remotePlaceholder: 'https://你的电脑.tailnet.ts.net',
 			remoteHint: '手机访问 daemon 用的地址，会写进配对二维码。推荐用 tailscale serve 把本机端口以 HTTPS 暴露到你自己的 tailnet；daemon 本身只监听本机。',
@@ -171,9 +168,8 @@ const settings = {
 			shellEnvCaptured: '已捕获 {count} 个变量（{shell}）',
 			shellEnvNotCaptured: '未捕获（将继承应用环境）',
 			shellEnvRefresh: '重新捕获终端环境',
-			shellEnvToggle: '使用终端环境启动引擎',
 			shellEnvHint:
-				'启动引擎时注入登录 shell 的环境快照（PATH、代理、证书等），使其行为与终端一致。关闭则继承应用自身环境。',
+				'后台服务启动时使用登录 shell 的环境快照（PATH、代理、证书等），所有引擎的行为与终端一致。重新捕获后，后台服务下次启动时生效。',
 			envLabel: '环境变量',
 			envPlaceholder: 'KEY=VALUE，每行一条（在终端环境快照之上追加）',
 			envInvalid: '以下行无效已忽略：{lines}'
@@ -512,9 +508,6 @@ const settings = {
 			pathPlaceholder: '{bin} binary path (optional, overrides auto-detection)',
 			defaultLabel: 'Default backend for new sessions',
 			defaultHint: 'The engine new sessions use by default; each project remembers its last choice.',
-			daemonLabel: 'Background service',
-			daemonToggle: 'Run new JuCode sessions in jucode daemon',
-			daemonHint: 'Sessions are hosted by the local jucode daemon: they keep working after the desktop closes and pick up where they are when it reopens. Start it first with `jucode daemon` in a terminal. Closing a tab ends its session.',
 			remoteLabel: 'Phone address',
 			remotePlaceholder: 'https://your-mac.tailnet.ts.net',
 			remoteHint: 'The address a phone uses to reach the daemon; it goes into the pairing QR code. Expose the local port over HTTPS to your own tailnet with tailscale serve; the daemon itself only listens locally.',
@@ -545,9 +538,8 @@ const settings = {
 			shellEnvCaptured: '{count} variables captured ({shell})',
 			shellEnvNotCaptured: 'Not captured (app environment will be inherited)',
 			shellEnvRefresh: 'Re-capture terminal environment',
-			shellEnvToggle: 'Launch engines with the terminal environment',
 			shellEnvHint:
-				'Injects a login-shell environment snapshot (PATH, proxies, certificates, …) when starting engines, so they behave exactly like in your terminal. Off = inherit the app environment.',
+				'The background service starts with a login-shell environment snapshot (PATH, proxies, certificates, …), so every engine behaves exactly like in your terminal. A re-capture applies the next time the service starts.',
 			envLabel: 'Environment variables',
 			envPlaceholder: 'KEY=VALUE, one per line (applied on top of the snapshot)',
 			envInvalid: 'Invalid lines ignored: {lines}'

@@ -11,13 +11,8 @@ export interface BackendSettings {
 	default: BackendId;
 	/** Per-backend binary path overrides (passed as bin_override on create). */
 	paths: Partial<Record<BackendId, string>>;
-	/** Build backend child env from the login-shell snapshot (default true). */
-	useShellEnv: boolean;
 	/** Per-backend custom env vars, applied after the snapshot. */
 	env: Partial<Record<BackendId, Record<string, string>>>;
-	/** Run new JuCode sessions in the local `jucode daemon`, so they keep
-	 *  working after the desktop closes (default false). */
-	daemon: boolean;
 	/** The address a phone uses to reach the daemon (e.g. a `tailscale serve`
 	 *  HTTPS URL); goes into the pairing QR code. */
 	remoteAddress: string;
@@ -28,9 +23,7 @@ const KEY = 'jucode-backend-settings';
 export const DEFAULT_BACKEND_SETTINGS: BackendSettings = {
 	default: 'jucode',
 	paths: {},
-	useShellEnv: true,
 	env: {},
-	daemon: false,
 	remoteAddress: ''
 };
 
@@ -99,9 +92,7 @@ export function parseBackendSettings(raw: string | null): BackendSettings {
 		return {
 			default: normalizeBackendId(v?.default),
 			paths,
-			useShellEnv: v?.useShellEnv !== false,
 			env,
-			daemon: v?.daemon === true,
 			remoteAddress: typeof v?.remoteAddress === 'string' ? v.remoteAddress.trim() : ''
 		};
 	} catch {
@@ -128,15 +119,13 @@ export function saveBackendSettings(s: BackendSettings): void {
 
 export interface SpawnBackendOpts extends Record<string, unknown> {
 	bin_override?: string;
-	use_shell_env?: boolean;
 	env?: Record<string, string>;
 }
 
 /**
- * Spawn options for `create_session` from the settings: binary override,
- * shell-env toggle (only sent when off — on is the engine-side default) and
- * per-backend custom env. Returns undefined when there is nothing to pass,
- * so the jucode default path stays exactly the historical two-argument call.
+ * A backend's binary override and custom env from the settings; undefined
+ * when there is none. Claude Code / Codex sessions pass them to the daemon;
+ * jucode's start the daemon itself (it runs jucode sessions in-process).
  */
 export function buildBackendOpts(
 	id: BackendId,
@@ -147,7 +136,6 @@ export function buildBackendOpts(
 	// agent registry (per-agent), never from a per-backend path setting.
 	const path = id === 'acp' ? undefined : settings.paths[id];
 	if (path) opts.bin_override = path;
-	if (!settings.useShellEnv) opts.use_shell_env = false;
 	const env = settings.env[id];
 	if (env && Object.keys(env).length) opts.env = env;
 	return Object.keys(opts).length ? opts : undefined;

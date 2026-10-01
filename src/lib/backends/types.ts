@@ -106,7 +106,7 @@ export interface SessionCtx {
 	model?: string;
 	/** The desktop's persisted approval mode ('ask' | 'edits' | 'all'). */
 	approvalMode: string;
-	/** The DESKTOP session id (the id used for send_line routing) — not the
+	/** The DESKTOP session id (the routing key for `sendLine`) — not the
 	 *  engine's own conversation id. */
 	sessionId: string;
 	/** Engine conversation id to resume instead of starting fresh, for backends
@@ -116,8 +116,7 @@ export interface SessionCtx {
 }
 
 /**
- * One adapter instance per session (adapters may be stateful: request-id
- * counters, pending-approval registries…). Create via `createAdapter()`.
+ * One adapter instance per session (`createJucodeAdapter()`).
  */
 export interface EngineAdapter {
 	readonly id: BackendId;

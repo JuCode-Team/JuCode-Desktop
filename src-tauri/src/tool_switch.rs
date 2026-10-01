@@ -1,11 +1,7 @@
-//! Run a Claude Code / Codex session through the JuCode gateway without
-//! touching the user's own config: the endpoint and token go to that one
-//! process (Claude: `--settings <file>`; Codex: `-c` overrides plus an env
-//! var for the key), so other Claude Code / Codex sessions on the machine
-//! keep their own provider.
-//!
-//! Earlier versions rewrote `~/.claude/settings.json` and `~/.codex/*`
-//! (with backups here); `restore_leftovers` puts those files back once.
+//! Earlier versions ran Claude Code / Codex on the JuCode gateway by
+//! rewriting `~/.claude/settings.json` and `~/.codex/*` (with backups here);
+//! `restore_leftovers` puts those files back once. The daemon now gives the
+//! gateway to each session's process alone.
 
 use serde_json::{json, Value};
 use std::fs;
@@ -22,16 +18,6 @@ pub enum Tool {
 }
 
 impl Tool {
-    fn parse(s: &str) -> Result<Self, String> {
-        match s {
-            "claude" => Ok(Self::Claude),
-            "codex" => Ok(Self::Codex),
-            _ => Err(format!(
-                "tool profile switch only supports claude/codex, not {s}"
-            )),
-        }
-    }
-
     fn as_str(self) -> &'static str {
         match self {
             Self::Claude => "claude",
@@ -84,62 +70,6 @@ impl Paths {
 
     fn bak(&self, name: &str) -> PathBuf {
         self.dir().join(name)
-    }
-}
-
-/// Where Claude Code's per-session gateway settings live (owner-only).
-const CLAUDE_GATEWAY_FILE: &str = "claude-gateway.json";
-/// The env var a Codex gateway session reads its key from.
-const CODEX_KEY_ENV: &str = "JUCODE_GATEWAY_TOKEN";
-
-/// Extra argv and env vars for a spawned child.
-pub type SpawnExtras = (Vec<String>, Vec<(String, String)>);
-
-/// Extra argv and env for a Claude Code / Codex child that should talk to
-/// the JuCode gateway at `api` with `token`.
-pub fn gateway_spawn(backend: &str, api: &str, token: &str) -> Result<SpawnExtras, String> {
-    gateway_spawn_in(&Paths::live(), Tool::parse(backend)?, api, token)
-}
-
-fn gateway_spawn_in(
-    paths: &Paths,
-    tool: Tool,
-    api: &str,
-    token: &str,
-) -> Result<SpawnExtras, String> {
-    if token.trim().is_empty() {
-        return Err("not logged in to JuCode".to_string());
-    }
-    let api = api.trim().trim_end_matches('/');
-    if !api.starts_with("https://") || api.contains('"') || api.contains('\n') {
-        return Err("invalid JuCode API URL".to_string());
-    }
-    match tool {
-        Tool::Claude => {
-            // An empty ANTHROPIC_API_KEY masks one the user's settings set.
-            let settings = json!({ "env": {
-                "ANTHROPIC_BASE_URL": api,
-                "ANTHROPIC_AUTH_TOKEN": token,
-                "ANTHROPIC_API_KEY": "",
-            } });
-            let path = paths.dir().join(CLAUDE_GATEWAY_FILE);
-            write_private_json(&path, &settings)?;
-            Ok((
-                vec!["--settings".to_string(), path.to_string_lossy().into_owned()],
-                Vec::new(),
-            ))
-        }
-        Tool::Codex => Ok((
-            vec![
-                "-c".to_string(),
-                "model_provider=\"jucode_gateway\"".to_string(),
-                "-c".to_string(),
-                format!(
-                    "model_providers.jucode_gateway={{name=\"JuCode\",base_url=\"{api}/v1\",env_key=\"{CODEX_KEY_ENV}\",wire_api=\"responses\"}}"
-                ),
-            ],
-            vec![(CODEX_KEY_ENV.to_string(), token.to_string())],
-        )),
     }
 }
 
@@ -233,14 +163,6 @@ fn write_json(path: &Path, value: &Value) -> Result<(), String> {
     fs::write(path, format!("{text}\n")).map_err(|e| e.to_string())
 }
 
-/// Written whole to a temporary file then renamed, readable by the owner only.
-fn write_private_json(path: &Path, value: &Value) -> Result<(), String> {
-    let tmp = path.with_extension("tmp");
-    write_json(&tmp, value)?;
-    secrets::restrict_to_owner(&tmp);
-    fs::rename(&tmp, path).map_err(|e| e.to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -259,60 +181,6 @@ mod tests {
 
     fn paths(home: PathBuf) -> Paths {
         Paths { home }
-    }
-
-    #[test]
-    fn claude_gateway_goes_to_a_private_settings_file_not_the_users() {
-        let home = tmp_home("claude");
-        let p = paths(home.clone());
-        let live = p.claude_settings();
-        fs::create_dir_all(live.parent().unwrap()).unwrap();
-        fs::write(&live, "{\"env\":{\"ANTHROPIC_API_KEY\":\"sk-user\"}}\n").unwrap();
-        let (args, env) =
-            gateway_spawn_in(&p, Tool::Claude, "https://api.jucode.net/", "tok").unwrap();
-        assert_eq!(args[0], "--settings");
-        assert!(env.is_empty());
-        let written: Value = serde_json::from_str(&fs::read_to_string(&args[1]).unwrap()).unwrap();
-        assert_eq!(
-            written["env"]["ANTHROPIC_BASE_URL"],
-            "https://api.jucode.net"
-        );
-        assert_eq!(written["env"]["ANTHROPIC_AUTH_TOKEN"], "tok");
-        assert_eq!(written["env"]["ANTHROPIC_API_KEY"], "");
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mode = fs::metadata(&args[1]).unwrap().permissions().mode();
-            assert_eq!(mode & 0o077, 0);
-        }
-        assert!(fs::read_to_string(&live).unwrap().contains("sk-user"));
-        let _ = fs::remove_dir_all(home);
-    }
-
-    #[test]
-    fn codex_gateway_is_config_overrides_and_a_key_variable() {
-        let home = tmp_home("codex");
-        let p = paths(home.clone());
-        let (args, env) =
-            gateway_spawn_in(&p, Tool::Codex, "https://api.jucode.net", "tok").unwrap();
-        assert_eq!(args[1], "model_provider=\"jucode_gateway\"");
-        assert!(args[3].contains("base_url=\"https://api.jucode.net/v1\""));
-        assert!(args[3].contains("env_key=\"JUCODE_GATEWAY_TOKEN\""));
-        assert!(!args.concat().contains("tok\""));
-        assert_eq!(
-            env,
-            vec![("JUCODE_GATEWAY_TOKEN".to_string(), "tok".to_string())]
-        );
-        assert!(!p.codex_config().exists());
-        let _ = fs::remove_dir_all(home);
-    }
-
-    #[test]
-    fn gateway_needs_a_token_and_an_https_url() {
-        let p = paths(tmp_home("reject"));
-        assert!(gateway_spawn_in(&p, Tool::Codex, "https://api.jucode.net", " ").is_err());
-        assert!(gateway_spawn_in(&p, Tool::Codex, "http://api.jucode.net", "tok").is_err());
-        assert!(gateway_spawn_in(&p, Tool::Codex, "https://a\"b", "tok").is_err());
     }
 
     #[test]

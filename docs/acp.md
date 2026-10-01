@@ -11,27 +11,21 @@ stdio, protocol v1) as a fourth engine backend, next to the native `jucode`,
 | piece | file |
 |---|---|
 | Agent registry (Rust-owned, validated) | `src-tauri/src/acp_registry.rs` → `~app-config/acp-agents.json` |
-| Spawn plumbing (`BackendKind::Acp`) | `src-tauri/src/backend.rs`, `src-tauri/src/lib.rs` |
-| Webview adapter (JSON-RPC ↔ AgentEvents) | `src/lib/backends/acp.ts` (+ `acp-types.ts`) |
+| Process and JSON-RPC ↔ AgentEvents | the daemon, JuCode-CLI `crates/daemon/src/engines/acp.rs` |
+| Session start (registry entry → daemon `engine: "acp"`) | `src/lib/session.svelte.ts` (`#spawn`) |
 | Settings UI (add / edit / remove agents) | `src/lib/settings/AcpSection.svelte` |
 | New-session picker rows | `src/lib/Composer.svelte` (below the native engines) |
 
-## Launch model: registry, not argv
+## Launch model: the registry names the command
 
-The frontend never sends a command line. A registered agent is
-`{ id, name, command, args, env }`; the webview passes only the allowlisted
-`agent: "<id>"` spawn option and the Rust side looks the entry up, resolves
-`command` (PATH + well-known install dirs; explicit paths kept as-is) and
-spawns `command args…` with `env` applied on top of the shell-env snapshot.
-Every entry is re-validated on **every read and write** of the registry file,
-so a hand-edited `acp-agents.json` cannot smuggle malformed entries into a
-spawn. `bin_override`, raw args and argv-shaped options are rejected for the
-`acp` backend kind.
-
-The JSON-RPC transport reuses the existing per-session stdio pipe
-(`create_session` / `send_line` / one event per stdout line) — no tokio, no
-extra runtime in Tauri, no SDK in the webview bundle (hand-rolled frames like
-`backends/codex.ts`).
+A registered agent is `{ id, name, command, args, env }`. Every entry is
+re-validated on **every read and write** of the registry file, so a
+hand-edited `acp-agents.json` cannot smuggle malformed entries into a spawn.
+A session starts from the entry: the desktop sends its command line to the
+daemon (`session_create` with `engine: "acp"`), which only local clients may
+do — paired phones can watch and drive an ACP session but never start one.
+The daemon resolves `command` on its `PATH` and runs `command args…` with
+`env` on top of its own environment.
 
 ## Protocol mapping
 

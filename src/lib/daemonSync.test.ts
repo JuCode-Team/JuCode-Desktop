@@ -4,7 +4,6 @@ const request = vi.fn((_op: Record<string, unknown>) => Promise.resolve({}));
 const desktopOf = vi.fn((_sid: string): string | undefined => undefined);
 vi.mock('./protocol', () => ({
 	daemon: { request: (op: Record<string, unknown>) => request(op), desktopOf: (sid: string) => desktopOf(sid), post: vi.fn(() => Promise.resolve()), sessionOf: vi.fn() },
-	createSession: vi.fn(() => Promise.resolve()),
 	hostSession: vi.fn(() => Promise.resolve()),
 	sessionMeta: vi.fn(() => Promise.resolve()),
 	closeSession: vi.fn(() => Promise.resolve()),
@@ -15,8 +14,7 @@ vi.mock('./protocol', () => ({
 	chatsDir: vi.fn(() => Promise.resolve('/h/.jucode/chats')),
 	writeConfig: vi.fn(() => Promise.resolve()),
 	git: vi.fn(() => Promise.resolve('')),
-	claudeSessionTranscript: vi.fn(() => Promise.resolve([])),
-	jucodeSessions: vi.fn(() => Promise.resolve([])),
+	sessionHistory: vi.fn(() => Promise.resolve([])),
 	appDataRead: vi.fn(() => Promise.resolve(null)),
 	appDataWrite: vi.fn(() => Promise.resolve())
 }));
@@ -96,7 +94,8 @@ describe('DaemonSync', () => {
 		sync.reconcile([session(), session({ session: 's-agent', agent: 'ops' }), session({ session: 's-other', cwd: '/elsewhere' })]);
 		const listed = store.projects[0].sessions;
 		expect(listed).toHaveLength(1);
-		expect(listed[0]).toMatchObject({ dormant: true, hosted: true, backendId: 'claude' });
+		expect(listed[0]).toMatchObject({ dormant: true, backendId: 'claude' });
+		expect(listed[0].chat.sessionId).toBe('s-1');
 		expect(listed[0].chat.title).toBe('fix login');
 
 		sync.reconcile([session({ title: 'Fix login flow', archived: true })]);
@@ -114,7 +113,26 @@ describe('DaemonSync', () => {
 		expect(store.projects[0].sessions).toHaveLength(0);
 	});
 
-	it('shares renames, archiving and closing of hosted sessions', async () => {
+	it('skips a just-created session while a tab here waits for its id, not while only drafts are open', async () => {
+		const { sync, store } = await setup();
+		const p = store.projects[0];
+		const fresh = (session: string) => ({ session, cwd: '/w/app', created_at: Date.now(), open: true, engine: 'jucode' });
+		// A draft has no daemon session yet: nothing is on its way to it.
+		store.addSession(p);
+		sync.reconcile([fresh('s-new')]);
+		expect(p.sessions.map((s) => s.chat.sessionId)).toEqual(['', 's-new']);
+
+		// A started tab whose daemon id has not arrived yet may be the owner.
+		const opening = p.sessions[0];
+		opening.draft = false;
+		sync.reconcile([fresh('s-new'), fresh('s-mine')]);
+		expect(p.sessions.map((s) => s.chat.sessionId)).toEqual(['', 's-new']);
+		// Older sessions are listed either way.
+		sync.reconcile([fresh('s-new'), { ...fresh('s-old'), created_at: Date.now() - 60_000 }]);
+		expect(p.sessions.map((s) => s.chat.sessionId)).toEqual(['', 's-new', 's-old']);
+	});
+
+	it('shares renames, archiving and closing of daemon sessions', async () => {
 		const { store, sync } = await setup();
 		sync.reconcile([{ session: 's-3', cwd: '/w/app', created_at: 0, open: false, engine: 'jucode', title: 'x' }]);
 		const id = store.projects[0].sessions[0].id;

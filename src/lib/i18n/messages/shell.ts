@@ -283,7 +283,7 @@ const shell = {
 			noReports: '还没有汇报',
 			working: '正在工作',
 			nobodyWorking: '现在没有 Agent 在工作',
-			unreachable: '连不上 jucode daemon。先在终端运行 jucode daemon，或在设置 → 后端打开后台服务。'
+			unreachable: '连不上 jucode daemon。桌面端会自动启动它；仍连不上时查看 ~/.jucode/daemon/daemon.log。'
 		},
 		agentPage: {
 			settings: '设置',
@@ -740,7 +740,7 @@ const shell = {
 			noReports: 'No reports yet',
 			working: 'Working now',
 			nobodyWorking: 'No agent is working right now',
-			unreachable: 'Cannot reach jucode daemon. Run `jucode daemon` in a terminal, or turn on the background service in Settings → Backends.'
+			unreachable: 'Cannot reach jucode daemon. The desktop starts it on its own; if it still cannot connect, see ~/.jucode/daemon/daemon.log.'
 		},
 		agentPage: {
 			settings: 'Settings',

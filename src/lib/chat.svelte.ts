@@ -248,6 +248,8 @@ export class ChatState {
 	// resume the same doomed id (it would crash-loop). One-shot — consumed by the
 	// store's restartSession, which then comes up fresh.
 	resumeBroken = false;
+	/** Skip the next `transcript` replay (see its handler). */
+	keepNextTranscript = false;
 	// Set while an intentional provider-switch restart is in flight, so the exit it
 	// causes isn't treated as a crash to auto-restart.
 	switching = false;
@@ -300,7 +302,6 @@ export class ChatState {
 	 *  The echo is de-duplicated in the `user_message` handler. */
 	optimisticUser(content: string) {
 		this.#trackSend({ kind: 'user', text: content, state: 'sending' });
-		this.unsavedSid = false;
 		this.#pendingUserEcho = content;
 		if (this.title === 'New session' && !this.titleLocked && content.trim()) this.title = content.trim().slice(0, 40);
 		this.#resetCurrent();
@@ -472,14 +473,10 @@ export class ChatState {
 
 	/** Whether this session has something the engine actually persisted to resume.
 	 *  A fresh session (id assigned at startup but no user turn yet) was never saved,
-	 *  so `/resume <id>` would fail with "No such file". Gates restart/switch resume
-	 *  and which tabs get persisted. */
+	 *  so a native TUI could not resume it. */
 	get resumable() {
-		return this.sessionId !== '' && !this.unsavedSid && this.messages.some((m) => m.kind === 'user');
+		return this.sessionId !== '' && this.messages.some((m) => m.kind === 'user');
 	}
-	/** `sessionId` was pinned for an engine that came up fresh under an
-	 *  existing transcript and has had no turn yet: nothing is saved under it. */
-	unsavedSid = $state(false);
 
 	/** The activity phase shown by the bottom indicator. O(1) — checks the last message. */
 	get phase(): 'connecting' | 'waiting' | 'generating' | 'tool' | 'compacting' | null {
@@ -831,6 +828,14 @@ export class ChatState {
 				break;
 			}
 			case 'transcript': {
+				// A claude conversation reopened under this chat (restart, yolo,
+				// gateway switch, rewind): the replay is plain text without tool
+				// cards or message uuids, so the messages held here stay.
+				if (this.keepNextTranscript) {
+					this.keepNextTranscript = false;
+					this.#resetCurrent();
+					break;
+				}
 				const items = arr<Record<string, unknown>>(ev.items);
 				// The message array is reassigned wholesale below and restored tool
 				// entries carry no call_id, so the fast-lookup map is now stale — clear

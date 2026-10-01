@@ -1,8 +1,14 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { McpServerEntry } from './mcp';
 import { DaemonClient, type DaemonEndpoint, type EngineSpec, type SocketLike } from './daemon';
+import { buildBackendOpts } from './backends/settings';
 
-let daemonEndpoint = () => invoke<DaemonEndpoint>('daemon_endpoint');
+// Started when needed with the jucode backend's binary and environment (the
+// daemon runs jucode sessions itself).
+let daemonEndpoint = () => {
+	const opts = buildBackendOpts('jucode');
+	return invoke<DaemonEndpoint>('daemon_endpoint', { binOverride: opts?.bin_override, env: opts?.env });
+};
 let openSocket = (url: string): SocketLike => new WebSocket(url) as unknown as SocketLike;
 
 /** Where the daemon is and which token to present. The desktop asks the
@@ -17,9 +23,8 @@ export function setDaemonEndpoint(
 	if (socket) openSocket = socket;
 }
 
-/** The shared connection to the local `jucode daemon`. Sessions it hosts are
- *  routed here by `closeSession` / `sendOp` / `sendLine`; the page wires its
- *  `onFrame` / `onExit` into the same path as child-process events. */
+/** The shared connection to the local `jucode daemon`, which runs every
+ *  session; the page wires its `onFrame` / `onExit` into the session store. */
 export const daemon = new DaemonClient(() => daemonEndpoint(), (url) => openSocket(url));
 
 /** Starts (or, with `resume`, reopens) a session hosted by the daemon;
@@ -43,7 +48,7 @@ export function hostSession(
 	return daemon.open(session, cwd, resume, agent, chat, engine);
 }
 
-// Commands the GUI sends to a session's `jucode serve` over stdin.
+// Commands the GUI sends to a session's engine.
 export type Op =
 	| { op: 'user_message'; content: string; images?: string[] }
 	| { op: 'command'; input: string }
@@ -62,34 +67,17 @@ export type Op =
 	| { op: 'mcp_remove'; name: string }
 	| { op: 'mcp_toggle'; name: string; enabled: boolean };
 
-/** Spawns the engine child for a session. `backend` picks the agent CLI
- *  ('jucode' default); `backendOpts` is validated Rust-side against that
- *  backend's fixed option allowlist (bin_override, claude's permission_mode /
- *  resume / session_id / model). */
-export function createSession(
-	session: string,
-	cwd?: string,
-	backend?: string,
-	backendOpts?: Record<string, unknown>
-): Promise<void> {
-	return invoke('create_session', { session, cwd, backend, backendOpts });
-}
-
 export function closeSession(session: string): Promise<void> {
-	if (daemon.owns(session)) return daemon.close(session);
-	return invoke('close_session', { session });
+	return daemon.close(session);
 }
 
 export function sendOp(session: string, op: Op): Promise<void> {
-	if (daemon.owns(session)) return daemon.send(session, JSON.stringify(op));
-	return invoke('send_op', { session, op });
+	return daemon.send(session, JSON.stringify(op));
 }
 
-/** Writes one raw line (a single protocol frame composed by a backend adapter)
- *  to the session child's stdin. */
+/** Writes one protocol frame to the session's engine. */
 export function sendLine(session: string, line: string): Promise<void> {
-	if (daemon.owns(session)) return daemon.send(session, line);
-	return invoke('send_line', { session, line });
+	return daemon.send(session, line);
 }
 
 /** Availability probe for a backend binary (`<bin> --version`). */
@@ -102,9 +90,9 @@ export function checkBackend(backend: string, binOverride?: string): Promise<Bac
 	return invoke('check_backend', { backend, binOverride });
 }
 
-// ACP agent registry (Rust-owned: ~app-config/acp-agents.json). The frontend
-// only ever references agents by id; command/args/env are validated Rust-side
-// on every read and write, and create_session looks the entry up by id.
+// ACP agent registry (Rust-owned: ~app-config/acp-agents.json). command/args/
+// env are validated Rust-side on every read and write; a session starts the
+// entry's command line in the daemon.
 export interface AcpAgent {
 	id: string;
 	name: string;
@@ -141,33 +129,23 @@ export function refreshShellEnv(): Promise<ShellEnvStatus> {
 	return invoke('refresh_shell_env');
 }
 
-// Claude Code session history (read-only listing of the per-project session
-// files under ~/.claude/projects — drives the claude /resume picker and the
-// transcript replay of a resumed session).
-export interface ClaudeSessionEntry {
-	id: string;
-	mtime_ms: number;
-	preview: string;
-}
-export function claudeSessions(cwd: string): Promise<ClaudeSessionEntry[]> {
-	return invoke('claude_sessions', { cwd });
-}
-// Saved JuCode conversations for a project (engine session store on disk).
-export interface JucodeSessionEntry {
-	id: string;
-	label: string;
+/** One conversation saved in a directory, by any engine, as the daemon
+ *  lists it (`session_history`). `updated_at` is in milliseconds. */
+export interface HistoryItem {
+	session: string;
+	title: string;
 	updated_at: number;
 	entries: number;
+	archived: boolean;
+	agent: string | null;
+	/** Hosted by the daemon right now. */
+	open: boolean;
+	/** `jucode`, `claude` or `codex`. */
+	engine?: string;
 }
-export function jucodeSessions(cwd: string): Promise<JucodeSessionEntry[]> {
-	return invoke('jucode_sessions', { cwd });
-}
-export interface ClaudeTranscriptRow {
-	role: string;
-	content: string;
-}
-export function claudeSessionTranscript(cwd: string, id: string): Promise<ClaudeTranscriptRow[]> {
-	return invoke('claude_session_transcript', { cwd, id });
+export async function sessionHistory(cwd: string): Promise<HistoryItem[]> {
+	const reply = await daemon.request({ op: 'session_history', cwd });
+	return (reply.sessions as HistoryItem[]) ?? [];
 }
 
 // Config / auth (read & write ~/.jucode/{config.json,auth.json} via Tauri fs).
@@ -523,8 +501,4 @@ export function generateText(
 export interface AgentEvent {
 	type: string;
 	[key: string]: unknown;
-}
-export interface EventPayload {
-	session: string;
-	data: string;
 }

@@ -31,7 +31,7 @@
 	import { buildSetApprovalModeOp, needsClaudeYoloRespawn, type ApprovalMode, type ApproveOp } from '$lib/approval';
 	import {
 		processVideo,
-		claudeSessions,
+		sessionHistory,
 		git,
 		gitCheckpointCapture,
 		gitCheckpointRestore,
@@ -140,9 +140,9 @@
 		}
 		// claude's /resume can't go over the wire: stream-json mode has no session
 		// listing protocol, the history lives in files under ~/.claude/projects.
-		// Bare /resume synthesizes the picker from the claude_sessions command; a
-		// typed `/resume <id>` opens that session in a fresh tab (same flow as a
-		// picker pick — the current chat is never replaced).
+		// Bare /resume builds the picker from the daemon's history of the
+		// directory; a typed `/resume <id>` opens that session in a fresh tab
+		// (same flow as a picker pick — the current chat is never replaced).
 		if (op.op === 'command' && chat.backendId === 'claude') {
 			const line = op.input.trim();
 			if (line === '/resume') {
@@ -161,21 +161,21 @@
 		}
 	}
 
-	// Builds the claude /resume picker from the session files Claude Code
-	// persisted for this project (claude_sessions → synthesized resume_view).
+	// Builds the claude /resume picker from the Claude Code conversations the
+	// daemon lists for this project (synthesized resume_view).
 	async function openClaudeHistory() {
 		const c = chat;
 		const proj = project;
 		if (!proj) return;
 		try {
-			const sessions = await claudeSessions(proj.path);
+			const sessions = (await sessionHistory(proj.path)).filter((s) => s.engine === 'claude');
 			c.handle({
 				type: 'resume_view',
 				items: sessions.map((s) => ({
-					id: s.id,
-					label: s.preview || s.id.slice(0, 8),
-					detail: new Date(s.mtime_ms).toLocaleString(),
-					active: s.id === c.sessionId
+					id: s.session,
+					label: s.title || s.session.slice(0, 8),
+					detail: new Date(s.updated_at).toLocaleString(),
+					active: s.session === c.sessionId
 				}))
 			});
 		} catch (e) {

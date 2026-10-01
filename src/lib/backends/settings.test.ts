@@ -35,18 +35,14 @@ describe('backend settings parsing', () => {
 		expect(parsed).toEqual({
 			default: 'claude',
 			paths: { codex: '/usr/local/bin/codex' },
-			useShellEnv: true,
 			env: {},
-			daemon: false,
 			remoteAddress: ''
 		});
-		expect(parseBackendSettings(JSON.stringify({ daemon: true })).daemon).toBe(true);
-		expect(parseBackendSettings(JSON.stringify({ daemon: 'yes' })).daemon).toBe(false);
 	});
 });
 
 describe('default backend for new sessions', () => {
-	const settings: BackendSettings = { default: 'codex', paths: {}, useShellEnv: true, env: {}, daemon: false, remoteAddress: '' };
+	const settings: BackendSettings = { default: 'codex', paths: {}, env: {}, remoteAddress: '' };
 
 	it("the project's last-used backend wins", () => {
 		expect(defaultBackendFor('claude', settings)).toBe('claude');
@@ -58,7 +54,7 @@ describe('default backend for new sessions', () => {
 		expect(defaultBackendFor(null, settings)).toBe('codex');
 		expect(defaultBackendFor('bogus', settings)).toBe('codex');
 		expect(
-			defaultBackendFor(undefined, { default: 'jucode', paths: {}, useShellEnv: true, env: {}, daemon: false, remoteAddress: '' })
+			defaultBackendFor(undefined, { default: 'jucode', paths: {}, env: {}, remoteAddress: '' })
 		).toBe('jucode');
 	});
 });
@@ -66,15 +62,13 @@ describe('default backend for new sessions', () => {
 const base = (over: Partial<BackendSettings> = {}): BackendSettings => ({
 	default: 'jucode',
 	paths: {},
-	useShellEnv: true,
 	env: {},
-	daemon: false,
 	remoteAddress: '',
 	...over
 });
 
 describe('spawn options from settings', () => {
-	it('returns undefined when nothing is configured (keeps the historical jucode call)', () => {
+	it('returns undefined when nothing is configured', () => {
 		expect(buildBackendOpts('jucode', base())).toBeUndefined();
 		expect(buildBackendOpts('claude', base({ paths: { codex: '/x' } }))).toBeUndefined();
 	});
@@ -83,13 +77,6 @@ describe('spawn options from settings', () => {
 		const s = base({ paths: { claude: '/opt/claude', jucode: '/dev/jucode' } });
 		expect(buildBackendOpts('claude', s)).toEqual({ bin_override: '/opt/claude' });
 		expect(buildBackendOpts('jucode', s)).toEqual({ bin_override: '/dev/jucode' });
-	});
-
-	it('sends use_shell_env only when the toggle is off (on is the engine default)', () => {
-		expect(buildBackendOpts('jucode', base({ useShellEnv: false }))).toEqual({
-			use_shell_env: false
-		});
-		expect(buildBackendOpts('jucode', base({ useShellEnv: true }))).toBeUndefined();
 	});
 
 	it('includes per-backend custom env only for the matching backend', () => {
@@ -122,21 +109,14 @@ describe('env line parsing', () => {
 });
 
 describe('persisted settings with env fields', () => {
-	it('parses useShellEnv=false and per-backend env maps, dropping invalid names', () => {
+	it('parses per-backend env maps, dropping invalid names', () => {
 		const s = parseBackendSettings(
 			JSON.stringify({
 				default: 'claude',
-				useShellEnv: false,
 				env: { claude: { GOOD: '1', 'BAD NAME': 'x', DYLD_X: 'x' }, nope: { A: '1' } }
 			})
 		);
-		expect(s.useShellEnv).toBe(false);
 		expect(s.env).toEqual({ claude: { GOOD: '1' } });
-	});
-
-	it('defaults useShellEnv to true for legacy payloads', () => {
-		expect(parseBackendSettings(JSON.stringify({ default: 'jucode', paths: {} })).useShellEnv).toBe(true);
-		expect(parseBackendSettings(null).useShellEnv).toBe(true);
 	});
 });
 

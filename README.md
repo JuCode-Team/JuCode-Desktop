@@ -1,24 +1,24 @@
 # JuCode Desktop
 
 A Tauri 2 + SvelteKit desktop GUI for [JuCode-CLI](https://github.com/JuCode-Team/JuCode-CLI).
-The app launches the CLI as a sidecar (`jucode serve`) and talks to it over the
-newline-delimited JSON protocol (documented in the CLI repo under
-`docs/desktop-gui-design.md`).
+Every session runs in the local `jucode daemon` (started on demand), which
+hosts the JuCode engine, Claude Code, Codex and ACP agents and speaks one
+WebSocket protocol for all of them (CLI repo, `docs/daemon-protocol.md`).
 
 ## Architecture
 
 ```
-WebView (Svelte)  ──invoke('send_op', …)──▶  src-tauri (Rust)  ──stdin──▶  jucode serve
-       ▲                                            │                          │
-       └────────── 'agent-event' event ─────────────┴────────── stdout (NDJSON)┘
+WebView (Svelte)  ──WebSocket (ops / events)──▶  jucode daemon  ──▶  engines
+       │
+       └──invoke(…)──▶  src-tauri (Rust): daemon start, files, git, PTY, …
 ```
 
-- `src-tauri/src/lib.rs` — spawns a `jucode serve` child per session, pumps its
-  stdout to the webview as `agent-event` events, and exposes `send_op` (writes a
-  JSON command to stdin). Also hosts IDE-side commands that operate directly on the
-  project directory — file walk, git, a real PTY terminal, config/auth read-write,
-  environment checks, and temp-image writes.
-- `src/lib/protocol.ts` — command types and the `invoke` wrappers.
+- `src-tauri/src/lib.rs` — starts the daemon (`daemon_endpoint`) and hosts the
+  IDE-side commands that operate directly on the project directory — file walk,
+  git, a real PTY terminal, config/auth read-write, environment checks, and
+  temp-image writes.
+- `src/lib/protocol.ts` — command types, the daemon connection and the
+  `invoke` wrappers.
 - `src/lib/chat.svelte.ts` — reactive `ChatState` projected from the `AgentEvent` stream.
 - `src/routes/+page.svelte` — the shell: sidebar, chat view, right dock, modals.
 - Pure logic lives in framework-free modules so it's unit-tested:

@@ -175,13 +175,13 @@ export class DaemonSync {
 			this.store.allSessions.filter((s) => s.chat.sessionId).map((s) => [s.chat.sessionId, s])
 		);
 		const current = new Set(list.map((r) => r.session));
-		// A new hosted tab learns its id just after the daemon records it.
-		const opening = this.store.allSessions.some((s) => s.hosted && !s.chat.sessionId);
+		// A new tab learns its id just after the daemon records it (drafts have
+		// no daemon session yet).
+		const opening = this.store.allSessions.some((s) => !s.draft && !s.chat.sessionId);
 		for (const r of list) {
 			if (r.agent) continue;
 			const s = bySid.get(r.session);
 			if (s) {
-				if (!s.hosted) continue;
 				if (r.title && r.title !== s.chat.title) s.chat.title = r.title;
 				if (!!r.archived !== !!s.archived) s.archived = !!r.archived;
 				continue;
@@ -194,7 +194,7 @@ export class DaemonSync {
 		}
 		for (const s of this.store.allSessions) {
 			const sid = s.chat.sessionId;
-			if (s.hosted && sid && this.#seen.has(sid) && !current.has(sid)) this.store.forget(s.id);
+			if (sid && this.#seen.has(sid) && !current.has(sid)) this.store.forget(s.id);
 		}
 		this.#seen = current;
 	}

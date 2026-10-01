@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { caps, CAPS, createAdapter, normalizeBackendId, isBackendId, BACKEND_IDS } from './index';
+import { caps, CAPS, normalizeBackendId, isBackendId, BACKEND_IDS } from './index';
 import { ChatState } from '$lib/chat.svelte';
 
 describe('caps() gating helper', () => {
@@ -25,8 +25,8 @@ describe('caps() gating helper', () => {
 		expect(caps({ backendId: 'jucode' }).goals).toBe(true);
 		// claude: approval picker, stop button, context ring, model picker
 		// (list_models/set_model control requests), /compact (stream-json slash
-		// text) and the resume picker (claude_sessions file listing + --resume,
-		// with transcript replay) and rewind (--resume-session-at respawn) are live;
+		// text) and the resume picker (the daemon's session history, with transcript
+		// replay) and rewind (reopened with --resume-session-at) are live;
 		// steer (stdin is already a queue), plan/goal tabs, tree, skills and MCP
 		// mutations stay hidden.
 		const cl = caps({ backendId: 'claude' });
@@ -67,7 +67,7 @@ describe('caps() gating helper', () => {
 	});
 });
 
-describe('backend id helpers / factory', () => {
+describe('backend id helpers', () => {
 	it('normalizeBackendId maps unknown values to jucode (restore path)', () => {
 		expect(normalizeBackendId(undefined)).toBe('jucode');
 		expect(normalizeBackendId('claude')).toBe('claude');
@@ -76,14 +76,5 @@ describe('backend id helpers / factory', () => {
 		expect(normalizeBackendId(42)).toBe('jucode');
 		expect(isBackendId('claude')).toBe(true);
 		expect(isBackendId('x')).toBe(false);
-	});
-
-	it('createAdapter returns a fresh, matching adapter per call', () => {
-		for (const id of BACKEND_IDS) {
-			const a = createAdapter(id);
-			expect(a.id).toBe(id);
-			expect(a.caps).toBe(CAPS[id]);
-			expect(createAdapter(id)).not.toBe(a);
-		}
 	});
 });

@@ -1,12 +1,12 @@
 import { ChatState } from './chat.svelte';
-import { acpAgentsList, createSession, closeSession, daemon, hostSession, sessionMeta, projectRoot, chatsDir, writeConfig, git, claudeSessionTranscript, jucodeSessions } from './protocol';
+import { acpAgentsList, closeSession, daemon, hostSession, sessionMeta, sessionHistory, projectRoot, chatsDir, writeConfig, git } from './protocol';
 import type { EngineSpec } from './daemon';
 import { canHandOffToTui, isValidResumeSessionId } from './tuiHandoff';
-import { createAdapter, normalizeBackendId, type BackendId } from './backends';
+import { normalizeBackendId, type BackendId } from './backends';
+import { createJucodeAdapter } from './backends/jucode';
 import { clearDraft, dispatch, dropHeldOps, holdOps, ioFor, markDraft, registerAdapter, unregisterAdapter } from './backends/router';
-import { buildBackendOpts, defaultBackendFor, loadBackendSettings } from './backends/settings';
-import { needsClaudeYoloRespawn, toEngineMode } from './approval';
-import { toClaudeMode } from './backends/claude';
+import { buildBackendOpts, defaultBackendFor } from './backends/settings';
+import { toEngineMode } from './approval';
 import { t } from '$lib/i18n';
 import { normalizeColor, parseTabIcon, type TabIcon } from './workbench/tabChrome';
 import type { Project, Session, WorktreeMeta } from './types';
@@ -38,8 +38,6 @@ export interface SavedProject {
 		/** The conversation was handed to the native TUI (resume by `sid`).
 		 *  Omitted for the default GUI surface so old layouts stay clean. */
 		surface?: 'tui';
-		/** Hosted by the local `jucode daemon`; `sid` is its daemon session. */
-		hosted?: boolean;
 		/** Claude Code / Codex through the JuCode gateway (Session.gateway). */
 		gateway?: boolean;
 	} & SavedTabChrome)[];
@@ -56,27 +54,7 @@ export interface SavedProject {
 /** Waits between attempts to reach an unreachable daemon, ms (~4.5 min). */
 const DAEMON_RETRY_DELAYS = [1000, 2000, 4000, 8000, 15000, 30000, 30000, 30000, 30000, 30000, 30000, 30000];
 
-/** Backends the daemon can run. */
-const DAEMON_BACKENDS: BackendId[] = ['jucode', 'claude', 'codex', 'acp'];
-
-/** New sessions of those backends run in the daemon when the setting is on. */
-function hostsNewSessions(backend: BackendId): boolean {
-	return DAEMON_BACKENDS.includes(backend) && loadBackendSettings().daemon;
-}
-
 const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
-
-/** A v4-ish UUID for claude's --session-id (falls back if crypto is unavailable). */
-function newUuid(): string {
-	try {
-		return crypto.randomUUID();
-	} catch {
-		return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-			const r = (Math.random() * 16) | 0;
-			return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
-		});
-	}
-}
 
 /**
  * Owns the project/session tree and its lifecycle (spawn, restore, restart,
@@ -118,10 +96,10 @@ export class SessionStore {
 		chat.engineState = 'exited';
 		chat.restarting = false;
 		const s = this.allSessions.find((x) => x.chat === chat);
-		// A hosted session whose daemon can't be reached (restarting, being
-		// upgraded): keep trying for about 4.5 minutes, backing off, without
-		// spending the crash budget or stacking an error per attempt.
-		if (s?.hosted && s.surface !== 'tui' && chat.daemonRetries < DAEMON_RETRY_DELAYS.length) {
+		// The daemon can't be reached (restarting, being upgraded): keep trying
+		// for about 4.5 minutes, backing off, without spending the crash budget
+		// or stacking an error per attempt.
+		if (s && s.surface !== 'tui' && chat.daemonRetries < DAEMON_RETRY_DELAYS.length) {
 			if (chat.daemonRetries === 0) chat.messages.push({ kind: 'system', text: t('shell.daemonReconnecting') });
 			const delay = DAEMON_RETRY_DELAYS[chat.daemonRetries++]!;
 			setTimeout(() => {
@@ -154,21 +132,18 @@ export class SessionStore {
 			chat.acpAgentId = acpAgent.id;
 			chat.acpAgentName = acpAgent.name;
 		}
-		const adapter = createAdapter(backendId);
+		const adapter = createJucodeAdapter();
 		registerAdapter(id, adapter);
 		return { id, chat, backendId, adapter, ...(acpAgent ? { acpAgent } : {}) };
 	}
 
-	/** Spawns the engine child for `s`, invokes the adapter's onStart hook once
-	 *  it is up (initial spawn and every restart alike), then runs `after` in
-	 *  the same continuation (so a first message follows the handshake without
-	 *  an extra microtask hop). The plain jucode call stays exactly the
-	 *  historical two-argument createSession (byte-for-byte default behavior);
-	 *  other backends (or a configured bin override) pass backend + opts.
-	 *  `extraOpts` adds per-spawn options on top of the settings-derived ones
-	 *  (e.g. claude's allowlisted `resume` session id). `resume` instead rides
-	 *  the SessionCtx into the adapter, for backends whose resume is a protocol
-	 *  call after the handshake rather than a spawn flag (codex thread/resume). */
+	/** Opens `s` in the daemon: its session when it has one (restart,
+	 *  restore, provider switch), else a new one; then runs `after`, then what
+	 *  the user sent meanwhile. `extraOpts` carries per-start choices (claude's
+	 *  `permission_mode`, `resume_session_at`); `resume` names the conversation
+	 *  to reopen when it is not the session's own; `agent` starts it as that
+	 *  long-lived agent. The daemon translates every engine into jucode
+	 *  events, so the session's adapter is the jucode one. */
 	#spawn(
 		s: Session,
 		cwd: string | undefined,
@@ -177,98 +152,74 @@ export class SessionStore {
 		resume?: string,
 		agent?: string
 	) {
-		const base = buildBackendOpts(s.backendId);
-		// ACP sessions always pass their registry agent id (initial spawn and
-		// every crash auto-restart alike) — the Rust side looks the command up.
-		const agentOpt = s.backendId === 'acp' && s.acpAgent ? { agent: s.acpAgent.id } : undefined;
 		// Sessions of the chats group run as chats (engine-side chat prompt).
 		const chat = this.projects.some((p) => p.chats && p.sessions.some((x) => x.id === s.id));
-		const chatOpt = chat ? { chat: true } : undefined;
+		const base = buildBackendOpts(s.backendId);
 		// claude reports its permission mode only when the first turn starts; an
-		// engine spawned in another mode than the desktop's would then be
-		// respawned mid-turn (yolo can't be set live), losing a turn it had not
-		// saved yet. Spawn it in the desktop's mode from the start.
-		const modeOpt =
-			s.backendId === 'claude' ? { permission_mode: toClaudeMode(toEngineMode(s.chat.approvalMode)) } : undefined;
-		// This session alone talks to the JuCode gateway (see Session.gateway).
-		const gatewayOpt =
-			(s.backendId === 'claude' || s.backendId === 'codex') && s.gateway !== undefined
-				? { jucode_gateway: s.gateway }
-				: undefined;
-		const opts =
-			agentOpt || extraOpts || chatOpt || modeOpt || gatewayOpt
-				? {
-						...(base ?? {}),
-						...(agentOpt ?? {}),
-						...(chatOpt ?? {}),
-						...(modeOpt ?? {}),
-						...(gatewayOpt ?? {}),
-						...(extraOpts ?? {})
-					}
-				: base;
-		if (s.backendId === 'claude') s.spawnedMode = String((opts as Record<string, unknown>)?.permission_mode ?? '');
-		// Ops sent until the new engine is up wait for it instead of reaching no
-		// child (or the one being replaced).
+		// engine started in another mode than the desktop's would then be
+		// restarted mid-turn (yolo can't be set live), losing a turn it had not
+		// saved yet. Start it in the desktop's mode.
+		const mode = String(extraOpts?.permission_mode ?? toEngineMode(s.chat.approvalMode));
+		if (s.backendId === 'claude') s.spawnedMode = mode === 'full-auto' ? 'bypassPermissions' : mode;
+		// Ops sent until the engine is up wait for it instead of reaching no
+		// engine (or the one being replaced).
 		holdOps(s.id);
 		s.chat.restarting = true;
-		// A hosted session reopens its daemon session when it has one (restart,
-		// restore, provider switch) and creates one otherwise.
-		// The daemon translates other engines into jucode events itself.
-		if (s.hosted && s.adapter.id !== 'jucode') {
-			s.adapter = createAdapter('jucode');
-			registerAdapter(s.id, s.adapter);
-		}
-		const optsRec = (opts ?? {}) as Record<string, unknown>;
-		const engine = !s.hosted
-			? undefined
-			: s.backendId === 'claude'
-				? {
+		// What this chat already shows of a claude conversation is richer than
+		// the daemon's replay of it.
+		if (s.backendId === 'claude' && s.chat.messages.some((m) => m.kind === 'user')) s.chat.keepNextTranscript = true;
+		const program = {
+			...(base?.bin_override ? { bin: base.bin_override } : {}),
+			...(base?.env ? { env: base.env } : {})
+		};
+		// This session alone talks to the JuCode gateway (see Session.gateway).
+		const gateway = s.gateway !== undefined ? { jucode_gateway: s.gateway } : {};
+		const engine: Promise<EngineSpec | undefined> =
+			s.backendId === 'claude'
+				? Promise.resolve({
 						engine: 'claude',
 						options: {
-							approval_mode: optsRec.permission_mode,
-							...(gatewayOpt ?? {}),
-							...(optsRec.model ? { model: optsRec.model } : {}),
-							...(optsRec.resume_session_at ? { resume_at: optsRec.resume_session_at } : {})
+							approval_mode: mode,
+							...gateway,
+							...program,
+							...(extraOpts?.resume_session_at ? { resume_at: extraOpts.resume_session_at } : {})
 						}
-					}
+					})
 				: s.backendId === 'codex'
-					? { engine: 'codex', options: { approval_mode: toEngineMode(s.chat.approvalMode), ...(gatewayOpt ?? {}) } }
-					: undefined;
-		// An ACP agent runs the command its registry entry names.
-		const acpEngine = () =>
-			acpAgentsList().then((agents) => {
-				const entry = agents.find((a) => a.id === s.acpAgent?.id);
-				if (!entry) throw new Error(`unknown ACP agent ${s.acpAgent?.id ?? ''}`);
-				return { engine: 'acp', options: { command: entry.command, args: entry.args, env: entry.env } };
-			});
-		const host = (spec: EngineSpec | undefined) =>
-			hostSession(s.id, cwd ?? '', resume ?? (s.chat.sessionId || undefined), agent, chat, spec).then(() => spec);
-		const hosted = () => (s.backendId === 'acp' ? acpEngine().then(host) : host(engine));
-		const spawned = s.hosted
-			? hosted().then((spec) => {
-					// A new claude or codex session is named by the daemon (the engine's
-					// conversation id).
-					if (spec && !s.chat.sessionId) s.chat.sessionId = daemon.sessionOf(s.id) ?? '';
+					? Promise.resolve({ engine: 'codex', options: { approval_mode: mode, ...gateway, ...program } })
+					: s.backendId === 'acp'
+						? // An ACP agent runs the command its registry entry names.
+							acpAgentsList().then((agents) => {
+								const entry = agents.find((a) => a.id === s.acpAgent?.id);
+								if (!entry) throw new Error(`unknown ACP agent ${s.acpAgent?.id ?? ''}`);
+								return {
+									engine: 'acp',
+									// The agent's own environment wins over the backend's.
+									options: { command: entry.command, args: entry.args, env: { ...(base?.env ?? {}), ...entry.env } }
+								};
+							})
+						: Promise.resolve(undefined);
+		return engine
+			.then((spec) =>
+				hostSession(s.id, cwd ?? '', resume ?? (s.chat.sessionId || undefined), agent, chat, spec).then(() => {
+					// A new session is named by the daemon (the engine's conversation id).
+					if (!s.chat.sessionId) s.chat.sessionId = daemon.sessionOf(s.id) ?? '';
 				})
-			: s.backendId === 'jucode' && !opts
-				? createSession(s.id, cwd)
-				: createSession(s.id, cwd, s.backendId, opts ?? {});
-		return spawned.then(() => {
-			// The child is up and its stdout is being pumped — let the adapter
-			// send handshake frames / reset per-process state before any op flows.
-			s.adapter.onStart(ioFor(s.id), {
-				cwd: cwd ?? '',
-				approvalMode: s.chat.approvalMode,
-				sessionId: s.id,
-				...(resume ? { resume } : {})
+			)
+			.then(() => {
+				s.adapter.onStart(ioFor(s.id), {
+					cwd: cwd ?? '',
+					approvalMode: s.chat.approvalMode,
+					sessionId: s.id,
+					...(resume ? { resume } : {})
+				});
+				// The start's own follow-up (a model pick, a first message) goes
+				// first, then whatever the user sent meanwhile.
+				const held = dropHeldOps(s.id);
+				s.chat.restarting = false;
+				after?.();
+				for (const op of held) dispatch(s.id, op);
 			});
-			// The spawn's own follow-up (resume, first message) goes first, then
-			// whatever the user sent meanwhile.
-			const held = dropHeldOps(s.id);
-			s.chat.restarting = false;
-			after?.();
-			for (const op of held) dispatch(s.id, op);
-		});
 	}
 
 	/** A new session in `project`, made active, as a draft: nothing starts
@@ -320,15 +271,8 @@ export class SessionStore {
 		const project = this.projects.find((p) => p.sessions.some((x) => x.id === id));
 		if (!s?.draft || !project) return;
 		s.draft = false;
-		s.hosted = hostsNewSessions(s.backendId);
 		project.lastBackend = s.backendId;
 		if (s.backendId === 'acp' && s.acpAgent) project.lastAcpAgent = s.acpAgent;
-		// Pin a session id we control for claude (via --session-id) so the
-		// conversation persists under a known uuid and --resume can restore its
-		// context after a crash/restart — the CLI's own auto-generated id isn't
-		// reliably resumable in gateway setups ("No conversation found").
-		const extra = s.backendId === 'claude' && !s.hosted ? { session_id: newUuid() } : undefined;
-		if (extra) s.chat.sessionId = extra.session_id;
 		const pick = s.draftPick;
 		s.draftPick = undefined;
 		const model = pick?.model || s.chat.model;
@@ -339,7 +283,7 @@ export class SessionStore {
 			const effort = pick.effort ?? '';
 			dispatch(s.id, { op: 'command', input: effort ? `/model ${model} ${effort}` : `/model ${model}` });
 		};
-		this.#spawn(s, project.path, applyPick, extra).catch((e) => this.#engineFailed(s.chat, e));
+		this.#spawn(s, project.path, applyPick).catch((e) => this.#engineFailed(s.chat, e));
 	}
 
 	/**
@@ -368,7 +312,7 @@ export class SessionStore {
 		chat.backendId = backend;
 		chat.switching = true;
 		unregisterAdapter(id);
-		const adapter = createAdapter(backend);
+		const adapter = createJucodeAdapter();
 		registerAdapter(id, adapter);
 		s.chat = chat;
 		s.backendId = backend;
@@ -388,12 +332,8 @@ export class SessionStore {
 		} catch {
 			/* old child may already be gone */
 		}
-		s.hosted = hostsNewSessions(backend);
-		// Same rationale as addSession: pin a resumable uuid for claude.
-		const extra = backend === 'claude' && !s.hosted ? { session_id: newUuid() } : undefined;
-		if (extra) chat.sessionId = extra.session_id;
 		try {
-			await this.#spawn(s, project?.path, undefined, extra);
+			await this.#spawn(s, project?.path);
 			chat.switching = false;
 		} catch (e) {
 			chat.switching = false;
@@ -412,7 +352,7 @@ export class SessionStore {
 			chat.acpAgentId = agent.id;
 			chat.acpAgentName = agent.name;
 		}
-		const adapter = createAdapter(backend);
+		const adapter = createJucodeAdapter();
 		registerAdapter(s.id, adapter);
 		s.chat = chat;
 		s.backendId = backend;
@@ -445,10 +385,10 @@ export class SessionStore {
 		this.#share(s, { archived: false });
 	}
 
-	/** A hosted session's title, archive state or removal goes to the daemon,
-	 *  which every other client follows. */
+	/** A session's title, archive state or removal goes to the daemon, which
+	 *  every other client follows. */
 	#share(s: Session, changes: { title?: string; archived?: boolean; hidden?: boolean }) {
-		if (s.hosted && s.chat.sessionId) sessionMeta(s.chat.sessionId, changes).catch(() => {});
+		if (s.chat.sessionId) sessionMeta(s.chat.sessionId, changes).catch(() => {});
 	}
 
 	/** Lists a daemon session in `project` without opening it here; it opens
@@ -459,7 +399,6 @@ export class SessionStore {
 		reuseId?: string
 	): string {
 		const s = this.#newSession(normalizeBackendId(rec.engine), undefined, reuseId);
-		s.hosted = true;
 		s.dormant = true;
 		s.restored = true;
 		s.archived = !!rec.archived;
@@ -539,13 +478,9 @@ export class SessionStore {
 		}
 	}
 
-	/** Re-open a persisted conversation in a new session (resume by id).
-	 *  jucode resumes via the `/resume` command; claude has no such command in
-	 *  stream-json mode and resumes via the allowlisted `--resume` spawn option
-	 *  instead, replaying the transcript from the session file on disk (the
-	 *  engine-side context is preserved by --resume regardless);
-	 *  codex resumes via the thread/resume RPC after the handshake (the thread
-	 *  id rides the SessionCtx, and the response replays the transcript). */
+	/** Re-open a persisted conversation in a new session: the daemon reopens
+	 *  it by id (one it never hosted, from the directory and the backend) and
+	 *  replays its transcript. */
 	restoreSession(
 		project: Project,
 		sid: string,
@@ -556,15 +491,10 @@ export class SessionStore {
 		reuseId?: string,
 		acpAgent?: { id: string; name: string },
 		surface?: 'tui',
-		hosted = false,
 		gateway?: boolean
 	) {
 		const s = this.#newSession(backend, backend === 'acp' ? acpAgent : undefined, reuseId);
 		if (gateway) s.gateway = true;
-		// A claude or codex conversation moves into the daemon whenever it can
-		// run there, even one saved or started outside it (the daemon resumes it
-		// by id).
-		s.hosted = (hosted && DAEMON_BACKENDS.includes(backend)) || (backend !== 'jucode' && hostsNewSessions(backend));
 		if (title) s.chat.title = title;
 		s.archived = archived;
 		if (chrome?.color) s.color = chrome.color;
@@ -579,23 +509,14 @@ export class SessionStore {
 		// conversation, or it comes back as a fresh session next time.
 		s.chat.sessionId = sid;
 		// The conversation was handed to the native TUI when it was persisted:
-		// render the TuiPanel (which resumes by id) and never spawn the GUI
+		// render the TuiPanel (which resumes by id) and never start the GUI
 		// engine beside it — one process per conversation. `returnToGui`
-		// respawns the engine with resume later.
+		// starts the engine again later.
 		if (surface === 'tui' && canHandOffToTui(backend)) {
 			s.surface = 'tui';
-			s.chat.sessionId = sid;
 			return s.id;
 		}
-		const spawned =
-			backend === 'claude' && !s.hosted
-				? this.#spawn(s, project.path, () => this.#replayClaudeTranscript(s, project.path, sid), {
-						resume: sid
-					})
-				: backend === 'codex' || s.hosted
-					? this.#spawn(s, project.path, undefined, undefined, sid)
-					: this.#spawn(s, project.path, () => dispatch(s.id, { op: 'command', input: `/resume ${sid}` }));
-		spawned.catch((e) => this.#engineFailed(s.chat, e));
+		this.#spawn(s, project.path, undefined, undefined, sid).catch((e) => this.#engineFailed(s.chat, e));
 		return s.id;
 	}
 
@@ -620,20 +541,6 @@ export class SessionStore {
 		this.#makeDraft(s);
 		project.sessions.push(s);
 		return s.id;
-	}
-
-	/** Best-effort transcript replay for a resumed claude session: the session
-	 *  file's user/assistant text becomes the message list (caps.transcriptReplay).
-	 *  Failures are silent — `--resume` already restored the engine-side context,
-	 *  the chat just starts visually empty. Only restores replay (crash
-	 *  auto-restarts keep their in-memory messages). */
-	#replayClaudeTranscript(s: Session, cwd: string, sid: string) {
-		claudeSessionTranscript(cwd, sid)
-			.then((rows) => {
-				if (!rows?.length || s.chat.messages.some((m) => m.kind === 'user')) return;
-				s.chat.handle({ type: 'transcript', items: rows });
-			})
-			.catch(() => {});
 	}
 
 	/** Start a chat (conversation and research, no project) in the chats
@@ -662,7 +569,7 @@ export class SessionStore {
 	 *  agent when `sid` is omitted. The tab lands in the project for the
 	 *  agent's directory, which is added when missing. */
 	openAgentSession(agent: { id: string; name: string; cwd: string }, sid?: string) {
-		const open = sid && this.allSessions.find((s) => s.hosted && s.chat.sessionId === sid);
+		const open = sid && this.allSessions.find((s) => s.chat.sessionId === sid);
 		if (open) {
 			open.archived = false;
 			this.activeId = open.id;
@@ -674,7 +581,6 @@ export class SessionStore {
 			this.projects.push(project);
 		}
 		const s = this.#newSession('jucode');
-		s.hosted = true;
 		s.chat.title = agent.name;
 		if (sid) {
 			// The daemon holds the conversation; the backend stays jucode.
@@ -708,11 +614,6 @@ export class SessionStore {
 		s.chat.restartWindowStart = now;
 		if (spend) s.chat.restarts++;
 		if (force) s.chat.daemonRetries = 0;
-		const sid = s.chat.sessionId;
-		// A restored session's conversation exists engine-side even while its
-		// replayed transcript is still empty (replay is async / best-effort) —
-		// the same rule serialize uses to decide a tab is resumable.
-		const canResume = s.chat.resumable || (!!sid && !!s.restored);
 		s.chat.engineState = 'connecting';
 		const text = force
 			? t('shell.restarting')
@@ -720,49 +621,14 @@ export class SessionStore {
 				? t('shell.autoRestartingWhy', { reason })
 				: t('shell.autoRestarting');
 		if (spend) s.chat.messages.push({ kind: 'system', text });
-		// claude resumes via the --resume spawn option (no /resume command in
-		// stream-json mode); codex resumes via the thread/resume RPC (thread id
-		// through SessionCtx); jucode resumes with the command after the handshake.
-		// A resume target the engine can't find ("No conversation found …") makes it
-		// exit immediately, which would crash-loop forever re-resuming the same
-		// doomed id (the bootstrap 'ready' keeps resetting the restart budget). When
-		// the adapter flagged a resume failure, come up fresh instead. One-shot: the
-		// fresh session gets a new id that CAN be resumed on a later crash.
-		const mayResume = sid && canResume && !s.chat.resumeBroken;
-		// The failed id names no saved conversation: forget it, or every later
-		// restart (the fresh engine has not reported its own id yet) would try it
-		// again and die the same way.
+		// The daemon reopens the session's conversation. A resume target the
+		// engine can't find ("No conversation found …") makes it exit at once,
+		// which would crash-loop re-resuming the same doomed id; when the engine
+		// flagged that, forget the id and come up fresh (one-shot: the fresh
+		// session gets a new id that CAN be resumed on a later crash).
 		if (s.chat.resumeBroken) s.chat.sessionId = '';
 		s.chat.resumeBroken = false;
-		const resumeViaSpawn = s.backendId === 'claude' && mayResume;
-		const resumeViaCtx = s.backendId === 'codex' && mayResume;
-		// Preserve claude's permission mode across the restart so yolo
-		// (--dangerously-skip-permissions) survives an auto-restart — otherwise the
-		// engine comes up in default mode while the desktop still thinks it's yolo.
-		const extra: Record<string, unknown> = {};
-		if (resumeViaSpawn) extra.resume = sid;
-		// A claude engine coming up fresh gets a new pinned id (as a new session
-		// does), not a leftover one it never used, which a later resume would
-		// fail on.
-		else if (s.backendId === 'claude' && !s.hosted) {
-			extra.session_id = newUuid();
-			s.chat.sessionId = extra.session_id as string;
-			s.chat.unsavedSid = true;
-		}
-		// A hosted claude session reopens by id; the daemon starts it again if
-		// Claude Code never saved it.
-		if (s.backendId === 'claude') extra.permission_mode = toClaudeMode(toEngineMode(s.chat.approvalMode));
-		this.#spawn(
-			s,
-			this.projectPathOf(id),
-			() => {
-				// Hosted sessions resume by reopening the daemon session in #spawn.
-				if (sid && canResume && s.backendId === 'jucode' && !s.hosted)
-					dispatch(id, { op: 'command', input: `/resume ${sid}` });
-			},
-			Object.keys(extra).length ? extra : undefined,
-			resumeViaCtx ? sid : undefined
-		).catch((e) => this.#engineFailed(s.chat, e));
+		this.#spawn(s, this.projectPathOf(id)).catch((e) => this.#engineFailed(s.chat, e));
 	}
 
 	/** Handle an engine exit: mark exited and auto-restart unless we've already
@@ -779,8 +645,7 @@ export class SessionStore {
 			return;
 		}
 		// Intentional close (provider switch, respawn): the caller brings the
-		// engine back itself. Local engines no longer report such closes (the
-		// Rust side drops a replaced child's exit); hosted ones still do.
+		// engine back itself; the daemon still reports the close.
 		if (s.chat.switching) {
 			s.chat.switching = false;
 			return;
@@ -838,8 +703,6 @@ export class SessionStore {
 			s.draftPick = undefined;
 			return;
 		}
-		const sid = s.chat.sessionId;
-		const canResume = s.chat.resumable;
 		s.chat.switching = true;
 		s.chat.engineState = 'connecting';
 		s.chat.messages.push({ kind: 'system', text: t('shell.switchingTo', { provider: provider.id, model }) });
@@ -848,7 +711,6 @@ export class SessionStore {
 			if (this.#gone(s)) return;
 			await this.#spawn(s, this.projectPathOf(id));
 			s.chat.switching = false;
-			if (sid && canResume && !s.hosted) dispatch(id, { op: 'command', input: `/resume ${sid}` });
 		} catch (e) {
 			s.chat.switching = false;
 			this.#engineFailed(s.chat, e);
@@ -881,21 +743,14 @@ export class SessionStore {
 			kind: 'system',
 			text: mode === 'jucode' ? t('shell.toolSwitch.toJucode') : t('shell.toolSwitch.toSystem')
 		});
-		const sid = s.chat.sessionId;
-		const canResume = s.chat.resumable || (!!sid && !!s.restored);
 		try {
 			await closeSession(id);
 			if (this.#gone(s)) return;
 			s.chat.resumeBroken = false;
-			const mayResume = !!(sid && canResume);
-			const extra: Record<string, unknown> = {};
-			if (s.backendId === 'claude' && mayResume && !s.hosted) extra.resume = sid;
 			await this.#spawn(
 				s,
 				this.projectPathOf(id),
-				model ? () => dispatch(id, { op: 'command', input: `/model ${model}` }) : undefined,
-				Object.keys(extra).length ? extra : undefined,
-				(s.backendId === 'codex' || s.hosted) && mayResume ? sid : undefined
+				model ? () => dispatch(id, { op: 'command', input: `/model ${model}` }) : undefined
 			);
 			s.chat.switching = false;
 		} catch (e) {
@@ -905,28 +760,22 @@ export class SessionStore {
 	}
 
 	/**
-	 * Switch a claude session INTO yolo (bypassPermissions) via a respawn: the
-	 * runtime `set_permission_mode bypassPermissions` control frame isn't honored
-	 * (no system/status follow-up), so we restart the child with
-	 * `--permission-mode bypassPermissions`, resuming the conversation with
-	 * `--resume <session-id>` when there is one to preserve context. Every other
-	 * mode switches live and never comes here (see approval.needsClaudeYoloRespawn).
+	 * Switch a claude session INTO yolo (bypassPermissions) by starting it
+	 * again: the runtime `set_permission_mode bypassPermissions` control frame
+	 * isn't honored (no system/status follow-up), so the daemon reopens the
+	 * conversation with `--dangerously-skip-permissions`. Every other mode
+	 * switches live and never comes here (see approval.needsClaudeYoloRespawn).
 	 */
 	async respawnClaudeYolo(id: string) {
 		const s = this.allSessions.find((x) => x.id === id);
 		if (!s || s.backendId !== 'claude') return;
-		const sid = s.chat.sessionId;
-		const canResume = s.chat.resumable;
 		// The close below is intentional — don't let handleExit treat it as a crash.
 		s.chat.switching = true;
 		s.chat.engineState = 'connecting';
 		try {
 			await closeSession(id);
 			if (this.#gone(s)) return;
-			await this.#spawn(s, this.projectPathOf(id), undefined, {
-				permission_mode: 'bypassPermissions',
-				...(sid && canResume ? { resume: sid } : {})
-			});
+			await this.#spawn(s, this.projectPathOf(id), undefined, { permission_mode: 'full-auto' });
 			s.chat.switching = false;
 		} catch (e) {
 			s.chat.switching = false;
@@ -936,30 +785,29 @@ export class SessionStore {
 
 	/**
 	 * Rewind a claude conversation to the `userIndex`-th user turn. claude has no
-	 * live rewind control frame, so — mirroring the yolo respawn — we restart the
-	 * child resuming the session truncated at the previous turn's assistant message
-	 * (`--resume <sid> --resume-session-at <uuid>`, the same argv the Agent SDK
-	 * builds), and truncate our projected transcript to match. A null uuid (rewind
-	 * to the first turn) restarts the session fresh.
+	 * live rewind control frame, so — mirroring the yolo respawn — the daemon
+	 * reopens the conversation truncated at the previous turn's assistant message
+	 * (`--resume-session-at <uuid>`), and our projected transcript is truncated
+	 * to match. A null uuid (rewind to the first turn) starts a new conversation.
 	 */
 	async rewindClaudeSession(id: string, resumeAtUuid: string | null, userIndex: number) {
 		const s = this.allSessions.find((x) => x.id === id);
 		if (!s || s.backendId !== 'claude') return;
-		const sid = s.chat.sessionId;
-		const yolo = needsClaudeYoloRespawn('claude', toEngineMode(s.chat.approvalMode));
 		s.chat.switching = true;
 		s.chat.engineState = 'connecting';
 		s.chat.truncateToUserTurn(userIndex);
-		// Back to before the first turn: a new conversation (a hosted session
-		// would otherwise reopen the old one by id).
-		if (!resumeAtUuid && s.hosted) s.chat.sessionId = '';
+		// Back to before the first turn: a new conversation (the session would
+		// otherwise reopen the old one by id).
+		if (!resumeAtUuid) s.chat.sessionId = '';
 		try {
 			await closeSession(id);
 			if (this.#gone(s)) return;
-			await this.#spawn(s, this.projectPathOf(id), undefined, {
-				...(sid && resumeAtUuid ? { resume: sid, resume_session_at: resumeAtUuid } : {}),
-				...(yolo ? { permission_mode: 'bypassPermissions' } : {})
-			});
+			await this.#spawn(
+				s,
+				this.projectPathOf(id),
+				undefined,
+				resumeAtUuid ? { resume_session_at: resumeAtUuid } : undefined
+			);
 			s.chat.switching = false;
 		} catch (e) {
 			s.chat.switching = false;
@@ -969,7 +817,7 @@ export class SessionStore {
 
 	removeSession(id: string) {
 		const s = this.allSessions.find((x) => x.id === id);
-		// Closing a hosted session's tab removes it from every client's list.
+		// Closing a session's tab removes it from every client's list.
 		if (s) this.#share(s, { hidden: true });
 		if (!s?.dormant && !s?.draft) closeSession(id).catch(() => {});
 		unregisterAdapter(id);
@@ -993,7 +841,7 @@ export class SessionStore {
 	}
 
 	/** Open the project's history: the JuCode conversations saved for its
-	 *  directory, read from disk, as a picker in one of its chats (the active
+	 *  directory, as the daemon lists them, as a picker in one of its chats (the active
 	 *  one when it is in this project). Only a project with no chat at all gets
 	 *  a new one to show it in. */
 	async openHistory(p: Project) {
@@ -1003,15 +851,15 @@ export class SessionStore {
 		const chat = this.allSessions.find((s) => s.id === id)?.chat;
 		if (!chat) return;
 		try {
-			const sessions = await jucodeSessions(p.path);
+			const sessions = (await sessionHistory(p.path)).filter((x) => x.engine === 'jucode');
 			chat.handle({
 				type: 'resume_view',
 				backend: 'jucode',
 				items: sessions.map((x) => ({
-					id: x.id,
-					label: x.label || x.id,
-					detail: new Date(x.updated_at * 1000).toLocaleString(),
-					active: x.id === chat.sessionId
+					id: x.session,
+					label: x.title || x.session,
+					detail: new Date(x.updated_at).toLocaleString(),
+					active: x.session === chat.sessionId
 				}))
 			});
 		} catch (e) {
@@ -1029,18 +877,7 @@ export class SessionStore {
 			this.activeId = open.id;
 			return;
 		}
-		this.activeId = this.restoreSession(
-			project,
-			sid,
-			title,
-			backend,
-			false,
-			undefined,
-			undefined,
-			undefined,
-			undefined,
-			hostsNewSessions(backend)
-		);
+		this.activeId = this.restoreSession(project, sid, title, backend);
 	}
 
 	/** The tab was closed (or its workspace swapped out) while an async
@@ -1067,8 +904,8 @@ export class SessionStore {
 			!canHandOffToTui(s.backendId)
 		)
 			return;
-		// Same rule serialize uses for `sid`: the engine persisted the
-		// conversation only once a user turn exists (or it was restored).
+		// The engine persisted the conversation only once a user turn exists
+		// (or it was restored); the TUI could not resume it before.
 		if (!isValidResumeSessionId(s.chat.sessionId) || !(s.chat.resumable || s.restored)) return;
 		// Keep a second click from issuing another close that could resolve first
 		// and expose the TUI while the original GUI child is still shutting down.
@@ -1129,12 +966,9 @@ export class SessionStore {
 			tabs: p.sessions
 				.map((s) => ({
 					id: s.id,
-					// A hosted session exists in the daemon from its first moment, so
-					// its id is always worth keeping.
-					...(s.chat.sessionId && (s.chat.resumable || s.restored || s.hosted)
-						? { sid: s.chat.sessionId }
-						: {}),
-					...(s.hosted ? { hosted: true } : {}),
+					// A session exists in the daemon from its first moment, so its id
+					// is always worth keeping.
+					...(s.chat.sessionId ? { sid: s.chat.sessionId } : {}),
 					...(s.gateway ? { gateway: true } : {}),
 					title: s.chat.title,
 					...(s.backendId !== 'jucode' ? { backend: s.backendId } : {}),
@@ -1190,7 +1024,7 @@ export class SessionStore {
 					let backend = normalizeBackendId(t.backend);
 					// An 'acp' tab needs its agent back to respawn; older files carry
 					// none on the tab → fall back to the project's last agent. Without
-					// any, never spawn a bare 'acp' (create_session rejects it).
+					// any, never start a bare 'acp' (there is no command to run).
 					const savedAgent =
 						t.acpAgent && typeof t.acpAgent.id === 'string' && typeof t.acpAgent.name === 'string'
 							? { id: t.acpAgent.id, name: t.acpAgent.name }
@@ -1209,9 +1043,9 @@ export class SessionStore {
 					// back as a draft. Both keep the saved desktop id (pre-id files mint anew).
 					// A tab handed to the TUI restores as a TUI surface (no engine).
 					const surface = t.surface === 'tui' && sid ? ('tui' as const) : undefined;
-					// A hosted conversation waits in the daemon: list it now and open
-					// it when it is shown (ACP needs its agent spawn path below).
-					const dormant = sid && t.hosted === true && !surface && backend !== 'acp';
+					// The conversation waits in the daemon: list it now and open it
+					// when it is shown (ACP needs its agent start path below).
+					const dormant = sid && !surface && backend !== 'acp';
 					const id = dormant
 						? this.#restoreDormant(proj, sid, t.title, backend, !!t.archived, chrome, t.id)
 						: sid
@@ -1225,7 +1059,6 @@ export class SessionStore {
 								t.id,
 								acpAgent,
 								surface,
-								t.hosted === true,
 								t.gateway === true
 							)
 						: this.#draftSaved(proj, t.id!, t.title, backend, !!t.archived, chrome, acpAgent);

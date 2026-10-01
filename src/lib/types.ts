@@ -14,7 +14,7 @@ export interface Session {
 	/** For 'acp' sessions: the registry id + display name of the launched agent
 	 *  (passed as the allowlisted `agent` spawn option on every (re)spawn). */
 	acpAgent?: { id: string; name: string };
-	/** Per-session adapter instance (stateful for codex/claude; not persisted). */
+	/** Per-session adapter instance (the jucode one; not persisted). */
 	adapter: EngineAdapter;
 	/** Archived threads are hidden from the sidebar by default (persisted); the
 	 *  conversation isn't deleted and can be unarchived. */
@@ -22,7 +22,8 @@ export interface Session {
 	/** Opened by resuming a persisted conversation — the engine already holds
 	 *  context, so the backend is locked even before any visible user turn. */
 	restored?: boolean;
-	/** claude: the permission mode its current engine was spawned with. */
+	/** claude: the mode its current engine was started in (`bypassPermissions`
+	 *  for full-auto, else the desktop's engine mode name). */
 	spawnedMode?: string;
 	/** Which surface currently owns the conversation: the GUI chat (default,
 	 *  undefined) or the native TUI resumed by session id. Exactly one process
@@ -30,10 +31,7 @@ export interface Session {
 	 *  before flipping to 'tui', and TuiPanel closes its pty before asking the
 	 *  store to flip back. */
 	surface?: 'gui' | 'tui';
-	/** A JuCode session hosted by the local `jucode daemon` instead of a
-	 *  child process: it keeps running when the desktop closes (persisted). */
-	hosted?: boolean;
-	/** A hosted session listed from the daemon without an engine open here
+	/** A session listed from the daemon without an engine open here
 	 *  yet; it opens when it is first shown (`SessionStore.wake`). */
 	dormant?: boolean;
 	/** A new session with no engine yet: its backend, model and effort are

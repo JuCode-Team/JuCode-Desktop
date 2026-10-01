@@ -1,14 +1,11 @@
 //! ACP agent registry: which external Agent Client Protocol agents the
 //! desktop may launch, and with what fixed command line.
 //!
-//! Safety model: mirrors `backend.rs` — the frontend NEVER passes argv to
-//! `create_session`. Users register agents (id, name, command, args, env)
-//! through the dedicated registry commands below, where every field is
-//! validated; a session then only references a registry *id*, and the command
-//! line is looked up here at spawn time. Registered args are fixed
-//! configuration (they may legitimately start with `-`, e.g.
-//! `--experimental-acp`), but they can never be extended or reordered by a
-//! session request.
+//! Users register agents (id, name, command, args, env) through the
+//! dedicated registry commands below, where every field is validated; a
+//! session starts from its entry, whose command line the desktop hands to the
+//! daemon. Registered args are fixed configuration (they may legitimately
+//! start with `-`, e.g. `--experimental-acp`).
 //!
 //! The registry persists as `acp-agents.json` in the per-app config dir
 //! (same directory as the other desktop app-data files).

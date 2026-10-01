@@ -2,7 +2,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager};
@@ -11,7 +11,6 @@ mod acp_registry;
 mod backend;
 mod browser;
 mod capture;
-mod claude_history;
 mod installer;
 mod plugins;
 mod secrets;
@@ -34,87 +33,6 @@ pub(crate) fn no_window(cmd: &mut Command) {
     }
     #[cfg(not(windows))]
     let _ = cmd;
-}
-
-/// One `jucode serve` child process backing a single GUI session.
-struct Session {
-    /// Lines for the child's stdin, written in order by the session's writer
-    /// thread: a child that stops reading must not block the caller (the send
-    /// commands run on the UI thread).
-    /// None once the session is retired (stdin closed).
-    stdin: Mutex<Option<std::sync::mpsc::Sender<String>>>,
-    child: Mutex<Child>,
-}
-
-/// Ends a session's child off the calling thread: close its stdin so it can
-/// exit on its own (releasing its session lock and cleaning up), and kill it
-/// only if it is still running after a grace period.
-fn retire(session: Arc<Session>) {
-    if let Ok(mut stdin) = session.stdin.lock() {
-        stdin.take();
-    }
-    std::thread::spawn(move || {
-        let Ok(mut child) = session.child.lock() else {
-            return;
-        };
-        for _ in 0..15 {
-            if matches!(child.try_wait(), Ok(Some(_))) {
-                return;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(100));
-        }
-        kill_tree(&mut child);
-        let _ = child.wait();
-    });
-}
-
-/// Kills a child with its descendants where the child is only a launcher:
-/// on Windows a `.cmd` shim (npm-installed CLIs) is cmd.exe, and killing it
-/// leaves the real program running with our stdout. Elsewhere the child is
-/// the program itself.
-fn kill_tree(child: &mut Child) {
-    #[cfg(windows)]
-    {
-        let mut cmd = Command::new("taskkill");
-        no_window(&mut cmd);
-        let _ = cmd
-            .args(["/pid", &child.id().to_string(), "/T", "/F"])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
-    }
-    let _ = child.kill();
-}
-
-/// Writes queued lines to `stdin` until the session is dropped or the child
-/// stops accepting input.
-fn spawn_stdin_writer(mut stdin: ChildStdin) -> std::sync::mpsc::Sender<String> {
-    let (tx, rx) = std::sync::mpsc::channel::<String>();
-    std::thread::spawn(move || {
-        for line in rx {
-            let written = stdin
-                .write_all(line.as_bytes())
-                .and_then(|_| stdin.write_all(b"\n"))
-                .and_then(|_| stdin.flush());
-            if written.is_err() {
-                break;
-            }
-        }
-    });
-    tx
-}
-
-/// All live sessions, keyed by the frontend-generated session id.
-#[derive(Default)]
-struct Engines {
-    sessions: Mutex<HashMap<String, Arc<Session>>>,
-}
-
-/// Stdout line tagged with the session it came from.
-#[derive(Clone, Serialize)]
-struct EventPayload {
-    session: String,
-    data: String,
 }
 
 /// Resolves the `jucode` binary: `JUCODE_BIN` override, then the system-installed
@@ -175,275 +93,6 @@ fn confine_to_root(path: &Path, root: Option<&Path>) -> Result<PathBuf, String> 
     } else {
         Err("path is outside the project root".to_string())
     }
-}
-
-/// Spawns a new engine process for `session`. The frontend generates the id and
-/// registers its event listener before calling this, so no startup event is lost.
-///
-/// `backend` selects which agent CLI backs the session (default `"jucode"`,
-/// which keeps the historical behavior exactly); `backend_opts` is validated
-/// against that backend's fixed option allowlist (see `backend::validate_opts`)
-/// — the frontend can never pass raw argv.
-#[tauri::command]
-fn create_session(
-    session: String,
-    cwd: Option<String>,
-    backend: Option<String>,
-    backend_opts: Option<serde_json::Value>,
-    app: AppHandle,
-    engines: tauri::State<Engines>,
-) -> Result<(), String> {
-    let kind = BackendKind::parse(backend.as_deref().unwrap_or("jucode"))?;
-    let opts = backend::validate_opts(kind, backend_opts.as_ref())?;
-    // ACP sessions spawn a registered agent: the command line is looked up in
-    // the validated registry by id — never composed from request data.
-    let (bin, mut args, mut agent_env) = if kind == BackendKind::Acp {
-        let agent_id = opts
-            .agent
-            .as_deref()
-            .ok_or_else(|| "acp backend requires an `agent` registry id".to_string())?;
-        let agent = acp_registry::find_agent(&app, agent_id)?;
-        let env: Vec<(String, String)> = agent
-            .env
-            .iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
-        (
-            backend::resolve_acp_program(&agent.command),
-            agent.args,
-            env,
-        )
-    } else {
-        (
-            backend::resolve_backend_bin(kind, opts.bin_override.as_deref()),
-            backend::build_args(kind, &opts),
-            Vec::new(),
-        )
-    };
-    // This one session talks to the JuCode gateway; the user's own Claude
-    // Code / Codex config (and every other session using it) is untouched.
-    if opts.jucode_gateway {
-        let (extra_args, extra_env) = tool_switch::gateway_spawn(
-            kind.bin_name(),
-            &jucode_api_url(),
-            &jucode_access_token()?,
-        )?;
-        args.extend(extra_args);
-        agent_env.extend(extra_env);
-    }
-    let dir = cwd
-        .map(PathBuf::from)
-        .filter(|p| p.is_dir())
-        .unwrap_or_else(resolve_cwd);
-    let mut cmd = Command::new(bin);
-    no_window(&mut cmd);
-    cmd.args(&args)
-        .current_dir(dir)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped());
-    if kind == BackendKind::Jucode {
-        // jucode's stderr stays inherited (visible in the app's own stderr),
-        // exactly as before multi-backend support.
-        cmd.stderr(Stdio::inherit());
-    } else {
-        // codex / claude diagnostics matter to their adapters — pipe stderr and
-        // forward each line to the webview as a distinct `{__stderr: …}` payload.
-        cmd.stderr(Stdio::piped());
-    }
-    // 终端等价环境：快照可用则从零重建子进程环境（见 shell_env.rs），
-    // JUCODE_DESKTOP 让引擎启用桌面专属工具（如 browser_open），协议关键、
-    // 最后断言不可被用户自定义覆盖。
-    let explicit: &[(&str, &str)] = if kind == BackendKind::Jucode {
-        &[("JUCODE_DESKTOP", "1")]
-    } else {
-        &[]
-    };
-    // Per-backend custom env first, then the registry entry's per-agent env
-    // (the more specific configuration wins).
-    let mut custom_env = opts.env.clone();
-    custom_env.extend(agent_env);
-    shell_env::apply_to_command(&mut cmd, opts.use_shell_env, explicit, &custom_env);
-    let mut child = cmd.spawn().map_err(|error| match kind {
-        BackendKind::Jucode => format!("failed to start jucode serve: {error}"),
-        _ => format!("failed to start {} backend: {error}", kind.bin_name()),
-    })?;
-
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| "failed to capture child stdout".to_string())?;
-    let stdin = child
-        .stdin
-        .take()
-        .ok_or_else(|| "failed to capture child stdin".to_string())?;
-    let stderr = child.stderr.take();
-
-    // Register before the readers start. The same desktop session id is reused
-    // across restarts and provider switches, so each reader forwards output
-    // only while its own child is the registered one: a replaced or closed
-    // engine's buffered lines and its exit must not land on the new engine
-    // (a late `agent-exit` read as a crash would restart the fresh child).
-    let entry = Arc::new(Session {
-        stdin: Mutex::new(Some(spawn_stdin_writer(stdin))),
-        child: Mutex::new(child),
-    });
-    let replaced = engines
-        .sessions
-        .lock()
-        .map_err(|e| format!("lock poisoned: {e}"))?
-        .insert(session.clone(), entry.clone());
-    if let Some(old) = replaced {
-        retire(old);
-    }
-    let mine = Arc::downgrade(&entry);
-    let is_current = move |handle: &AppHandle, id: &str| {
-        handle
-            .state::<Engines>()
-            .sessions
-            .lock()
-            .map(|map| map.get(id).is_some_and(|s| std::ptr::eq(Arc::as_ptr(s), mine.as_ptr())))
-            .unwrap_or(false)
-    };
-
-    // Piped stderr (codex / claude): forward lines as {"__stderr": "<line>"}
-    // agent-event payloads so adapters can surface diagnostics.
-    // Signalled (by dropping it) when the stderr reader is done, so the exit
-    // is reported after the engine's last diagnostics (claude's "No
-    // conversation found" decides how the restart resumes).
-    let (stderr_done, stderr_finished) = std::sync::mpsc::channel::<()>();
-    if let Some(stderr) = stderr {
-        let id = session.clone();
-        let handle = app.clone();
-        let is_current = is_current.clone();
-        std::thread::spawn(move || {
-            let _done = stderr_done;
-            let reader = BufReader::new(stderr);
-            for line in reader.lines() {
-                match line {
-                    Ok(line) if !line.trim().is_empty() => {
-                        if !is_current(&handle, &id) {
-                            break;
-                        }
-                        let data = serde_json::json!({ "__stderr": line }).to_string();
-                        let _ = handle.emit(
-                            "agent-event",
-                            EventPayload {
-                                session: id.clone(),
-                                data,
-                            },
-                        );
-                    }
-                    Ok(_) => {}
-                    Err(_) => break,
-                }
-            }
-        });
-    }
-
-    let id = session;
-    let handle = app.clone();
-    std::thread::spawn(move || {
-        let reader = BufReader::new(stdout);
-        for line in reader.lines() {
-            match line {
-                Ok(line) if !line.trim().is_empty() => {
-                    if !is_current(&handle, &id) {
-                        return;
-                    }
-                    let _ = handle.emit(
-                        "agent-event",
-                        EventPayload {
-                            session: id.clone(),
-                            data: line,
-                        },
-                    );
-                }
-                Ok(_) => {}
-                Err(_) => break,
-            }
-        }
-        // Only an engine that is still registered exited on its own; a closed
-        // or replaced one ends silently.
-        if is_current(&handle, &id) {
-            let _ = stderr_finished.recv_timeout(std::time::Duration::from_millis(500));
-            let reason = engine_exit_reason(&handle, &id);
-            let _ = handle.emit(
-                "agent-exit",
-                serde_json::json!({ "session": id, "reason": reason }),
-            );
-        }
-    });
-
-    Ok(())
-}
-
-/// How a registered engine ended ("exit code 1", "signal 9"), for the
-/// restart notice. Its stdout has closed; give the process a moment to exit.
-fn engine_exit_reason(handle: &AppHandle, id: &str) -> String {
-    let Some(entry) = handle
-        .state::<Engines>()
-        .sessions
-        .lock()
-        .ok()
-        .and_then(|map| map.get(id).cloned())
-    else {
-        return String::new();
-    };
-    for _ in 0..20 {
-        let status = entry.child.lock().ok().and_then(|mut c| c.try_wait().ok().flatten());
-        if let Some(status) = status {
-            if let Some(code) = status.code() {
-                return format!("exit code {code}");
-            }
-            #[cfg(unix)]
-            {
-                use std::os::unix::process::ExitStatusExt;
-                if let Some(signal) = status.signal() {
-                    return format!("signal {signal}");
-                }
-            }
-            return status.to_string();
-        }
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    }
-    String::new()
-}
-
-/// Queues one raw line (a single protocol frame) for a session child's stdin.
-fn write_line(engines: &Engines, session: &str, line: &str) -> Result<(), String> {
-    let target = engines
-        .sessions
-        .lock()
-        .map_err(|e| format!("lock poisoned: {e}"))?
-        .get(session)
-        .cloned()
-        .ok_or_else(|| format!("unknown session: {session}"))?;
-    let stdin = target.stdin.lock().map_err(|error| error.to_string())?;
-    stdin
-        .as_ref()
-        .and_then(|tx| tx.send(line.to_string()).ok())
-        .ok_or_else(|| format!("session {session} no longer accepts input"))
-}
-
-#[tauri::command]
-fn send_op(
-    session: String,
-    op: serde_json::Value,
-    engines: tauri::State<Engines>,
-) -> Result<(), String> {
-    let line = serde_json::to_string(&op).map_err(|error| error.to_string())?;
-    write_line(&engines, &session, &line)
-}
-
-/// Raw stdin write for non-jucode backends: the frontend adapter composes its
-/// own protocol frame (JSON-RPC for codex, stream-json for claude) and sends it
-/// as one line. Embedded newlines are rejected — one call, one frame.
-#[tauri::command]
-fn send_line(session: String, line: String, engines: tauri::State<Engines>) -> Result<(), String> {
-    if line.contains('\n') || line.contains('\r') {
-        return Err("line must be a single frame (no embedded newlines)".to_string());
-    }
-    write_line(&engines, &session, &line)
 }
 
 /// Availability report for one backend binary (settings / new-session UI).
@@ -522,7 +171,7 @@ fn daemon_listening() -> bool {
 /// otherwise both spawn one.
 static DAEMON_START: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-fn ensure_daemon() -> Result<(), String> {
+fn ensure_daemon(bin_override: Option<&str>, env: &[(String, String)]) -> Result<(), String> {
     if daemon_listening() {
         return Ok(());
     }
@@ -537,16 +186,20 @@ fn ensure_daemon() -> Result<(), String> {
         .append(true)
         .open(log.join("daemon.log"))
         .map_err(|e| e.to_string())?;
-    let mut cmd = Command::new(resolve_bin());
+    let mut cmd = Command::new(backend::resolve_backend_bin(
+        BackendKind::Jucode,
+        bin_override,
+    ));
     no_window(&mut cmd);
     cmd.args(["daemon", "--listen", DAEMON_ADDR])
         .stdin(std::process::Stdio::null())
         .stdout(log.try_clone().map_err(|e| e.to_string())?)
         .stderr(log);
-    // The terminal's environment, as for engines Desktop spawns itself: a GUI
-    // launch has a bare PATH, so an npm-installed jucode could not find node
-    // and hosted sessions' tools could not find git, cargo and the like.
-    shell_env::apply_to_command(&mut cmd, true, &[], &[]);
+    // The terminal's environment: a GUI launch has a bare PATH, so an
+    // npm-installed jucode could not find node and sessions' tools could not
+    // find git, cargo and the like. The jucode backend's own environment
+    // comes on top (the daemon is the jucode engine).
+    shell_env::apply_to_command(&mut cmd, true, &[], env);
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
@@ -590,15 +243,20 @@ static DAEMON_CHECKED: std::sync::atomic::AtomicBool = std::sync::atomic::Atomic
 fn stale_daemon() -> Option<(i32, String)> {
     let run = |program: &str, args: &[&str]| -> Option<String> {
         let out = Command::new(program).args(args).output().ok()?;
-        out.status.success().then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
+        out.status
+            .success()
+            .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
     };
     let port = DAEMON_ADDR.rsplit(':').next()?;
-    let pid: i32 = run("lsof", &["-nP", "-t", &format!("-iTCP:{port}"), "-sTCP:LISTEN"])?
-        .lines()
-        .next()?
-        .trim()
-        .parse()
-        .ok()?;
+    let pid: i32 = run(
+        "lsof",
+        &["-nP", "-t", &format!("-iTCP:{port}"), "-sTCP:LISTEN"],
+    )?
+    .lines()
+    .next()?
+    .trim()
+    .parse()
+    .ok()?;
     let exe = if cfg!(target_os = "linux") {
         std::fs::read_link(format!("/proc/{pid}/exe"))
             .ok()?
@@ -619,8 +277,12 @@ fn stale_daemon() -> Option<(i32, String)> {
     let started = std::time::SystemTime::now().checked_sub(age)?;
     let modified = meta.modified().ok()?;
     // A little slack for ps' one-second resolution.
-    (modified > started + std::time::Duration::from_secs(2))
-        .then(|| (pid, format!("{} was updated after it started", exe.display())))
+    (modified > started + std::time::Duration::from_secs(2)).then(|| {
+        (
+            pid,
+            format!("{} was updated after it started", exe.display()),
+        )
+    })
 }
 
 /// `ps -o etime` ("[[dd-]hh:]mm:ss") as a duration.
@@ -646,7 +308,9 @@ fn replace_stale_daemon() {
     #[cfg(unix)]
     if let Some((pid, reason)) = stale_daemon() {
         eprintln!("jucode daemon is stale ({reason}); restarting it");
-        let _ = Command::new("kill").args(["-TERM", &pid.to_string()]).status();
+        let _ = Command::new("kill")
+            .args(["-TERM", &pid.to_string()])
+            .status();
         for _ in 0..50 {
             if !daemon_listening() {
                 break;
@@ -656,10 +320,23 @@ fn replace_stale_daemon() {
     }
 }
 
+/// The local daemon's address and token, starting it first when needed.
+/// `bin_override` and `env` are the jucode backend's settings, used when it
+/// has to be started.
 #[tauri::command(async)]
-fn daemon_endpoint() -> Result<DaemonEndpoint, String> {
+fn daemon_endpoint(
+    bin_override: Option<String>,
+    env: Option<serde_json::Value>,
+) -> Result<DaemonEndpoint, String> {
+    if let Some(bin) = bin_override.as_deref() {
+        backend::validate_bin_override(bin)?;
+    }
+    let env = match &env {
+        Some(env) => backend::validate_env(env)?,
+        None => Vec::new(),
+    };
     replace_stale_daemon();
-    ensure_daemon()?;
+    ensure_daemon(bin_override.as_deref(), &env)?;
     let path = jucode_dir().join("daemon").join("token");
     let token = std::fs::read_to_string(&path)
         .map(|token| token.trim().to_string())
@@ -675,54 +352,6 @@ fn daemon_endpoint() -> Result<DaemonEndpoint, String> {
 fn jucode_dir() -> PathBuf {
     let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"));
     PathBuf::from(home.unwrap_or_default()).join(".jucode")
-}
-
-/// One saved JuCode conversation for the history picker.
-#[derive(serde::Serialize)]
-struct JucodeSessionEntry {
-    id: String,
-    label: String,
-    updated_at: u64,
-    entries: u64,
-}
-
-/// The engine's session directory name for `cwd` (FNV-1a, as agent-core's
-/// session::hash_path).
-fn jucode_cwd_key(cwd: &str) -> String {
-    let mut hash = 0xcbf29ce484222325u64;
-    for byte in cwd.as_bytes() {
-        hash ^= u64::from(*byte);
-        hash = hash.wrapping_mul(0x100000001b3);
-    }
-    format!("{hash:016x}")
-}
-
-/// The JuCode conversations saved for `cwd`, newest first, read from the
-/// engine's session store (`~/.jucode/sessions/<fnv1a(cwd)>/<id>.json`) so the
-/// history picker needs no running engine. Empty conversations are skipped.
-#[tauri::command(async)]
-fn jucode_sessions(cwd: String) -> Result<Vec<JucodeSessionEntry>, String> {
-    let dir = jucode_dir().join("sessions").join(jucode_cwd_key(&cwd));
-    let Ok(read) = std::fs::read_dir(&dir) else {
-        return Ok(Vec::new());
-    };
-    let mut out: Vec<JucodeSessionEntry> = read
-        .flatten()
-        .filter(|e| e.path().extension().is_some_and(|x| x == "json"))
-        .filter_map(|e| {
-            let meta = read_json(&e.path());
-            let id = meta.get("id")?.as_str()?.to_string();
-            let entries = meta.get("entries_count").and_then(|v| v.as_u64()).unwrap_or(0);
-            (entries > 0).then(|| JucodeSessionEntry {
-                label: meta.get("label").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                updated_at: meta.get("updated_at").and_then(|v| v.as_u64()).unwrap_or(0),
-                entries,
-                id,
-            })
-        })
-        .collect();
-    out.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-    Ok(out)
 }
 
 fn read_json(path: &std::path::Path) -> serde_json::Value {
@@ -1614,19 +1243,6 @@ fn generate_text(
         .and_then(|v| v.as_str())
         .map(|s| s.trim().to_string())
         .ok_or_else(|| format!("无法解析生成结果：{resp}"))
-}
-
-#[tauri::command]
-fn close_session(session: String, engines: tauri::State<Engines>) -> Result<(), String> {
-    let removed = engines
-        .sessions
-        .lock()
-        .map_err(|e| format!("lock poisoned: {e}"))?
-        .remove(&session);
-    if let Some(target) = removed {
-        retire(target);
-    }
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -3332,14 +2948,10 @@ pub fn run() {
                 }
             }
         })
-        .manage(Engines::default())
         .manage(Ptys::default())
         .manage(capture::Recorder::default())
         .invoke_handler(tauri::generate_handler![
-            create_session,
             daemon_endpoint,
-            send_op,
-            send_line,
             check_backend,
             acp_registry::acp_agents_list,
             acp_registry::acp_agent_upsert,
@@ -3347,7 +2959,6 @@ pub fn run() {
             acp_registry::acp_agent_check,
             shell_env::shell_env_status,
             shell_env::refresh_shell_env,
-            close_session,
             read_config,
             write_config,
             app_data_read,
@@ -3384,9 +2995,6 @@ pub fn run() {
             git,
             plugins::github_pr::gh,
             worktree_base,
-            claude_history::claude_sessions,
-            jucode_sessions,
-            claude_history::claude_session_transcript,
             pty_open,
             pty_write,
             pty_resize,
@@ -3417,21 +3025,21 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{jucode_cwd_key, read_json_strict, valid_app_data_name};
+    use super::{read_json_strict, valid_app_data_name};
 
     #[test]
     fn parses_ps_elapsed_times() {
         use std::time::Duration;
         assert_eq!(super::parse_etime("05:07"), Some(Duration::from_secs(307)));
-        assert_eq!(super::parse_etime(" 01:05:07\n"), Some(Duration::from_secs(3907)));
-        assert_eq!(super::parse_etime("2-01:05:07"), Some(Duration::from_secs(2 * 86_400 + 3907)));
+        assert_eq!(
+            super::parse_etime(" 01:05:07\n"),
+            Some(Duration::from_secs(3907))
+        );
+        assert_eq!(
+            super::parse_etime("2-01:05:07"),
+            Some(Duration::from_secs(2 * 86_400 + 3907))
+        );
         assert_eq!(super::parse_etime("x"), None);
-    }
-
-    #[test]
-    fn jucode_cwd_key_matches_the_engine_store() {
-        // A directory name the engine created for this path.
-        assert_eq!(jucode_cwd_key("/Users/apple/.jucode/chats"), "41f93034987d6cdc");
     }
 
     #[test]

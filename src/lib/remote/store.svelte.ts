@@ -3,8 +3,10 @@
 // reads everything through here; the list stays current from the daemon's
 // `workspaces` broadcasts.
 
-import { daemon } from '$lib/protocol';
+import { daemon, sessionHistory, type HistoryItem } from '$lib/protocol';
 import { agentDirectory } from '$lib/agents.svelte';
+
+export type { HistoryItem };
 
 export interface ProjectView {
 	id: string;
@@ -19,19 +21,6 @@ export interface WorkspaceView {
 	name: string;
 	is_default?: boolean;
 	projects: ProjectView[];
-}
-
-export interface HistoryItem {
-	session: string;
-	title: string;
-	updated_at: number;
-	entries: number;
-	archived: boolean;
-	agent: string | null;
-	/** Hosted by the daemon right now. */
-	open: boolean;
-	/** `jucode` or `claude` (newer daemons). */
-	engine?: string;
 }
 
 export interface DirEntry {
@@ -90,9 +79,8 @@ export class RemoteProjects {
 		this.supported = false;
 	}
 
-	async history(cwd: string): Promise<HistoryItem[]> {
-		const reply = await daemon.request({ op: 'session_history', cwd });
-		return (reply.sessions as HistoryItem[]) ?? [];
+	history(cwd: string): Promise<HistoryItem[]> {
+		return sessionHistory(cwd);
 	}
 
 	/** No reply on success; the daemon broadcasts the new session list. The

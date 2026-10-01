@@ -45,7 +45,7 @@ export function createJucodeAdapter(): EngineAdapter {
 		id: 'jucode',
 		caps: JUCODE_CAPS,
 		onStart() {
-			/* no handshake — `jucode serve` announces itself via startup events */
+			/* no handshake — the daemon sends the session's startup events */
 		},
 		translate(raw: unknown): NormalizedEvent[] {
 			const ev = raw as Record<string, unknown>;
