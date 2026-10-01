@@ -38,7 +38,7 @@ pub struct Found {
 /// Download progress, in the shape of the updater plugin's JS events.
 #[derive(Clone, Serialize)]
 #[serde(tag = "event", content = "data")]
-pub enum Progress {
+pub enum DownloadEvent {
     #[serde(rename_all = "camelCase")]
     Started { content_length: Option<u64> },
     #[serde(rename_all = "camelCase")]
@@ -127,19 +127,19 @@ pub async fn update_check(app: AppHandle, pending: State<'_, Pending>) -> Result
     Ok(result)
 }
 
-async fn install(update: &Update, on_event: &Channel<Progress>) -> Result<(), String> {
+async fn install(update: &Update, on_event: &Channel<DownloadEvent>) -> Result<(), String> {
     let mut started = false;
     update
         .download_and_install(
             |chunk_length, content_length| {
                 if !started {
                     started = true;
-                    let _ = on_event.send(Progress::Started { content_length });
+                    let _ = on_event.send(DownloadEvent::Started { content_length });
                 }
-                let _ = on_event.send(Progress::Progress { chunk_length });
+                let _ = on_event.send(DownloadEvent::Progress { chunk_length });
             },
             || {
-                let _ = on_event.send(Progress::Finished);
+                let _ = on_event.send(DownloadEvent::Finished);
             },
         )
         .await
@@ -174,7 +174,7 @@ pub async fn update_policy() -> String {
 pub async fn update_install(
     app: AppHandle,
     pending: State<'_, Pending>,
-    on_event: Channel<Progress>,
+    on_event: Channel<DownloadEvent>,
 ) -> Result<(), String> {
     let (update, source) = pending
         .0
@@ -202,11 +202,11 @@ mod tests {
 
     #[test]
     fn progress_matches_the_plugin_events() {
-        let started = serde_json::to_value(Progress::Started { content_length: Some(9) }).unwrap();
+        let started = serde_json::to_value(DownloadEvent::Started { content_length: Some(9) }).unwrap();
         assert_eq!(started, serde_json::json!({ "event": "Started", "data": { "contentLength": 9 } }));
-        let chunk = serde_json::to_value(Progress::Progress { chunk_length: 3 }).unwrap();
+        let chunk = serde_json::to_value(DownloadEvent::Progress { chunk_length: 3 }).unwrap();
         assert_eq!(chunk, serde_json::json!({ "event": "Progress", "data": { "chunkLength": 3 } }));
-        assert_eq!(serde_json::to_value(Progress::Finished).unwrap(), serde_json::json!({ "event": "Finished" }));
+        assert_eq!(serde_json::to_value(DownloadEvent::Finished).unwrap(), serde_json::json!({ "event": "Finished" }));
     }
 
     #[test]
