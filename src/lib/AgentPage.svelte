@@ -214,10 +214,8 @@
 		onIcon={(icon) => change({ icon })}
 		onClose={() => (picker = null)}
 	>
+		{#snippet defaultIcon()}<AgentAvatar agent={{ ...agent, icon: null }} size={16} />{/snippet}
 		<div class="avatar-pick">
-			<button class="avatar-btn" class:on={!agent.icon} onclick={() => change({ icon: null })}>
-				<AgentAvatar agent={{ ...agent, icon: null }} size={22} />{t('shell.chrome.randomAvatar')}
-			</button>
 			<Button size="sm" onclick={() => change({ icon: null, avatar_seed: newAvatarSeed() })}>
 				<ShuffleIcon size={12} />{t('shell.chrome.shuffle')}
 			</Button>
@@ -483,7 +481,7 @@
 	.head {
 		display: flex;
 		align-items: flex-start;
-		justify-content: space-between;
+		justify-content: flex-end;
 		padding: 18px 20px 14px;
 		border-bottom: 1px solid var(--hairline);
 	}
@@ -509,18 +507,12 @@
 		cursor: pointer;
 	}
 	.avatar-btn:hover,
-	.avatar-btn.on {
-		background: var(--surface2);
-	}
 	.avatar-pick {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: 6px;
 		font-size: var(--fs-sm);
-	}
-	.avatar-pick .avatar-btn {
-		padding: 3px 8px 3px 3px;
 	}
 	.head p {
 		margin: 4px 0 0;

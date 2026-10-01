@@ -13,6 +13,7 @@
 	import ClockCounterClockwiseIcon from 'phosphor-svelte/lib/ClockCounterClockwiseIcon';
 	import FilesIcon from 'phosphor-svelte/lib/FilesIcon';
 	import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon';
+	import FolderIcon from 'phosphor-svelte/lib/FolderIcon';
 	import GlobeIcon from 'phosphor-svelte/lib/GlobeIcon';
 	import PulseIcon from 'phosphor-svelte/lib/PulseIcon';
 	import Toaster from '$lib/ui/Toaster.svelte';
@@ -1278,7 +1279,11 @@
 			onColor={(c) => store.setProjectChrome(chromeProject, { color: c })}
 			onIcon={(i) => store.setProjectChrome(chromeProject, { icon: i })}
 			onClose={() => (projectChromeFor = null)}
-		/>
+		>
+			{#snippet defaultIcon()}
+				{#if chromeProject.worktree}<GitBranchIcon size={14} />{:else}<FolderIcon size={14} />{/if}
+			{/snippet}
+		</TabChromePopover>
 	{/if}
 
 	{#if showPalette}

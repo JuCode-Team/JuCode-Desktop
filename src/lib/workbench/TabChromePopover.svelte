@@ -2,10 +2,12 @@
 	import { tick, type Snippet } from 'svelte';
 	import ProhibitIcon from 'phosphor-svelte/lib/ProhibitIcon';
 	import TrashIcon from 'phosphor-svelte/lib/TrashIcon';
+	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
+	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
 	import PushPinIcon from 'phosphor-svelte/lib/PushPinIcon';
 	import PushPinSlashIcon from 'phosphor-svelte/lib/PushPinSlashIcon';
 	import { t } from '$lib/i18n';
-	import { BUILTIN_ICONS, parseTabIcon, sanitizeSvg, TAB_COLORS, type TabIcon } from './tabChrome';
+	import { PICKER_ICONS, parseTabIcon, sanitizeSvg, TAB_COLORS, type TabIcon } from './tabChrome';
 	import TabGlyph from './TabGlyph.svelte';
 	import Button from '$lib/ui/Button.svelte';
 
@@ -27,6 +29,7 @@
 		pinned = false,
 		onPin,
 		onClose,
+		defaultIcon,
 		children
 	}: {
 		x: number;
@@ -44,6 +47,9 @@
 		pinned?: boolean;
 		onPin?: (pinned: boolean) => void;
 		onClose: () => void;
+		/** What shows with no icon set (a project's folder, an agent's
+		 *  generated avatar): the first choice, so it can be picked back. */
+		defaultIcon?: Snippet;
 		/** Caller-specific controls below the icon fields (agents: the avatar). */
 		children?: Snippet;
 	} = $props();
@@ -57,6 +63,9 @@
 	// svelte-ignore state_referenced_locally
 	let svgVal = $state(icon?.kind === 'svg' ? icon.markup : '');
 	let svgError = $state(false);
+	// Name/emoji and SVG are rarely used: folded unless the icon is one.
+	// svelte-ignore state_referenced_locally
+	let custom = $state(icon?.kind === 'slug' || icon?.kind === 'svg');
 	let nameEl = $state<HTMLInputElement | null>(null);
 	let popW = $state(0);
 	let popH = $state(0);
@@ -145,7 +154,16 @@
 
 	<div class="lbl">{t('shell.chrome.icon')}</div>
 	<div class="icons">
-		{#each BUILTIN_ICONS as id (id)}
+		<button
+			class="ic"
+			class:on={!icon}
+			title={defaultIcon ? t('shell.chrome.defaultIcon') : t('shell.chrome.clearIcon')}
+			aria-label={defaultIcon ? t('shell.chrome.defaultIcon') : t('shell.chrome.clearIcon')}
+			onclick={() => onIcon(null)}
+		>
+			{#if defaultIcon}{@render defaultIcon()}{:else}<ProhibitIcon size={13} />{/if}
+		</button>
+		{#each PICKER_ICONS as id (id)}
 			<button
 				class="ic"
 				class:on={icon?.kind === 'builtin' && icon.id === id}
@@ -156,11 +174,12 @@
 				<TabGlyph icon={{ kind: 'builtin', id }} size={14} />
 			</button>
 		{/each}
-		<button class="ic" class:on={!icon} title={t('shell.chrome.clearIcon')} aria-label={t('shell.chrome.clearIcon')} onclick={() => onIcon(null)}>
-			<ProhibitIcon size={13} />
-		</button>
 	</div>
 
+	<button class="more" onclick={() => (custom = !custom)} aria-expanded={custom}>
+		{#if custom}<CaretDownIcon size={11} />{:else}<CaretRightIcon size={11} />{/if}{t('shell.chrome.custom')}
+	</button>
+	{#if custom}
 	<label class="field">
 		<span class="lbl">{t('shell.chrome.slug')}</span>
 		<input
@@ -188,6 +207,7 @@
 		></textarea>
 		{#if svgError}<span class="err">{t('shell.chrome.svgInvalid')}</span>{/if}
 	</label>
+	{/if}
 
 	{@render children?.()}
 
@@ -291,7 +311,7 @@
 	}
 	.icons {
 		display: grid;
-		grid-template-columns: repeat(8, 1fr);
+		grid-template-columns: repeat(6, 1fr);
 		gap: 2px;
 	}
 	.ic {
@@ -307,6 +327,22 @@
 	}
 	.ic:hover {
 		background: var(--surface2);
+		color: var(--text);
+	}
+	.more {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		align-self: flex-start;
+		padding: 0;
+		border: none;
+		background: none;
+		color: var(--dim2);
+		font: inherit;
+		font-size: var(--fs-xs);
+		cursor: pointer;
+	}
+	.more:hover {
 		color: var(--text);
 	}
 	.ic.on {

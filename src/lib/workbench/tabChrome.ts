@@ -8,6 +8,13 @@ export type TabIcon =
 	| { kind: 'slug'; value: string }
 	| { kind: 'svg'; markup: string };
 
+/** The icons the picker offers; the rest of BUILTIN_ICONS stay valid for
+ *  icons picked before the list was trimmed. */
+export const PICKER_ICONS = [
+	'folder', 'code', 'terminal', 'globe', 'rocket', 'bug',
+	'star', 'database', 'box', 'sparkles', 'wrench'
+] as const;
+
 export const BUILTIN_ICONS = [
 	'layers', 'folder', 'code', 'bug', 'rocket', 'terminal', 'globe',
 	'star', 'home', 'file', 'git-branch', 'bot', 'sparkles', 'zap',
