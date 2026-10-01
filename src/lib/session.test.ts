@@ -22,7 +22,7 @@ vi.mock('./protocol', () => ({
 	)
 }));
 
-import { SessionStore } from './session.svelte';
+import { SessionStore, listedSessions } from './session.svelte';
 import { dispatch } from './backends/router';
 import { hostSession, closeSession, sendLine, git, writeConfig, sessionHistory, sessionMeta } from './protocol';
 import type { EngineSpec } from './daemon';
@@ -823,6 +823,86 @@ describe('SessionStore claude and codex in the daemon', () => {
 		s.chat.engineState = 'exited';
 		store.restartSession(id);
 		expect(s.chat.keepNextTranscript).toBe(false);
+	});
+});
+
+describe('session order and pins', () => {
+	const titles = (p: Project) => listedSessions(p).map((s) => s.chat.title);
+	function three() {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		for (const title of ['a', 'b', 'c']) store.renameSession(store.addSession(p), title);
+		return { store, p, id: (title: string) => p.sessions.find((s) => s.chat.title === title)!.id };
+	}
+
+	it('lists pinned sessions first, each group in the project order, archived ones left out', () => {
+		const { store, p, id } = three();
+		expect(titles(p)).toEqual(['a', 'b', 'c']);
+		store.setPinned(id('c'), true);
+		store.setPinned(id('b'), true);
+		expect(titles(p)).toEqual(['b', 'c', 'a']);
+		store.archiveSession(id('b'));
+		expect(titles(p)).toEqual(['c', 'a']);
+		// Unpinned, a session goes back to its place.
+		store.setPinned(id('c'), false);
+		expect(titles(p)).toEqual(['a', 'c']);
+		expect(p.sessions.find((s) => s.chat.title === 'c')!.pinned).toBeUndefined();
+	});
+
+	it('a dragged session lands before or after its target; new sessions join at the end', () => {
+		const { store, p, id } = three();
+		store.moveSession(id('c'), id('a'), false);
+		expect(titles(p)).toEqual(['c', 'a', 'b']);
+		store.moveSession(id('c'), id('b'), true);
+		expect(titles(p)).toEqual(['a', 'b', 'c']);
+		store.moveSession(id('a'), id('a'), true);
+		expect(titles(p)).toEqual(['a', 'b', 'c']);
+		store.setPinned(id('b'), true);
+		store.setPinned(id('c'), true);
+		store.moveSession(id('c'), id('b'), false);
+		expect(titles(p)).toEqual(['c', 'b', 'a']);
+		store.renameSession(store.addSession(p), 'd');
+		expect(titles(p)).toEqual(['c', 'b', 'a', 'd']);
+	});
+
+	it('order and pins survive serialize and restore', async () => {
+		const { store, id } = three();
+		store.moveSession(id('a'), id('c'), true);
+		store.setPinned(id('c'), true);
+		const saved = store.serialize();
+		expect(saved[0].tabs!.map((t) => [t.title, t.pinned])).toEqual([
+			['b', undefined],
+			['c', true],
+			['a', undefined]
+		]);
+		const again = new SessionStore();
+		await again.restore(saved);
+		expect(titles(again.projects[0])).toEqual(['c', 'b', 'a']);
+	});
+});
+
+describe('hidden chats', () => {
+	it('a saved chats group stays in the data but is never listed or activated', async () => {
+		const store = new SessionStore();
+		await store.restore([
+			{ id: 'c', name: '对话', path: '/home/u/.jucode/chats', chats: true, tabs: [{ id: 'c1', sid: 's-chat', title: 'chat' }] },
+			{ id: 'p1', name: 'p1', path: '/tmp/p1', tabs: [{ id: 'k1', sid: 's-code', title: 'code' }] }
+		]);
+		expect(store.shownProjects.map((p) => p.id)).toEqual(['p1']);
+		expect(store.activeId).toBe('k1');
+		// Closing the last coding session does not fall back to the chat.
+		store.removeSession('k1');
+		expect(store.activeId).toBe('');
+		// The chats group is written back unchanged.
+		expect(store.serialize()[0]).toMatchObject({ chats: true, tabs: [{ id: 'c1', sid: 's-chat', title: 'chat' }] });
+	});
+
+	it('with only a chats group saved, nothing opens', async () => {
+		const store = new SessionStore();
+		await store.restore([{ id: 'c', name: '对话', path: '/home/u/.jucode/chats', chats: true, tabs: [{ id: 'c1', sid: 's-chat', title: 'chat' }] }]);
+		expect(store.shownProjects).toEqual([]);
+		expect(store.activeId).toBe('');
 	});
 });
 

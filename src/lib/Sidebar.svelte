@@ -19,6 +19,8 @@
 	import ChatsIcon from 'phosphor-svelte/lib/ChatsIcon';
 	import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon';
 	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
+	import PushPinIcon from 'phosphor-svelte/lib/PushPinIcon';
+	import PushPinSlashIcon from 'phosphor-svelte/lib/PushPinSlashIcon';
 	import Button from '$lib/ui/Button.svelte';
 	import { t } from '$lib/i18n';
 	import { withShortcut } from '$lib/shortcuts';
@@ -27,7 +29,8 @@
 	import TabGlyph from '$lib/workbench/TabGlyph.svelte';
 	import SessionMark from '$lib/SessionMark.svelte';
 	import { sessionStatus } from '$lib/sessionStatus';
-	import type { Project } from '$lib/types';
+	import { listedSessions } from '$lib/session.svelte';
+	import { CHATS_ENABLED, type Project, type Session } from '$lib/types';
 	import type { AgentView } from '$lib/agents.svelte';
 
 	let {
@@ -44,6 +47,8 @@
 		onCloseProject,
 		onArchiveSession,
 		onUnarchiveSession,
+		onPinSession,
+		onMoveSession,
 		onRenameSession,
 		onSessionMenu,
 		onHistory,
@@ -69,6 +74,9 @@
 		onCloseProject: (p: Project) => void;
 		onArchiveSession: (id: string) => void;
 		onUnarchiveSession: (id: string) => void;
+		onPinSession: (id: string, pinned: boolean) => void;
+		/** A dragged row dropped before or after `target` (same project and pinned group). */
+		onMoveSession: (id: string, target: string, after: boolean) => void;
 		/** Inline rename committed on a session row (dblclick the title). */
 		onRenameSession: (id: string, title: string) => void;
 		/** Right-click on a session row: the page opens the chrome popover. */
@@ -108,7 +116,7 @@
 	let collapsed = $state<Record<string, boolean>>({});
 	let showAll = $state<Record<string, boolean>>({});
 	const SHOW_LIMIT = 6;
-	const chats = $derived(projects.find((p) => p.chats));
+	const chats = $derived(CHATS_ENABLED ? projects.find((p) => p.chats) : undefined);
 	const codeProjects = $derived(projects.filter((p) => !p.chats));
 
 	// Session filter: case-insensitive substring over session title + project
@@ -157,10 +165,85 @@
 
 	// "New chat" starts where you are: in the project of the active session,
 	// or as a chat when the active session is a chat (or nothing is open).
+	// With chats hidden it starts in the first project, or asks for one.
 	function newHere() {
 		const p = projects.find((pr) => pr.sessions.some((s) => s.id === activeId));
+		const first = codeProjects.find((pr) => !pr.stale);
 		if (p && !p.chats) onNewSession(p);
-		else onNewChat();
+		else if (CHATS_ENABLED) onNewChat();
+		else if (first) onNewSession(first);
+		else onNewProject();
+	}
+
+	// Drag a session row to reorder it within its project and pinned group.
+	// Pointer events, as the workbench tabs do (HTML drag and drop is not
+	// reliable in the macOS webview): a press stays a click until the
+	// pointer travels, then a line marks where the row lands.
+	let listEl = $state<HTMLElement | null>(null);
+	let drag = $state<{ id: string; live: boolean } | null>(null);
+	let drop = $state<{ id: string; after: boolean } | null>(null);
+	function rowDown(e: PointerEvent, p: Project, s: Session) {
+		if (e.button !== 0 || renaming === s.id || !listEl) return;
+		const list = listEl;
+		const group = `${p.id}:${s.pinned ? 'pin' : ''}`;
+		const startX = e.clientX;
+		const startY = e.clientY;
+		let y = startY;
+		let frame = 0;
+		drag = { id: s.id, live: false };
+		/** Where the row would land among the rows of its group (null: where it is). */
+		const target = () => {
+			const rows = [...list.querySelectorAll<HTMLElement>('[data-group]')].filter((el) => el.dataset.group === group);
+			let at = rows.findIndex((el) => {
+				const r = el.getBoundingClientRect();
+				return y < r.top + r.height / 2;
+			});
+			if (at < 0) at = rows.length;
+			const from = rows.findIndex((el) => el.dataset.sid === s.id);
+			if (at === from || at === from + 1) return null;
+			return at < rows.length ? { id: rows[at].dataset.sid!, after: false } : { id: rows[at - 1].dataset.sid!, after: true };
+		};
+		// Held near the top or bottom edge, the list scrolls.
+		const scroll = () => {
+			const r = list.getBoundingClientRect();
+			const step = y < r.top + 32 ? -8 : y > r.bottom - 32 ? 8 : 0;
+			if (step) {
+				list.scrollTop += step;
+				drop = target();
+			}
+			frame = requestAnimationFrame(scroll);
+		};
+		const noSelect = (ev: Event) => ev.preventDefault();
+		const move = (ev: PointerEvent) => {
+			y = ev.clientY;
+			if (!drag?.live) {
+				if (!drag || Math.hypot(ev.clientX - startX, ev.clientY - startY) < 5) return;
+				drag.live = true;
+				frame = requestAnimationFrame(scroll);
+			}
+			drop = target();
+		};
+		const end = (ev: PointerEvent) => {
+			window.removeEventListener('pointermove', move);
+			window.removeEventListener('pointerup', end);
+			window.removeEventListener('pointercancel', end);
+			window.removeEventListener('selectstart', noSelect);
+			cancelAnimationFrame(frame);
+			const live = drag?.live;
+			const to = drop;
+			drag = null;
+			drop = null;
+			if (!live) return;
+			// The release ends the drag; it does not open the row.
+			const swallow = (c: Event) => c.stopPropagation();
+			window.addEventListener('click', swallow, { capture: true, once: true });
+			setTimeout(() => window.removeEventListener('click', swallow, { capture: true }));
+			if (ev.type === 'pointerup' && to) onMoveSession(s.id, to.id, to.after);
+		};
+		window.addEventListener('pointermove', move);
+		window.addEventListener('pointerup', end);
+		window.addEventListener('pointercancel', end);
+		window.addEventListener('selectstart', noSelect);
 	}
 	// Width the content lays out at; kept while the panel closes.
 	let openWidth = $state(292);
@@ -203,16 +286,23 @@
 	</nav>
 
 
-	{#snippet sessRow(s: Project['sessions'][number], nested = false, selectable = false)}
+	{#snippet sessRow(s: Session, nested = false, selectable = false, p?: Project)}
 		{@const status = sessionStatus(s.chat)}
+		<!-- Listed rows (`p` given) drag within their project and pinned group. -->
 		<button
 			class="sess"
 			class:nested
 			class:on={!selectable && s.id === activeId}
 			class:arch={s.archived}
 			class:selectable
+			class:lifted={drag?.live && drag.id === s.id}
+			class:drop-before={drop?.id === s.id && !drop.after}
+			class:drop-after={drop?.id === s.id && drop.after}
+			data-sid={s.id}
+			data-group={p ? `${p.id}:${s.pinned ? 'pin' : ''}` : undefined}
 			aria-pressed={selectable ? picked.includes(s.id) : undefined}
 			style:box-shadow={s.color ? `inset 2px 0 0 ${s.color}` : undefined}
+			onpointerdown={(e) => p && rowDown(e, p, s)}
 			onclick={() => (selectable ? togglePick(s.id) : onSelect(s.id))}
 			oncontextmenu={(e) => onSessionMenu(s.id, e)}
 		>
@@ -248,8 +338,25 @@
 			{#if s.backendId && s.backendId !== 'jucode' && !s.draft}
 				<span class="backend-chip" title={BACKEND_LABELS[s.backendId]}><BackendIcon backend={s.backendId} size={12} /></span>
 			{/if}
+			{#if s.pinned && !s.archived}<span class="pin-mark" title={t('shell.pin')}><PushPinIcon size={12} weight="fill" /></span>{/if}
 			<SessionMark status={status} />
 			{#if !selectable}
+			{#if !s.archived}
+				<span
+					class="act"
+					role="button"
+					tabindex="0"
+					onclick={(e) => {
+						e.stopPropagation();
+						onPinSession(s.id, !s.pinned);
+					}}
+					onkeydown={(e) => e.key === 'Enter' && (e.stopPropagation(), onPinSession(s.id, !s.pinned))}
+					aria-label={s.pinned ? t('shell.unpin') : t('shell.pin')}
+					title={s.pinned ? t('shell.unpin') : t('shell.pin')}
+				>
+					{#if s.pinned}<PushPinSlashIcon size={16} />{:else}<PushPinIcon size={16} />{/if}
+				</span>
+			{/if}
 			<span
 				class="act"
 				role="button"
@@ -279,7 +386,7 @@
 		</button>
 	{/snippet}
 
-	{#snippet archived(p: Project, arch: Project['sessions'], nested: boolean)}
+	{#snippet archived(p: Project, arch: Session[], nested: boolean)}
 		{#if arch.length}
 			{@const open = showArchived[p.id] || !!query}
 			{@const sel = selecting === p.id && open}
@@ -312,7 +419,7 @@
 		{/if}
 	{/snippet}
 
-	<div class="list">
+	<div class="list" class:dragging={drag?.live} bind:this={listEl}>
 		<!-- Agents: long-lived workers of the local daemon. -->
 		<section>
 			<div class="head">
@@ -356,7 +463,7 @@
 
 		<!-- Chats: conversations without a project. -->
 		{#if chats}
-			{@const active = chats.sessions.filter((s) => !s.archived && sessionMatches(chats, s))}
+			{@const active = listedSessions(chats).filter((s) => sessionMatches(chats, s))}
 			{@const arch = chats.sessions.filter((s) => s.archived && sessionMatches(chats, s))}
 			{#if !query || active.length || arch.length}
 				<section>
@@ -365,7 +472,7 @@
 						<button class="head-act" onclick={() => onHistory(chats)} aria-label="history" title={t('shell.history')}><ClockCounterClockwiseIcon size={16} /></button>
 						<button class="head-act" onclick={onNewChat} aria-label={t('shell.newChat')} title={t('shell.newChat')}><PlusIcon size={16} /></button>
 					</div>
-					{#each showAll[chats.id] || query ? active : active.slice(0, SHOW_LIMIT) as s (s.id)}{@render sessRow(s)}{/each}
+					{#each showAll[chats.id] || query ? active : active.slice(0, SHOW_LIMIT) as s (s.id)}{@render sessRow(s, false, false, chats)}{/each}
 					{#if active.length > SHOW_LIMIT && !query}
 						<button class="more" onclick={() => (showAll[chats.id] = !showAll[chats.id])}>{showAll[chats.id] ? t('shell.showLess') : t('shell.showMore')}</button>
 					{/if}
@@ -381,7 +488,7 @@
 				<button class="head-act" onclick={onNewProject} aria-label="new project" title={t('shell.newProjectTitle')}><PlusIcon size={16} /></button>
 			</div>
 			{#each codeProjects as p (p.id)}
-				{@const active = p.sessions.filter((s) => !s.archived && sessionMatches(p, s))}
+				{@const active = listedSessions(p).filter((s) => sessionMatches(p, s))}
 				{@const arch = p.sessions.filter((s) => s.archived && sessionMatches(p, s))}
 				{@const open = !collapsed[p.id] || !!query}
 				{@const w = p.sessions.some((s) => s.id === activeId) ? 'fill' : 'regular'}
@@ -405,7 +512,7 @@
 						{/if}
 					</div>
 					{#if open}
-						{#each showAll[p.id] || query ? active : active.slice(0, SHOW_LIMIT) as s (s.id)}{@render sessRow(s, true)}{/each}
+						{#each showAll[p.id] || query ? active : active.slice(0, SHOW_LIMIT) as s (s.id)}{@render sessRow(s, true, false, p)}{/each}
 						{#if active.length > SHOW_LIMIT && !query}
 							<button class="more nested" onclick={() => (showAll[p.id] = !showAll[p.id])}>{showAll[p.id] ? t('shell.showLess') : t('shell.showMore')}</button>
 						{/if}
@@ -592,6 +699,46 @@
 
 	.sess.on {
 		background: var(--surface2);
+	}
+	.sess {
+		position: relative;
+	}
+	/* Dragging a row: it fades where it was and a line marks where it lands. */
+	.list.dragging {
+		cursor: grabbing;
+		user-select: none;
+	}
+	.list.dragging .sess {
+		pointer-events: none;
+	}
+	.sess.lifted {
+		opacity: 0.45;
+	}
+	.sess.drop-before::before,
+	.sess.drop-after::after {
+		content: '';
+		position: absolute;
+		left: 12px;
+		right: 8px;
+		height: 2px;
+		border-radius: var(--r-full);
+		background: var(--accent);
+		pointer-events: none;
+	}
+	.sess.nested.drop-before::before,
+	.sess.nested.drop-after::after {
+		left: 42px;
+	}
+	.sess.drop-before::before {
+		top: -1px;
+	}
+	.sess.drop-after::after {
+		bottom: -1px;
+	}
+	.pin-mark {
+		display: inline-flex;
+		color: var(--dim2);
+		flex-shrink: 0;
 	}
 	.sess.nested {
 		padding-left: 42px;

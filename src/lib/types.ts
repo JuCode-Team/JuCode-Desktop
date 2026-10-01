@@ -37,6 +37,8 @@ export interface Session {
 	/** A new session with no engine yet: its backend, model and effort are
 	 *  only choices until the first message starts it (`markDraft`). */
 	draft?: boolean;
+	/** Listed above the project's other sessions (persisted, desktop only). */
+	pinned?: boolean;
 	/** Model and effort picked while a draft, applied when it starts. */
 	draftPick?: { model?: string; effort?: string };
 	/** Claude Code / Codex: runs through the JuCode gateway on the user's
@@ -79,3 +81,7 @@ export interface Project {
 	/** 对话分组：path 为 ~/.jucode/chats，会话以对话模式（非编程）运行，只用 jucode 引擎。 */
 	chats?: boolean;
 }
+
+/** 对话功能本版本隐藏（之后由新的助手取代）：桌面端和远程网页都不显示、不新建对话。
+ *  已有的对话分组仍留在 workspaces.json 和后台服务里，只是不列出。改回 true 即恢复。 */
+export const CHATS_ENABLED = false;

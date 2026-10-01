@@ -2,6 +2,8 @@
 	import { tick } from 'svelte';
 	import ProhibitIcon from 'phosphor-svelte/lib/ProhibitIcon';
 	import TrashIcon from 'phosphor-svelte/lib/TrashIcon';
+	import PushPinIcon from 'phosphor-svelte/lib/PushPinIcon';
+	import PushPinSlashIcon from 'phosphor-svelte/lib/PushPinSlashIcon';
 	import { t } from '$lib/i18n';
 	import { BUILTIN_ICONS, parseTabIcon, sanitizeSvg, TAB_COLORS, type TabIcon } from './tabChrome';
 	import TabGlyph from './TabGlyph.svelte';
@@ -21,6 +23,8 @@
 		onIcon,
 		onDelete,
 		deleteLabel = '',
+		pinned = false,
+		onPin,
 		onClose
 	}: {
 		x: number;
@@ -33,6 +37,9 @@
 		onIcon: (icon: TabIcon | null) => void;
 		onDelete?: () => void;
 		deleteLabel?: string;
+		/** Sessions: pin or unpin it in the sidebar. */
+		pinned?: boolean;
+		onPin?: (pinned: boolean) => void;
 		onClose: () => void;
 	} = $props();
 
@@ -175,6 +182,11 @@
 		{#if svgError}<span class="err">{t('shell.chrome.svgInvalid')}</span>{/if}
 	</label>
 
+	{#if onPin}
+		<Button size="sm" full onclick={() => onPin(!pinned)}>
+			{#if pinned}<PushPinSlashIcon size={12} />{t('shell.unpin')}{:else}<PushPinIcon size={12} />{t('shell.pin')}{/if}
+		</Button>
+	{/if}
 	{#if onDelete}
 		<Button variant="danger" size="sm" full onclick={onDelete}><TrashIcon size={12} />{deleteLabel || t('shell.chrome.delete')}</Button>
 	{/if}

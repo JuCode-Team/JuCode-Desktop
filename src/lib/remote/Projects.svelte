@@ -25,6 +25,7 @@
 	import { baseName, remoteProjects, type ProjectView } from './store.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
 	import { t } from '$lib/i18n';
+	import { CHATS_ENABLED } from '$lib/types';
 
 	let {
 		current,
@@ -51,13 +52,14 @@
 	const trim = (path: string) => path.replace(/[\\/]+$/, '');
 
 	const projects = $derived(remoteProjects.active?.projects ?? []);
-	const chats = $derived(projects.find((p) => p.chats));
+	const chats = $derived(CHATS_ENABLED ? projects.find((p) => p.chats) : undefined);
 	const code = $derived(projects.filter((p) => !p.chats));
 	/** The daemon's sessions, newest first. A closed ACP session cannot be
-	 *  reopened, so it is not listed (the desktop does the same). */
+	 *  reopened, so it is not listed (the desktop does the same); nor are
+	 *  chats while they are hidden. */
 	const listed = $derived(
 		agentDirectory.sessions
-			.filter((s) => !s.agent && (s.engine !== 'acp' || s.open))
+			.filter((s) => !s.agent && (s.engine !== 'acp' || s.open) && (CHATS_ENABLED || !s.chat))
 			.sort((a, b) => (b.updated_at ?? b.created_at) - (a.updated_at ?? a.created_at))
 	);
 	const sessionsOf = (p: ProjectView) => listed.filter((s) => trim(s.cwd) === trim(p.path));
