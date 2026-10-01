@@ -15,15 +15,20 @@ export type SectionKey =
 	| 'market'
 	| 'agents'
 	| 'acp'
+	| 'daemon'
 	| 'updates';
 
+// Grouped by what a setting applies to: the app itself, every coding agent,
+// or only sessions run by the JuCode CLI engine (its ~/.jucode/config.json).
 export const GROUPS: { key: string; sections: SectionKey[] }[] = [
-	{ key: 'personal', sections: ['general', 'account', 'usage', 'voice'] },
-	{ key: 'models', sections: ['providers', 'models', 'network'] },
-	{ key: 'extensions', sections: ['plugins', 'mcp', 'market'] },
-	{ key: 'agents', sections: ['agents', 'acp'] },
+	{ key: 'app', sections: ['general', 'account', 'usage', 'voice', 'plugins'] },
+	{ key: 'agents', sections: ['agents', 'acp', 'daemon', 'market'] },
+	{ key: 'jucode', sections: ['providers', 'models', 'mcp', 'network'] },
 	{ key: 'about', sections: ['updates'] }
 ];
+
+/** Sections whose settings only the JuCode CLI engine reads. */
+export const JUCODE_ONLY = new Set<SectionKey>(GROUPS.find((g) => g.key === 'jucode')!.sections);
 
 const KEYS = new Set<string>(GROUPS.flatMap((g) => g.sections));
 
@@ -74,10 +79,11 @@ export const ROWS: SearchRow[] = [
 	{ section: 'agents', id: 'shell-env', titleKey: 'settings.backend.shellEnvLabel', descKey: 'settings.backend.shellEnvHint' },
 	{ section: 'agents', id: 'backend-list', titleKey: 'settings.backend.groupLabel', descKey: 'settings.backend.hint' },
 	{ section: 'agents', id: 'default-backend', titleKey: 'settings.backend.defaultLabel', descKey: 'settings.backend.defaultHint' },
-	{ section: 'agents', id: 'relay', titleKey: 'settings.backend.relayToggle', descKey: 'settings.backend.relayHint' },
-	{ section: 'agents', id: 'devices', titleKey: 'settings.backend.devices', descKey: 'settings.backend.devicesHint' },
 	{ section: 'agents', id: 'dependencies', titleKey: 'setup.deps.title', descKey: 'setup.deps.sub' },
 	{ section: 'acp', id: 'acp-agents', titleKey: 'settings.acp.groupLabel', descKey: 'settings.acp.hint' },
+	{ section: 'daemon', id: 'title-model', titleKey: 'settings.behavior.titleModel', descKey: 'settings.behavior.titleModelHint' },
+	{ section: 'daemon', id: 'relay', titleKey: 'settings.backend.relayToggle', descKey: 'settings.backend.relayHint' },
+	{ section: 'daemon', id: 'devices', titleKey: 'settings.backend.devices', descKey: 'settings.backend.devicesHint' },
 	{ section: 'updates', id: 'app-version', titleKey: 'settings.update.currentVersion', descKey: 'settings.update.groupLabel' }
 ];
 

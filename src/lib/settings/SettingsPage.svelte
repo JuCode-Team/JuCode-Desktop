@@ -20,12 +20,11 @@
 	import RobotIcon from 'phosphor-svelte/lib/RobotIcon';
 	import PlugsConnectedIcon from 'phosphor-svelte/lib/PlugsConnectedIcon';
 	import InfoIcon from 'phosphor-svelte/lib/InfoIcon';
+	import DesktopTowerIcon from 'phosphor-svelte/lib/DesktopTowerIcon';
 	import SignInIcon from 'phosphor-svelte/lib/SignInIcon';
 	import SignOutIcon from 'phosphor-svelte/lib/SignOutIcon';
 	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
 	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
-	import XCircleIcon from 'phosphor-svelte/lib/XCircleIcon';
-	import CircleDashedIcon from 'phosphor-svelte/lib/CircleDashedIcon';
 	import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon';
 	import {
 		readConfig,
@@ -66,12 +65,13 @@
 	import SettingsRow from './SettingsRow.svelte';
 	import BackendSection from './BackendSection.svelte';
 	import AcpSection from './AcpSection.svelte';
+	import DaemonSection from './DaemonSection.svelte';
 	import McpSection from './McpSection.svelte';
 	import UpdateCard from './UpdateCard.svelte';
 	import ProviderAccountCard from './ProviderAccountCard.svelte';
 	import ProviderCatalogPicker from './ProviderCatalogPicker.svelte';
 	import CustomProviderForm from './CustomProviderForm.svelte';
-	import { GROUPS, resolveSection, searchRows, type SearchRow, type SectionKey } from './nav';
+	import { GROUPS, JUCODE_ONLY, resolveSection, searchRows, type SearchRow, type SectionKey } from './nav';
 
 	let {
 		sessionId,
@@ -109,6 +109,7 @@
 		market: StorefrontIcon,
 		agents: RobotIcon,
 		acp: PlugsConnectedIcon,
+		daemon: DesktopTowerIcon,
 		updates: InfoIcon
 	};
 	const current = $derived(resolveSection(section));
@@ -532,6 +533,7 @@
 		<div class="main">
 			<div class="col">
 				<h1>{t(`settings.section.${current}`)}</h1>
+				{#if JUCODE_ONLY.has(current)}<p class="scope">{t('settings.page.jucodeOnly')}</p>{/if}
 
 				{#if current === 'general'}
 					<SettingsSection title={t('settings.page.appearance')}>
@@ -732,18 +734,6 @@
 							<span class="unit">%</span>
 						</SettingsRow>
 					</SettingsSection>
-					<SettingsSection title={t('settings.behavior.titles')}>
-						<SettingsRow id="title-model" title={t('settings.behavior.titleModel')} description={t('settings.behavior.titleModelHint')}>
-							<div class="w-lg">
-								<Select value={cfg.title_model ?? ''} options={titleModelOpts} onChange={(v) => (cfg.title_model = v)}>
-									{#snippet item(o)}
-										{#if o.value}<span class="tile sm"><Vendor model={o.label ?? ''} size={15} /></span>{/if}
-										<span class="ell" class:mono={!!o.value}>{o.label}</span>
-									{/snippet}
-								</Select>
-							</div>
-						</SettingsRow>
-					</SettingsSection>
 				{:else if current === 'network'}
 					<SettingsSection title={t('settings.page.requests')}>
 						<SettingsRow id="retry-attempts" title={t('settings.behavior.retryAttempts')} description={t('settings.page.retryAttemptsDesc')}>
@@ -770,26 +760,8 @@
 						{/each}
 					</SettingsSection>
 				{:else if current === 'mcp'}
-					{#if caps(chat).mcpManage}
-						<McpSection {sessionId} {chat} />
-					{:else}
-						<!-- Read-only: claude configures MCP in its own settings; we can
-						     only list what the engine reports at startup. -->
-						<SettingsSection id="mcp-servers" title={t('settings.mcp.groupLabel')}>
-							{#if chat?.mcpServers?.length}
-								<SettingsRow description={t('settings.mcp.readonlyHint')} />
-								{#each chat.mcpServers as s (s.name)}
-									<div class="mcp-ro">
-										<span class="mcp-dot" class:bad={s.state === 'failed'}>{#if s.state === 'connected'}<CheckCircleIcon size={14} />{:else if s.state === 'failed'}<XCircleIcon size={14} />{:else}<CircleDashedIcon size={14} />{/if}</span>
-										<span class="mcp-name">{s.name}</span>
-										<span class="mcp-state">{s.state}</span>
-									</div>
-								{/each}
-							{:else}
-								<SettingsRow description={t('settings.backend.mcpUnsupported')} />
-							{/if}
-						</SettingsSection>
-					{/if}
+					<!-- The JuCode CLI's servers; only a JuCode session can apply edits live. -->
+					<McpSection {sessionId} chat={caps(chat).mcpManage ? chat : undefined} />
 				{:else if current === 'market'}
 					<SettingsSection>
 						<SettingsRow id="market-open" title={t('settings.market.groupLabel')} description={t('settings.market.hint')}>
@@ -801,6 +773,21 @@
 					<div class="deps" id="set-dependencies"><Dependencies /></div>
 				{:else if current === 'acp'}
 					<AcpSection />
+				{:else if current === 'daemon'}
+					<DaemonSection>
+						<SettingsSection title={t('settings.behavior.titles')}>
+							<SettingsRow id="title-model" title={t('settings.behavior.titleModel')} description={t('settings.behavior.titleModelHint')}>
+								<div class="w-lg">
+									<Select value={cfg.title_model ?? ''} options={titleModelOpts} onChange={(v) => (cfg.title_model = v)}>
+										{#snippet item(o)}
+											{#if o.value}<span class="tile sm"><Vendor model={o.label ?? ''} size={15} /></span>{/if}
+											<span class="ell" class:mono={!!o.value}>{o.label}</span>
+										{/snippet}
+									</Select>
+								</div>
+							</SettingsRow>
+						</SettingsSection>
+					</DaemonSection>
 				{:else if current === 'updates'}
 					<UpdateCard />
 				{/if}
@@ -990,6 +977,11 @@
 		line-height: 1.15;
 		color: var(--text);
 	}
+	.scope {
+		margin: 10px 0 0;
+		font-size: var(--fs-sm);
+		color: var(--dim);
+	}
 	.notice {
 		margin-top: 28px;
 	}
@@ -1091,29 +1083,4 @@
 		flex-shrink: 0;
 	}
 
-	/* read-only MCP list (non-JuCode engines) */
-	.mcp-ro {
-		display: flex;
-		align-items: center;
-		gap: 9px;
-		padding: 14px 18px;
-	}
-	.mcp-dot {
-		display: inline-flex;
-		color: var(--dim);
-		flex-shrink: 0;
-	}
-	.mcp-dot.bad {
-		color: var(--err);
-	}
-	.mcp-name {
-		flex: 1;
-		font-family: var(--font-mono);
-		font-size: var(--fs-sm);
-		color: var(--text);
-	}
-	.mcp-state {
-		font-size: var(--fs-2xs);
-		color: var(--dim2);
-	}
 </style>

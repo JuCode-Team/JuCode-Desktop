@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Settings → 编程智能体 → 智能体: per-backend availability (check_backend), a
+	// Settings → 所有智能体 → 智能体: per-backend availability (check_backend), a
 	// binary-path override, and the default backend for new sessions. All
 	// preferences persist to localStorage immediately.
 	import { onMount } from 'svelte';
@@ -27,7 +27,6 @@
 	import Select from '$lib/ui/Select.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import { t } from '$lib/i18n';
-	import DevicePairing from './DevicePairing.svelte';
 	import SettingsSection from './SettingsSection.svelte';
 	import SettingsRow from './SettingsRow.svelte';
 
@@ -189,10 +188,6 @@
 			</IconButton>
 		</div>
 	{/each}
-</SettingsSection>
-
-<SettingsSection id="remote" title={t('settings.backend.remoteGroup')} description={t('settings.backend.remoteGroupHint')}>
-	<DevicePairing bind:address={settings.remoteAddress} onAddressChange={persist} />
 </SettingsSection>
 
 <style>

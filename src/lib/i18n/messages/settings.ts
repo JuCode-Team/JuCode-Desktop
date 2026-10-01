@@ -14,10 +14,9 @@ const settings = {
 			open: '打开市场'
 		},
 		group: {
-			personal: '个人',
-			models: '模型',
-			extensions: '扩展',
-			agents: '编程智能体',
+			app: '应用',
+			agents: '所有智能体',
+			jucode: 'JuCode CLI',
 			about: '关于'
 		},
 		section: {
@@ -33,6 +32,7 @@ const settings = {
 			market: '技能市场',
 			agents: '智能体',
 			acp: 'ACP',
+			daemon: '后台服务',
 			updates: '更新'
 		},
 		page: {
@@ -43,6 +43,7 @@ const settings = {
 			appearance: '外观',
 			conversation: '对话',
 			files: '打开文件',
+			jucodeOnly: '只对 JuCode CLI 的会话生效。Claude Code、Codex 和 ACP 智能体使用各自的配置。',
 			jucodeAccount: 'JuCode 账户',
 			jucodeAccountDesc: '登录后可使用 JuCode 托管的模型，并查看余额与套餐。',
 			jucodeLoggedInDesc: '可以使用 JuCode 托管的模型。重新登录可切换账户。',
@@ -163,7 +164,6 @@ const settings = {
 			copied: '已复制',
 			lanAdvanced: '局域网 / Tailscale 地址（高级）',
 			lanAdvancedHint: '不用中继时，手机直接访问这个地址上的 daemon。关闭中继后，“添加设备”会使用这个地址。',
-			mcpUnsupported: '当前会话的引擎后端不支持 MCP 管理。切换到 JuCode 引擎的会话后可在此管理 MCP 服务器。',
 			shellEnvLabel: '终端环境',
 			shellEnvCaptured: '已捕获 {count} 个变量（{shell}）',
 			shellEnvNotCaptured: '未捕获（将继承应用环境）',
@@ -230,7 +230,7 @@ const settings = {
 			compactModelHint: '上下文压缩时生成摘要使用的模型。',
 			titles: '对话标题',
 			titleModel: '标题模型',
-			titleModelHint: '后台服务按对话内容生成和更新对话名称所用的模型：第 1、3 轮后各一次，之后每 5 轮一次；手动改过名的对话不会被覆盖。',
+			titleModelHint: '后台服务按对话内容为所有智能体的对话生成和更新名称：第 1、3 轮后各一次，之后每 5 轮一次；手动改过名的对话不会被覆盖。模型从 JuCode CLI 的默认提供商中选。',
 			followMainModel: '跟随主模型',
 			network: '网络',
 			retryAttempts: '重试次数',
@@ -243,8 +243,7 @@ const settings = {
 		},
 		mcp: {
 			groupLabel: 'MCP 服务器',
-			readonlyHint: '此后端在自身配置里管理 MCP，这里仅展示引擎上报的已连接服务器（只读）。',
-			hint: '管理 Model Context Protocol 服务器。更改会写入 ~/.jucode/config.json，对所有会话生效。',
+			hint: '管理 Model Context Protocol 服务器。更改会写入 ~/.jucode/config.json。',
 			empty: 'MCP 让智能体接入外部工具（文件、搜索、数据库等标准化服务器）。',
 			addServer: '添加服务器',
 			noSession: '打开一个 JuCode 会话后，这里会显示各服务器的连接状态和工具。',
@@ -385,10 +384,9 @@ const settings = {
 			open: 'Open marketplace'
 		},
 		group: {
-			personal: 'Personal',
-			models: 'Models',
-			extensions: 'Extensions',
-			agents: 'Coding agents',
+			app: 'App',
+			agents: 'All agents',
+			jucode: 'JuCode CLI',
 			about: 'About'
 		},
 		section: {
@@ -404,6 +402,7 @@ const settings = {
 			market: 'Skills marketplace',
 			agents: 'Agents',
 			acp: 'ACP',
+			daemon: 'Background service',
 			updates: 'Updates'
 		},
 		page: {
@@ -414,6 +413,7 @@ const settings = {
 			appearance: 'Appearance',
 			conversation: 'Conversation',
 			files: 'Opening files',
+			jucodeOnly: 'Applies only to JuCode CLI sessions. Claude Code, Codex and ACP agents use their own configuration.',
 			jucodeAccount: 'JuCode account',
 			jucodeAccountDesc: 'Sign in to use JuCode-hosted models and see your balance and plan.',
 			jucodeLoggedInDesc: 'JuCode-hosted models are available. Log in again to switch accounts.',
@@ -534,7 +534,6 @@ const settings = {
 			copied: 'Copied',
 			lanAdvanced: 'LAN / Tailscale address (advanced)',
 			lanAdvancedHint: 'Without the relay, the phone reaches the daemon at this address directly. With the relay off, “Add device” uses it.',
-			mcpUnsupported: 'The active session’s engine backend does not support MCP management. Switch to a JuCode-engine session to manage MCP servers here.',
 			shellEnvLabel: 'Terminal environment',
 			shellEnvCaptured: '{count} variables captured ({shell})',
 			shellEnvNotCaptured: 'Not captured (app environment will be inherited)',
@@ -601,7 +600,7 @@ const settings = {
 			compactModelHint: 'The model used to generate summaries during context compaction.',
 			titles: 'Conversation titles',
 			titleModel: 'Title model',
-			titleModelHint: 'The model the background service uses to name conversations and rename them as they move on: after turns 1 and 3, then every 5th. A conversation you renamed yourself keeps its name.',
+			titleModelHint: 'The background service names the conversations of every agent and renames them as they move on: after turns 1 and 3, then every 5th. A conversation you renamed yourself keeps its name. The model comes from the JuCode CLI default provider.',
 			followMainModel: 'Same as the main model',
 			network: 'Network',
 			retryAttempts: 'Retry attempts',
@@ -614,8 +613,7 @@ const settings = {
 		},
 		mcp: {
 			groupLabel: 'MCP servers',
-			readonlyHint: 'This backend manages MCP in its own settings; this is a read-only list of the servers the engine reports as connected.',
-			hint: 'Manage Model Context Protocol servers. Changes are written to ~/.jucode/config.json and apply to all sessions.',
+			hint: 'Manage Model Context Protocol servers. Changes are written to ~/.jucode/config.json.',
 			empty: 'MCP lets the agent use external tools (files, search, databases and other standardized servers).',
 			addServer: 'Add server',
 			noSession: 'Open a JuCode session to see each server’s connection state and tools here.',
