@@ -438,7 +438,7 @@
 		display: flex;
 		align-items: center;
 		gap: 4px;
-		padding: 6px 6px 5px;
+		padding: 6px 8px;
 		border-bottom: 1px solid var(--hairline);
 		flex-shrink: 0;
 		/* dblclick maximizes — don't let it select panel text instead */
@@ -447,7 +447,7 @@
 	.ltabs {
 		display: flex;
 		align-items: center;
-		gap: 3px;
+		gap: 2px;
 		flex: 1;
 		min-width: 0;
 		overflow-x: auto;
@@ -455,47 +455,49 @@
 	.ltabs::-webkit-scrollbar {
 		height: 0;
 	}
+	/* Tabs read like the sidebar's rows: no outline, a soft fill marks the
+	   open one, the rest are dim text until hovered. */
 	.ltab {
 		display: flex;
 		align-items: center;
 		gap: 6px;
-		padding: 4px 5px 4px 9px;
-		border-radius: var(--r-sm);
-		font-size: var(--fs-xs);
+		min-height: 30px;
+		max-width: 240px;
+		padding: 0 6px 0 12px;
+		border-radius: var(--r-md);
+		font-size: var(--fs-sm);
 		color: var(--dim);
 		cursor: pointer;
 		user-select: none;
 		white-space: nowrap;
 		flex-shrink: 0;
-		/* Inactive tabs keep a visible surface so they read as tabs, not text. */
-		background: var(--surface);
-		box-shadow: inset 0 0 0 1px var(--hairline);
+		transition:
+			background var(--t-fast) var(--ease-out),
+			color var(--t-fast) var(--ease-out);
 	}
 	.ltab:hover {
-		background: var(--surface2);
+		background: var(--surface);
 		color: var(--text);
 	}
 	.ltab.on {
 		background: var(--surface2);
 		color: var(--text);
-		box-shadow: inset 0 0 0 1px var(--border);
 	}
 	.ltab.lifted {
 		opacity: 0.45;
 	}
-	.ldot.on {
-		background: var(--accent-bright);
-	}
 	.llabel {
-		font-weight: 600;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 	.lclose {
 		display: inline-flex;
-		padding: 2px;
+		padding: 3px;
 		border: none;
 		background: none;
 		color: var(--dim2);
-		border-radius: var(--r-xs);
+		border-radius: var(--r-sm);
 		cursor: pointer;
 		opacity: 0;
 		transition: opacity var(--t-fast) var(--ease-out);
@@ -506,7 +508,8 @@
 	}
 	.lclose:hover {
 		color: var(--text);
-		background: var(--surface2);
+		/* the open tab is already --surface2 */
+		background: color-mix(in oklab, var(--text) 10%, transparent);
 	}
 	.lactions {
 		display: flex;
