@@ -123,6 +123,12 @@
 	let collapsed = $state<Record<string, boolean>>({});
 	let showAll = $state<Record<string, boolean>>({});
 	const SHOW_LIMIT = 6;
+	/** A project's first sessions, and the active one wherever it is. */
+	function firstSessions(list: Session[]): Session[] {
+		const top = list.slice(0, SHOW_LIMIT);
+		const current = list.find((s) => s.id === activeId);
+		return current && !top.includes(current) ? [...top, current] : top;
+	}
 	const chats = $derived(CHATS_ENABLED ? projects.find((p) => p.chats) : undefined);
 	const codeProjects = $derived(projects.filter((p) => !p.chats));
 
@@ -486,7 +492,7 @@
 						<button class="head-act" onclick={() => onHistory(chats)} aria-label="history" title={t('shell.history')}><ClockCounterClockwiseIcon size={16} /></button>
 						<button class="head-act" onclick={onNewChat} aria-label={t('shell.newChat')} title={t('shell.newChat')}><PlusIcon size={16} /></button>
 					</div>
-					{#each showAll[chats.id] || query ? active : active.slice(0, SHOW_LIMIT) as s (s.id)}{@render sessRow(s, false, false, chats)}{/each}
+					{#each showAll[chats.id] || query ? active : firstSessions(active) as s (s.id)}{@render sessRow(s, false, false, chats)}{/each}
 					{#if active.length > SHOW_LIMIT && !query}
 						<button class="more" onclick={() => (showAll[chats.id] = !showAll[chats.id])}>{showAll[chats.id] ? t('shell.showLess') : t('shell.showMore')}</button>
 					{/if}
@@ -526,7 +532,7 @@
 						{/if}
 					</div>
 					{#if open}
-						{#each showAll[p.id] || query ? active : active.slice(0, SHOW_LIMIT) as s (s.id)}{@render sessRow(s, true, false, p)}{/each}
+						{#each showAll[p.id] || query ? active : firstSessions(active) as s (s.id)}{@render sessRow(s, true, false, p)}{/each}
 						{#if active.length > SHOW_LIMIT && !query}
 							<button class="more nested" onclick={() => (showAll[p.id] = !showAll[p.id])}>{showAll[p.id] ? t('shell.showLess') : t('shell.showMore')}</button>
 						{/if}

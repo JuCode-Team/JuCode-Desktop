@@ -3,9 +3,12 @@
 // every client follows it, and the desktop's own edits go to it.
 //
 // - Workspaces and projects: the desktop's list is sent with `workspaces_set`
-//   whenever it differs from the daemon's; a `workspaces` frame that differs
-//   is applied here (projects added, removed or renamed elsewhere). An empty
-//   daemon takes the desktop's list.
+//   whenever it differs from the daemon's. A `workspaces` frame brings over
+//   what changed since the daemon's previous list (projects added, removed or
+//   renamed elsewhere); what the desktop changed meanwhile stays and is sent.
+//   The first list of a connection only adds: an empty daemon takes the
+//   desktop's list, and one that knows fewer projects (a new daemon, a lost
+//   file) never closes the desktop's.
 // - Sessions: every daemon session in one of the active workspace's projects
 //   shows in the sidebar. Ones not open here are listed dormant and open when
 //   first shown; titles and archive state follow the daemon; a session
@@ -102,13 +105,37 @@ export class DaemonSync {
 	#rev = -1;
 	/** The daemon's list as last seen (or as last sent). */
 	#remoteKey = '';
-	/** Session ids the last daemon list had. */
+	/** The daemon's last list on this connection; null before its first. */
+	#base: DaemonWorkspace[] | null = null;
+	/** A list that arrived before the desktop's own was restored. */
+	#held: Record<string, unknown> | null = null;
+	/** Session ids the last daemon list on this connection had. */
 	#seen = new Set<string>();
 
+	/** `ready`: the desktop's project tree is restored and not being swapped
+	 *  (a list applied before would be merged with an empty tree). */
 	constructor(
 		private store: SessionStore,
-		private workspaces: WorkspaceStore
+		private workspaces: WorkspaceStore,
+		private ready: () => boolean = () => true
 	) {}
+
+	/** The connection dropped: the next daemon may be another one, so its
+	 *  first list is merged as at start and its session list compared afresh. */
+	reset() {
+		this.#rev = -1;
+		this.#remoteKey = '';
+		this.#base = null;
+		this.#held = null;
+		this.#seen = new Set();
+	}
+
+	/** Applies the list held while the desktop was not ready. */
+	flush() {
+		const frame = this.#held;
+		this.#held = null;
+		if (frame) this.handle(frame);
+	}
 
 	/** The desktop's list, shaped as the daemon keeps it; the active
 	 *  workspace's projects come from the live session tree. */
@@ -124,17 +151,23 @@ export class DaemonSync {
 	/** Daemon-wide frames (wired to `daemon.onEvent`). */
 	handle(frame: Record<string, unknown>) {
 		if (frame.type !== 'workspaces' || !Array.isArray(frame.workspaces)) return;
-		const first = this.#rev < 0;
+		if (!this.ready()) {
+			this.#held = frame;
+			return;
+		}
 		this.#rev = Number(frame.rev) || 0;
 		const remote = (frame.workspaces as DaemonWorkspace[]).map((ws) =>
 			workspace(ws, (ws.projects ?? []).map(project))
 		);
 		this.#remoteKey = canonical(remote);
-		// An empty daemon takes the desktop's list (push below). On the
-		// first list after start, projects only the desktop has are kept and
-		// sent, not closed: they were added while the two were apart.
-		const target = first ? union(remote, this.local()) : remote;
-		if (remote.length > 0 && canonical(this.local()) !== canonical(target)) this.#apply(target);
+		const base = this.#base;
+		this.#base = remote;
+		// An empty daemon takes the desktop's list (push below). The first
+		// list of a connection keeps and sends the projects only the desktop
+		// has: they were added while the two were apart.
+		const local = this.local();
+		const target = base ? rebase(local, base, remote) : union(remote, local);
+		if (remote.length > 0 && canonical(local) !== canonical(target)) this.#apply(target);
 		this.push();
 	}
 
@@ -220,7 +253,8 @@ export class DaemonSync {
 			if (opening && Date.now() - r.created_at < NEW_SESSION_GRACE_MS) continue;
 			if (!LISTED_ENGINES.has(r.engine ?? 'jucode')) continue;
 			const home = this.#projectFor(r.cwd);
-			if (home) this.store.listDormant(home, r);
+			// At the start, with the project's newest: it came from elsewhere just now.
+			if (home) this.store.listDormant(home, r, undefined, true);
 		}
 		for (const s of this.store.allSessions) {
 			const sid = s.chat.sessionId;
@@ -240,6 +274,35 @@ function merge(saved: SavedProject[], remote: DaemonProject[]): SavedProject[] {
 	return remote.map((r) => {
 		const known = saved.find((p) => trim(p.path) === trim(r.path));
 		return known ? { ...known, name: r.name, color: r.color, icon: r.icon } : { ...r, tabs: [] };
+	});
+}
+
+const projectKey = (p: DaemonProject) => trim(p.path);
+
+/** The daemon's workspaces with the desktop's changes kept: of the projects
+ *  the two disagree on, the ones the daemon added or removed since `base`
+ *  follow it, the rest stay as the desktop has them (its own edits, maybe
+ *  not sent yet, or sent and not echoed back yet). */
+function rebase(local: DaemonWorkspace[], base: DaemonWorkspace[], remote: DaemonWorkspace[]): DaemonWorkspace[] {
+	return remote.map((r) => {
+		const mine = local.find((w) => w.id === r.id);
+		const was = base.find((w) => w.id === r.id);
+		if (!mine) return r;
+		if (!was) return union([r], [mine])[0];
+		const keys = (list: DaemonProject[]) => new Map(list.map((p) => [projectKey(p), p]));
+		const theirs = keys(r.projects);
+		const before = keys(was.projects);
+		const ours = keys(mine.projects);
+		const kept = mine.projects
+			.filter((p) => theirs.has(projectKey(p)) || !before.has(projectKey(p)))
+			.map((p) => {
+				const now = theirs.get(projectKey(p));
+				const then = before.get(projectKey(p));
+				// Changed elsewhere (a rename, new chrome): theirs; else ours.
+				return now && then && canonical(now) !== canonical(then) ? now : p;
+			});
+		const added = r.projects.filter((p) => !ours.has(projectKey(p)) && !before.has(projectKey(p)));
+		return { ...r, projects: [...kept, ...added] };
 	});
 }
 

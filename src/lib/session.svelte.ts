@@ -56,10 +56,11 @@ export interface SavedProject extends SavedTabChrome {
 const DAEMON_RETRY_DELAYS = [1000, 2000, 4000, 8000, 15000, 30000, 30000, 30000, 30000, 30000, 30000, 30000];
 
 const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
+const samePath = (a: string, b: string) => a.replace(/[\\/]+$/, '') === b.replace(/[\\/]+$/, '');
 
 /** A project's sessions as the sidebar lists them: pinned first, each group
- *  in the project's own order (new sessions join at the end); archived ones
- *  are left out. */
+ *  in the project's own order (new sessions join at the start); archived
+ *  ones are left out. */
 export function listedSessions(p: Project): Session[] {
 	const live = p.sessions.filter((s) => !s.archived);
 	return [...live.filter((s) => s.pinned), ...live.filter((s) => !s.pinned)];
@@ -76,6 +77,9 @@ export class SessionStore {
 	loaded = $state(false);
 
 	#counter = 0;
+	/** The saved tabs of stale projects, by project id: kept so they are saved
+	 *  back as they were, should the worktree come back. */
+	#staleTabs = new Map<string, SavedProject['tabs']>();
 	#surfaceTransitions = new Set<string>();
 	uid() {
 		return `s${Date.now().toString(36)}-${(this.#counter++).toString(36)}`;
@@ -272,7 +276,8 @@ export class SessionStore {
 		}
 		const s = this.#newSession(backendId, agent);
 		this.#makeDraft(s);
-		project.sessions.push(s);
+		// At the start: the sidebar lists a project's first sessions only.
+		project.sessions.unshift(s);
 		this.activeId = s.id;
 		if (firstMessage) {
 			s.chat.optimisticUser(firstMessage);
@@ -472,7 +477,8 @@ export class SessionStore {
 			group?: string | null;
 			gateway?: boolean;
 		},
-		reuseId?: string
+		reuseId?: string,
+		atStart = false
 	): string {
 		const s = this.#newSession(normalizeBackendId(rec.engine), undefined, reuseId);
 		if (rec.gateway) s.gateway = true;
@@ -484,7 +490,8 @@ export class SessionStore {
 		s.chat.sessionId = rec.session;
 		if (rec.title) s.chat.title = rec.title;
 		s.chat.engineState = 'ready';
-		project.sessions.push(s);
+		if (atStart) project.sessions.unshift(s);
+		else project.sessions.push(s);
 		return s.id;
 	}
 
@@ -500,7 +507,7 @@ export class SessionStore {
 		model?: string
 	): string {
 		const id = this.listDormant(project, { session: sid, title, archived, engine: backend, gateway }, reuseId);
-		const s = project.sessions[project.sessions.length - 1];
+		const s = project.sessions.find((x) => x.id === id)!;
 		if (model) s.model = model;
 		if (chrome.color) s.color = chrome.color;
 		if (chrome.icon) s.icon = chrome.icon;
@@ -539,6 +546,7 @@ export class SessionStore {
 		color?: unknown;
 		icon?: unknown;
 	}) {
+		if (this.userProjects.some((x) => x.id === project.id || samePath(x.path, project.path))) return;
 		const p: Project = { id: project.id, name: project.name, path: project.path, sessions: [] };
 		if (project.chats) p.chats = true;
 		if (project.worktree) p.worktree = project.worktree;
@@ -972,6 +980,7 @@ export class SessionStore {
 			dropHeldOps(s.id);
 		}
 		this.projects = this.projects.filter((x) => x.id !== p.id);
+		this.#staleTabs.delete(p.id);
 		if (!this.allSessions.some((s) => s.id === this.activeId)) this.activeId = this.shownSessions[0]?.id ?? '';
 	}
 
@@ -1101,8 +1110,9 @@ export class SessionStore {
 			...(p.lastBackend === 'acp' && p.lastAcpAgent ? { lastAcpAgent: p.lastAcpAgent } : {}),
 			...(p.color ? { color: p.color } : {}),
 			...(p.icon ? { icon: p.icon } : {}),
-			tabs: p.sessions
-				.map((s) => ({
+			tabs: p.stale
+				? (this.#staleTabs.get(p.id) ?? [])
+				: p.sessions.map((s) => ({
 					id: s.id,
 					// A session exists in the daemon from its first moment, so its id
 					// is always worth keeping.
@@ -1121,6 +1131,64 @@ export class SessionStore {
 		}));
 	}
 
+	/** Restores saved tabs into `proj` (dormant, resumed or as drafts). */
+	#restoreTabs(proj: Project, tabs: NonNullable<SavedProject['tabs']>) {
+		for (const t of tabs) {
+			// Workspace data is user-editable. Invalid ids must never
+			// reach either a GUI resume or the TUI pty argv.
+			const sid =
+				typeof t.sid === 'string' && isValidResumeSessionId(t.sid) ? t.sid : undefined;
+			if (!sid && !t.id) continue;
+			// Already open: the same tab in a duplicated project entry.
+			if (this.allSessions.some((s) => (t.id && s.id === t.id) || (sid && s.chat.sessionId === sid))) continue;
+			// Tabs saved before multi-backend support carry no backend field →
+			// jucode (normalizeBackendId maps unknown/missing to the default).
+			// Chrome fields are re-validated here (the file is user-editable).
+			let backend = normalizeBackendId(t.backend);
+			// An 'acp' tab needs its agent back to respawn; older files carry
+			// none on the tab → fall back to the project's last agent. Without
+			// any, never start a bare 'acp' (there is no command to run).
+			const savedAgent =
+				t.acpAgent && typeof t.acpAgent.id === 'string' && typeof t.acpAgent.name === 'string'
+					? { id: t.acpAgent.id, name: t.acpAgent.name }
+					: undefined;
+			let acpAgent = backend === 'acp' ? (savedAgent ?? proj.lastAcpAgent) : undefined;
+			if (backend === 'acp' && !acpAgent) {
+				backend = 'jucode';
+				acpAgent = undefined;
+			}
+			const chrome = {
+				color: normalizeColor(t.color),
+				icon: parseTabIcon(t.icon)
+			};
+			// With a conversation to resume, resume it; an empty window comes
+			// back as a draft. Both keep the saved desktop id (pre-id files mint anew).
+			// A tab handed to the TUI restores as a TUI surface (no engine).
+			const surface = t.surface === 'tui' && sid ? ('tui' as const) : undefined;
+			// The conversation waits in the daemon: list it now and open it
+			// when it is shown (ACP needs its agent start path below).
+			const dormant = sid && !surface && backend !== 'acp';
+			const id = dormant
+				? this.#restoreDormant(proj, sid, t.title, backend, !!t.archived, chrome, t.id, t.gateway === true, t.model)
+				: sid
+				? this.restoreSession(
+						proj,
+						sid,
+						t.title,
+						backend,
+						!!t.archived,
+						chrome,
+						t.id,
+						acpAgent,
+						surface,
+						t.gateway === true,
+						t.model
+					)
+				: this.#draftSaved(proj, t.id!, t.title, backend, !!t.archived, chrome, acpAgent);
+			if (t.pinned === true) proj.sessions.find((s) => s.id === id)!.pinned = true;
+		}
+	}
+
 	/** Restore saved projects + their open conversations, or seed a default
 	 *  project on first run. Sets `loaded` when done. A worktree project whose
 	 *  directory has vanished (task finished elsewhere / dir deleted) is kept in
@@ -1129,6 +1197,14 @@ export class SessionStore {
 	async restore(saved: SavedProject[]) {
 		if (saved.length) {
 			for (const p of saved) {
+				// The same project twice (a file an older version wrote while a
+				// daemon list raced the restore): one entry, both entries' tabs.
+				const known = this.userProjects.find((x) => x.id === p.id || samePath(x.path, p.path));
+				if (known) {
+					if (known.stale) this.#staleTabs.set(known.id, [...(this.#staleTabs.get(known.id) ?? []), ...(p.tabs ?? [])]);
+					else this.#restoreTabs(known, p.tabs ?? []);
+					continue;
+				}
 				const proj: Project = { id: p.id, name: p.name, path: p.path, sessions: [] };
 				if (p.chats === true) proj.chats = true;
 				this.setProjectChrome(proj, p);
@@ -1150,59 +1226,12 @@ export class SessionStore {
 					}
 				}
 				this.projects.push(proj);
-				if (proj.stale) continue;
-				for (const t of p.tabs ?? []) {
-					// Workspace data is user-editable. Invalid ids must never
-					// reach either a GUI resume or the TUI pty argv.
-					const sid =
-						typeof t.sid === 'string' && isValidResumeSessionId(t.sid) ? t.sid : undefined;
-					if (!sid && !t.id) continue;
-					// Tabs saved before multi-backend support carry no backend field →
-					// jucode (normalizeBackendId maps unknown/missing to the default).
-					// Chrome fields are re-validated here (the file is user-editable).
-					let backend = normalizeBackendId(t.backend);
-					// An 'acp' tab needs its agent back to respawn; older files carry
-					// none on the tab → fall back to the project's last agent. Without
-					// any, never start a bare 'acp' (there is no command to run).
-					const savedAgent =
-						t.acpAgent && typeof t.acpAgent.id === 'string' && typeof t.acpAgent.name === 'string'
-							? { id: t.acpAgent.id, name: t.acpAgent.name }
-							: undefined;
-					let acpAgent = backend === 'acp' ? (savedAgent ?? proj.lastAcpAgent) : undefined;
-					if (backend === 'acp' && !acpAgent) {
-						backend = 'jucode';
-						acpAgent = undefined;
-					}
-					const chrome = {
-						color: normalizeColor(t.color),
-						icon: parseTabIcon(t.icon)
-					};
-					// With a conversation to resume, resume it; an empty window comes
-					// back as a draft. Both keep the saved desktop id (pre-id files mint anew).
-					// A tab handed to the TUI restores as a TUI surface (no engine).
-					const surface = t.surface === 'tui' && sid ? ('tui' as const) : undefined;
-					// The conversation waits in the daemon: list it now and open it
-					// when it is shown (ACP needs its agent start path below).
-					const dormant = sid && !surface && backend !== 'acp';
-					const id = dormant
-						? this.#restoreDormant(proj, sid, t.title, backend, !!t.archived, chrome, t.id, t.gateway === true, t.model)
-						: sid
-						? this.restoreSession(
-								proj,
-								sid,
-								t.title,
-								backend,
-								!!t.archived,
-								chrome,
-								t.id,
-								acpAgent,
-								surface,
-								t.gateway === true,
-								t.model
-							)
-						: this.#draftSaved(proj, t.id!, t.title, backend, !!t.archived, chrome, acpAgent);
-					if (t.pinned === true) proj.sessions.find((s) => s.id === id)!.pinned = true;
+				if (proj.stale) {
+					this.#staleTabs.set(proj.id, p.tabs ?? []);
+					continue;
 				}
+				// Pushed proxies are new objects: restore into the tree's copy.
+				this.#restoreTabs(this.projects[this.projects.length - 1], p.tabs ?? []);
 			}
 			const first = this.shownSessions.find((s) => !s.archived)?.id;
 			const firstLive = this.shownProjects.find((p) => !p.stale);

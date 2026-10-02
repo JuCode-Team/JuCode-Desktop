@@ -2,6 +2,7 @@
 	import { DaemonSync } from '$lib/daemonSync.svelte';
 	import { onMount, untrack } from 'svelte';
 	import { listen } from '@tauri-apps/api/event';
+	import { invoke } from '@tauri-apps/api/core';
 	import { getCurrentWebview } from '@tauri-apps/api/webview';
 	import TerminalWindowIcon from 'phosphor-svelte/lib/TerminalWindowIcon';
 	import SessionMark from '$lib/SessionMark.svelte';
@@ -545,9 +546,11 @@
 
 	// One list of projects and sessions with the daemon (and so with paired
 	// devices): the desktop's edits go to it, other clients' come back.
-	const sync = new DaemonSync(store, workspaces);
+	const sync = new DaemonSync(store, workspaces, () => store.loaded && !wsBusy);
 	$effect(() => {
 		if (!store.loaded || wsBusy) return;
+		// A list that came while the tree was being restored or swapped.
+		untrack(() => sync.flush());
 		void sync.local();
 		// Coalesce bursts of edits (a restore, a drag) into one save.
 		const timer = setTimeout(() => sync.push(), 600);
@@ -961,7 +964,10 @@
 				agentDirectory.handle(frame);
 				sync.handle(frame);
 			};
-			daemon.onDisconnect = () => agentDirectory.disconnected();
+			daemon.onDisconnect = () => {
+				agentDirectory.disconnected();
+				sync.reset();
+			};
 			daemon.onHello = (version) => {
 				checkDaemonVersion(version).then((outcome) => {
 					if (outcome.kind === 'restart-when-idle')
@@ -1001,7 +1007,13 @@
 				const p = store.activeProject ?? store.shownProjects[0];
 				if (p) store.addSession(p);
 			});
-			cleanups.push(undrop, unbrowser, untray);
+			// Quitting (tray menu, Cmd+Q): save the workspaces first; the app
+			// waits for this (see begin_quit in src-tauri).
+			const unquit = await listen('app-quit', async () => {
+				await workspaces.flush();
+				await invoke('quit_app');
+			});
+			cleanups.push(undrop, unbrowser, untray, unquit);
 			// The agent's browser_open tool navigates the embedded browser.
 			ChatState.onBrowserOpen = (url) => browser.open(url);
 			cleanups.push(() => (ChatState.onBrowserOpen = null));

@@ -202,7 +202,7 @@ describe('SessionStore lifecycle', () => {
 
 		const store2 = new SessionStore();
 		await store2.restore(snap);
-		expect(store2.projects[0].sessions[0].archived).toBe(true);
+		expect(store2.projects[0].sessions.find((s) => s.chat.sessionId === 'sid-0')!.archived).toBe(true);
 	});
 
 	it('a flagged resume failure makes the next claude restart come up fresh', async () => {
@@ -833,7 +833,7 @@ describe('session order and pins', () => {
 		const store = new SessionStore();
 		const p = proj();
 		store.projects.push(p);
-		for (const title of ['a', 'b', 'c']) store.renameSession(store.addSession(p), title);
+		for (const title of ['c', 'b', 'a']) store.renameSession(store.addSession(p), title);
 		return { store, p, id: (title: string) => p.sessions.find((s) => s.chat.title === title)!.id };
 	}
 
@@ -851,7 +851,7 @@ describe('session order and pins', () => {
 		expect(p.sessions.find((s) => s.chat.title === 'c')!.pinned).toBeUndefined();
 	});
 
-	it('a dragged session lands before or after its target; new sessions join at the end', () => {
+	it('a dragged session lands before or after its target; new sessions join at the start', () => {
 		const { store, p, id } = three();
 		store.moveSession(id('c'), id('a'), false);
 		expect(titles(p)).toEqual(['c', 'a', 'b']);
@@ -864,7 +864,7 @@ describe('session order and pins', () => {
 		store.moveSession(id('c'), id('b'), false);
 		expect(titles(p)).toEqual(['c', 'b', 'a']);
 		store.renameSession(store.addSession(p), 'd');
-		expect(titles(p)).toEqual(['c', 'b', 'a', 'd']);
+		expect(titles(p)).toEqual(['c', 'b', 'd', 'a']);
 	});
 
 	it('order and pins survive serialize and restore', async () => {

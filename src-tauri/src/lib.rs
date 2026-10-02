@@ -2903,6 +2903,34 @@ fn pty_close(id: String, ptys: tauri::State<Ptys>) -> Result<(), String> {
     Ok(())
 }
 
+/// Set once the page has saved what it had pending for a quit.
+static QUITTING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// A quit through `app.exit` (the tray menu) first lets the page save: it writes
+/// workspaces.json half a second after a change, so the last edit would
+/// otherwise be lost. It answers with `quit_app`; a page that does not answer
+/// within a few seconds is not waited for. (macOS's Cmd+Q ends the app without
+/// an ExitRequested, so it is not covered.)
+fn begin_quit(app: &AppHandle) {
+    if app.emit("app-quit", ()).is_err() {
+        QUITTING.store(true, std::sync::atomic::Ordering::SeqCst);
+        app.exit(0);
+        return;
+    }
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(3));
+        QUITTING.store(true, std::sync::atomic::Ordering::SeqCst);
+        app.exit(0);
+    });
+}
+
+#[tauri::command]
+fn quit_app(app: AppHandle) {
+    QUITTING.store(true, std::sync::atomic::Ordering::SeqCst);
+    app.exit(0);
+}
+
 /// 显示并聚焦主窗口（托盘点击 / 二次启动 / 深链 / Dock 图标都会走这里）。
 fn show_main_window(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("main") {
@@ -3065,6 +3093,7 @@ pub fn run() {
         .manage(Ptys::default())
         .manage(capture::Recorder::default())
         .invoke_handler(tauri::generate_handler![
+            quit_app,
             window_effect,
             daemon_endpoint,
             check_backend,
@@ -3148,6 +3177,13 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen { .. } = _event {
                 show_main_window(_app);
+            }
+            // A restart (an update's relaunch) cannot be held; the updater saves first.
+            if let tauri::RunEvent::ExitRequested { api, code, .. } = &_event {
+                if *code != Some(tauri::RESTART_EXIT_CODE) && !QUITTING.load(std::sync::atomic::Ordering::SeqCst) {
+                    api.prevent_exit();
+                    begin_quit(_app);
+                }
             }
         });
 }

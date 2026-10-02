@@ -22,7 +22,7 @@ vi.mock('./protocol', () => ({
 const { DaemonSync } = await import('./daemonSync.svelte');
 const { SessionStore, listedSessions } = await import('./session.svelte');
 const { WorkspaceStore } = await import('./workbench/workspaceStore.svelte');
-const { sessionMeta } = await import('./protocol');
+const { sessionMeta, git } = await import('./protocol');
 
 async function setup() {
 	const store = new SessionStore();
@@ -105,6 +105,76 @@ describe('DaemonSync', () => {
 		expect(request).not.toHaveBeenCalled();
 	});
 
+	it('holds a list that comes before the restore and merges it once restored, without a second copy', async () => {
+		const store = new SessionStore();
+		const workspaces = new WorkspaceStore();
+		await workspaces.load('默认工作区');
+		const sync = new DaemonSync(store, workspaces, () => store.loaded);
+		const ws = workspaces.workspaces[0];
+		sync.handle({
+			type: 'workspaces',
+			rev: 2,
+			workspaces: [{ id: ws.id, name: ws.name, is_default: true, projects: [{ id: 'p1', name: 'app', path: '/w/app' }, { id: 'p9', name: 'new', path: '/w/new' }] }]
+		});
+		expect(store.projects).toHaveLength(0);
+		await store.restore([{ id: 'p1', name: 'app', path: '/w/app', tabs: [{ id: 't1', sid: 's-1', title: 'one' }] }]);
+		sync.flush();
+		expect(store.projects.map((p) => p.path)).toEqual(['/w/app', '/w/new']);
+		expect(store.projects[0].sessions.map((s) => s.chat.sessionId)).toEqual(['s-1']);
+	});
+
+	it('keeps a project added here when a list without it arrives before the echo', async () => {
+		const { sync, store, workspaces } = await setup();
+		const ws = workspaces.workspaces[0];
+		const frame = (rev: number, projects: { id: string; name: string; path: string }[]) =>
+			sync.handle({ type: 'workspaces', rev, workspaces: [{ id: ws.id, name: ws.name, is_default: true, projects }] });
+		frame(3, [{ id: 'p1', name: 'app', path: '/w/app' }]);
+		store.addProjectShell({ id: 'p2', name: 'two', path: '/w/two' });
+		frame(4, [{ id: 'p1', name: 'app renamed', path: '/w/app' }]);
+		expect(store.projects.map((p) => [p.path, p.name])).toEqual([
+			['/w/app', 'app renamed'],
+			['/w/two', 'two']
+		]);
+		const sent = request.mock.calls.at(-1)![0] as { workspaces: { projects: { path: string }[] }[] };
+		expect(sent.workspaces[0].projects.map((p) => p.path)).toEqual(['/w/app', '/w/two']);
+	});
+
+	it('after a reconnect, a daemon that knows fewer projects or sessions closes nothing', async () => {
+		const { sync, store, workspaces } = await setup();
+		const ws = workspaces.workspaces[0];
+		const frame = (rev: number, projects: { id: string; name: string; path: string }[]) =>
+			sync.handle({ type: 'workspaces', rev, workspaces: [{ id: ws.id, name: ws.name, is_default: true, projects }] });
+		frame(3, [{ id: 'p1', name: 'app', path: '/w/app' }, { id: 'p9', name: 'new', path: '/w/new' }]);
+		sync.reconcile([{ session: 's-1', cwd: '/w/app', created_at: 0, open: false, engine: 'jucode' }]);
+		sync.reset();
+		frame(1, [{ id: 'p1', name: 'app', path: '/w/app' }]);
+		sync.reconcile([]);
+		expect(store.projects.map((p) => p.path)).toEqual(['/w/app', '/w/new']);
+		expect(store.projects[0].sessions.map((s) => s.chat.sessionId)).toEqual(['s-1']);
+	});
+
+	it('restores a project saved twice once, with the tabs of both', async () => {
+		const store = new SessionStore();
+		await store.restore([
+			{ id: 'p1', name: 'app', path: '/w/app', tabs: [{ id: 't1', sid: 's-1', title: 'one' }] },
+			{ id: 'p1', name: 'app', path: '/w/app/', tabs: [{ id: 't1', sid: 's-1', title: 'one' }, { id: 't2', sid: 's-2', title: 'two' }] }
+		]);
+		expect(store.projects).toHaveLength(1);
+		expect(store.projects[0].sessions.map((s) => s.chat.sessionId)).toEqual(['s-1', 's-2']);
+	});
+
+	it('saves a stale worktree project with the tabs it was restored with', async () => {
+		vi.mocked(git).mockRejectedValueOnce(new Error('not a git repository'));
+		const store = new SessionStore();
+		const tabs = [{ id: 't1', sid: 's-1', title: 'one' }];
+		await store.restore([
+			{ id: 'p1', name: 'task', path: '/w/gone', worktree: { isWorktree: true, mainRepoPath: '/w/app', branch: 'b', baseBranch: 'main', slug: 'b' }, tabs },
+			{ id: 'p2', name: 'app', path: '/w/app', tabs: [] }
+		]);
+		expect(store.projects[0].stale).toBe(true);
+		expect(store.serialize()[0].tabs).toEqual(tabs);
+	});
+
 	it('lists daemon sessions dormant, follows their titles and archive state, and drops removed ones', async () => {
 		const { sync, store } = await setup();
 		const session = (over: Record<string, unknown> = {}) => ({
@@ -139,19 +209,19 @@ describe('DaemonSync', () => {
 		// A draft has no daemon session yet: nothing is on its way to it.
 		store.addSession(p);
 		sync.reconcile([fresh('s-new')]);
-		expect(p.sessions.map((s) => s.chat.sessionId)).toEqual(['', 's-new']);
+		expect(p.sessions.map((s) => s.chat.sessionId)).toEqual(['s-new', '']);
 
 		// A started tab whose daemon id has not arrived yet may be the owner.
-		const opening = p.sessions[0];
+		const opening = p.sessions.find((s) => !s.chat.sessionId)!;
 		opening.draft = false;
 		sync.reconcile([fresh('s-new'), fresh('s-mine')]);
-		expect(p.sessions.map((s) => s.chat.sessionId)).toEqual(['', 's-new']);
+		expect(p.sessions.map((s) => s.chat.sessionId)).toEqual(['s-new', '']);
 		// Older sessions are listed either way.
 		sync.reconcile([fresh('s-new'), { ...fresh('s-old'), created_at: Date.now() - 60_000 }]);
-		expect(p.sessions.map((s) => s.chat.sessionId)).toEqual(['', 's-new', 's-old']);
+		expect(p.sessions.map((s) => s.chat.sessionId)).toEqual(['s-old', 's-new', '']);
 	});
 
-	it('keeps the sidebar order and pins over a reconcile; new daemon sessions join at the end', async () => {
+	it('keeps the sidebar order and pins over a reconcile; new daemon sessions join at the start', async () => {
 		const { sync, store } = await setup();
 		const p = store.projects[0];
 		const session = (id: string) => ({ session: id, cwd: '/w/app', created_at: 0, open: false, engine: 'jucode', title: id });
@@ -160,14 +230,14 @@ describe('DaemonSync', () => {
 		store.moveSession(id('s-3'), id('s-1'), false);
 		store.setPinned(id('s-2'), true);
 		sync.reconcile([session('s-1'), session('s-2'), session('s-3'), session('s-4')]);
-		expect(listedSessions(p).map((s) => s.chat.sessionId)).toEqual(['s-2', 's-3', 's-1', 's-4']);
+		expect(listedSessions(p).map((s) => s.chat.sessionId)).toEqual(['s-2', 's-4', 's-3', 's-1']);
 
 		// After a restart the saved order comes back and the daemon list keeps it.
 		const again = new SessionStore();
 		await again.restore(store.serialize());
 		again.loaded = true;
 		new DaemonSync(again, new WorkspaceStore()).reconcile([session('s-1'), session('s-2'), session('s-3'), session('s-4')]);
-		expect(listedSessions(again.projects[0]).map((s) => s.chat.sessionId)).toEqual(['s-2', 's-3', 's-1', 's-4']);
+		expect(listedSessions(again.projects[0]).map((s) => s.chat.sessionId)).toEqual(['s-2', 's-4', 's-3', 's-1']);
 	});
 
 	it('shares renames, archiving and closing of daemon sessions', async () => {

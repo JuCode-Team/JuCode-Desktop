@@ -5,6 +5,7 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
 import { relaunch } from '@tauri-apps/plugin-process';
+import { workspaces } from '$lib/workbench/workspaceStore.svelte';
 
 type Progress =
 	| { event: 'Started'; data: { contentLength?: number | null } }
@@ -124,6 +125,8 @@ export class UpdaterState {
 
 	/** 重启应用以应用已安装的更新。 */
 	async restart() {
+		// The relaunch does not wait for the half-second save of the workspaces.
+		await workspaces.flush();
 		await relaunch();
 	}
 }
