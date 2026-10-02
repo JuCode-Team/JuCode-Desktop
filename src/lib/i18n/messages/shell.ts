@@ -335,7 +335,7 @@ const shell = {
 		},
 		dispatch: {
 			title: '派发',
-			placeholder: '一次说清要做的几件事，例如：修好登录页跳转的 bug；给订单接口加分页；更新 README 的安装说明。',
+			placeholder: '要做的事一起写在这里，例如：修好登录跳转；给订单接口加分页',
 			send: '派发',
 			sending: '派发中…',
 			plan: '先出计划',
@@ -1010,7 +1010,7 @@ const shell = {
 		},
 		dispatch: {
 			title: 'Dispatch',
-			placeholder: 'Say everything that needs doing, e.g.: fix the login redirect bug; add paging to the orders API; update the install steps in the README.',
+			placeholder: 'Everything that needs doing, e.g.: fix the login redirect; add paging to the orders API',
 			send: 'Dispatch',
 			sending: 'Dispatching…',
 			plan: 'Plan first',

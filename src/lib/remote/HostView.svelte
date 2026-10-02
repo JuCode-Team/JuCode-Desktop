@@ -176,24 +176,25 @@
 			<nav>
 				<button class:on={tab === 'projects'} onclick={() => (tab = 'projects')}>
 					<ListIcon size={18} weight={tab === 'projects' ? 'fill' : 'regular'} />
-					<span>{t('shell.remote.sessions')}</span>
+					<span class="label">{t('shell.remote.sessions')}</span>
 				</button>
 				<button class:on={tab === 'dispatch'} onclick={() => (tab = 'dispatch')}>
 					<PaperPlaneTiltIcon size={18} weight={tab === 'dispatch' ? 'fill' : 'regular'} />
-					<span>{t('shell.dispatch.title')}</span>
+					<span class="label">{t('shell.dispatch.title')}</span>
 					{#if conn.dispatches.pending > 0}<span class="badge">{conn.dispatches.pending}</span>{/if}
 				</button>
 				<button class:on={tab === 'desk'} onclick={() => (tab = 'desk')}>
 					<TrayIcon size={18} weight={tab === 'desk' ? 'fill' : 'regular'} />
-					<span>{t('shell.desk.title')}</span>
+					<span class="label">{t('shell.desk.title')}</span>
 					{#if conn.agents.pending > 0}<span class="badge">{conn.agents.pending}</span>{/if}
 				</button>
 			</nav>
+			<!-- Outside the scrolling list, so the switcher's menu is not cut off. -->
+			<div class="top">
+				<h1>{t(TAB_TITLES[tab])}</h1>
+				{@render switcher()}
+			</div>
 			<main>
-				<div class="top">
-					<h1>{t(TAB_TITLES[tab])}</h1>
-					{@render switcher()}
-				</div>
 				{#if conn.kind === 'lan' && conn.agents.status === 'unreachable'}
 					<!-- The daemon served this page, so a failing connection most likely
 					     means this device's token was revoked; offer to pair again. -->
@@ -358,30 +359,52 @@
 	   pages (transform), so they fill it instead of the window. */
 	.wide .side {
 		position: relative;
+		/* Above the pane: the switcher's menu opens over it. */
+		z-index: 1;
+		container: side / inline-size;
 		display: flex;
 		flex-direction: column;
 		min-width: 0;
 		border-right: 1px solid var(--hairline);
 		background: var(--sidebar);
 	}
+	/* Wide: the tabs are one segmented control; a narrow column keeps only
+	   their names. */
 	.wide nav {
 		position: static;
-		gap: 4px;
-		padding: calc(env(safe-area-inset-top) + 10px) 12px 6px;
-		border-top: none;
-		background: none;
+		gap: 2px;
+		margin: calc(env(safe-area-inset-top) + 12px) 12px 4px;
+		padding: 3px;
+		border: none;
+		border-radius: var(--r-md);
+		background: var(--surface);
 	}
 	.wide nav button {
+		min-width: 0;
 		flex-direction: row;
 		justify-content: center;
 		gap: 6px;
-		height: 34px;
-		padding: 0;
-		border-radius: var(--r-md);
+		height: 30px;
+		padding: 0 8px;
+		border-radius: calc(var(--r-md) - 2px);
 		font-size: var(--fs-sm);
+	}
+	.wide nav button:active {
+		transform: none;
 	}
 	.wide nav button.on {
 		background: var(--surface2);
+		color: var(--text);
+	}
+	.wide nav .label {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	@container side (max-width: 320px) {
+		.wide nav button > :global(svg) {
+			display: none;
+		}
 	}
 	.wide .badge {
 		position: static;
@@ -390,7 +413,7 @@
 		flex: 1;
 		min-height: 0;
 		overflow-y: auto;
-		padding: 8px 12px 24px;
+		padding: 0 12px 24px;
 	}
 	.wide .pane {
 		display: flex;
@@ -404,21 +427,22 @@
 		animation-name: pane-in;
 	}
 	main {
-		padding: calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 76px);
+		padding: 0 16px calc(env(safe-area-inset-bottom) + 76px);
 	}
 	.top {
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		margin: 4px 0 10px;
+		padding: calc(env(safe-area-inset-top) + 16px) 16px 10px;
+	}
+	.wide .top {
+		padding: 10px 12px 10px 16px;
 	}
 	.top h1 {
-		flex: 1;
-		min-width: 0;
+		flex: 1 0 auto;
 		margin: 0;
 	}
 	.wide .top h1 {
-		padding-left: 4px;
 		font-size: var(--fs-lg);
 	}
 	.tabbody:not([hidden]) {

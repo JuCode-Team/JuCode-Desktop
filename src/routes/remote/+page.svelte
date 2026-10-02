@@ -652,9 +652,9 @@
 	.actions {
 		margin-top: 24px;
 	}
+	/* Gives way to the heading beside it: the name is cut, not the title. */
 	.conn-wrap {
 		position: relative;
-		flex-shrink: 0;
 		min-width: 0;
 	}
 	.conn {
@@ -693,6 +693,7 @@
 		transform: rotate(180deg);
 	}
 	.conn-text {
+		min-width: 0;
 		max-width: 40vw;
 		overflow: hidden;
 		text-overflow: ellipsis;

@@ -126,35 +126,41 @@
 			onkeydown={onKey}
 			disabled={sending}
 		></textarea>
-		<div class="settings">
-			<label class="plan" title={t('shell.dispatch.planHint')}>
+		<div class="options">
+			<label class="option" title={t('shell.dispatch.planHint')}>
+				<span class="option-label">{t('shell.dispatch.plan')}</span>
 				<Switch bind:checked={plan} label={t('shell.dispatch.plan')} />
-				<span>{t('shell.dispatch.plan')}</span>
 			</label>
-			<div class="mode">
-				<span class="label">{t('shell.dispatch.mode')}</span>
-				<Select bind:value={mode} options={modes} />
+			<div class="option">
+				<span class="option-label">{t('shell.dispatch.mode')}</span>
+				<div class="mode"><Select bind:value={mode} options={modes} /></div>
 			</div>
+		</div>
+		{#if mode === 'full-access'}<Notice tone="warn">{t('shell.dispatch.fullAccess')}</Notice>{/if}
+		{#if error}<Notice tone="error">{error}</Notice>{/if}
+		<div class="send">
 			<Button variant="primary" size="sm" disabled={!text.trim() || sending} onclick={send}>
 				{#if sending}<CircleNotchIcon size={15} class="spin" />{:else}<PaperPlaneTiltIcon size={15} />{/if}
 				{sending ? t('shell.dispatch.sending') : t('shell.dispatch.send')}
 			</Button>
 		</div>
-		{#if mode === 'full-access'}<Notice tone="warn">{t('shell.dispatch.fullAccess')}</Notice>{/if}
-		{#if error}<Notice tone="error">{error}</Notice>{/if}
 	</div>
 
-	<div class="notify">
-		{#if !supported}
-			<span class="dim">{t('shell.dispatch.notifyUnsupported')}</span>
-		{:else if notifying}
-			<span class="dim"><BellIcon size={14} /> {t('shell.dispatch.notifyOn')}</span>
-		{:else}
-			<Button size="sm" variant="ghost" onclick={turnOnNotifications}><BellIcon size={14} /> {t('shell.dispatch.notify')}</Button>
-			<span class="dim">{t('shell.dispatch.notifyHint')}</span>
-		{/if}
-		{#if notifyError}<span class="err">{notifyError}</span>{/if}
-	</div>
+	{#if !supported}
+		<p class="notify-note">{t('shell.dispatch.notifyUnsupported')}</p>
+	{:else if notifying}
+		<p class="notify-note"><BellIcon size={14} /> {t('shell.dispatch.notifyOn')}</p>
+	{:else}
+		<button class="notify" onclick={turnOnNotifications}>
+			<BellIcon size={16} />
+			<span class="notify-text">
+				<span class="notify-title">{t('shell.dispatch.notify')}</span>
+				<span class="notify-hint">{t('shell.dispatch.notifyHint')}</span>
+			</span>
+			<CaretRightIcon size={12} />
+		</button>
+	{/if}
+	{#if notifyError}<p class="err">{notifyError}</p>{/if}
 
 	{#if conn.dispatches.list.length === 0}
 		<p class="empty">{t('shell.dispatch.empty')}</p>
@@ -220,8 +226,8 @@
 	}
 	textarea {
 		width: 100%;
-		min-height: 96px;
-		resize: vertical;
+		height: 104px;
+		resize: none;
 		padding: 0;
 		border: none;
 		background: none;
@@ -234,51 +240,89 @@
 	textarea::placeholder {
 		color: var(--dim2);
 	}
-	.settings {
+	/* Label on the left, control on the right, one line each. */
+	.options {
 		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 10px 14px;
+		flex-direction: column;
+		border-top: 1px solid var(--hairline);
 	}
-	.plan {
-		display: inline-flex;
+	.option {
+		display: flex;
 		align-items: center;
-		gap: 8px;
-		font-size: var(--fs-sm);
-		color: var(--text);
+		justify-content: space-between;
+		gap: 12px;
+		min-height: 40px;
+		border-bottom: 1px solid var(--hairline);
+	}
+	.option:last-child {
+		border-bottom: none;
+	}
+	label.option {
 		cursor: pointer;
 	}
+	.option-label {
+		font-size: var(--fs-sm);
+		color: var(--text);
+		white-space: nowrap;
+	}
 	.mode {
-		display: inline-flex;
-		align-items: center;
-		gap: 8px;
-		margin-right: auto;
+		width: 132px;
 	}
-	.label,
-	.dim {
-		font-size: var(--fs-xs);
-		color: var(--dim);
-	}
-	.dim {
-		display: inline-flex;
-		align-items: center;
-		gap: 5px;
+	.send {
+		display: flex;
+		justify-content: flex-end;
 	}
 	.notify {
 		display: flex;
-		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px 10px;
+		gap: 10px;
+		width: 100%;
+		padding: 10px 12px;
+		border: 1px solid var(--hairline);
+		border-radius: var(--r-lg);
+		background: none;
+		color: var(--dim);
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+		transition: background var(--t-fast) var(--ease-out);
+	}
+	.notify:hover {
+		background: var(--surface);
+	}
+	.notify-text {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+	.notify-title {
+		font-size: var(--fs-sm);
+		color: var(--text);
+	}
+	.notify-hint {
+		font-size: var(--fs-xs);
+		line-height: 1.45;
+	}
+	.notify-note,
+	.err {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		margin: 0 4px;
+		font-size: var(--fs-xs);
+		line-height: 1.5;
+		color: var(--dim);
 	}
 	.err {
-		font-size: var(--fs-xs);
 		color: var(--err);
 	}
 	.empty {
-		margin: 8px 2px;
-		font-size: var(--fs-sm);
+		margin: 4px 4px 0;
+		font-size: var(--fs-xs);
 		line-height: 1.6;
-		color: var(--dim);
+		color: var(--dim2);
 	}
 	.card {
 		display: flex;
