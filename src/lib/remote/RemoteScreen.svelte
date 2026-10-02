@@ -1,6 +1,7 @@
 <script lang="ts">
 	// A full-screen page of the remote app: a header with a back button and
 	// optional actions over a scrolling body. Pages stack on top of each other.
+	// Without `onBack` it is a tab's own page in the wide pane (nothing under it).
 	import type { Snippet } from 'svelte';
 	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
 	import { t } from '$lib/i18n';
@@ -14,7 +15,7 @@
 	}: {
 		title: string;
 		subtitle?: string;
-		onBack: () => void;
+		onBack?: () => void;
 		actions?: Snippet;
 		children: Snippet;
 	} = $props();
@@ -22,7 +23,9 @@
 
 <div class="screen">
 	<header>
-		<button class="back" onclick={onBack} aria-label={t('shell.remote.back')}><ArrowLeftIcon size={18} /></button>
+		{#if onBack}
+			<button class="back" onclick={onBack} aria-label={t('shell.remote.back')}><ArrowLeftIcon size={18} /></button>
+		{/if}
 		<span class="heading">
 			<span class="title">{title}</span>
 			{#if subtitle}<span class="subtitle">{subtitle}</span>{/if}
@@ -44,6 +47,7 @@
 		display: flex;
 		align-items: center;
 		gap: 8px;
+		min-height: 52px;
 		padding: calc(env(safe-area-inset-top) + 8px) 12px 8px;
 		border-bottom: 1px solid var(--hairline);
 		background: var(--panel);
@@ -70,6 +74,7 @@
 	}
 	.heading {
 		flex: 1;
+		padding-left: 4px;
 		min-width: 0;
 		display: flex;
 		flex-direction: column;

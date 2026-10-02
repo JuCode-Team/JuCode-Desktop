@@ -4,15 +4,14 @@
 	// jucode daemon through agentDirectory. Shown on the desktop's workbench
 	// and on the remote page. With `agent`, only that agent's pending items
 	// (its page shows the rest as activity).
-	import QuestionIcon from 'phosphor-svelte/lib/QuestionIcon';
-	import ShieldCheckIcon from 'phosphor-svelte/lib/ShieldCheckIcon';
 	import FileTextIcon from 'phosphor-svelte/lib/FileTextIcon';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import ClockIcon from 'phosphor-svelte/lib/ClockIcon';
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import AgentAvatar from '$lib/AgentAvatar.svelte';
-	import type { AgentView, ActionView, QuestionView, ReportView } from '$lib/agents.svelte';
+	import DeskCard from '$lib/DeskCard.svelte';
+	import type { AgentView, ReportView } from '$lib/agents.svelte';
 	import { useAgents } from '$lib/agentScope';
 	import { t } from '$lib/i18n';
 
@@ -39,9 +38,6 @@
 	const reports = $derived(agentDirectory.reports.filter((r) => inScope(r.agent)));
 	const pending = $derived(questions.length + actions.length);
 
-	let answers = $state<Record<string, string>>({});
-	let busy = $state<Record<string, boolean>>({});
-	let errors = $state<Record<string, string>>({});
 	let expanded = $state<Record<string, boolean>>({});
 
 	const working = $derived(agentDirectory.agents.filter((a) => a.busy && inScope(a.id)));
@@ -61,28 +57,6 @@
 		});
 	}
 
-	async function run(key: string, work: () => Promise<void>) {
-		busy[key] = true;
-		errors[key] = '';
-		try {
-			await work();
-		} catch (e) {
-			errors[key] = e instanceof Error ? e.message : String(e);
-		} finally {
-			busy[key] = false;
-		}
-	}
-
-	function answer(q: QuestionView) {
-		const text = (answers[q.id] ?? '').trim();
-		if (!text) return;
-		void run(q.id, () => agentDirectory.answer(q.id, text));
-	}
-
-	function decide(a: ActionView, allow: boolean) {
-		void run(a.id, () => agentDirectory.decide(a, allow));
-	}
-
 	function toggleReport(r: ReportView) {
 		expanded[r.id] = !expanded[r.id];
 		if (expanded[r.id]) void agentDirectory.markRead(r).catch(() => {});
@@ -91,14 +65,6 @@
 
 {#snippet face(agent: AgentView | undefined)}
 	{#if agent}<AgentAvatar {agent} size={14} />{/if}
-{/snippet}
-
-{#snippet who(id: string | undefined, label: string, at: number)}
-	{#if id && onOpenAgent}
-		<button class="who link" onclick={() => onOpenAgent(id)}>{label}</button><span class="who">· {when(at)}</span>
-	{:else}
-		<span class="who">{label} · {when(at)}</span>
-	{/if}
 {/snippet}
 
 {#if agentDirectory.status === 'unreachable'}
@@ -111,68 +77,14 @@
 	{#if pending === 0}
 		<p class="empty">{t('shell.desk.nothingPending')}</p>
 	{/if}
-	{#each questions as q (q.id)}
-		<article class="card" class:high={q.importance === 'high'}>
-			<div class="card-head">
-				<QuestionIcon size={14} />
-				<span class="kind">{t('shell.desk.question')}</span>
-				{@render face(agentDirectory.agents.find((x) => x.id === q.agent))}
-				{@render who(q.agent, agentDirectory.agentName(q.agent), q.asked_at)}
-				{#if q.due_at}<span class="due">{t('shell.desk.due', { time: when(q.due_at) })}</span>{/if}
-			</div>
-			<div class="title">{q.title}</div>
-			{#if q.body}<div class="text">{q.body}</div>{/if}
-			{#if q.assumption}
-				<div class="meta"><span>{t('shell.desk.assumption')}</span>{q.assumption}</div>
-			{/if}
-			{#if q.default}
-				<div class="meta"><span>{t('shell.desk.default')}</span>{q.default}</div>
-			{/if}
-			<textarea
-				rows="2"
-				bind:value={answers[q.id]}
-				placeholder={t('shell.desk.answerPlaceholder')}
-				onkeydown={(e) => e.key === 'Enter' && (e.metaKey || e.ctrlKey) && (e.preventDefault(), answer(q))}
-			></textarea>
-			{#if errors[q.id]}<Notice>{errors[q.id]}</Notice>{/if}
-			<div class="actions">
-				<Button size="sm" onclick={() => onOpenSession(q.session)}>{t('shell.desk.openSession')}</Button>
-				<Button
-					size="sm"
-					variant="primary"
-					disabled={!(answers[q.id] ?? '').trim() || busy[q.id]}
-					onclick={() => answer(q)}
-				>
-					{#if busy[q.id]}<CircleNotchIcon size={13} class="spin" />{/if}
-					{t('shell.desk.answer')}
-				</Button>
-			</div>
-		</article>
-	{/each}
-	{#each actions as a (a.id)}
-		{@const agent = agentDirectory.agentOfSession(a.session_id)}
-		<article class="card">
-			<div class="card-head">
-				<ShieldCheckIcon size={14} />
-				<span class="kind">{t('shell.desk.action')}</span>
-				{@render face(agent)}
-				{@render who(agent?.id, agent?.name ?? a.cwd, a.created_at)}
-			</div>
-			<div class="title"><code>{a.name}</code> {a.summary}</div>
-			<details>
-				<summary>{t('shell.desk.arguments')}</summary>
-				<pre>{a.arguments}</pre>
-			</details>
-			{#if errors[a.id]}<Notice>{errors[a.id]}</Notice>{/if}
-			<div class="actions">
-				<Button size="sm" onclick={() => onOpenSession(a.session_id)}>{t('shell.desk.openSession')}</Button>
-				<Button size="sm" disabled={busy[a.id]} onclick={() => decide(a, false)}>{t('shell.desk.deny')}</Button>
-				<Button size="sm" variant="primary" disabled={busy[a.id]} onclick={() => decide(a, true)}>
-					{t('shell.desk.allow')}
-				</Button>
-			</div>
-		</article>
-	{/each}
+	<div class="cards">
+		{#each questions as q (q.id)}
+			<DeskCard question={q} {onOpenSession} {onOpenAgent} />
+		{/each}
+		{#each actions as a (a.id)}
+			<DeskCard action={a} {onOpenSession} {onOpenAgent} />
+		{/each}
+	</div>
 </section>
 {/if}
 
@@ -189,12 +101,17 @@
 		</div>
 	{/if}
 	{#if upcoming.length}
-		<div class="upcoming">
-			<span>{t('shell.schedule.upcoming')}</span>
+		<h3 class="sub">{t('shell.schedule.upcoming')}</h3>
+		<ul class="upcoming">
 			{#each upcoming as s (s.id)}
-				<span class="chip"><ClockIcon size={14} />{when(s.next_run_at! * 1000)} {agentDirectory.agentName(s.agent)} · {s.name}</span>
+				<li>
+					<ClockIcon size={14} />
+					<span class="time">{when(s.next_run_at! * 1000)}</span>
+					<span class="what">{s.name}</span>
+					<span class="who">{agentDirectory.agentName(s.agent)}</span>
+				</li>
 			{/each}
-		</div>
+		</ul>
 	{/if}
 </section>
 
@@ -252,94 +169,22 @@
 	.unreachable {
 		margin-top: 10px;
 	}
-	.card {
-		display: flex;
-		flex-direction: column;
-		gap: 7px;
-		margin-bottom: 10px;
-		padding: 12px 14px;
-		border: 1px solid var(--hairline);
-		border-radius: var(--r-md);
-		background: var(--surface);
-	}
-	.card.high {
-		border-color: color-mix(in oklab, var(--warn) 45%, var(--hairline));
-	}
-	.card-head {
-		display: flex;
-		align-items: center;
-		gap: 7px;
-		font-size: var(--fs-xs);
-		color: var(--dim);
-	}
-	.kind {
-		font-weight: 600;
-		color: var(--text);
-	}
 	.who {
 		color: var(--dim2);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
-	.due {
-		margin-left: auto;
-		color: var(--warn);
-		font-family: var(--font-mono);
-	}
 	.title {
 		font-size: var(--fs-sm);
 		font-weight: 600;
 		color: var(--text);
-	}
-	.title code {
-		font-family: var(--font-mono);
-		font-size: var(--fs-xs);
-		font-weight: 500;
-		color: var(--accent-bright);
 	}
 	.text {
 		font-size: var(--fs-sm);
 		color: var(--text);
 		line-height: 1.55;
 		white-space: pre-wrap;
-	}
-	.meta {
-		font-size: var(--fs-xs);
-		color: var(--dim);
-	}
-	.meta span {
-		margin-right: 6px;
-		color: var(--dim2);
-	}
-	textarea {
-		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
-		background: var(--surface2);
-		color: var(--text);
-		font-family: var(--font-sans);
-		font-size: var(--fs-sm);
-		padding: 7px 10px;
-		outline: none;
-		resize: vertical;
-	}
-	textarea:focus {
-		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
-	}
-	details {
-		font-size: var(--fs-xs);
-		color: var(--dim);
-	}
-	pre {
-		margin: 6px 0 0;
-		padding: 8px 10px;
-		border-radius: var(--r-sm);
-		background: var(--surface2);
-		font-family: var(--font-mono);
-		font-size: var(--fs-xs);
-		white-space: pre-wrap;
-		word-break: break-all;
-		color: var(--text);
 	}
 	.actions {
 		display: flex;
@@ -351,25 +196,48 @@
 		flex-wrap: wrap;
 		gap: 6px;
 	}
+	.cards {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+	}
+	h3.sub {
+		margin-top: 14px;
+	}
 	.upcoming {
 		display: flex;
-		flex-wrap: wrap;
+		flex-direction: column;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.upcoming li {
+		display: flex;
 		align-items: center;
-		gap: 6px;
-		margin-top: 8px;
+		gap: 8px;
+		min-width: 0;
+		padding: 6px 2px;
 		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
-	.link {
-		padding: 0;
-		border: none;
-		background: none;
-		font: inherit;
-		cursor: pointer;
+	.upcoming li > :global(svg) {
+		flex-shrink: 0;
 	}
-	.link:hover {
+	.upcoming .time {
+		flex-shrink: 0;
+		font-family: var(--font-mono);
+		font-variant-numeric: tabular-nums;
+	}
+	.upcoming .what {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 		color: var(--text);
-		text-decoration: underline;
+	}
+	.upcoming .who {
+		flex-shrink: 1;
+		margin-left: auto;
 	}
 	button.chip:not(:disabled) {
 		cursor: pointer;
@@ -408,10 +276,21 @@
 		cursor: pointer;
 		text-align: left;
 	}
+	.report-head > :global(svg) {
+		flex-shrink: 0;
+	}
 	.report-head .title {
 		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 		font-weight: 500;
 		color: var(--dim);
+	}
+	.report-head .who {
+		flex-shrink: 0;
+		max-width: 45%;
 	}
 	.report.unread .title {
 		font-weight: 600;

@@ -353,7 +353,20 @@ const shell = {
 			notify: '开启通知',
 			notifyHint: '派发完成、计划待确认时通知这台手机',
 			notifyOn: '通知已开启',
-			notifyUnsupported: '这个浏览器不支持通知。iPhone 需要先把 JuCode 添加到主屏幕，再从主屏幕打开。'
+			notifyUnsupported: '这个浏览器不支持通知。iPhone 需要先把 JuCode 添加到主屏幕，再从主屏幕打开。',
+			new: '新派发',
+			newHint: '一次写下要做的几件事，JuCode 会分到对应项目的会话里执行，完成后汇总结果。',
+			history: '派发记录',
+			none: '还没有派发',
+			request: '需求',
+			tasks: '任务',
+			summary: '结果汇总',
+			progress: '{done}/{total} 完成',
+			awaitingHint: '计划已拆好，确认后开始执行。',
+			note: '补充说明（可选）',
+			planning: '正在拆分任务…',
+			reply: '最近回复',
+			gone: '这条派发已不在这台电脑上'
 		},
 		desk: {
 			title: '工作台',
@@ -382,7 +395,11 @@ const shell = {
 			statusNext: '下次 {time}',
 			statusOff: '已停用',
 			statusIdle: '空闲',
-			pendingFor: '{n} 件待你处理'
+			pendingFor: '{n} 件待你处理',
+			report: '汇报',
+			handled: '这件事已经处理了',
+			reportGone: '这份汇报已不在了',
+			nothingScheduled: '没有安排中的任务'
 		},
 		agentPage: {
 			settings: '设置',
@@ -1028,7 +1045,20 @@ const shell = {
 			notify: 'Turn on notifications',
 			notifyHint: 'Hear on this phone when a dispatch is done or its plan needs you',
 			notifyOn: 'Notifications are on',
-			notifyUnsupported: 'This browser cannot show notifications. On an iPhone, add JuCode to the Home Screen and open it from there.'
+			notifyUnsupported: 'This browser cannot show notifications. On an iPhone, add JuCode to the Home Screen and open it from there.',
+			new: 'New dispatch',
+			newHint: 'Write down everything that needs doing. JuCode hands each part to a session in the right project and sums up the results.',
+			history: 'Dispatches',
+			none: 'Nothing dispatched yet',
+			request: 'Request',
+			tasks: 'Tasks',
+			summary: 'Summary',
+			progress: '{done}/{total} done',
+			awaitingHint: 'The plan is ready. Nothing runs until you confirm it.',
+			note: 'Anything to add (optional)',
+			planning: 'Splitting it into tasks…',
+			reply: 'Latest reply',
+			gone: 'This dispatch is no longer on this computer'
 		},
 		desk: {
 			title: 'Desk',
@@ -1057,7 +1087,11 @@ const shell = {
 			statusNext: 'Next {time}',
 			statusOff: 'Disabled',
 			statusIdle: 'Idle',
-			pendingFor: '{n} waiting for you'
+			pendingFor: '{n} waiting for you',
+			report: 'Report',
+			handled: 'This one has been dealt with',
+			reportGone: 'This report is gone',
+			nothingScheduled: 'Nothing scheduled'
 		},
 		agentPage: {
 			settings: 'Settings',

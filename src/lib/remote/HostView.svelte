@@ -14,8 +14,12 @@
 	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
 	import ChatsCircleIcon from 'phosphor-svelte/lib/ChatsCircleIcon';
 	import PaperPlaneTiltIcon from 'phosphor-svelte/lib/PaperPlaneTiltIcon';
-	import DispatchView from './DispatchView.svelte';
-	import DeskContent from '$lib/DeskContent.svelte';
+	import DispatchList from './DispatchList.svelte';
+	import DispatchComposer from './DispatchComposer.svelte';
+	import DispatchScreen from './DispatchScreen.svelte';
+	import DeskList from './DeskList.svelte';
+	import DeskHome from './DeskHome.svelte';
+	import DeskItemScreen from './DeskItemScreen.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import type { AgentView } from '$lib/agents.svelte';
@@ -71,7 +75,9 @@
 	// svelte-ignore state_referenced_locally
 	provideHost(conn);
 
-	let tab = $state<'projects' | 'dispatch' | 'desk'>('projects');
+	type Tab = 'projects' | 'dispatch' | 'desk';
+	const TABS: Tab[] = ['projects', 'dispatch', 'desk'];
+	let tab = $state<Tab>('projects');
 	const TAB_TITLES = { projects: 'shell.remote.sessions', dispatch: 'shell.dispatch.title', desk: 'shell.desk.title' } as const;
 	/** Pages opened over the tabs, last on top. */
 	type Screen = { key: number } & (
@@ -79,20 +85,26 @@
 		| { kind: 'project'; project: ProjectView }
 		| { kind: 'add' }
 		| { kind: 'files' | 'changes'; root: string; title: string }
+		| { kind: 'dispatch'; id: string }
+		| { kind: 'compose' }
+		| { kind: 'desk'; item: string }
 	);
-	let stack = $state<Screen[]>([]);
+	/** Each tab keeps its own pages: switching tabs on a wide page shows that
+	 *  tab's pane as it was left (and keeps its sessions streaming). */
+	let stacks = $state<Record<Tab, Screen[]>>({ projects: [], dispatch: [], desk: [] });
+	const stack = $derived(stacks[tab]);
 	let nextKey = 0;
 	type NewScreen = Screen extends infer S ? (S extends Screen ? Omit<S, 'key'> : never) : never;
 	function push(screen: NewScreen) {
-		stack = [...stack, { ...screen, key: nextKey++ } as Screen];
+		stacks[tab] = [...stacks[tab], { ...screen, key: nextKey++ } as Screen];
 	}
 	function pop() {
-		stack = stack.slice(0, -1);
+		stacks[tab] = stacks[tab].slice(0, -1);
 	}
 	/** Opens a page from the list: on a wide screen it replaces the right
 	 *  pane's pages; on a phone it goes on top. */
 	function open(screen: NewScreen) {
-		if (wide) stack = [];
+		if (wide) stacks[tab] = [];
 		push(screen);
 	}
 
@@ -125,25 +137,35 @@
 	/** Past pairing and connected once: the lists and pages are showing. */
 	const ready = $derived(conn.everConnected && !conn.relayError?.fatal);
 
-	/** The session on top of the pages, highlighted in the list. */
-	const currentSession = $derived.by(() => {
-		const top = stack.at(-1);
-		return top?.kind === 'session' ? top.session : undefined;
-	});
+	/** What the page on top shows, highlighted in its tab's list. */
+	const top = $derived(stack.at(-1));
+	const currentSession = $derived(top?.kind === 'session' ? top.session : undefined);
+	const currentDispatch = $derived(top?.kind === 'dispatch' ? top.id : undefined);
+	const currentDeskItem = $derived(top?.kind === 'desk' ? top.item : undefined);
 
-	function openSession(session: string) {
+	/** A daemon session's page, from what the daemon's list knows of it. */
+	function sessionScreen(session: string, title?: string): NewScreen {
 		const agent = conn.agents.agentOfSession(session);
 		const known = conn.agents.sessions.find((s) => s.session === session);
-		open({ kind: 'session', session, cwd: known?.cwd, title: agent?.name ?? known?.title ?? session });
+		return {
+			kind: 'session',
+			session,
+			cwd: known?.cwd,
+			engine: known?.engine && known.engine !== 'jucode' ? known.engine : undefined,
+			title: title ?? agent?.name ?? known?.title ?? session
+		};
+	}
+
+	/** An agent's latest session, or a new one. */
+	function agentScreen(id: string): NewScreen {
+		const agent = conn.agents.agents.find((a) => a.id === id);
+		const name = agent?.name ?? id;
+		const latest = conn.agents.latestSession(id);
+		return latest ? { kind: 'session', session: latest.session, title: name } : { kind: 'session', agent: id, title: name };
 	}
 
 	function openAgent(agent: AgentView) {
-		const latest = conn.agents.latestSession(agent.id);
-		open(
-			latest
-				? { kind: 'session', session: latest.session, title: agent.name }
-				: { kind: 'session', agent: agent.id, title: agent.name }
-		);
+		open(agentScreen(agent.id));
 	}
 </script>
 
@@ -226,35 +248,42 @@
 					/>
 				</div>
 				<div class="tabbody" hidden={tab !== 'dispatch'}>
-					<DispatchView
-						onOpenSession={(session, title) => {
-							const known = conn.agents.sessions.find((s) => s.session === session);
-							open({
-								kind: 'session',
-								session,
-								cwd: known?.cwd,
-								engine: known?.engine && known.engine !== 'jucode' ? known.engine : undefined,
-								title
-							});
-						}}
-						onOpenDispatch={(d) => open({ kind: 'session', session: d.id, title: t('shell.dispatch.title') })}
+					<DispatchList
+						current={currentDispatch}
+						composing={wide ? stacks.dispatch.length === 0 : false}
+						onNew={() => (wide ? (stacks.dispatch = []) : push({ kind: 'compose' }))}
+						onOpen={(d) => open({ kind: 'dispatch', id: d.id })}
 					/>
 				</div>
 				<div class="tabbody" hidden={tab !== 'desk'}>
-					<DeskContent onOpenSession={openSession} />
+					<DeskList
+						current={currentDeskItem}
+						status={!wide}
+						onOpen={(item) => open({ kind: 'desk', item })}
+						onOpenAgent={(id) => open(agentScreen(id))}
+					/>
 				</div>
 			</main>
 			{#if wide}{@render resizer()}{/if}
 		</aside>
 		<section class="pane">
+			<!-- With nothing opened from the list, a wide pane shows the tab's
+			     own page: the composer, the desk's queue. -->
 			{#if wide && stack.length === 0}
-				<div class="pane-empty">
-					<ChatsCircleIcon size={32} />
-					<p>{t('shell.remote.pickSomething')}</p>
-				</div>
+				{#if tab === 'dispatch'}
+					<DispatchComposer onSent={(d) => open({ kind: 'dispatch', id: d.id })} />
+				{:else if tab === 'desk'}
+					<DeskHome onOpenSession={(s) => push(sessionScreen(s))} onOpenAgent={(id) => push(agentScreen(id))} />
+				{:else}
+					<div class="pane-empty">
+						<ChatsCircleIcon size={32} />
+						<p>{t('shell.remote.pickSomething')}</p>
+					</div>
+				{/if}
 			{/if}
-			{#each stack as screen, i (screen.key)}
-				<div class="layer" style:z-index={20 + i} out:layerOut>
+			{#each TABS as name (name)}
+			{#each stacks[name] as screen, i (screen.key)}
+				<div class="layer" hidden={name !== tab} style:z-index={20 + i} out:layerOut>
 					{#if screen.kind === 'session'}
 						{@const root = screen.cwd && !screen.chat && !screen.agent ? screen.cwd : null}
 						{#if screens.RemoteSession}
@@ -287,6 +316,29 @@
 						/>
 					{:else if screen.kind === 'add'}
 						<AddProjectScreen onBack={pop} onAdded={pop} />
+					{:else if screen.kind === 'dispatch'}
+						{@const id = screen.id}
+						<DispatchScreen
+							{id}
+							onBack={pop}
+							onOpenSession={(session, title) => push(sessionScreen(session, title))}
+							onOpenProcess={() => push({ kind: 'session', session: id, title: t('shell.dispatch.title') })}
+						/>
+					{:else if screen.kind === 'compose'}
+						<DispatchComposer
+							onBack={pop}
+							onSent={(d) => {
+								pop();
+								push({ kind: 'dispatch', id: d.id });
+							}}
+						/>
+					{:else if screen.kind === 'desk'}
+						<DeskItemScreen
+							key={screen.item}
+							onBack={pop}
+							onOpenSession={(s) => push(sessionScreen(s))}
+							onOpenAgent={(id) => push(agentScreen(id))}
+						/>
 					{:else if screen.kind === 'files'}
 						{#if screens.FilesScreen}
 							<screens.FilesScreen root={screen.root} title={screen.title} onBack={pop} />
@@ -299,6 +351,7 @@
 						{@render loadingPage(screen.title)}
 					{/if}
 				</div>
+			{/each}
 			{/each}
 		</section>
 		{#if creating}
