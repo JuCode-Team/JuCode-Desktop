@@ -224,7 +224,8 @@ body {
 :root[data-vibrancy='on'] body {
 	background: transparent;
 }
-/* Windows and Linux have no native frost (see src-tauri/Cargo.toml). */
+/* Windows uses the same fills over Mica / Acrylic (the window is transparent
+   there too, see tauri.windows.conf.json); Linux has no native frost. */
 :root[data-vibrancy='on'] {
 	--vibrancy-tint: color-mix(in oklab, var(--sidebar) 36%, transparent);
 	--vibrancy-chrome: color-mix(in oklab, var(--rail) 32%, transparent);

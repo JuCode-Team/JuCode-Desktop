@@ -57,11 +57,12 @@ tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 # （非 macOS 上不起作用），和共用依赖里的 macos-private-api feature 保持一致：tauri dev 会按
 # 配置自动改写 feature，两边只在 macOS 开时，它会把 feature 写进共用依赖，导致 Linux/Windows
 # 构建报错。
-[target."cfg(target_os = \"macos\")".dependencies]
-# 窗口磨砂：macOS 的 NSVisualEffectView（透明窗口在 tauri.macos.conf.json 里开启）。Windows
-# 不做：tao 的透明窗口靠 DwmEnableBlurBehindWindow，系统会在半透明处画出原生标题栏
-#（tauri#14764）；Linux 没有通用的模糊接口。两者都保持不透明。
+[target."cfg(any(target_os = \"macos\", target_os = \"windows\"))".dependencies]
+# 窗口磨砂：macOS 的 NSVisualEffectView，Windows 的 Mica / Acrylic（透明窗口在各自的
+# tauri.<os>.conf.json 里开启；Linux 没有通用的模糊接口，保持不透明）。
 window-vibrancy = "0.5"
+
+[target."cfg(target_os = \"macos\")".dependencies]
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSImage", "NSResponder"] }
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSData"] }

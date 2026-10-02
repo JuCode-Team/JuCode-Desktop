@@ -10,7 +10,7 @@ type PrefsShape = {
 	 *  always open in the editor. */
 	htmlOpenInBrowser: boolean;
 	/** Frost the sidebar and window chrome with the native window effect
-	 *  (macOS vibrancy). The native layer is always
+	 *  (macOS vibrancy, Windows Mica / Acrylic). The native layer is always
 	 *  present but stays invisible unless this opts the CSS in (the root
 	 *  `data-vibrancy` flag), so toggling needs no window round-trip. */
 	sidebarVibrancy: boolean;
@@ -66,7 +66,8 @@ export const vibrancySupported = () => prefs.windowEffect !== null;
 class PrefsStore {
 	htmlOpenInBrowser = $state(DEFAULTS.htmlOpenInBrowser);
 	sidebarVibrancy = $state(DEFAULTS.sidebarVibrancy);
-	/** `vibrancy`; null where none applied (Windows, Linux, the browser). */
+	/** `vibrancy`, `mica` or `acrylic`; null where none applied (Linux, the
+	 *  browser, an unsupported Windows). */
 	windowEffect = $state<string | null>(
 		// The macOS app always has one: assume it for the first frame (no flash
 		// of an opaque sidebar); window_effect confirms it right after.
