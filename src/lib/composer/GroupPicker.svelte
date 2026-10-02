@@ -39,6 +39,7 @@
 	import { readConfig, writeConfig } from '$lib/protocol';
 	import { toast } from '$lib/ui/toast.svelte';
 	import { t } from '$lib/i18n';
+	import { fmtContext } from './modelRows';
 
 	let {
 		model,
@@ -142,11 +143,12 @@
 				{/if}
 				{#each listed as g (g.id)}
 					{@const tag = billing(g)}
+					{@const win = fmtContext(g.context_windows?.[base]?.context_window)}
 					<button class="pop-row" role="option" aria-selected={current?.id === g.id} onclick={() => pick(g.id)}>
 						<span class="pop-txt">
 							<span class="pop-label">{g.name}</span>
-							{#if g.description || tag}
-								{@const desc = [tag, g.description].filter(Boolean).join(' · ')}
+							{#if g.description || tag || win}
+								{@const desc = [win, tag, g.description].filter(Boolean).join(' · ')}
 								<span class="pop-desc" title={desc}>{desc}</span>
 							{/if}
 						</span>

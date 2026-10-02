@@ -53,6 +53,7 @@
 	import { t } from '$lib/i18n';
 	import { SessionStore, listedSessions } from '$lib/session.svelte';
 	import { workspaces } from '$lib/workbench/workspaceStore.svelte';
+	import { refreshJucodeModels } from '$lib/jucodeModels';
 	import {
 		activateTab,
 		closeTab,
@@ -1046,6 +1047,12 @@
 			readAuthProviders()
 				.then((p) => {
 					providers = p;
+					// Display names and windows the gateway changed since the models
+					// were picked (the engines read them from config.json).
+					if (p.includes('jucode'))
+						refreshJucodeModels()
+							.then((changed) => changed && loadProviders())
+							.catch(() => {});
 					// First run: show the setup wizard only when nothing is configured yet
 					// (a genuinely fresh machine). Pre-configured users skip it silently.
 					if (!localStorage.getItem('jucode-setup-done')) {

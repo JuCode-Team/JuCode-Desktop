@@ -17,6 +17,7 @@
 	import { toast } from '$lib/ui/toast.svelte';
 	import { fetchJucodeModels, readConfig, writeConfig, type JucodeModel } from '$lib/protocol';
 	import { fmtContext } from '$lib/composer/modelRows';
+	import { savedModel } from '$lib/jucodeModels';
 	import { t } from '$lib/i18n';
 
 	let { onClose }: { onClose: () => void } = $props();
@@ -143,15 +144,7 @@
 		const order = groups.length && !query ? groups.flatMap(([, list]) => list) : models;
 		const chosen = order
 			.filter((m) => picked.includes(m.id))
-			.map((m) => ({
-				// Explicit unknowns (0 / ["none"]), as the engine's own login
-				// writes them: a missing field would read back as a default.
-				name: m.id,
-				context_window: m.context_window ?? 0,
-				max_context_window: m.max_context_window ?? m.context_window ?? 0,
-				max_output_tokens: m.max_output_tokens ?? 0,
-				reasoning_efforts: m.reasoning_efforts ?? ['none']
-			}));
+			.map(savedModel);
 		// Windows for models outside this account's list (another login) stay.
 		const overrides: Record<string, number> = {};
 		for (const [k, v] of Object.entries((cfg.context_window_overrides ?? {}) as Record<string, unknown>)) {
@@ -204,7 +197,7 @@
 						{@const max = maxWindow(m)}
 						<div class="row">
 							<Checkbox checked={picked.includes(m.id)} onchange={(on) => toggle(m.id, on)}>
-								<span class="name">{m.id}</span>
+								<span class="name" title={m.id}>{m.display_name || m.id}</span>
 							</Checkbox>
 							{#if max > (m.context_window ?? 0) && m.context_window}
 								<span class="ctx">{t('shell.modelSetup.windowMax', { max: fmtContext(max) })}</span>

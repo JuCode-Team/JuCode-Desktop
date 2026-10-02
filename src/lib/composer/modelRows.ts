@@ -27,7 +27,7 @@ export interface EngineModel {
 
 export interface CatalogProvider {
 	id: string;
-	models: { name: string; context_window?: number }[];
+	models: { name: string; display_name?: string | null; context_window?: number }[];
 }
 
 export interface ModelGroupLabels {
@@ -76,7 +76,7 @@ function claudeLabel(id: string): string {
 
 export function toolModels(
 	models: EngineModel[],
-	served: { name: string; context_window?: number }[],
+	served: { name: string; display_name?: string | null; context_window?: number }[],
 	onJucode: boolean
 ): ToolModel[] {
 	const keyOf = (m: EngineModel) => m.vendor || m.model;
@@ -106,7 +106,7 @@ export function toolModels(
 		}
 		byKey.set(g.name, {
 			key: g.name,
-			label: g.name.startsWith('claude-') ? claudeLabel(g.name) : g.name,
+			label: g.display_name || (g.name.startsWith('claude-') ? claudeLabel(g.name) : g.name),
 			vendor: g.name,
 			context_window: g.context_window,
 			jucode: g.name,
@@ -213,7 +213,7 @@ export function buildModelRows(input: {
 		.flatMap((pv) =>
 			pv.models.map((m) => ({
 				id: `${pv.id}::${m.name}`,
-				label: m.name,
+				label: m.display_name || m.name,
 				vendor: m.name,
 				detail: pv.id === 'jucode' ? jucodeDetail(m.context_window, unsetWindow) : detailOf(pv.id, m.context_window),
 				active: false,

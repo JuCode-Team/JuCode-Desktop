@@ -292,6 +292,10 @@ export type JucodeModel = {
 	max_context_window?: number;
 	max_output_tokens?: number;
 	reasoning_efforts?: string[];
+	/** What the model is called for people; absent: the id. */
+	display_name?: string;
+	/** The window range through each of the account's groups, by group id. */
+	group_context_windows?: Record<string, { context_window: number; max_context_window: number }>;
 };
 export async function fetchJucodeModels(): Promise<JucodeModel[]> {
 	const v = await invoke<{ data?: JucodeModel[] }>('fetch_jucode_models');
@@ -304,6 +308,8 @@ export type JucodeGroup = {
 	billing_source?: 'plan_only' | 'balance_only' | '';
 	rate_multiplier: number;
 	models?: string[];
+	/** Each model's window range through this group, by model name. */
+	context_windows?: Record<string, { context_window: number; max_context_window: number }>;
 };
 export async function fetchJucodeGroups(): Promise<JucodeGroup[]> {
 	const v = await invoke<{ groups?: JucodeGroup[] }>('fetch_jucode_groups');
@@ -488,6 +494,7 @@ export interface ProviderInfo {
 	protocol: string;
 	models: {
 		name: string;
+		display_name?: string | null;
 		context_window?: number;
 		max_context_window?: number;
 		max_output_tokens?: number;

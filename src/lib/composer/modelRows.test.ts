@@ -28,6 +28,22 @@ describe('buildModelRows', () => {
 		});
 	});
 
+	it('shows the gateway display name, keeping the id for the command and the icon', () => {
+		const rows = buildModelRows({
+			...base,
+			backendId: 'jucode',
+			provider: 'deepseek',
+			configured: ['jucode', 'deepseek'],
+			providersList: [{ id: 'jucode', models: [{ name: 'gpt-6.1-sol', display_name: 'GPT-6.1 Sol' }, { name: 'glm-5' }] }],
+			models: [{ model: 'deepseek-v4', label: 'DeepSeek V4', active: true }]
+		});
+		expect(rows.map((r) => [r.label, r.vendor, r.command])).toEqual([
+			['GPT-6.1 Sol', 'gpt-6.1-sol', '@switch jucode gpt-6.1-sol'],
+			['glm-5', 'glm-5', '@switch jucode glm-5'],
+			['DeepSeek V4', 'deepseek-v4', '/model deepseek-v4']
+		]);
+	});
+
 	it('marks JuCode models whose window nobody configured', () => {
 		const rows = buildModelRows({
 			...base,

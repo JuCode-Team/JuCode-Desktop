@@ -231,7 +231,7 @@
 	const sid = $derived(chat.sessionId || session || '');
 	const view = $derived(agentDirectory.sessions.find((x) => x.session === sid));
 	const toolSession = $derived((engine === 'claude' || engine === 'codex') && !!sid);
-	let catalog = $state<{ models: { name: string; context_window?: number }[]; groups: JucodeGroup[] } | null>(null);
+	let catalog = $state<{ models: { name: string; display_name?: string | null; context_window?: number }[]; groups: JucodeGroup[] } | null>(null);
 	function loadCatalog() {
 		daemon
 			.request({ op: 'gateway_catalog' })
