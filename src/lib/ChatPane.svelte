@@ -69,6 +69,7 @@
 	import type { SectionKey } from '$lib/settings/nav';
 	import type { ErrorAction } from '$lib/errorInfo';
 	import FindBar from '$lib/shell/FindBar.svelte';
+	import { autoRetry } from '$lib/autoRetry.svelte';
 
 	// One full conversation (transcript + composer + approvals + pickers) for a
 	// single session, extracted from the page so several chats can tile side by
@@ -657,6 +658,7 @@
 		imageSeq = 0;
 	}
 	function stop() {
+		autoRetry.cancel(chat);
 		send({ op: 'interrupt' });
 	}
 	function respondApproval(op: ApproveOp) {
@@ -1001,7 +1003,7 @@
 	<div class="mainwrap" class:resizing={dragW !== null} bind:clientWidth={wrapW}>
 	<main bind:this={scroller} onscroll={onScroll}>
 		<div bind:this={contentEl}>
-			<MessageList bind:this={messageList} bind:mark messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} />
+			<MessageList bind:this={messageList} bind:mark messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} />
 		</div>
 		{#if chat.booting && chat.engineState !== 'exited'}
 			<div class="welcome spawning">

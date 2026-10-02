@@ -1,4 +1,4 @@
-import { ChatState, UNTITLED } from './chat.svelte';
+import { AUTO_CONTINUE, ChatState, UNTITLED } from './chat.svelte';
 import { acpAgentsList, closeSession, daemon, hostSession, sessionMeta, sessionHistory, projectRoot, chatsDir, writeConfig, git } from './protocol';
 import type { EngineSpec } from './daemon';
 import { canHandOffToTui, isValidResumeSessionId } from './tuiHandoff';
@@ -936,6 +936,58 @@ export class SessionStore {
 			s.chat.switching = false;
 			this.#engineFailed(s.chat, e);
 		}
+	}
+
+	/** Picks a failed turn back up in place (autoRetry.ts decides when).
+	 *  `started`: the engine had begun the turn. JuCode runs the conversation
+	 *  again as it stands. A turn that produced nothing is undone and its
+	 *  message sent again where the engine can undo (Codex, Claude Code); one
+	 *  that did produce something, or that cannot be undone, gets a "continue"
+	 *  shown as a note, not as a message. */
+	async retryTurn(id: string, note: string, started: boolean) {
+		const s = this.allSessions.find((x) => x.id === id);
+		if (!s || s.dormant || s.draft || s.chat.busy) return;
+		const c = s.chat;
+		c.clearFailure();
+		const last = c.lastUserTurn();
+		const output = c.turnHadOutput();
+		const auto = c.lastTurnAuto;
+		// The note goes in after any undo, which drops what follows the turn.
+		const send = (text: string, hidden: boolean) => {
+			c.messages.push({ kind: 'system', text: note });
+			if (hidden) c.autoContinue(text);
+			else c.optimisticUser(text, undefined, true);
+			dispatch(id, { op: 'user_message', content: text });
+		};
+		if (s.backendId === 'jucode') {
+			c.messages.push({ kind: 'system', text: note });
+			dispatch(id, { op: 'continue' });
+			return;
+		}
+		const plain = !auto && last && !last.images ? last : null;
+		// The message never reached the engine: send it again as it was.
+		if (!started && plain) {
+			c.truncateToUserTurn(plain.index);
+			send(plain.text, false);
+			return;
+		}
+		if (!output && (auto || plain) && s.backendId === 'codex') {
+			// The daemon holds the message until the rollback is done.
+			dispatch(id, { op: 'command', input: '/rewind 1' });
+			if (plain) c.truncateToUserTurn(plain.index);
+			send(plain ? plain.text : AUTO_CONTINUE, !plain);
+			return;
+		}
+		// Claude Code: a "continue" is not undone. The reply before it may end
+		// in a tool call whose result would be cut off by resuming there.
+		if (!output && plain && s.backendId === 'claude') {
+			// Resumed at the reply before the failed turn (a respawn).
+			await this.rewindClaudeSession(id, c.claudeRewindTarget(plain.index), plain.index);
+			if (this.#gone(s)) return;
+			send(plain.text, false);
+			return;
+		}
+		send(AUTO_CONTINUE, true);
 	}
 
 	removeSession(id: string) {

@@ -31,6 +31,9 @@
 		call = null,
 		compactionTokens = 0,
 		retry = null,
+		autoRetry = null,
+		onAutoRetryNow,
+		onAutoRetryCancel,
 		findActive = null,
 		scroller = null,
 		onEdit,
@@ -51,6 +54,10 @@
 		compactionTokens?: number;
 		/** A failed model request being re-sent: shown instead of the phase. */
 		retry?: RetryState | null;
+		/** The app's retry of a failed turn, waiting (autoRetry.ts). */
+		autoRetry?: RetryState | null;
+		onAutoRetryNow?: () => void;
+		onAutoRetryCancel?: () => void;
 		findActive?: number | null;
 		// The scroll viewport (owned by +page). When provided and the history is
 		// long, rows outside the viewport are windowed out.
@@ -531,6 +538,8 @@
 	{/each}
 	{#if retry}
 		<RetryNotice {retry} {backend} />
+	{:else if autoRetry}
+		<RetryNotice retry={autoRetry} {backend} onNow={onAutoRetryNow} onCancel={onAutoRetryCancel} />
 	{:else}
 		<Indicator phase={shownPhase} tokens={compactionTokens} {call} />
 	{/if}

@@ -9,7 +9,14 @@
 	import type { RetryState } from '$lib/chat.svelte';
 	import { t } from '$lib/i18n';
 
-	let { retry, backend = '' }: { retry: RetryState; backend?: string } = $props();
+	// `onNow` / `onCancel`: the app's own retry of a failed turn (autoRetry.ts),
+	// which the user can bring forward or call off; the engine's has neither.
+	let {
+		retry,
+		backend = '',
+		onNow,
+		onCancel
+	}: { retry: RetryState; backend?: string; onNow?: () => void; onCancel?: () => void } = $props();
 
 	let now = $state(Date.now());
 	$effect(() => {
@@ -32,9 +39,11 @@
 <div class="retry" role="status">
 	<div class="head">
 		<span class="ico" class:spin={left === 0}><ArrowClockwiseIcon size={15} /></span>
-		<span class="title">{t('chat.retry.title')}</span>
+		<span class="title">{t(onCancel ? 'chat.autoRetry.title' : 'chat.retry.title')}</span>
 		<span class="count">{t('chat.retry.attempt', { n: retry.attempt, max: retry.max })}</span>
 		<span class="when">{left > 0 ? t('chat.retry.in', { s: left }) : t('chat.retry.now')}</span>
+		{#if onNow}<button class="act" onclick={onNow}>{t('chat.autoRetry.now')}</button>{/if}
+		{#if onCancel}<button class="act" onclick={onCancel}>{t('chat.autoRetry.cancel')}</button>{/if}
 	</div>
 	{#if retry.max > 1}
 		<div class="bar" aria-hidden="true">
@@ -102,6 +111,20 @@
 		font-size: var(--fs-xs);
 		color: var(--dim);
 		font-variant-numeric: tabular-nums;
+	}
+	.act {
+		flex: none;
+		padding: 2px 8px;
+		border: 1px solid var(--border);
+		border-radius: var(--r-sm);
+		background: none;
+		color: var(--text);
+		font: inherit;
+		font-size: var(--fs-xs);
+		cursor: pointer;
+	}
+	.act:hover {
+		background: var(--surface2);
 	}
 	/* One segment per attempt: failed ones filled, the coming one pulsing. */
 	.bar {

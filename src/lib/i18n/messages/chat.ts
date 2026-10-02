@@ -137,6 +137,13 @@ const chat = {
 		turnRail: '对话导航',
 		cite: '引用',
 		resizeColumn: '拖动调整对话宽度',
+		autoRetry: {
+			title: '连接中断，将自动继续',
+			now: '立即重试',
+			cancel: '取消',
+			note: '连接中断，已自动重试（第 {n} / {max} 次）',
+			resumed: '连接中断后自动继续'
+		},
 		retry: {
 			title: '请求失败，正在重试',
 			attempt: '第 {n} / {max} 次',
@@ -332,6 +339,13 @@ const chat = {
 		turnRail: 'Conversation turns',
 		cite: 'Quote',
 		resizeColumn: 'Drag to resize the conversation',
+		autoRetry: {
+			title: 'Connection lost; continuing automatically',
+			now: 'Retry now',
+			cancel: 'Cancel',
+			note: 'Connection lost; retried automatically (attempt {n} of {max})',
+			resumed: 'Continued automatically after a lost connection'
+		},
 		retry: {
 			title: 'Request failed, retrying',
 			attempt: 'attempt {n} of {max}',

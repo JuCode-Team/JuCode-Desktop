@@ -53,6 +53,7 @@
 	import { t } from '$lib/i18n';
 	import { SessionStore, listedSessions } from '$lib/session.svelte';
 	import { workspaces } from '$lib/workbench/workspaceStore.svelte';
+	import { autoRetry } from '$lib/autoRetry.svelte';
 	import { refreshJucodeModels } from '$lib/jucodeModels';
 	import {
 		activateTab,
@@ -1022,6 +1023,10 @@
 			// (and resolve pending ⌘K AI edits).
 			ChatState.onFilesEdited = (paths) => editorStore.handleEngineEdit(paths);
 			cleanups.push(() => (ChatState.onFilesEdited = null));
+			// A turn that failed on the connection is picked back up (autoRetry.ts).
+			autoRetry.store = store;
+			ChatState.onTurnFailed = (c, message, started) => autoRetry.failed(c, message, started);
+			cleanups.push(() => (ChatState.onTurnFailed = null));
 			if (disposed) {
 				cleanups.forEach((f) => f());
 				return;

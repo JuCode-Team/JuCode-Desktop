@@ -77,7 +77,11 @@ export function describeError(raw: string, backend = ''): ErrorInfo | null {
 		/overloaded|bad gateway|service unavailable|gateway timeout|upstream|internal server error/i.test(low)
 	)
 		return info('upstream');
-	if (/stream disconnected|connection (reset|refused|closed)|econn|etimedout|enotfound|timed? ?out|network|dns|error sending request|broken pipe/i.test(low))
+	if (
+		/stream disconnected|stream closed before|response body closed|connection (reset|refused|closed|abort|error|failed)|econn|etimedout|enotfound|timed? ?out|network|dns|error sending request|broken pipe|unexpected eof|io error:|decoding chunk|exceeded retry limit/i.test(
+			low
+		)
+	)
 		return info('network');
 	if (status === 403 || /forbidden|permission denied|not allowed/i.test(low)) return info('forbidden');
 	if (status === 400 || /invalid_request|请求参数有误|bad request/i.test(text)) return info('badRequest');

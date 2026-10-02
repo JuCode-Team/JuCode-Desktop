@@ -156,6 +156,10 @@ export interface TurnDiff {
 /** Reactive chat state projected from the engine's AgentEvent stream. */
 /** A failed model request being re-sent: attempt `attempt` of `max`, after
  *  `delayMs` from `at` (ms), because of `reason` (the provider's error). */
+/** What an automatic retry sends when the failed turn is kept (autoRetry.ts).
+ *  Recognised again in a reloaded transcript, where it shows as a note. */
+export const AUTO_CONTINUE = '继续（连接中断后自动重试）';
+
 export interface RetryState {
 	attempt: number;
 	max: number;
@@ -176,6 +180,17 @@ export class ChatState {
 	/** Set by the page: invoked with the file paths a successful edit tool
 	 *  touched, so the built-in editor can auto-reload open tabs (⌘K flow). */
 	static onFilesEdited: ((paths: string[]) => void) | null = null;
+	/** A turn failed (see autoRetry.ts). `started`: the engine had begun it. */
+	static onTurnFailed: ((chat: ChatState, message: string, started: boolean) => void) | null = null;
+
+	/** The automatic retry waiting to pick a failed turn back up (autoRetry.ts). */
+	autoRetry = $state<RetryState | null>(null);
+	/** Automatic retries since the user last sent a message. */
+	autoRetries = 0;
+	/** The engine's last turn is an automatic "continue" (no bubble of its own). */
+	lastTurnAuto = false;
+	/** Where the messages of that turn start. */
+	#autoFrom = -1;
 
 	/** Which engine backend drives this session ('jucode' default). Set once at
 	 *  session creation; the `caps()` helper gates UI surfaces off it. */
@@ -371,10 +386,61 @@ export class ChatState {
 
 	/** Show a just-sent user message immediately, before the engine echoes it.
 	 *  The echo is de-duplicated in the `user_message` handler. */
-	optimisticUser(content: string, images?: string[]) {
+	optimisticUser(content: string, images?: string[], auto = false) {
+		if (!auto) {
+			this.autoRetries = 0;
+			this.autoRetry = null;
+		}
+		this.lastTurnAuto = false;
 		this.lastError = null;
 		this.#trackSend({ kind: 'user', text: content, state: 'sending', ...(images?.length ? { images } : {}) });
 		this.#pendingUserEcho = content;
+		this.#resetCurrent();
+	}
+
+	/** Sends an automatic "continue" without a bubble: its echo (and its turn
+	 *  in a reloaded transcript) shows as a note. */
+	autoContinue(content: string) {
+		this.lastTurnAuto = true;
+		this.#autoFrom = this.messages.length;
+		this.lastError = null;
+		this.#pendingUserEcho = content;
+		this.#resetCurrent();
+	}
+
+	/** The last user bubble: its index among user turns, and what it said. */
+	lastUserTurn(): { index: number; text: string; images?: string[] } | null {
+		let index = -1;
+		let last: Extract<Msg, { kind: 'user' }> | null = null;
+		for (const m of this.messages)
+			if (m.kind === 'user') {
+				index++;
+				last = m;
+			}
+		return last ? { index, text: last.text, ...(last.images?.length ? { images: last.images } : {}) } : null;
+	}
+
+	/** The engine's last turn produced something worth keeping: text or a tool
+	 *  call (reasoning alone is not kept by the engines across a retry). */
+	turnHadOutput(): boolean {
+		let from = this.messages.findLastIndex((m) => m.kind === 'user');
+		if (this.lastTurnAuto) from = Math.max(from, this.#autoFrom - 1);
+		return this.messages
+			.slice(from + 1)
+			.some((m) => m.kind === 'tool' || (m.kind === 'assistant' && m.text.trim() !== ''));
+	}
+
+	/** A failed turn is being retried: its error goes (the retry's note says
+	 *  why), and so does the reply it was streaming, which the engines did not
+	 *  keep (Claude Code keeps a finished one, which has its uuid). The message
+	 *  it failed on is no longer marked failed. */
+	clearFailure() {
+		while (this.messages.at(-1)?.kind === 'error') this.messages.pop();
+		for (let last = this.messages.at(-1); last?.kind === 'reasoning' || (last?.kind === 'assistant' && !last.uuid); last = this.messages.at(-1))
+			this.messages.pop();
+		const user = this.messages.findLast((m) => m.kind === 'user');
+		if (user?.kind === 'user' && user.state === 'failed') delete user.state;
+		this.lastError = null;
 		this.#resetCurrent();
 	}
 
@@ -782,6 +848,11 @@ export class ChatState {
 				// later swallow an identical message.
 				this.#pendingUserEcho = null;
 				this.lastError = null;
+				// Sent from elsewhere (another device, a queue): the user's own turn,
+				// so no retry of the turn before it is still due.
+				this.lastTurnAuto = false;
+				this.autoRetries = 0;
+				this.autoRetry = null;
 				// No send state: claude echoes after the reply, when it would stick.
 				this.messages.push({ kind: 'user', text });
 				this.#resetCurrent();
@@ -991,6 +1062,8 @@ export class ChatState {
 				this.messages = items
 					.map((it): Msg | null => {
 						const role = str(it.role);
+						if (role === 'user' && str(it.content) === AUTO_CONTINUE)
+							return { kind: 'system', text: t('chat.autoRetry.resumed') };
 						if (role === 'user') return { kind: 'user', text: str(it.content) };
 						if (role === 'assistant') return { kind: 'assistant', text: str(it.content) };
 						if (role === 'tool')
@@ -1024,6 +1097,12 @@ export class ChatState {
 				};
 				break;
 			case 'retrying':
+				// The request is sent again from the start: what it streamed so far
+				// is replaced. A request's tool calls arrive only once it completed,
+				// so the text and reasoning at the end are this request's.
+				while (this.messages.at(-1)?.kind === 'assistant' || this.messages.at(-1)?.kind === 'reasoning')
+					this.messages.pop();
+				this.#resetCurrent();
 				// Shown live at the end of the transcript (RetryNotice), not as a log line.
 				this.retry = {
 					attempt: num(ev.attempt),
@@ -1161,6 +1240,9 @@ export class ChatState {
 				}
 				if (!this.busy) {
 					this.retry = null;
+					// A turn ended without an error: a later failure is a new one,
+					// with its own automatic retries.
+					if (this.#turnStart !== null) this.autoRetries = 0;
 					this.#endTurn();
 					this.#resetCurrent();
 					this.pendingApproval = null;
@@ -1195,6 +1277,9 @@ export class ChatState {
 				break;
 			case 'error': {
 				this.retry = null;
+				// A turn was being sent or run (not, say, a refused command).
+				const started = this.#turnStart !== null;
+				const inTurn = started || this.#sending !== null;
 				const last = this.messages[this.messages.length - 1];
 				this.lastError = str(ev.message);
 				this.pendingApproval = null;
@@ -1205,6 +1290,7 @@ export class ChatState {
 					this.messages.push({ kind: 'error', text: str(ev.message) });
 				this.#endTurn();
 				this.#resetCurrent();
+				if (inTurn) ChatState.onTurnFailed?.(this, str(ev.message), started);
 				break;
 			}
 		}
