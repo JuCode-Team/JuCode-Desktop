@@ -7,6 +7,8 @@
 import { getContext, setContext } from 'svelte';
 import { DaemonClient, type DaemonEndpoint, type SocketLike } from '$lib/daemon';
 import { AgentDirectory } from '$lib/agents.svelte';
+import { Dispatches } from './dispatch.svelte';
+import { resubscribe } from './push';
 import { provideAgents } from '$lib/agentScope';
 import { deviceKey, hostStaticKey, type RelayHost } from '$lib/relay/pairing';
 import { RelaySocket, type RelayError, type RelayErrorKind } from '$lib/relay/socket';
@@ -46,6 +48,7 @@ export class HostConnection {
 	readonly daemon: DaemonClient;
 	readonly agents: AgentDirectory;
 	readonly projects: RemoteProjects;
+	readonly dispatches: Dispatches;
 	/** Why the last relay connection failed (relay only). */
 	relayError = $state<RelayError | null>(null);
 	/** The daemon accepted this device at least once since the page opened. */
@@ -70,6 +73,7 @@ export class HostConnection {
 		});
 		this.agents = new AgentDirectory(this.daemon);
 		this.projects = new RemoteProjects(this.daemon, this.agents);
+		this.dispatches = new Dispatches(this.daemon);
 		this.everConnected = kind === 'lan';
 	}
 
@@ -120,6 +124,12 @@ export class HostConnection {
 		this.daemon.onEvent = (frame) => {
 			this.agents.handle(frame);
 			this.projects.handle(frame);
+			this.dispatches.handle(frame);
+		};
+		// Notifications keep reaching this phone after the computer restarts
+		// or the browser renews its subscription.
+		this.daemon.onHello = () => {
+			resubscribe(this.daemon).catch(() => {});
 		};
 		this.daemon.onDisconnect = () => {
 			this.agents.disconnected();

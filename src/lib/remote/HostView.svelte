@@ -13,6 +13,8 @@
 	import DesktopIcon from 'phosphor-svelte/lib/DesktopIcon';
 	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
 	import ChatsCircleIcon from 'phosphor-svelte/lib/ChatsCircleIcon';
+	import PaperPlaneTiltIcon from 'phosphor-svelte/lib/PaperPlaneTiltIcon';
+	import DispatchView from './DispatchView.svelte';
 	import DeskContent from '$lib/DeskContent.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
@@ -69,7 +71,8 @@
 	// svelte-ignore state_referenced_locally
 	provideHost(conn);
 
-	let tab = $state<'projects' | 'desk'>('projects');
+	let tab = $state<'projects' | 'dispatch' | 'desk'>('projects');
+	const TAB_TITLES = { projects: 'shell.remote.sessions', dispatch: 'shell.dispatch.title', desk: 'shell.desk.title' } as const;
 	/** Pages opened over the tabs, last on top. */
 	type Screen = { key: number } & (
 		| { kind: 'session'; session?: string; agent?: string; cwd?: string; chat?: boolean; engine?: string; title: string }
@@ -175,6 +178,11 @@
 					<ListIcon size={18} weight={tab === 'projects' ? 'fill' : 'regular'} />
 					<span>{t('shell.remote.sessions')}</span>
 				</button>
+				<button class:on={tab === 'dispatch'} onclick={() => (tab = 'dispatch')}>
+					<PaperPlaneTiltIcon size={18} weight={tab === 'dispatch' ? 'fill' : 'regular'} />
+					<span>{t('shell.dispatch.title')}</span>
+					{#if conn.dispatches.pending > 0}<span class="badge">{conn.dispatches.pending}</span>{/if}
+				</button>
 				<button class:on={tab === 'desk'} onclick={() => (tab = 'desk')}>
 					<TrayIcon size={18} weight={tab === 'desk' ? 'fill' : 'regular'} />
 					<span>{t('shell.desk.title')}</span>
@@ -183,7 +191,7 @@
 			</nav>
 			<main>
 				<div class="top">
-					<h1>{tab === 'projects' ? t('shell.remote.sessions') : t('shell.desk.title')}</h1>
+					<h1>{t(TAB_TITLES[tab])}</h1>
 					{@render switcher()}
 				</div>
 				{#if conn.kind === 'lan' && conn.agents.status === 'unreachable'}
@@ -214,6 +222,21 @@
 						onFiles={(project) => open({ kind: 'files', root: project.path, title: project.name })}
 						onChanges={(project) => open({ kind: 'changes', root: project.path, title: project.name })}
 						onOpenAgent={openAgent}
+					/>
+				</div>
+				<div class="tabbody" hidden={tab !== 'dispatch'}>
+					<DispatchView
+						onOpenSession={(session, title) => {
+							const known = conn.agents.sessions.find((s) => s.session === session);
+							open({
+								kind: 'session',
+								session,
+								cwd: known?.cwd,
+								engine: known?.engine && known.engine !== 'jucode' ? known.engine : undefined,
+								title
+							});
+						}}
+						onOpenDispatch={(d) => open({ kind: 'session', session: d.id, title: t('shell.dispatch.title') })}
 					/>
 				</div>
 				<div class="tabbody" hidden={tab !== 'desk'}>

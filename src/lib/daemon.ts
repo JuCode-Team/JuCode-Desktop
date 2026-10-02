@@ -49,7 +49,8 @@ const DAEMON_EVENTS = new Set([
 	'actions',
 	'report_posted',
 	'schedules',
-	'workspaces'
+	'workspaces',
+	'dispatches'
 ]);
 const CLOSE_TIMEOUT_MS = 10_000;
 

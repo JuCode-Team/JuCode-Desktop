@@ -35,6 +35,38 @@ sw.addEventListener('activate', (event) => {
 	);
 });
 
+// Notifications the computers send through the relay (lib/remote/push.ts):
+// `{title, body, tag, url}`. A tap opens (or focuses) the remote page.
+sw.addEventListener('push', (event) => {
+	let data: { title?: string; body?: string; tag?: string; url?: string } = {};
+	try {
+		data = event.data?.json() ?? {};
+	} catch {
+		data = { body: event.data?.text() };
+	}
+	event.waitUntil(
+		sw.registration.showNotification(data.title || 'JuCode', {
+			body: data.body ?? '',
+			tag: data.tag,
+			// A dispatch's later notice replaces its earlier one, and still alerts.
+			renotify: Boolean(data.tag),
+			icon: '/icon-192.png',
+			data: { url: data.url || SHELL }
+		})
+	);
+});
+
+sw.addEventListener('notificationclick', (event) => {
+	event.notification.close();
+	const url = new URL((event.notification.data as { url?: string } | null)?.url || SHELL, sw.location.origin).href;
+	event.waitUntil(
+		sw.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
+			const open = windows.find((w) => new URL(w.url).pathname.startsWith(SHELL));
+			return open ? open.focus() : sw.clients.openWindow(url);
+		})
+	);
+});
+
 sw.addEventListener('fetch', (event) => {
 	const request = event.request;
 	if (request.method !== 'GET') return;
