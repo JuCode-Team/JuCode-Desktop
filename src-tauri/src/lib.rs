@@ -2991,7 +2991,16 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        // Decorations are left to the config: a state saved by a version with the
+        // native title bar (0.3.x) would otherwise bring it back over the drawn one.
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::all()
+                        - tauri_plugin_window_state::StateFlags::DECORATIONS,
+                )
+                .build(),
+        )
         .setup(|app| {
             #[cfg(all(debug_assertions, target_os = "macos"))]
             set_dev_dock_icon();
