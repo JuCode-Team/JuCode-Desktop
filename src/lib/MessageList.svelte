@@ -8,6 +8,8 @@
 	import { fade, slide } from 'svelte/transition';
 	import Markdown from '$lib/Markdown.svelte';
 	import ToolCard from '$lib/ToolCard.svelte';
+	import DeliveryNotice from '$lib/DeliveryNotice.svelte';
+	import { parseDelivery } from '$lib/delivery';
 	import { parseToolOutput, toolIcon, toolTarget, toolVerb } from '$lib/toolSummary';
 	import Indicator from '$lib/Indicator.svelte';
 	import CallTimer from '$lib/CallTimer.svelte';
@@ -189,8 +191,8 @@
 	});
 	let rowEls: (HTMLElement | null)[] = [];
 
-	// Index in `messages` of each user message, in order: the rail's marks.
-	const markRows = $derived(messages.flatMap((m, i) => (m.kind === 'user' ? [i] : [])));
+	// Index in `messages` of each message the user wrote, in order: the rail's marks.
+	const markRows = $derived(messages.flatMap((m, i) => (m.kind === 'user' && !parseDelivery(m.text) ? [i] : [])));
 	$effect(() => {
 		const rows = markRows;
 		if (atEnd) {
@@ -432,7 +434,11 @@
 		{#if shown(m)}
 			<div class="mwrap" class:animate={!virtual} class:hit={i === findActive} bind:this={rowEls[i]} use:measure={m}>
 				{#if m.kind === 'user'}
+			{@const delivery = parseDelivery(m.text)}
 			{@const drop = userOrdinal.size - (userOrdinal.get(m) ?? 0)}
+			{#if delivery}
+				<DeliveryNotice {delivery} />
+			{:else}
 			<div class="row user">
 				<button class="uedit rewind" onclick={() => onRewind(m.text, userOrdinal.get(m) ?? 0)} aria-label="rewind" title={t('chat.rewindTitleN', { n: drop })}>
 					<ArrowCounterClockwiseIcon size={12} />{#if drop > 1}<span class="rwn">{drop}</span>{/if}
@@ -452,6 +458,7 @@
 					{/if}
 				</div>
 			</div>
+			{/if}
 		{:else if m.kind === 'assistant'}
 			<div class="answer">
 				{#if m === streamingMsg}

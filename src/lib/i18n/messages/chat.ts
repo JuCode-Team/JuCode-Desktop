@@ -144,6 +144,17 @@ const chat = {
 			note: '连接中断，已自动重试（第 {n} / {max} 次）',
 			resumed: '连接中断后自动继续'
 		},
+		delivery: {
+			agent: '来自 {name} 的消息',
+			from: '来自 {name} 的消息',
+			timer: '定时器触发',
+			schedule: '定时任务',
+			answer: '提问已答复',
+			task: '任务进展',
+			approved: '待确认动作已批准并执行',
+			declined: '待确认动作已拒绝：{name}',
+			failed: '执行失败'
+		},
 		retry: {
 			title: '请求失败，正在重试',
 			attempt: '第 {n} / {max} 次',
@@ -345,6 +356,17 @@ const chat = {
 			cancel: 'Cancel',
 			note: 'Connection lost; retried automatically (attempt {n} of {max})',
 			resumed: 'Continued automatically after a lost connection'
+		},
+		delivery: {
+			agent: 'Message from {name}',
+			from: 'Message from {name}',
+			timer: 'Timer fired',
+			schedule: 'Scheduled task',
+			answer: 'Question answered',
+			task: 'Task update',
+			approved: 'Pending action approved and run',
+			declined: 'Pending action declined: {name}',
+			failed: 'failed'
 		},
 		retry: {
 			title: 'Request failed, retrying',

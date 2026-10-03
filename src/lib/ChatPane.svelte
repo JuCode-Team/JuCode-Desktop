@@ -70,6 +70,7 @@
 	import type { ErrorAction } from '$lib/errorInfo';
 	import FindBar from '$lib/shell/FindBar.svelte';
 	import { autoRetry } from '$lib/autoRetry.svelte';
+	import { parseDelivery } from '$lib/delivery';
 
 	// One full conversation (transcript + composer + approvals + pickers) for a
 	// single session, extracted from the page so several chats can tile side by
@@ -133,7 +134,7 @@
 	let atBottom = $state(true);
 	let messageList = $state<MessageList | null>(null);
 	let mark = $state(-1);
-	const marks = $derived(chat.messages.flatMap((m) => (m.kind === 'user' ? [m.text] : [])));
+	const marks = $derived(chat.messages.flatMap((m) => (m.kind === 'user' && !parseDelivery(m.text) ? [m.text] : [])));
 
 	// The conversation column's width: dragging either edge resizes it about
 	// the centre; the width is kept once the drag ends.
