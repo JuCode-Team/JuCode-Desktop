@@ -606,3 +606,18 @@ export interface AgentEvent {
 	type: string;
 	[key: string]: unknown;
 }
+
+/** The end of the engine's and the daemon's logs, for a bug report. */
+export function diagnosticLogs(): Promise<{ name: string; size: number; text: string }[]> {
+	return invoke('diagnostic_logs');
+}
+
+/** A bug report or suggestion, as a ticket of the signed-in user. */
+export function submitFeedback(ticket: Record<string, unknown>): Promise<Record<string, unknown>> {
+	return invoke('submit_feedback', { ticket });
+}
+
+/** Anonymous usage counts by day (telemetry.svelte.ts). */
+export function sendTelemetry(install: string, days: { day: string; events: Record<string, number> }[]): Promise<void> {
+	return invoke('send_telemetry', { install, days });
+}

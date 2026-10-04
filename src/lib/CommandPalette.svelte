@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ChatCircleTextIcon from 'phosphor-svelte/lib/ChatCircleTextIcon';
 	import { tick } from 'svelte';
 	import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon';
 	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
@@ -43,7 +44,8 @@
 		onToggleTheme,
 		onSetup,
 		onHistory,
-		onShortcuts
+		onShortcuts,
+		onFeedback
 	}: {
 		chat: ChatState | undefined;
 		hasProject: boolean;
@@ -66,6 +68,7 @@
 		onSetup: (view?: 'login') => void;
 		onHistory: () => void;
 		onShortcuts: () => void;
+		onFeedback: () => void;
 	} = $props();
 
 	type Action = {
@@ -121,6 +124,7 @@
 				run: wrap(() => onOpenPanel(p.key))
 			})),
 			{ id: 'settings', label: t('shell.cmd.settings'), keys: shortcutLabel('settings'), icon: SettingsIcon, keywords: t('shell.cmd.settingsKw'), run: wrap(onSettings) },
+			{ id: 'feedback', label: t('shell.cmd.feedback'), icon: ChatCircleTextIcon, keywords: t('shell.cmd.feedbackKw'), run: wrap(onFeedback) },
 			{ id: 'setup', label: t('shell.cmd.setup'), hint: t('shell.cmd.setupHint'), icon: WrenchIcon, keywords: t('shell.cmd.setupKw'), run: wrap(() => onSetup()) },
 			// Debug builds only: VITE_JUCODE_DEBUG=1 when running or building.
 			...(import.meta.env.VITE_JUCODE_DEBUG === '1'

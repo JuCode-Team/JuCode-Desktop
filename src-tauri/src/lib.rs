@@ -807,6 +807,59 @@ fn put_cloud_settings(settings: serde_json::Value) -> Result<serde_json::Value, 
     jucode_send("PUT", "/v1/oauth/settings", Some(&serde_json::json!({ "settings": settings })))
 }
 
+/// The end of the engine's and the daemon's logs, for a bug report (the
+/// app shows them, then redacts and gzips them before sending). A missing
+/// log is left out.
+#[tauri::command(async)]
+fn diagnostic_logs() -> Vec<serde_json::Value> {
+    use std::io::{Seek, SeekFrom};
+    const TAIL: u64 = 256 * 1024;
+    let dir = jucode_dir();
+    [
+        ("jucode.log", dir.join("logs").join("jucode.log")),
+        ("daemon.log", dir.join("daemon").join("daemon.log")),
+    ]
+    .into_iter()
+    .filter_map(|(name, path)| {
+        let mut file = std::fs::File::open(&path).ok()?;
+        let size = file.metadata().ok()?.len();
+        file.seek(SeekFrom::Start(size.saturating_sub(TAIL))).ok()?;
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes).ok()?;
+        Some(serde_json::json!({
+            "name": name,
+            "size": size,
+            "text": String::from_utf8_lossy(&bytes),
+        }))
+    })
+    .collect()
+}
+
+/// A bug report or suggestion, as a support ticket of the signed-in user.
+#[tauri::command(async)]
+fn submit_feedback(ticket: serde_json::Value) -> Result<serde_json::Value, String> {
+    jucode_send("POST", "/v1/oauth/tickets", Some(&ticket))
+}
+
+/// Anonymous usage counts (src/lib/telemetry.svelte.ts), with this app's
+/// version and platform; no login needed.
+#[tauri::command(async)]
+fn send_telemetry(app: AppHandle, install: String, days: serde_json::Value) -> Result<(), String> {
+    let body = serde_json::json!({
+        "install": install,
+        "app": "desktop",
+        "version": app.package_info().version.to_string(),
+        "os": std::env::consts::OS,
+        "arch": std::env::consts::ARCH,
+        "days": days,
+    });
+    ureq::post(&format!("{}/v1/public/telemetry", app_update::api_base()))
+        .timeout(std::time::Duration::from_secs(15))
+        .send_json(body)
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
 /// DeepSeek account balance (https://api.deepseek.com/user/balance), using the
 /// API key stored under providers.deepseek in auth.json.
 #[tauri::command(async)]
@@ -3118,6 +3171,9 @@ pub fn run() {
             fetch_agent_usage_recent,
             fetch_cloud_settings,
             put_cloud_settings,
+            diagnostic_logs,
+            submit_feedback,
+            send_telemetry,
             fetch_jucode_models,
             fetch_jucode_groups,
             fetch_deepseek_balance,

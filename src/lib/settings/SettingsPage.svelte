@@ -83,7 +83,8 @@
 		navWidth,
 		onClose,
 		onAuthChange,
-		onMarket
+		onMarket,
+		onFeedback
 	}: {
 		sessionId: string;
 		/** The active session's ChatState — source of the live `mcp_servers` view.
@@ -97,6 +98,8 @@
 		onAuthChange?: () => void;
 		/** Open the skill marketplace (closes the settings page). */
 		onMarket?: () => void;
+		/** Open 反馈问题. */
+		onFeedback?: () => void;
 	} = $props();
 
 	const ICONS: Record<SectionKey, typeof GearSixIcon> = {
@@ -638,6 +641,14 @@
 								]}
 								onChange={(v) => prefs.setHtmlOpenInBrowser(v === 'browser')}
 							/>
+						</SettingsRow>
+					</SettingsSection>
+					<SettingsSection title={t('settings.page.help')}>
+						<SettingsRow id="feedback" title={t('settings.help.feedback')} description={t('settings.help.feedbackHint')}>
+							<Button size="sm" disabled={!onFeedback} onclick={() => onFeedback?.()}>{t('settings.help.feedbackOpen')}</Button>
+						</SettingsRow>
+						<SettingsRow id="telemetry" title={t('settings.help.telemetry')} description={t('settings.help.telemetryHint')}>
+							<Switch checked={prefs.telemetry} label={t('settings.help.telemetry')} onChange={(on) => prefs.setTelemetry(on)} />
 						</SettingsRow>
 					</SettingsSection>
 				{:else if current === 'account'}

@@ -75,6 +75,7 @@
 	import RequirementTag from '$lib/requirements/RequirementTag.svelte';
 	import { statusLabel } from '$lib/requirements/labels';
 	import { useRequirements } from '$lib/requirements.svelte';
+	import { telemetry } from '$lib/telemetry.svelte';
 
 	// One full conversation (transcript + composer + approvals + pickers) for a
 	// single session, extracted from the page so several chats can tile side by
@@ -125,6 +126,7 @@
 				text,
 				...(chat.sessionId ? { session: chat.sessionId } : project ? { projects: [project.path] } : {})
 			});
+			telemetry.track('requirement_create');
 			toast.success(t('shell.requirement.noted', { id: r.id }), {
 				action: { label: t('shell.requirement.undo'), run: () => void reqs.remove(r.id).catch(() => {}) }
 			});

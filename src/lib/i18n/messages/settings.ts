@@ -42,6 +42,7 @@ const settings = {
 			appearance: '外观',
 			conversation: '对话',
 			files: '打开文件',
+			help: '帮助与反馈',
 			jucodeOnly: '只对 JuCode CLI 的会话生效。Claude Code、Codex 和 ACP 智能体使用各自的配置。',
 			jucodeAccount: 'JuCode 账户',
 			jucodeAccountDesc: '登录后可使用 JuCode 托管的模型，并查看余额与套餐。',
@@ -198,6 +199,15 @@ const settings = {
 			envPlaceholder: 'KEY=VALUE，每行一条（仅对该智能体生效）',
 			envInvalid: '以下行无效：{lines}',
 			needNameCommand: '名称和命令不能为空'
+		},
+		help: {
+			feedback: '反馈问题',
+			feedbackHint: '提交问题或建议，可附截图和日志。会以工单提交到你的 JuCode 账户，回复可在控制台查看。',
+			feedbackOpen: '反馈问题',
+			telemetry: '发送匿名使用数据',
+			telemetryHint: '只统计启动次数、各功能的使用次数和错误类型，附带版本和系统。不含对话、代码、文件路径和提示词，也不关联账户。',
+			notice: 'JuCode 会发送匿名使用数据（功能使用次数和错误类型，不含任何内容），用于改进产品。可以在设置里关闭。',
+			noticeAction: '设置'
 		},
 		behavior: {
 			defaultModel: '默认模型',
@@ -450,6 +460,7 @@ const settings = {
 			appearance: 'Appearance',
 			conversation: 'Conversation',
 			files: 'Opening files',
+			help: 'Help and feedback',
 			jucodeOnly: 'Applies only to JuCode CLI sessions. Claude Code, Codex and ACP agents use their own configuration.',
 			jucodeAccount: 'JuCode account',
 			jucodeAccountDesc: 'Sign in to use JuCode-hosted models and see your balance and plan.',
@@ -606,6 +617,15 @@ const settings = {
 			envPlaceholder: 'KEY=VALUE, one per line (applied to this agent only)',
 			envInvalid: 'Invalid lines: {lines}',
 			needNameCommand: 'Name and command are required'
+		},
+		help: {
+			feedback: 'Send feedback',
+			feedbackHint: 'Report a problem or suggest something, with screenshots and logs. It is sent as a ticket of your JuCode account; replies show in the console.',
+			feedbackOpen: 'Send feedback',
+			telemetry: 'Send anonymous usage data',
+			telemetryHint: 'Counts starts, how often features are used and kinds of errors, with the version and system. No conversations, code, file paths or prompts, and not tied to your account.',
+			notice: 'JuCode sends anonymous usage data (how often features are used and kinds of errors, no content) to improve the product. You can turn it off in Settings.',
+			noticeAction: 'Settings'
 		},
 		behavior: {
 			defaultModel: 'Default model',

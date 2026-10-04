@@ -49,6 +49,12 @@ pub enum DownloadEvent {
 /// The JuCode server's mirror of the desktop manifest, on the API the user's
 /// config names (regional domains differ).
 fn jucode_manifest() -> String {
+    format!("{}/v1/public/releases/desktop/latest.json", api_base())
+}
+
+/// The JuCode API this app talks to without a login (`jucode_api_url` in
+/// config.json; regional domains differ).
+pub fn api_base() -> String {
     let api = std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(|home| std::path::PathBuf::from(home).join(".jucode").join("config.json"))
@@ -57,7 +63,7 @@ fn jucode_manifest() -> String {
         .and_then(|config| config["jucode_api_url"].as_str().map(str::to_string))
         .filter(|api| !api.trim().is_empty())
         .unwrap_or_else(|| "https://api.jucode.net".to_string());
-    format!("{}/v1/public/releases/desktop/latest.json", api.trim_end_matches('/'))
+    api.trim_end_matches('/').to_string()
 }
 
 async fn check_at(app: &AppHandle, manifest: &str) -> Result<Option<Update>, String> {

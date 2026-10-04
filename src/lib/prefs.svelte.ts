@@ -22,6 +22,8 @@ type PrefsShape = {
 	/** Offer to stop a running turn when one of its requests misses the
 	 *  prompt cache (see cacheMiss.ts). */
 	cacheMissAlert: boolean;
+	/** Send anonymous usage counts (telemetry.svelte.ts). */
+	telemetry: boolean;
 };
 
 export const TURN_STAT_KEYS = ['elapsed', 'ttft', 'tokens', 'files', 'tools', 'cost', 'model'] as const;
@@ -32,7 +34,8 @@ const DEFAULTS: PrefsShape = {
 	sidebarVibrancy: true,
 	turnStats: ['elapsed', 'tokens', 'files'],
 	chatWidth: 844,
-	cacheMissAlert: true
+	cacheMissAlert: true,
+	telemetry: true
 };
 
 function load(): PrefsShape {
@@ -78,6 +81,7 @@ class PrefsStore {
 	turnStats = $state<TurnStatKey[]>(DEFAULTS.turnStats);
 	chatWidth = $state(DEFAULTS.chatWidth);
 	cacheMissAlert = $state(DEFAULTS.cacheMissAlert);
+	telemetry = $state(DEFAULTS.telemetry);
 
 	init() {
 		const p = load();
@@ -88,6 +92,7 @@ class PrefsStore {
 			: DEFAULTS.turnStats;
 		this.chatWidth = Number.isFinite(p.chatWidth) ? p.chatWidth : DEFAULTS.chatWidth;
 		this.cacheMissAlert = p.cacheMissAlert !== false;
+		this.telemetry = p.telemetry !== false;
 		this.#applyVibrancy();
 		if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
 			invoke<string | null>('window_effect')
@@ -108,7 +113,8 @@ class PrefsStore {
 					sidebarVibrancy: this.sidebarVibrancy,
 					turnStats: this.turnStats,
 					chatWidth: this.chatWidth,
-					cacheMissAlert: this.cacheMissAlert
+					cacheMissAlert: this.cacheMissAlert,
+					telemetry: this.telemetry
 				})
 			);
 		} catch {
@@ -145,6 +151,11 @@ class PrefsStore {
 
 	setCacheMissAlert(v: boolean) {
 		this.cacheMissAlert = v;
+		this.#save();
+	}
+
+	setTelemetry(v: boolean) {
+		this.telemetry = v;
 		this.#save();
 	}
 

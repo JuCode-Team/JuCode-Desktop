@@ -52,6 +52,8 @@ export const ROWS: SearchRow[] = [
 	{ section: 'general', id: 'turn-stats', titleKey: 'settings.behavior.turnStats', descKey: 'settings.behavior.turnStatsHint' },
 	{ section: 'general', id: 'cache-miss', titleKey: 'settings.behavior.cacheMissAlert', descKey: 'settings.behavior.cacheMissAlertHint' },
 	{ section: 'general', id: 'html-open', titleKey: 'settings.behavior.htmlOpen', descKey: 'settings.behavior.htmlOpenHint' },
+	{ section: 'general', id: 'feedback', titleKey: 'settings.help.feedback', descKey: 'settings.help.feedbackHint' },
+	{ section: 'general', id: 'telemetry', titleKey: 'settings.help.telemetry', descKey: 'settings.help.telemetryHint' },
 	{ section: 'account', id: 'account-login', titleKey: 'settings.page.jucodeAccount', descKey: 'settings.page.jucodeAccountDesc' },
 	{ section: 'account', id: 'account-models', titleKey: 'shell.modelSetup.manage', descKey: 'settings.page.manageModelsDesc' },
 	{ section: 'account', id: 'account-sync', titleKey: 'settings.sync.title', descKey: 'settings.sync.desc' },

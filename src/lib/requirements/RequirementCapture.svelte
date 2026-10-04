@@ -7,6 +7,7 @@
 	import { MAX_IMAGES, useRequirements } from '$lib/requirements.svelte';
 	import { sendFile } from '$lib/upload';
 	import { daemon } from '$lib/protocol';
+	import { telemetry } from '$lib/telemetry.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
 	import { loadComposerText, saveComposerText } from '$lib/composerText';
 	import { t } from '$lib/i18n';
@@ -63,6 +64,7 @@
 			const paths = [];
 			for (const image of images) paths.push((await sendFile(daemon, image.file)).path);
 			const r = await reqs.create({ text: words, images: paths, source: 'desktop' });
+			telemetry.track('requirement_create');
 			text = '';
 			for (const image of images) URL.revokeObjectURL(image.url);
 			images = [];

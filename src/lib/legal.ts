@@ -131,6 +131,13 @@ export const LEGAL: Record<LegalDocId, Record<'zh' | 'en', LegalText>> = {
 					]
 				},
 				{
+					heading: '匿名使用数据与问题反馈',
+					body: [
+						'应用默认发送匿名使用数据：启动次数、各功能的使用次数、错误类型，以及应用版本和系统。每个安装使用一个随机编号，不关联账户，不包含对话、代码、文件路径和提示词。可以在设置的「帮助与反馈」中关闭。',
+						'你提交反馈时，内容、你添加的截图和你选择附带的日志会作为工单保存在你的账户下，用于排查问题。日志在发送前会去掉令牌、API Key、授权头和路径中的用户名。'
+					]
+				},
+				{
 					heading: '第三方',
 					body: [
 						'我们不出售你的数据。除转发给你所选的模型服务商和完成支付所需外，不向第三方提供你的数据，法律要求的情形除外。'
@@ -180,6 +187,13 @@ export const LEGAL: Record<LegalDocId, Record<'zh' | 'en', LegalText>> = {
 					body: [
 						'With remote control, our relay forwards messages between the desktop app and the web page and records the IP addresses that connect, for security and troubleshooting.',
 						'Update checks contact GitHub and our servers, which can see your IP address.'
+					]
+				},
+				{
+					heading: 'Anonymous usage data and feedback',
+					body: [
+						'By default the app sends anonymous usage data: how often it starts, how often features are used, kinds of errors, and the app version and system. Each install uses a random id, not tied to your account, and nothing of your conversations, code, file paths or prompts is sent. You can turn it off under Help and feedback in Settings.',
+						'When you send feedback, its text, the screenshots you add and the logs you choose to attach are kept as a ticket of your account to look into the problem. Tokens, API keys, authorization headers and the user name in paths are taken out of the logs before they are sent.'
 					]
 				},
 				{

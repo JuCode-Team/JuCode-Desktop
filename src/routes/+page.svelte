@@ -95,6 +95,9 @@
 	import TaskDialog from '$lib/TaskDialog.svelte';
 	import AgentDialog from '$lib/AgentDialog.svelte';
 	import DeskPage from '$lib/DeskPage.svelte';
+	import FeedbackDialog from '$lib/FeedbackDialog.svelte';
+	import { telemetry } from '$lib/telemetry.svelte';
+	import { sendTelemetry } from '$lib/protocol';
 	import { Requirements, provideRequirements, type Requirement } from '$lib/requirements.svelte';
 	import type { StartHow } from '$lib/requirements/StartButton.svelte';
 	import { normalizeBackendId } from '$lib/backends';
@@ -171,6 +174,7 @@
 	let setupView = $state<'login' | undefined>();
 	let showPalette = $state(false);
 	let showShortcuts = $state(false);
+	let showFeedback = $state(false);
 	// 「新建并行任务」对话框：为哪个（主仓库）项目开任务。
 	let taskDialogFor = $state<Project | null>(null);
 	let showAgentDialog = $state(false);
@@ -204,6 +208,7 @@
 	async function startRequirement(r: Requirement, how: StartHow) {
 		try {
 			const text = await requirements.prompt(r.id);
+			telemetry.track(how.mode === 'dispatch' ? 'dispatch_send' : 'requirement_start');
 			if (how.mode === 'dispatch') {
 				await daemon.request({ op: 'dispatch_send', text, plan: false, approval_mode: 'auto', requirement: r.id });
 				toast.success(t('shell.requirement.dispatched'));
@@ -967,6 +972,15 @@
 
 	onMount(() => {
 		cloudSync.start();
+		// Anonymous usage counts; told once, off in Settings → General.
+		if (telemetry.start(sendTelemetry))
+			toast.info(t('settings.help.notice'), {
+				duration: 15000,
+				action: { label: t('settings.help.noticeAction'), run: () => openSettings('general') }
+			});
+		const onUiError = () => telemetry.track('error:ui');
+		window.addEventListener('error', onUiError);
+		window.addEventListener('unhandledrejection', onUiError);
 		const savedSb = Number(localStorage.getItem('jucode-sidebar-width'));
 		if (savedSb >= 240 && savedSb <= 460) sidebarWidth = savedSb;
 		if (localStorage.getItem('jucode-sidebar-visible') === '0') showSidebar = false;
@@ -1148,6 +1162,8 @@
 		})();
 		return () => {
 			disposed = true;
+			window.removeEventListener('error', onUiError);
+			window.removeEventListener('unhandledrejection', onUiError);
 			cleanups.forEach((f) => f());
 		};
 	});
@@ -1356,6 +1372,7 @@
 						closeSettings();
 						showMarket = true;
 					}}
+					onFeedback={() => (showFeedback = true)}
 					onClose={closeSettings}
 				/>
 			{/if}
@@ -1449,6 +1466,10 @@
 		/>
 	{/if}
 
+	{#if showFeedback}
+		<FeedbackDialog onClose={() => (showFeedback = false)} />
+	{/if}
+
 	{#if taskDialogFor}
 		<TaskDialog
 			project={taskDialogFor}
@@ -1525,6 +1546,7 @@
 			}}
 			onHistory={() => activeProject && store.openHistory(activeProject)}
 			onShortcuts={() => (showShortcuts = true)}
+			onFeedback={() => (showFeedback = true)}
 		/>
 	{/if}
 	{#if showShortcuts}

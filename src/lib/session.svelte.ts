@@ -10,6 +10,7 @@ import { toEngineMode } from './approval';
 import { t } from '$lib/i18n';
 import { saveComposerText } from './composerText';
 import { toast } from './ui/toast.svelte';
+import { telemetry } from './telemetry.svelte';
 import { normalizeColor, parseTabIcon, type TabIcon } from './workbench/tabChrome';
 import { CHATS_ENABLED, type Project, type Session, type WorktreeMeta } from './types';
 
@@ -121,6 +122,7 @@ export class SessionStore {
 	 *  handleExit): up to 3 times, a little later each time, since the usual
 	 *  causes (daemon still starting, a network blip) clear up on their own. */
 	#engineFailed(chat: ChatState, e: unknown) {
+		telemetry.track('error:engine');
 		chat.engineState = 'exited';
 		chat.restarting = false;
 		const s = this.allSessions.find((x) => x.chat === chat);
@@ -314,6 +316,7 @@ export class SessionStore {
 		const project = this.projects.find((p) => p.sessions.some((x) => x.id === id));
 		if (!s?.draft || !project) return;
 		s.draft = false;
+		telemetry.track(`session_start:${s.backendId}`);
 		project.lastBackend = s.backendId;
 		if (s.backendId === 'acp' && s.acpAgent) project.lastAcpAgent = s.acpAgent;
 		const pick = s.draftPick;
