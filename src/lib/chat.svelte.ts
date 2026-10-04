@@ -3,6 +3,7 @@ import { loadProfile, profileKey, rememberProfile, type BackendProfile } from '$
 import { isBackendId, type BackendId } from './backends/types';
 import {
 	EDIT_TOOLS,
+	fromEngineMode,
 	parseHunks,
 	parseQuestions,
 	reconcileMode,
@@ -128,6 +129,8 @@ export interface PlanStep {
 	status: string;
 }
 
+/** Mode names as a client sends them to the daemon (see backends/jucode.ts). */
+const PENDING_MODES: Record<string, ApprovalMode> = { manual: 'ask', 'auto-edit': 'edits', auto: 'auto', 'full-access': 'all', plan: 'plan' };
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
 const num = (v: unknown) => (typeof v === 'number' ? v : 0);
 const arr = <T>(v: unknown) => (Array.isArray(v) ? (v as T[]) : []);
@@ -294,6 +297,9 @@ export class ChatState {
 	// with this value and clear it. Re-armed on every engine `startup` event, so
 	// crash auto-restarts / provider switches re-push the mode too.
 	pendingModeSync = $state<EngineApprovalMode | null>(null);
+	// A mode the user picked that the engine applies only once the running
+	// turn ends (Codex, or Claude in or out of full access); null otherwise.
+	approvalPending = $state<ApprovalMode | null>(null);
 	// The long-lived agent this session belongs to (empty for other sessions).
 	// It runs in the agent's approval mode, set on the Agent page: the startup
 	// sync never pushes the desktop's mode over it, and its mode is not
@@ -800,6 +806,11 @@ export class ChatState {
 				// startup sync so the desktop's persisted mode is pushed again.
 				this.#modeSynced = false;
 				break;
+			case 'approval_mode_pending': {
+				const mode = str(ev.mode);
+				this.approvalPending = mode ? (PENDING_MODES[mode] ?? fromEngineMode(mode)) : null;
+				break;
+			}
 			case 'approval_mode': {
 				const engineMode = str(ev.mode);
 				if (this.agent || this.followEngineMode) {
@@ -930,6 +941,9 @@ export class ChatState {
 				break;
 			}
 			case 'tool_output': {
+				// The call ran: it was decided here, on another device, or by
+				// a mode switch, so its card goes.
+				if (this.pendingApproval && this.pendingApproval.callId === str(ev.call_id)) this.pendingApproval = null;
 				// Engines that do not announce each request (codex) start the next
 				// one once the tools are back.
 				this.#segStart = Date.now();

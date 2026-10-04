@@ -355,6 +355,20 @@ describe('approval flow (engine-enforced)', () => {
 		});
 	});
 
+	it('shows a mode that waits for the turn, and drops an approval decided elsewhere', () => {
+		const c = new ChatState();
+		c.handle({ type: 'approval_mode_pending', mode: 'full-access' } as never);
+		expect(c.approvalPending).toBe('all');
+		c.handle({ type: 'approval_mode_pending', mode: null } as never);
+		expect(c.approvalPending).toBeNull();
+		c.handle({ type: 'approval_request', call_id: 'c1', name: 'bash', summary: 'ls', hunks: null, subagent_id: null } as never);
+		expect(c.pendingApproval?.callId).toBe('c1');
+		c.handle({ type: 'tool_output', call_id: 'c2', output: '', is_error: false } as never);
+		expect(c.pendingApproval?.callId).toBe('c1');
+		c.handle({ type: 'tool_output', call_id: 'c1', output: 'ok', is_error: false } as never);
+		expect(c.pendingApproval).toBeNull();
+	});
+
 	it('reduces a hunk-less approval_request with null hunks/subagent', () => {
 		const c = new ChatState();
 		c.handle({ type: 'approval_request', call_id: 'c2', name: 'bash', summary: 'rm -rf /tmp/x', subagent_id: null, hunks: null });

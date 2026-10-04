@@ -755,6 +755,13 @@
 			onRemoveVideo={(i) => videos.splice(i, 1)}
 		/>
 	{/if}
+	{#if chat.approvalPending && chat.busy}
+		<!-- The engine applies the picked mode only from the next turn. -->
+		<div class="queued">
+			<span class="queued-label">{t('chat.modePending', { mode: APPROVAL_MODES[chat.approvalPending]?.label ?? chat.approvalPending })}</span>
+			<button class="qsteer" onclick={onStop}>{t('chat.modeApplyNow')}</button>
+		</div>
+	{/if}
 	{#if chat.pendingMessages.length}
 		<div class="queued">
 			<span class="queued-label">{t('chat.queuedLabel', { n: chat.pendingMessages.length })}</span>
