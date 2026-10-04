@@ -98,11 +98,6 @@ export class Requirements {
 			this.list = frame.requirements as Requirement[];
 	}
 
-	/** The connection dropped: the next one sends the list again. */
-	reset() {
-		this.list = [];
-	}
-
 	get(id: string): Requirement | undefined {
 		return this.list.find((r) => r.id === id);
 	}

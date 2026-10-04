@@ -20,6 +20,11 @@
 	import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon';
 	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
 	import DeviceMobileIcon from 'phosphor-svelte/lib/DeviceMobileIcon';
+	import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon';
+	import BellIcon from 'phosphor-svelte/lib/BellIcon';
+	import { enablePush, pushOn, pushSupported } from '$lib/remote/push';
+	import { forgetLists } from '$lib/remote/cache';
+	import { toast } from '$lib/ui/toast.svelte';
 	import HostView from '$lib/remote/HostView.svelte';
 	import { HostConnection, LAN_ID } from '$lib/remote/connection.svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -103,6 +108,52 @@
 	const isStandalone = () =>
 		matchMedia('(display-mode: standalone)').matches ||
 		(navigator as Navigator & { standalone?: boolean }).standalone === true;
+	// Installing: Android and desktop Chrome offer a prompt the page can show
+	// from its menu; an iPhone adds the app from Safari's share sheet (the
+	// guide below); an app's built-in browser (WeChat, QQ…) can do neither.
+	type InstallPrompt = Event & { prompt: () => Promise<void> };
+	let installPrompt = $state<InstallPrompt | null>(null);
+	let installGuide = $state(false);
+	const inAppBrowser = () => /MicroMessenger|QQ\/|Weibo|DingTalk|AlipayClient|Lark|Feishu/i.test(navigator.userAgent);
+	let embedded = $state(false);
+	const canInstall = $derived(!!installPrompt || (mounted && isIos() && !isStandalone()));
+	function install() {
+		switchMenu = false;
+		if (installPrompt) {
+			const prompt = installPrompt;
+			installPrompt = null;
+			void prompt.prompt();
+		} else installGuide = true;
+	}
+
+	/** Sends a test notification to this phone through the shown computer,
+	 *  turning notifications on first, and says which push service took it. */
+	const SERVICES: Record<string, string> = {
+		'fcm.googleapis.com': 'Google FCM',
+		'web.push.apple.com': 'Apple',
+		'updates.push.services.mozilla.com': 'Mozilla'
+	};
+	async function testPush() {
+		switchMenu = false;
+		const conn = active;
+		if (!conn) return;
+		try {
+			if (!pushSupported()) throw new Error(t(isIos() ? 'shell.remote.pushIosHint' : 'shell.dispatch.notifyUnsupported'));
+			if (!pushOn()) await enablePush([conn.daemon]);
+			const reply = await conn.daemon.request({ op: 'push_test' });
+			const results = (reply.results as { service: string; status?: number; error?: string }[]) ?? [];
+			if (!results.length) throw new Error(t('shell.remote.pushNone'));
+			for (const r of results) {
+				const service = SERVICES[r.service] ?? r.service;
+				if (r.status && r.status < 300)
+					toast.success(t(r.service === 'fcm.googleapis.com' ? 'shell.remote.pushSentFcm' : 'shell.remote.pushSent', { service }), { duration: 10000 });
+				else toast.error(t('shell.remote.pushFailed', { service, reason: r.error ?? String(r.status) }));
+			}
+		} catch (e) {
+			const message = e instanceof Error ? e.message : String(e);
+			toast.error(/requires session/.test(message) ? t('shell.remote.pushOld') : message);
+		}
+	}
 	/** Pairing another computer, opened from the switcher. */
 	let adding = $state(false);
 	/** LAN pairing with a code, asked for while other computers are paired. */
@@ -111,7 +162,7 @@
 	const view = $derived(
 		!mounted
 			? null
-			: pendingLink
+			: pendingLink || installGuide
 				? 'install'
 				: adding
 					? 'scan'
@@ -148,6 +199,7 @@
 		addPaired(link);
 	}
 	function continueInBrowser() {
+		installGuide = false;
 		const link = pendingLink;
 		pendingLink = null;
 		if (link) addPaired(link);
@@ -207,6 +259,12 @@
 			if (e.data?.type === 'jucode-open' && typeof e.data.url === 'string') want(e.data.url);
 		};
 		navigator.serviceWorker?.addEventListener('message', fromWorker);
+		embedded = inAppBrowser();
+		const onInstallPrompt = (e: Event) => {
+			e.preventDefault();
+			installPrompt = e as InstallPrompt;
+		};
+		window.addEventListener('beforeinstallprompt', onInstallPrompt);
 		const link = parsePairLink(location.href);
 		const fromQr = new URLSearchParams(location.search).get('pair');
 		if (link || fromQr || location.hash) {
@@ -245,6 +303,7 @@
 		}
 		return () => {
 			navigator.serviceWorker?.removeEventListener('message', fromWorker);
+			window.removeEventListener('beforeinstallprompt', onInstallPrompt);
 			for (const conn of conns) conn.stop();
 		};
 	});
@@ -290,6 +349,7 @@
 		if (ask && !confirm(t('shell.remote.forgetHostConfirm', { name: nameOf(conn) }))) return;
 		conn.stop();
 		forgetHost(conn.id);
+		forgetLists(conn.id);
 		hosts = loadHosts();
 		conns = conns.filter((c) => c !== conn);
 		if (activeId === conn.id && conns.length) select(conns[0].id);
@@ -428,6 +488,16 @@
 							<span class="pop-txt"><span class="pop-label">{t('shell.remote.repair')}</span></span>
 						</button>
 					{/if}
+					{#if canInstall}
+						<button class="pop-row" role="menuitem" onclick={install}>
+							<span class="pop-ico"><DownloadSimpleIcon size={18} /></span>
+							<span class="pop-txt"><span class="pop-label">{t('shell.remote.install')}</span></span>
+						</button>
+					{/if}
+					<button class="pop-row" role="menuitem" onclick={testPush}>
+						<span class="pop-ico"><BellIcon size={18} /></span>
+						<span class="pop-txt"><span class="pop-label">{t('shell.remote.pushTest')}</span></span>
+					</button>
 					<button class="pop-row" role="menuitem" onclick={openLicenses}>
 						<span class="pop-ico"><ScrollIcon size={18} /></span>
 						<span class="pop-txt"><span class="pop-label">{t('shell.remote.licenses')}</span></span>
@@ -489,7 +559,9 @@
 				<li>{t('shell.remote.installStep2')}</li>
 				<li>{t('shell.remote.installStep3')}</li>
 			</ol>
-			<div class="actions"><Button variant="ghost" onclick={continueInBrowser}>{t('shell.remote.installSkip')}</Button></div>
+			<div class="actions">
+				<Button variant="ghost" onclick={continueInBrowser}>{installGuide && !pendingLink ? t('shell.remote.installClose') : t('shell.remote.installSkip')}</Button>
+			</div>
 		</div>
 	{:else if view === 'scan'}
 		<div class="pair">
@@ -517,6 +589,9 @@
 			</form>
 			{#if pairError}<div class="err"><Notice>{pairError}</Notice></div>{/if}
 		</div>
+	{/if}
+	{#if embedded && view === 'app'}
+		<div class="embedded"><Notice tone="info">{t('shell.remote.inAppBrowser')}</Notice></div>
 	{/if}
 	<!-- Every computer's view stays mounted (its pages and sessions live on);
 	     the shown one is visible. -->
@@ -835,5 +910,10 @@
 		font-size: var(--fs-md);
 		line-height: 1.7;
 		text-align: left;
+	}
+	.embedded {
+		position: relative;
+		z-index: 30;
+		padding: calc(env(safe-area-inset-top) + 8px) 12px 0;
 	}
 </style>

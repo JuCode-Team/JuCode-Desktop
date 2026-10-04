@@ -14,7 +14,20 @@ import { deviceKey, hostStaticKey, type RelayHost } from '$lib/relay/pairing';
 import { RelaySocket, type RelayError, type RelayErrorKind } from '$lib/relay/socket';
 import { deviceName, remoteEndpoint } from '$lib/remote';
 import { RemoteProjects } from './store.svelte';
-import { Requirements, provideRequirements } from '$lib/requirements.svelte';
+import { Requirements, provideRequirements, type Requirement } from '$lib/requirements.svelte';
+import { loadLists, saveLists } from './cache';
+import type { AgentView, DaemonSessionView } from '$lib/agents.svelte';
+import type { WorkspaceView } from './store.svelte';
+import type { DispatchView } from './dispatch.svelte';
+
+/** A computer's lists as kept on the phone (see cache.ts). */
+type Lists = {
+	sessions: DaemonSessionView[];
+	agents: AgentView[];
+	workspaces: WorkspaceView[];
+	requirements: Requirement[];
+	dispatches: DispatchView[];
+};
 
 /** The id of the LAN connection (relay computers use their host id). */
 export const LAN_ID = 'lan';
@@ -61,6 +74,7 @@ export class HostConnection {
 	#routes = new Map<string, Route>();
 	#socket: SocketLike | null = null;
 	#stopped = false;
+	#saveTimer: ReturnType<typeof setTimeout> | undefined;
 
 	constructor(
 		id: string,
@@ -80,6 +94,16 @@ export class HostConnection {
 		this.dispatches = new Dispatches(this.daemon);
 		this.requirements = new Requirements(this.daemon);
 		this.everConnected = kind === 'lan';
+		// What this phone saw last shows until the computer is reached.
+		const kept = loadLists<Lists>(id);
+		if (kept) {
+			this.agents.sessions = kept.sessions ?? [];
+			this.agents.agents = kept.agents ?? [];
+			this.projects.workspaces = kept.workspaces ?? [];
+			this.requirements.list = kept.requirements ?? [];
+			this.dispatches.list = kept.dispatches ?? [];
+			this.everConnected = true;
+		}
 	}
 
 	/** A paired computer through the relay; `pair` goes along until its
@@ -131,6 +155,7 @@ export class HostConnection {
 			this.projects.handle(frame);
 			this.dispatches.handle(frame);
 			this.requirements.handle(frame);
+			this.#keepLists();
 		};
 		// Notifications keep reaching this phone after the computer restarts
 		// or the browser renews its subscription.
@@ -138,9 +163,9 @@ export class HostConnection {
 			resubscribe(this.daemon).catch(() => {});
 		};
 		this.daemon.onDisconnect = () => {
+			// The lists stay, as last seen, until the computer is back.
 			this.agents.disconnected();
 			this.projects.reset();
-			this.requirements.reset();
 		};
 		this.daemon.onFrame = (id, raw) => this.#routes.get(id)?.onFrame(raw);
 		this.daemon.onExit = (id) => this.#routes.get(id)?.onExit();
@@ -166,9 +191,25 @@ export class HostConnection {
 		if (!answered && this.#socket === socket) socket?.close();
 	}
 
+	/** Keeps the lists on the phone, a moment after they last changed. */
+	#keepLists() {
+		clearTimeout(this.#saveTimer);
+		this.#saveTimer = setTimeout(() => {
+			const lists: Lists = {
+				sessions: this.agents.sessions,
+				agents: this.agents.agents,
+				workspaces: this.projects.workspaces,
+				requirements: this.requirements.list,
+				dispatches: this.dispatches.list
+			};
+			saveLists(this.id, $state.snapshot(lists));
+		}, 1000);
+	}
+
 	/** Disconnects for good (the computer was forgotten or paired again). */
 	stop() {
 		this.#stopped = true;
+		clearTimeout(this.#saveTimer);
 		this.agents.stop();
 		this.#socket?.close();
 		this.#socket = null;

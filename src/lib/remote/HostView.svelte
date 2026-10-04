@@ -110,16 +110,34 @@
 	const stack = $derived(stacks[tab]);
 	let nextKey = 0;
 	type NewScreen = Screen extends infer S ? (S extends Screen ? Omit<S, 'key'> : never) : never;
+	// Each page opened over a tab is a browser history entry, so the system
+	// back (Android's button, a swipe) goes back a page rather than leaving
+	// the app; the page's own back button goes through history too.
 	function push(screen: NewScreen) {
 		stacks[tab] = [...stacks[tab], { ...screen, key: nextKey++ } as Screen];
+		history.pushState({ jucodePage: true }, '');
 	}
 	function pop() {
+		if (history.state?.jucodePage) history.back();
+		else drop();
+	}
+	/** The page on top gives way to `screen` (one history entry still). */
+	function replace(screen: NewScreen) {
+		stacks[tab] = [...stacks[tab].slice(0, -1), { ...screen, key: nextKey++ } as Screen];
+	}
+	function drop() {
 		stacks[tab] = stacks[tab].slice(0, -1);
+	}
+	function onPopState() {
+		if (!hidden && stacks[tab].length) drop();
 	}
 	/** Opens a page from the list: on a wide screen it replaces the right
 	 *  pane's pages; on a phone it goes on top. */
 	function open(screen: NewScreen) {
-		if (wide) stacks[tab] = [];
+		if (wide && stacks[tab].length) {
+			stacks[tab] = [{ ...screen, key: nextKey++ } as Screen];
+			return;
+		}
 		push(screen);
 	}
 
@@ -191,6 +209,8 @@
 		open(agentScreen(agent.id));
 	}
 </script>
+
+<svelte:window onpopstate={onPopState} />
 
 <div class="host" class:wide {hidden}>
 	{#if conn.relayError?.fatal}
@@ -366,8 +386,7 @@
 						<DispatchComposer
 							onBack={pop}
 							onSent={(d) => {
-								pop();
-								push({ kind: 'dispatch', id: d.id });
+								replace({ kind: 'dispatch', id: d.id });
 							}}
 						/>
 					{:else if screen.kind === 'requirement'}
@@ -376,8 +395,7 @@
 						<RequirementCompose
 							onBack={pop}
 							onNoted={(id) => {
-								pop();
-								push({ kind: 'requirement', id });
+								replace({ kind: 'requirement', id });
 							}}
 						/>
 					{:else if screen.kind === 'desk'}

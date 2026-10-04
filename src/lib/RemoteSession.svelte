@@ -24,6 +24,7 @@
 	import FileIcon from 'phosphor-svelte/lib/FileIcon';
 	import XIcon from 'phosphor-svelte/lib/XIcon';
 	import { sendFile, type Uploaded } from '$lib/upload';
+	import { loadSession, saveSession } from '$lib/remote/cache';
 	import ModelMenu from '$lib/remote/ModelMenu.svelte';
 	import MessageList from '$lib/MessageList.svelte';
 	import ApprovalCard from '$lib/ApprovalCard.svelte';
@@ -122,8 +123,22 @@
 		} catch {
 			return;
 		}
+		// The computer's own copy replaces the one kept on this phone.
+		if ((frame as { type?: string }).type === 'transcript') fromCache = false;
 		for (const event of adapter.translate(frame)) chat.handle(event);
 	}
+
+	// The conversation as last seen here shows at once, before the computer
+	// (maybe over a weak network) sends it; it is kept again after each turn.
+	let fromCache = $state(false);
+	const cacheKey = $derived(chat.sessionId || session ? `${host.id}:${chat.sessionId || session}` : '');
+	function keep() {
+		if (cacheKey && !fromCache && chat.messages.length) void saveSession(cacheKey, chat.messages, title);
+	}
+	$effect(() => {
+		// After each turn, with the conversation as it now stands.
+		if (!chat.busy && connected) untrack(keep);
+	});
 
 	// Stick to the bottom while the content grows (the snapshot, streaming
 	// text, new cards) unless the reader scrolled up, as the desktop does.
@@ -197,6 +212,13 @@
 
 	onMount(() => {
 		chat.title = title;
+		if (session)
+			void loadSession<(typeof chat.messages)[number]>(`${host.id}:${session}`).then((kept) => {
+				if (kept && !chat.messages.length) {
+					chat.messages = kept.messages;
+					fromCache = true;
+				}
+			});
 		unregister = register(id, onFrame, () => {
 			exited = true;
 			connected = false;
@@ -208,6 +230,7 @@
 		if (text) tick().then(autosize);
 	});
 	onDestroy(() => {
+		keep();
 		unregister();
 		daemon.detach(id);
 	});
@@ -494,6 +517,11 @@
 			</div>
 		{/if}
 
+		{#if fromCache && !connected && !exited}
+			<div class="exit">
+				<div class="exit-msg"><Notice tone="info">{t('shell.remote.cached')}</Notice></div>
+			</div>
+		{/if}
 		{#if reconnecting}
 			<div class="exit">
 				<div class="exit-msg"><Notice tone="warn">{t('shell.remote.reconnecting')}</Notice></div>
@@ -506,6 +534,12 @@
 		{/if}
 
 		<div class="composer-wrap">
+			{#if chat.approvalPending && chat.busy}
+				<div class="queued">
+					<span class="queued-label">{t('chat.modePending', { mode: APPROVAL_MODES[chat.approvalPending]?.label ?? chat.approvalPending })}</span>
+					<button type="button" class="qsteer" onclick={stop}>{t('chat.modeApplyNow')}</button>
+				</div>
+			{/if}
 			{#if waiting.length}
 				<div class="queued">
 					<span class="queued-label">{t('chat.queuedLabel', { n: waiting.length })}</span>
