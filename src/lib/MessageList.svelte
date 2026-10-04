@@ -24,6 +24,7 @@
 	import { convertFileSrc } from '@tauri-apps/api/core';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import QuotesIcon from 'phosphor-svelte/lib/QuotesIcon';
+	import ListPlusIcon from 'phosphor-svelte/lib/ListPlusIcon';
 
 	let {
 		messages,
@@ -40,6 +41,7 @@
 		scroller = null,
 		onEdit,
 		onCite,
+		onNote,
 		onRewind,
 		onFile,
 		onDismiss,
@@ -67,6 +69,8 @@
 		onEdit: (text: string) => void;
 		/** Quote text selected in a reply into the composer. */
 		onCite?: (text: string) => void;
+		/** Notes the selected passage as a requirement (offered beside quoting). */
+		onNote?: (text: string) => void;
 		onRewind: (text: string, userIndex: number) => void;
 		/** Open a workspace file referenced by a chat link (editor / browser). */
 		onFile?: (href: string) => void;
@@ -246,9 +250,9 @@
 		const r = range.getBoundingClientRect();
 		cite = { text, x: r.left + r.width / 2, top: r.top, bottom: r.bottom };
 	}
-	function takeCite() {
+	function takeCite(to: ((text: string) => void) | undefined = onCite) {
 		if (!cite) return;
-		onCite?.(cite.text);
+		to?.(cite.text);
 		window.getSelection()?.removeAllRanges();
 		cite = null;
 	}
@@ -554,16 +558,16 @@
 {#if cite}
 	{@const below = cite.top < 60}
 	<!-- mousedown would clear the selection before the click lands. -->
-	<button
-		class="cite"
-		class:below
-		style:left="{cite.x}px"
-		style:top="{below ? cite.bottom + 8 : cite.top - 8}px"
-		onmousedown={(e) => e.preventDefault()}
-		onclick={takeCite}
-	>
-		<QuotesIcon size={13} />{t('chat.cite')}
-	</button>
+	<div class="cite" class:below style:left="{cite.x}px" style:top="{below ? cite.bottom + 8 : cite.top - 8}px">
+		<button onmousedown={(e) => e.preventDefault()} onclick={() => takeCite()}>
+			<QuotesIcon size={13} />{t('chat.cite')}
+		</button>
+		{#if onNote}
+			<button onmousedown={(e) => e.preventDefault()} onclick={() => takeCite(onNote)}>
+				<ListPlusIcon size={13} />{t('shell.requirement.note')}
+			</button>
+		{/if}
+	</div>
 {/if}
 
 <style>
@@ -572,23 +576,33 @@
 		z-index: 300;
 		transform: translate(-50%, -100%);
 		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		padding: 5px 10px;
 		border-radius: var(--r-sm);
 		border: 1px solid var(--border);
 		background: var(--panel);
 		box-shadow: var(--shadow-pop);
+		overflow: hidden;
+		animation: cite-in var(--t-fast) var(--ease-out);
+	}
+	.cite button {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 5px 10px;
+		border: none;
+		background: none;
 		color: var(--text);
+		font: inherit;
 		font-size: var(--fs-xs);
 		cursor: pointer;
-		animation: cite-in var(--t-fast) var(--ease-out);
 		transition: background var(--t-fast) var(--ease-out);
+	}
+	.cite button + button {
+		border-left: 1px solid var(--border);
 	}
 	.cite.below {
 		transform: translateX(-50%);
 	}
-	.cite:hover {
+	.cite button:hover {
 		background: var(--surface2);
 	}
 	@keyframes cite-in {
@@ -841,10 +855,6 @@
 	.copy:active {
 		transform: scale(0.94);
 	}
-	.reason {
-		border-left: 2px solid var(--hairline);
-		padding-left: 12px;
-	}
 	.reason-head {
 		display: inline-flex;
 		align-items: center;
@@ -928,14 +938,12 @@
 		font-weight: 400;
 		color: var(--err);
 	}
-	/* The group's calls hang under its header behind a hairline rule. */
+	/* The group's calls hang indented under its header. */
 	.tg-list {
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
-		margin: 6px 0 0 6px;
-		padding-left: 12px;
-		border-left: 1px solid var(--border);
+		margin: 6px 0 0 20px;
 	}
 	.reason-body {
 		margin-top: 4px;

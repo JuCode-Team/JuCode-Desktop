@@ -51,6 +51,9 @@ export interface Session {
 	/** Claude Code: the model a restored session last ran on, until its engine
 	 *  reports one (see SessionStore.#keepModel). */
 	model?: string;
+	/** The requirement a new session starts on: linked to it once the daemon
+	 *  names the session (not persisted). */
+	requirement?: string;
 }
 
 /** 并行任务（git worktree）项目的元数据，随项目布局持久化。 */

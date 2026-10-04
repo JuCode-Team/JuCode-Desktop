@@ -95,6 +95,9 @@
 	import TaskDialog from '$lib/TaskDialog.svelte';
 	import AgentDialog from '$lib/AgentDialog.svelte';
 	import DeskPage from '$lib/DeskPage.svelte';
+	import { Requirements, provideRequirements, type Requirement } from '$lib/requirements.svelte';
+	import type { StartHow } from '$lib/requirements/StartButton.svelte';
+	import { normalizeBackendId } from '$lib/backends';
 	import { agentDirectory, agentsOfWorkspace } from '$lib/agents.svelte';
 	import { CHATS_ENABLED, type Project, type WorktreeMeta } from '$lib/types';
 	import PlanPanel from '$lib/PlanPanel.svelte';
@@ -123,6 +126,9 @@
 	// O(1) session lookup for the hot agent-event path (fires per stream chunk),
 	// instead of an O(n) allSessions.find on every event.
 	const sessionMap = $derived(new Map(allSessions.map((s) => [s.id, s])));
+	// The requirements on this computer (the daemon's list).
+	const requirements = new Requirements(daemon);
+	provideRequirements(requirements);
 
 	let providers = $state<string[]>([]);
 
@@ -173,12 +179,74 @@
 	let showDesk = $state(false);
 	let deskAgent = $state<string | null>(null);
 	let deskSession = $state<string | null>(null);
+	let deskPage = $state<'overview' | 'requirements' | 'schedules'>('overview');
+	let deskRequirement = $state<string | null>(null);
+	let captureSignal = $state(0);
 	function openDesk(agent: string | null) {
 		deskAgent = agent;
 		deskSession = null;
 		showSettings = false;
 		showDesk = true;
 	}
+	/** The workbench's requirements page: one requirement, or the list. */
+	function openRequirements(id: string | null = null) {
+		openDesk(null);
+		deskPage = 'requirements';
+		deskRequirement = id;
+	}
+
+	/** Starts a session on requirement `r`: a new session in its project,
+	 *  its first message (the requirement and its progress) filled in for the
+	 *  user to edit and send, its screenshots attached; it is linked once it
+	 *  starts. Or a parallel task (worktree) with that message, or Dispatch
+	 *  across its projects. */
+	let taskRequirement = $state<{ id: string; name: string; description: string } | null>(null);
+	async function startRequirement(r: Requirement, how: StartHow) {
+		try {
+			const text = await requirements.prompt(r.id);
+			if (how.mode === 'dispatch') {
+				await daemon.request({ op: 'dispatch_send', text, plan: false, approval_mode: 'auto', requirement: r.id });
+				toast.success(t('shell.requirement.dispatched'));
+				return;
+			}
+			const path = how.project ?? r.projects[0];
+			const project = path ? await openProjectPath(path, false) : null;
+			if (!project) return toast.warn(t('shell.requirement.pickProject'));
+			if (!r.projects.length) await requirements.update(r.id, { projects: [project.path] });
+			if (how.mode === 'worktree') {
+				// The id keeps the branch name readable whatever the title's script.
+				taskRequirement = { id: r.id, name: `${r.id} ${r.title}`, description: text };
+				newTask(project);
+				return;
+			}
+			// An empty new session there (one a new project starts with) is used
+			// rather than a second one.
+			const backend = how.backend ? normalizeBackendId(how.backend) : undefined;
+			const empty = project.sessions.find(
+				(s) => s.draft && !s.requirement && !s.chat.messages.length && (!backend || s.backendId === backend)
+			);
+			const id = empty?.id ?? store.addSession(project, undefined, backend);
+			store.activeId = id;
+			const session = store.allSessions.find((s) => s.id === id);
+			if (session) {
+				session.requirement = r.id;
+				session.chat.pendingFill = text;
+				session.chat.pendingAttach = [...r.images];
+			}
+			showDesk = false;
+		} catch (e) {
+			toast.error(e instanceof Error ? e.message : String(e));
+		}
+	}
+	/** What a running daemon session shown here is doing now (its plan's
+	 *  current step). */
+	function currentStep(session: string): string | undefined {
+		const chat = allSessions.find((s) => s.chat.sessionId === session)?.chat;
+		return chat?.plan.find((p) => p.status === 'in_progress')?.step;
+	}
+	const workspaceProjects = $derived(
+		projects.filter((p) => !p.worktree && !p.chats).map((p) => ({ path: p.path, name: p.name }))
+	);
 
 	/** Show a daemon session: an agent's on the workbench, a plain hosted one
 	 *  in a tab. */
@@ -764,12 +832,17 @@
 	/** 把任务 worktree 作为项目打开（已在列表中则聚焦），可携带首条消息（任务描述）。 */
 	function openTaskProject(path: string, meta: WorktreeMeta, description = '') {
 		taskDialogFor = null;
+		const requirement = taskRequirement?.id;
+		taskRequirement = null;
 		const existing = store.userProjects.find((p) => normPath(p.path) === normPath(path));
 		if (existing) {
 			store.activeId = existing.sessions[0]?.id ?? store.addSession(existing);
 			return;
 		}
-		store.createProject(path, meta, description || undefined);
+		const project = store.createProject(path, meta, description || undefined);
+		// Started on a requirement: its session is linked once the daemon names it.
+		if (requirement && project.sessions[0]) project.sessions[0].requirement = requirement;
+		if (requirement) showDesk = false;
 	}
 	/** 任务清理完成（worktree 已删除）后，把对应项目从侧边栏移除。 */
 	function closeTaskProject(path: string) {
@@ -864,6 +937,11 @@
 		const pane = panes.get(activeId);
 		if (matches(e, 'palette')) return act(() => (showPalette = !showPalette));
 		if (matches(e, 'shortcuts')) return act(() => (showShortcuts = !showShortcuts));
+		if (matches(e, 'captureRequirement'))
+			return act(() => {
+				openRequirements();
+				captureSignal += 1;
+			});
 		if (matches(e, 'find') && chat) return act(() => pane?.toggleFind());
 		if (matches(e, 'newSession')) return act(() => activeProject && store.addSession(activeProject));
 		if (matches(e, 'settings')) return act(() => !showSettings && openSettings());
@@ -965,6 +1043,7 @@
 			daemon.onEvent = (frame) => {
 				agentDirectory.handle(frame);
 				sync.handle(frame);
+				requirements.handle(frame);
 			};
 			daemon.onDisconnect = () => {
 				agentDirectory.disconnected();
@@ -1243,6 +1322,7 @@
 												onUnregister={unregisterPane}
 												onOpenSettings={openSettings}
 												onOpenAgent={openDesk}
+												onOpenRequirement={openRequirements}
 											/>
 										{/if}
 									{:else}
@@ -1283,6 +1363,12 @@
 				<DeskPage
 					bind:agentId={deskAgent}
 					bind:sessionId={deskSession}
+					bind:page={deskPage}
+					bind:requirementId={deskRequirement}
+					projects={workspaceProjects}
+					{captureSignal}
+					{currentStep}
+					onStartRequirement={startRequirement}
 					openSid={deskSession ? (sessionMap.get(deskSession)?.chat.sessionId ?? null) : null}
 					navWidth={sidebarWidth}
 					onClose={() => (showDesk = false)}
@@ -1306,6 +1392,7 @@
 								onUnregister={unregisterPane}
 								onOpenSettings={openSettings}
 								onOpenAgent={openDesk}
+								onOpenRequirement={openRequirements}
 							/>
 						{:else}
 							<div class="gone">{t('shell.chatGone')}</div>
@@ -1363,7 +1450,13 @@
 	{/if}
 
 	{#if taskDialogFor}
-		<TaskDialog project={taskDialogFor} onClose={() => (taskDialogFor = null)} onCreated={openTaskProject} />
+		<TaskDialog
+			project={taskDialogFor}
+			name={taskRequirement?.name}
+			description={taskRequirement?.description}
+			onClose={() => ((taskDialogFor = null), (taskRequirement = null))}
+			onCreated={openTaskProject}
+		/>
 	{/if}
 
 	{#if showAgentDialog}

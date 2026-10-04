@@ -397,6 +397,13 @@ export class AgentDirectory {
 		if (this.status !== 'off') this.status = 'unreachable';
 	}
 
+	/** Tries again within a second instead of after the backoff. */
+	retryNow() {
+		if (this.status !== 'unreachable') return;
+		this.#delay = RETRY_MIN_MS;
+		this.#nextAttempt = 0;
+	}
+
 	/** The agent's most recently created session, if it has one. */
 	latestSession(agentId: string): DaemonSessionView | undefined {
 		return this.sessions

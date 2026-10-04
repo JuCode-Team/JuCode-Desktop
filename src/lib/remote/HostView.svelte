@@ -14,6 +14,10 @@
 	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
 	import ChatsCircleIcon from 'phosphor-svelte/lib/ChatsCircleIcon';
 	import PaperPlaneTiltIcon from 'phosphor-svelte/lib/PaperPlaneTiltIcon';
+	import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon';
+	import RequirementList from './RequirementList.svelte';
+	import RequirementCompose from './RequirementCompose.svelte';
+	import RequirementScreen from './RequirementScreen.svelte';
 	import DispatchList from './DispatchList.svelte';
 	import DispatchComposer from './DispatchComposer.svelte';
 	import DispatchScreen from './DispatchScreen.svelte';
@@ -43,7 +47,8 @@
 		resizer,
 		onAdd,
 		onForget,
-		onRepair
+		onRepair,
+		show
 	}: {
 		conn: HostConnection;
 		/** The computer's name. */
@@ -68,6 +73,9 @@
 		onForget: (ask?: boolean) => void;
 		/** LAN: pair this device again. */
 		onRepair: () => void;
+		/** A requirement to show (a notification was opened); `n` makes the
+		 *  same one again a new request. */
+		show?: { requirement: string; n: number } | null;
 	} = $props();
 	/* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -75,10 +83,15 @@
 	// svelte-ignore state_referenced_locally
 	provideHost(conn);
 
-	type Tab = 'projects' | 'dispatch' | 'desk';
-	const TABS: Tab[] = ['projects', 'dispatch', 'desk'];
+	type Tab = 'projects' | 'requirements' | 'dispatch' | 'desk';
+	const TABS: Tab[] = ['projects', 'requirements', 'dispatch', 'desk'];
 	let tab = $state<Tab>('projects');
-	const TAB_TITLES = { projects: 'shell.remote.sessions', dispatch: 'shell.dispatch.title', desk: 'shell.desk.title' } as const;
+	const TAB_TITLES = {
+		projects: 'shell.remote.sessions',
+		requirements: 'shell.requirement.title',
+		dispatch: 'shell.dispatch.title',
+		desk: 'shell.desk.title'
+	} as const;
 	/** Pages opened over the tabs, last on top. */
 	type Screen = { key: number } & (
 		| { kind: 'session'; session?: string; agent?: string; cwd?: string; chat?: boolean; engine?: string; title: string }
@@ -88,10 +101,12 @@
 		| { kind: 'dispatch'; id: string }
 		| { kind: 'compose' }
 		| { kind: 'desk'; item: string }
+		| { kind: 'requirement'; id: string }
+		| { kind: 'capture' }
 	);
 	/** Each tab keeps its own pages: switching tabs on a wide page shows that
 	 *  tab's pane as it was left (and keeps its sessions streaming). */
-	let stacks = $state<Record<Tab, Screen[]>>({ projects: [], dispatch: [], desk: [] });
+	let stacks = $state<Record<Tab, Screen[]>>({ projects: [], requirements: [], dispatch: [], desk: [] });
 	const stack = $derived(stacks[tab]);
 	let nextKey = 0;
 	type NewScreen = Screen extends infer S ? (S extends Screen ? Omit<S, 'key'> : never) : never;
@@ -142,6 +157,14 @@
 	const currentSession = $derived(top?.kind === 'session' ? top.session : undefined);
 	const currentDispatch = $derived(top?.kind === 'dispatch' ? top.id : undefined);
 	const currentDeskItem = $derived(top?.kind === 'desk' ? top.item : undefined);
+	const currentRequirement = $derived(top?.kind === 'requirement' ? top.id : undefined);
+
+	// A requirement asked for from outside (an opened notification).
+	$effect(() => {
+		if (!show) return;
+		tab = 'requirements';
+		open({ kind: 'requirement', id: show.requirement });
+	});
 
 	/** A daemon session's page, from what the daemon's list knows of it. */
 	function sessionScreen(session: string, title?: string): NewScreen {
@@ -200,6 +223,11 @@
 					<ListIcon size={18} weight={tab === 'projects' ? 'fill' : 'regular'} />
 					<span class="label">{t('shell.remote.sessions')}</span>
 				</button>
+				<button class:on={tab === 'requirements'} onclick={() => (tab = 'requirements')}>
+					<ListChecksIcon size={18} weight={tab === 'requirements' ? 'fill' : 'regular'} />
+					<span class="label">{t('shell.requirement.title')}</span>
+					{#if conn.requirements.pending > 0}<span class="badge">{conn.requirements.pending}</span>{/if}
+				</button>
 				<button class:on={tab === 'dispatch'} onclick={() => (tab = 'dispatch')}>
 					<PaperPlaneTiltIcon size={18} weight={tab === 'dispatch' ? 'fill' : 'regular'} />
 					<span class="label">{t('shell.dispatch.title')}</span>
@@ -247,6 +275,14 @@
 						onOpenAgent={openAgent}
 					/>
 				</div>
+				<div class="tabbody" hidden={tab !== 'requirements'}>
+					<RequirementList
+						current={currentRequirement}
+						composing={wide ? stacks.requirements.length === 0 : false}
+						onNew={() => (wide ? (stacks.requirements = []) : push({ kind: 'capture' }))}
+						onOpen={(id) => open({ kind: 'requirement', id })}
+					/>
+				</div>
 				<div class="tabbody" hidden={tab !== 'dispatch'}>
 					<DispatchList
 						current={currentDispatch}
@@ -270,7 +306,9 @@
 			<!-- With nothing opened from the list, a wide pane shows the tab's
 			     own page: the composer, the desk's queue. -->
 			{#if wide && stack.length === 0}
-				{#if tab === 'dispatch'}
+				{#if tab === 'requirements'}
+					<RequirementCompose onNoted={(id) => open({ kind: 'requirement', id })} />
+				{:else if tab === 'dispatch'}
 					<DispatchComposer onSent={(d) => open({ kind: 'dispatch', id: d.id })} />
 				{:else if tab === 'desk'}
 					<DeskHome onOpenSession={(s) => push(sessionScreen(s))} onOpenAgent={(id) => push(agentScreen(id))} />
@@ -330,6 +368,16 @@
 							onSent={(d) => {
 								pop();
 								push({ kind: 'dispatch', id: d.id });
+							}}
+						/>
+					{:else if screen.kind === 'requirement'}
+						<RequirementScreen id={screen.id} onBack={pop} onOpenSession={(s, title) => push(sessionScreen(s, title))} />
+					{:else if screen.kind === 'capture'}
+						<RequirementCompose
+							onBack={pop}
+							onNoted={(id) => {
+								pop();
+								push({ kind: 'requirement', id });
 							}}
 						/>
 					{:else if screen.kind === 'desk'}

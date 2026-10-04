@@ -1,12 +1,14 @@
 <script lang="ts">
 	// The workbench: a page over the content panel, like Settings. The nav
-	// lists the overview, the scheduled tasks and every agent with what it is
-	// doing, the shown agent with its sessions under it; the main column shows
-	// the overview (DeskContent), the scheduled tasks, one agent's page, or one
-	// of its sessions (`chatView`, rendered by the page).
+	// lists the overview, the requirements, the scheduled tasks and every
+	// agent with what it is doing, the shown agent with its sessions under it;
+	// the main column shows the overview (DeskContent), the requirements (one
+	// of them, or the list), the scheduled tasks, one agent's page, or one of
+	// its sessions (`chatView`, rendered by the page).
 	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
 	import TrayIcon from 'phosphor-svelte/lib/TrayIcon';
 	import CalendarBlankIcon from 'phosphor-svelte/lib/CalendarBlankIcon';
+	import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon';
 	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import type { Snippet } from 'svelte';
@@ -14,6 +16,10 @@
 	import AgentPage from '$lib/AgentPage.svelte';
 	import DeskContent from '$lib/DeskContent.svelte';
 	import ScheduleBoard from '$lib/ScheduleBoard.svelte';
+	import RequirementBoard from '$lib/requirements/RequirementBoard.svelte';
+	import RequirementDetail from '$lib/requirements/RequirementDetail.svelte';
+	import type { StartHow } from '$lib/requirements/StartButton.svelte';
+	import { needsYou, useRequirements, type Requirement } from '$lib/requirements.svelte';
 	import { agentDirectory, agentsOfWorkspace, agentWorkspace, type AgentView } from '$lib/agents.svelte';
 	import { workspaces } from '$lib/workbench/workspaceStore.svelte';
 	import { t } from '$lib/i18n';
@@ -21,30 +27,77 @@
 	let {
 		agentId = $bindable(null),
 		sessionId = $bindable(null),
+		page = $bindable('overview'),
+		requirementId = $bindable(null),
 		openSid = null,
 		chatView,
 		navWidth,
+		projects,
+		captureSignal = 0,
+		currentStep,
 		onClose,
 		onOpenSession,
 		onNewAgent,
-		onNewSession
+		onNewSession,
+		onStartRequirement
 	}: {
 		/** The agent shown; null for the overview. */
 		agentId?: string | null;
 		/** The desktop session shown in the main column (one of the agent's). */
 		sessionId?: string | null;
+		/** With no agent shown: the overview, the requirements or the
+		 *  scheduled tasks. */
+		page?: 'overview' | 'requirements' | 'schedules';
+		/** The requirement shown on the requirements page; null for the list. */
+		requirementId?: string | null;
 		/** The daemon session `sessionId` is, for the nav's highlight. */
 		openSid?: string | null;
 		/** A desktop session's chat pane. */
 		chatView: Snippet<[string]>;
 		navWidth: number;
+		/** The open workspace's projects: its requirements are those about them
+		 *  (or about none), and sessions start in them. */
+		projects: { path: string; name: string }[];
+		/** Bumped to focus the box that notes an idea. */
+		captureSignal?: number;
+		/** What a running session is doing now, when this computer shows it. */
+		currentStep?: (session: string) => string | undefined;
 		onClose: () => void;
 		/** `agent`: whose it is, when the caller knows (the list may lag). */
 		onOpenSession: (session: string, agent?: string) => void;
 		onNewAgent: () => void;
 		/** Open a new, empty session of the agent. */
 		onNewSession: (agent: AgentView) => void;
+		onStartRequirement: (r: Requirement, how: StartHow) => void;
 	} = $props();
+
+	const reqs = useRequirements();
+	const norm = (p: string) => p.replace(/[\\/]+$/, '');
+	const projectPaths = $derived(new Set(projects.map((p) => norm(p.path))));
+	/** The open workspace's requirements: about its projects, or about none. */
+	const shownReqs = $derived(
+		reqs.list.filter((r) => !r.projects.length || r.projects.some((p) => projectPaths.has(norm(p))))
+	);
+	const yourTurn = $derived(
+		shownReqs.filter(needsYou).sort((a, b) => b.updated_at - a.updated_at)
+	);
+	const shownReq = $derived(requirementId ? reqs.get(requirementId) : undefined);
+	function openRequirement(id: string | null) {
+		page = 'requirements';
+		requirementId = id;
+		agentId = null;
+		sessionId = null;
+	}
+	/** J: the next requirement on the user's turn (outside text fields). */
+	function onKey(e: KeyboardEvent) {
+		if (e.key !== 'j' || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || e.defaultPrevented) return;
+		const el = e.target as HTMLElement | null;
+		if (el?.closest('input, textarea, [contenteditable="true"]')) return;
+		if (sessionId || agentId || !yourTurn.length) return;
+		e.preventDefault();
+		const i = yourTurn.findIndex((r) => r.id === requirementId);
+		openRequirement(yourTurn[(i + 1) % yourTurn.length].id);
+	}
 
 	const shown = $derived(agentId ? agentDirectory.agents.find((a) => a.id === agentId) : undefined);
 	/** The agents listed: the open workspace's, or every agent. */
@@ -53,7 +106,7 @@
 		showAll ? agentDirectory.agents : agentsOfWorkspace(agentDirectory.agents, workspaces.workspaces, workspaces.activeId)
 	);
 	const listedIds = $derived(listed.map((a) => a.id));
-	const pending = $derived(listed.reduce((n, a) => n + agentDirectory.pendingFor(a.id), 0));
+	const pending = $derived(listed.reduce((n, a) => n + agentDirectory.pendingFor(a.id), 0) + yourTurn.length);
 	const workspaceName = (a: AgentView) =>
 		workspaces.workspaces.find((w) => w.id === agentWorkspace(a, workspaces.workspaces))?.name ?? '';
 	/** The shown agent's sessions, most recently active first. */
@@ -65,15 +118,15 @@
 			: []
 	);
 
-	/** With no agent shown: the overview or the scheduled-tasks page. */
-	let page = $state<'overview' | 'schedules'>('overview');
 	const scheduleCount = $derived(agentDirectory.schedules.filter((s) => s.enabled && listedIds.includes(s.agent)).length);
 	const onOverview = $derived(!shown && page === 'overview');
 	const onSchedules = $derived(!shown && page === 'schedules');
+	const onRequirements = $derived(!shown && !sessionId && page === 'requirements');
 	function openPage(p: typeof page) {
 		page = p;
 		agentId = null;
 		sessionId = null;
+		requirementId = null;
 	}
 	function openAgent(id: string) {
 		agentId = id;
@@ -100,6 +153,8 @@
 	}
 </script>
 
+<svelte:window onkeydown={onKey} />
+
 <div class="desk-page">
 	<nav class="nav" style:width="{navWidth}px" aria-label={t('shell.desk.title')}>
 		<div class="nav-head">
@@ -113,6 +168,11 @@
 				<TrayIcon size={18} weight={onOverview ? 'fill' : 'regular'} />
 				<span class="label">{t('shell.desk.overview')}</span>
 				{#if pending}<span class="badge">{pending}</span>{/if}
+			</button>
+			<button class="item" class:on={onRequirements} aria-current={onRequirements ? 'page' : undefined} onclick={() => openPage('requirements')}>
+				<ListChecksIcon size={18} weight={onRequirements ? 'fill' : 'regular'} />
+				<span class="label">{t('shell.requirement.title')}</span>
+				{#if yourTurn.length}<span class="badge">{yourTurn.length}</span>{/if}
 			</button>
 			<button class="item" class:on={onSchedules} aria-current={onSchedules ? 'page' : undefined} onclick={() => openPage('schedules')}>
 				<CalendarBlankIcon size={18} weight={onSchedules ? 'fill' : 'regular'} />
@@ -171,6 +231,31 @@
 			<div class="col">
 				<ScheduleBoard agents={listed} {onOpenSession} onOpenAgent={openAgent} />
 			</div>
+		{:else if page === 'requirements'}
+			{#if shownReq}
+				<div class="col wide">
+					{#key shownReq.id}
+						<RequirementDetail
+							requirement={shownReq}
+							{projects}
+							onBack={() => (requirementId = null)}
+							onStart={onStartRequirement}
+							onOpenSession={(s) => onOpenSession(s)}
+						/>
+					{/key}
+				</div>
+			{:else}
+				<div class="col">
+					<RequirementBoard
+						list={shownReqs}
+						{projects}
+						focusSignal={captureSignal}
+						{currentStep}
+						onOpen={openRequirement}
+						onStart={onStartRequirement}
+					/>
+				</div>
+			{/if}
 		{:else}
 			<div class="col">
 				<h1>{t('shell.desk.title')}</h1>
@@ -193,7 +278,7 @@
 						{/each}
 					</div>
 				{/if}
-				<DeskContent agents={listedIds} {onOpenSession} onOpenAgent={openAgent} />
+				<DeskContent agents={listedIds} {onOpenSession} onOpenAgent={openAgent} requirements={yourTurn} onOpenRequirement={openRequirement} />
 			</div>
 		{/if}
 	</div>
@@ -372,8 +457,8 @@
 		min-width: 20px;
 		padding: 0 6px;
 		border-radius: var(--r-full);
-		background: color-mix(in oklab, var(--warn) 18%, transparent);
-		color: var(--warn);
+		background: var(--accent);
+		color: var(--on-accent);
 		font-family: var(--font-mono);
 		font-size: var(--fs-2xs);
 		line-height: 20px;
@@ -416,6 +501,11 @@
 		margin: 0 auto;
 		padding: 56px 32px 80px;
 		animation: rise var(--t-med) var(--ease-out);
+	}
+	/* A requirement's two columns. */
+	.col.wide {
+		max-width: 1120px;
+		padding-top: 40px;
 	}
 	h1 {
 		margin: 0;

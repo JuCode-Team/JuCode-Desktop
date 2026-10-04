@@ -15,17 +15,24 @@
 
 	let {
 		project,
+		name: initialName = '',
+		description: initialDescription = '',
 		onClose,
 		onCreated
 	}: {
 		project: Project;
+		/** Prefilled task name and description (a requirement started here). */
+		name?: string;
+		description?: string;
 		onClose: () => void;
 		/** worktree 已创建：path = worktree 目录，description 非空时作为首条消息。 */
 		onCreated: (path: string, meta: WorktreeMeta, description: string) => void;
 	} = $props();
 
-	let name = $state('');
-	let description = $state('');
+	// svelte-ignore state_referenced_locally
+	let name = $state(initialName);
+	// svelte-ignore state_referenced_locally
+	let description = $state(initialDescription);
 	let base = $state('');
 	let branches = $state<string[]>([]);
 	let busy = $state(false);

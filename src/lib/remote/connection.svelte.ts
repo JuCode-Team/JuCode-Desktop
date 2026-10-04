@@ -14,9 +14,12 @@ import { deviceKey, hostStaticKey, type RelayHost } from '$lib/relay/pairing';
 import { RelaySocket, type RelayError, type RelayErrorKind } from '$lib/relay/socket';
 import { deviceName, remoteEndpoint } from '$lib/remote';
 import { RemoteProjects } from './store.svelte';
+import { Requirements, provideRequirements } from '$lib/requirements.svelte';
 
 /** The id of the LAN connection (relay computers use their host id). */
 export const LAN_ID = 'lan';
+/** How long a connection that looks up has to answer when the page wakes. */
+const WAKE_PING_MS = 5000;
 
 type Route = { onFrame: (raw: string) => void; onExit: () => void };
 
@@ -49,6 +52,7 @@ export class HostConnection {
 	readonly agents: AgentDirectory;
 	readonly projects: RemoteProjects;
 	readonly dispatches: Dispatches;
+	readonly requirements: Requirements;
 	/** Why the last relay connection failed (relay only). */
 	relayError = $state<RelayError | null>(null);
 	/** The daemon accepted this device at least once since the page opened. */
@@ -74,6 +78,7 @@ export class HostConnection {
 		this.agents = new AgentDirectory(this.daemon);
 		this.projects = new RemoteProjects(this.daemon, this.agents);
 		this.dispatches = new Dispatches(this.daemon);
+		this.requirements = new Requirements(this.daemon);
 		this.everConnected = kind === 'lan';
 	}
 
@@ -125,6 +130,7 @@ export class HostConnection {
 			this.agents.handle(frame);
 			this.projects.handle(frame);
 			this.dispatches.handle(frame);
+			this.requirements.handle(frame);
 		};
 		// Notifications keep reaching this phone after the computer restarts
 		// or the browser renews its subscription.
@@ -134,10 +140,30 @@ export class HostConnection {
 		this.daemon.onDisconnect = () => {
 			this.agents.disconnected();
 			this.projects.reset();
+			this.requirements.reset();
 		};
 		this.daemon.onFrame = (id, raw) => this.#routes.get(id)?.onFrame(raw);
 		this.daemon.onExit = (id) => this.#routes.get(id)?.onExit();
 		this.agents.start();
+	}
+
+	/** The page came back to the foreground. A socket the phone suspended can
+	 *  still look open, so a connection that seems up must answer a ping
+	 *  within a few seconds or is dropped (and reconnects); one that is down
+	 *  retries now instead of waiting out its backoff. */
+	async wake() {
+		if (this.#stopped) return;
+		if (this.agents.status !== 'on') return this.agents.retryNow();
+		const socket = this.#socket;
+		// Any reply counts, an older daemon's error to `ping` included.
+		const answered = await Promise.race([
+			this.daemon.request({ op: 'ping' }).then(
+				() => true,
+				() => true
+			),
+			new Promise<boolean>((resolve) => setTimeout(() => resolve(false), WAKE_PING_MS))
+		]);
+		if (!answered && this.#socket === socket) socket?.close();
 	}
 
 	/** Disconnects for good (the computer was forgotten or paired again). */
@@ -168,6 +194,7 @@ const KEY = Symbol('remote-host');
 export function provideHost(conn: HostConnection) {
 	setContext(KEY, conn);
 	provideAgents(conn.agents);
+	provideRequirements(conn.requirements);
 }
 
 /** The computer this part of the remote page shows. */

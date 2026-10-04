@@ -19,6 +19,7 @@ export type ShortcutId =
 	| 'sessionN'
 	| 'terminal'
 	| 'approvalMode'
+	| 'captureRequirement'
 	| 'shortcuts';
 
 export interface Shortcut {
@@ -39,6 +40,7 @@ export const SHORTCUTS: Record<ShortcutId, Shortcut> = {
 	settings: { key: ',', mod: true, group: 'general' },
 	terminal: { key: '`', ctrl: true, group: 'general' },
 	shortcuts: { key: '/', mod: true, group: 'general' },
+	captureRequirement: { key: 'n', mod: true, shift: true, group: 'general' },
 	newSession: { key: 'n', mod: true, group: 'session' },
 	history: { key: 'h', mod: true, shift: true, group: 'session' },
 	prevSession: { key: '[', mod: true, shift: true, group: 'session' },

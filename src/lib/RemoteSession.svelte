@@ -13,6 +13,17 @@
 	import FilesIcon from 'phosphor-svelte/lib/FilesIcon';
 	import GitDiffIcon from 'phosphor-svelte/lib/GitDiffIcon';
 	import DesktopIcon from 'phosphor-svelte/lib/DesktopIcon';
+	import FastForwardIcon from 'phosphor-svelte/lib/FastForwardIcon';
+	import HandIcon from 'phosphor-svelte/lib/HandIcon';
+	import ClipboardTextIcon from 'phosphor-svelte/lib/ClipboardTextIcon';
+	import ShieldCheckIcon from 'phosphor-svelte/lib/ShieldCheckIcon';
+	import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon';
+	import ShieldWarningIcon from 'phosphor-svelte/lib/ShieldWarningIcon';
+	import PopMenu, { type PopMenuItem } from '$lib/ui/PopMenu.svelte';
+	import PaperclipIcon from 'phosphor-svelte/lib/PaperclipIcon';
+	import FileIcon from 'phosphor-svelte/lib/FileIcon';
+	import XIcon from 'phosphor-svelte/lib/XIcon';
+	import { sendFile, type Uploaded } from '$lib/upload';
 	import ModelMenu from '$lib/remote/ModelMenu.svelte';
 	import MessageList from '$lib/MessageList.svelte';
 	import ApprovalCard from '$lib/ApprovalCard.svelte';
@@ -27,8 +38,9 @@
 	import type { JucodeGroup, Op } from '$lib/protocol';
 	import { useHost } from '$lib/remote/connection.svelte';
 	import { confirm } from '$lib/ui/confirm.svelte';
-	import { BACKEND_LABELS } from '$lib/backends';
-	import type { ApproveOp } from '$lib/approval';
+	import { BACKEND_LABELS, caps } from '$lib/backends';
+	import { buildSetApprovalModeOp, type ApprovalMode, type ApproveOp } from '$lib/approval';
+	import { loadComposerText, saveComposerText } from '$lib/composerText';
 	import { t } from '$lib/i18n';
 
 	let {
@@ -64,12 +76,21 @@
 		register: (id: string, onFrame: (raw: string) => void, onExit: () => void) => () => void;
 		onBack: () => void;
 	} = $props();
-	const { daemon, agents: agentDirectory } = useHost();
+	const host = useHost();
+	const { daemon, agents: agentDirectory } = host;
 
 	const id = `remote-${Math.random().toString(36).slice(2)}`;
 	const chat = new ChatState();
+	// The session belongs to the computer: show its approval mode as it is.
+	chat.followEngineMode = true;
 	const adapter = createJucodeAdapter();
-	let text = $state('');
+	// Unsent text is kept on this device per conversation (a new one by where
+	// it would start), so leaving the page or closing the app keeps it.
+	const textKey = untrack(
+		() => `${host.id}:${session ?? `new:${agent ?? ''}:${isChat ? 'chat' : (cwd ?? '')}:${engine ?? ''}`}`
+	);
+	let text = $state(loadComposerText(textKey));
+	$effect(() => saveComposerText(textKey, text));
 	let error = $state('');
 	let exited = $state(false);
 	/** Set once the session is open here; sending earlier would fail and the
@@ -123,6 +144,27 @@
 		scroller?.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' });
 	}
 
+	/** The connection to the computer dropped (rather than the session being
+	 *  closed there): the page reopens it on its own once the computer is back,
+	 *  a few times, before falling back to the reconnect button. */
+	let dropped = $state(false);
+	let retries = $state(0);
+	const RETRY_DELAYS = [0, 2000, 5000];
+	const reconnecting = $derived(exited && dropped && retries < RETRY_DELAYS.length);
+	let wasOn = untrack(() => agentDirectory.status === 'on');
+	$effect(() => {
+		const on = agentDirectory.status === 'on';
+		// The computer is back: start the attempts afresh.
+		if (on && !wasOn) retries = 0;
+		wasOn = on;
+		if (!on || !reconnecting || draft) return;
+		const timer = setTimeout(() => {
+			retries += 1;
+			void connect();
+		}, RETRY_DELAYS[retries]);
+		return () => clearTimeout(timer);
+	});
+
 	async function connect() {
 		error = '';
 		exited = false;
@@ -140,6 +182,13 @@
 				engine && engine !== 'jucode' ? { engine, options: {} } : undefined
 			);
 			connected = true;
+			dropped = false;
+			retries = 0;
+			// An approval mode picked before the first message.
+			if (draftMode) {
+				applyMode(draftMode);
+				draftMode = null;
+			}
 		} catch (e) {
 			error = e instanceof Error ? e.message : String(e);
 			exited = true;
@@ -151,8 +200,12 @@
 		unregister = register(id, onFrame, () => {
 			exited = true;
 			connected = false;
+			// The connection's own disconnect is handled before its sessions
+			// exit, so a computer that still looks reachable closed the session.
+			dropped = agentDirectory.status !== 'on';
 		});
 		if (!draft) void connect();
+		if (text) tick().then(autosize);
 	});
 	onDestroy(() => {
 		unregister();
@@ -181,17 +234,72 @@
 		input.style.height = `${input.scrollHeight}px`;
 	}
 
+	// Images and files sent along: each goes to the computer as soon as it is
+	// picked or pasted (through the relay, encrypted), and the message names
+	// the paths there, as the desktop's attachments do.
+	type Attachment = { key: number; name: string; url?: string; sent: number; total: number; done?: Uploaded; error?: string };
+	let attachments = $state<Attachment[]>([]);
+	let attachKey = 0;
+	let picker = $state<HTMLInputElement | null>(null);
+	const uploading = $derived(attachments.some((a) => !a.done && !a.error));
+	const attached = $derived(attachments.flatMap((a) => (a.done ? [a.done] : [])));
+	function attach(files: Iterable<File>) {
+		for (const file of files) {
+			const key = ++attachKey;
+			attachments.push({
+				key,
+				name: file.name,
+				url: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
+				sent: 0,
+				total: file.size
+			});
+			const entry = () => attachments.find((a) => a.key === key);
+			sendFile(daemon, file, (sent, total) => {
+				const a = entry();
+				if (a) Object.assign(a, { sent, total });
+			})
+				.then((done) => {
+					const a = entry();
+					if (a) a.done = done;
+				})
+				.catch((e) => {
+					const a = entry();
+					if (a) a.error = e instanceof Error ? e.message : String(e);
+				});
+		}
+	}
+	function detach(key: number) {
+		const a = attachments.find((x) => x.key === key);
+		if (a?.url) URL.revokeObjectURL(a.url);
+		attachments = attachments.filter((x) => x.key !== key);
+	}
+	function onPaste(e: ClipboardEvent) {
+		const files = [...(e.clipboardData?.files ?? [])];
+		if (!files.length) return;
+		e.preventDefault();
+		attach(files);
+	}
+
 	async function submit() {
-		const content = text.trim();
-		if (!content) return;
+		const typed = text.trim();
+		if ((!typed && !attached.length) || uploading) return;
+		const images = attached.filter((a) => a.image).map((a) => a.path);
+		const files = attached.filter((a) => !a.image).map((a) => a.path);
+		const content = files.length ? `${typed}${typed ? '\n\n' : ''}Attached files (read these):\n${files.join('\n')}` : typed;
 		if (draft) {
 			draft = false;
 			await connect();
 		}
 		if (!connected) return;
-		chat.optimisticUser(content);
-		send({ op: 'user_message', content });
+		// A busy session queues the message: the engine lists it (jucode) or
+		// runs it as the next turn (others, listed here until that turn).
+		if (chat.busy) {
+			if (!bcaps.steer) queued = [...queued, content];
+		} else chat.optimisticUser(content);
+		send({ op: 'user_message', content, images: images.length ? images : undefined });
 		text = '';
+		for (const a of attachments) if (a.url) URL.revokeObjectURL(a.url);
+		attachments = [];
 		atBottom = true;
 		tick().then(autosize);
 	}
@@ -201,6 +309,48 @@
 	$effect(() => {
 		if (!chat.busy) stopping = false;
 	});
+
+	const sid = $derived(chat.sessionId || session || '');
+	const view = $derived(agentDirectory.sessions.find((x) => x.session === sid));
+	const bcaps = $derived(caps({ backendId: engine ?? view?.engine ?? 'jucode' }));
+	/** Messages sent mid-turn to an engine that runs them as the next turn
+	 *  (it does not list them): shown until that turn starts. */
+	let queued = $state<string[]>([]);
+	$effect(() => {
+		if (!chat.busy) queued = [];
+	});
+	const waiting = $derived(chat.pendingMessages.length ? chat.pendingMessages : queued);
+
+	// The approval mode, as on the desktop: claude adds plan and auto; an
+	// agent's session follows the agent (changed on its page).
+	const APPROVAL_MODES: Record<string, PopMenuItem> = {
+		ask: { key: 'ask', label: t('chat.approvalAsk'), desc: t('chat.approvalAskDesc'), icon: HandIcon },
+		plan: { key: 'plan', label: t('chat.approvalPlan'), desc: t('chat.approvalPlanDesc'), icon: ClipboardTextIcon },
+		auto: { key: 'auto', label: t('chat.approvalAuto'), desc: t('chat.approvalAutoDesc'), icon: ShieldCheckIcon },
+		edits: { key: 'edits', label: t('chat.approvalEdits'), desc: t('chat.approvalEditsDesc'), icon: NotePencilIcon },
+		all: { key: 'all', label: t('chat.approvalAll'), desc: t('chat.approvalAllDesc'), icon: ShieldWarningIcon, tone: 'warn' }
+	};
+	const isAgent = $derived(!!(agent || chat.agent || view?.agent));
+	/** Picked before the first message: applied once the session is open. */
+	let draftMode = $state<ApprovalMode | null>(null);
+	const shownMode = $derived(draftMode ?? chat.approvalMode);
+	const APPROVAL = $derived(
+		(isAgent ? ['ask', 'edits', 'auto', 'all'] : bcaps.extendedApprovalModes ? ['ask', 'plan', 'auto', 'edits', 'all'] : ['ask', 'edits', 'all']).map(
+			(k) => ({ ...APPROVAL_MODES[k], checked: shownMode === k, disabled: isAgent })
+		)
+	);
+	const approvalCurrent = $derived(APPROVAL.find((a) => a.checked) ?? APPROVAL_MODES.ask);
+	let approvalOpen = $state(false);
+	function applyMode(mode: ApprovalMode) {
+		chat.approvalMode = mode;
+		send(buildSetApprovalModeOp(mode));
+	}
+	function pickMode(key: string) {
+		approvalOpen = false;
+		const mode = key as ApprovalMode;
+		if (draft) draftMode = mode;
+		else if (connected && mode !== chat.approvalMode) applyMode(mode);
+	}
 	function stop() {
 		stopping = true;
 		send({ op: 'interrupt' });
@@ -228,8 +378,6 @@
 
 	// Claude Code / Codex run on this machine's own login or on the JuCode
 	// gateway; the daemon knows which, and what the gateway offers.
-	const sid = $derived(chat.sessionId || session || '');
-	const view = $derived(agentDirectory.sessions.find((x) => x.session === sid));
 	const toolSession = $derived((engine === 'claude' || engine === 'codex') && !!sid);
 	let catalog = $state<{ models: { name: string; display_name?: string | null; context_window?: number }[]; groups: JucodeGroup[] } | null>(null);
 	function loadCatalog() {
@@ -346,7 +494,11 @@
 			</div>
 		{/if}
 
-		{#if exited}
+		{#if reconnecting}
+			<div class="exit">
+				<div class="exit-msg"><Notice tone="warn">{t('shell.remote.reconnecting')}</Notice></div>
+			</div>
+		{:else if exited}
 			<div class="exit">
 				<div class="exit-msg"><Notice tone={error ? 'error' : 'warn'}>{error || t('shell.remote.disconnected')}</Notice></div>
 				<Button size="sm" onclick={connect}><ArrowClockwiseIcon size={13} /> {t('shell.remote.reconnect')}</Button>
@@ -354,6 +506,19 @@
 		{/if}
 
 		<div class="composer-wrap">
+			{#if waiting.length}
+				<div class="queued">
+					<span class="queued-label">{t('chat.queuedLabel', { n: waiting.length })}</span>
+					{#each waiting as q, i (i)}
+						<span class="qchip">{q}</span>
+					{/each}
+					{#if bcaps.steer && chat.pendingMessages.length}
+						<button type="button" class="qsteer" onclick={() => send({ op: 'steer' })} title={t('chat.steerTitle')}
+							><FastForwardIcon size={12} />{t('chat.steerAction')}</button
+						>
+					{/if}
+				</div>
+			{/if}
 			<form class="composer" onsubmit={(e) => (e.preventDefault(), submit())}>
 				<textarea
 					rows="1"
@@ -362,8 +527,62 @@
 					placeholder={t('shell.remote.messagePlaceholder')}
 					oninput={autosize}
 					onkeydown={onKey}
+					onpaste={onPaste}
 				></textarea>
+				{#if attachments.length}
+					<div class="attachments">
+						{#each attachments as a (a.key)}
+							<span class="att" class:failed={!!a.error} title={a.error ?? a.name}>
+								{#if a.url}<img src={a.url} alt="" />{:else}<FileIcon size={16} />{/if}
+								<span class="att-name">{a.name}</span>
+								{#if a.error}<span class="att-state">{t('shell.upload.failed')}</span>
+								{:else if !a.done}<span class="att-state">{Math.round((a.sent / Math.max(a.total, 1)) * 100)}%</span>{/if}
+								<button type="button" aria-label={t('shell.upload.remove')} onclick={() => detach(a.key)}><XIcon size={11} /></button>
+							</span>
+						{/each}
+					</div>
+				{/if}
 				<div class="composer-bar">
+					<button type="button" class="flatbtn attach" onclick={() => picker?.click()} title={t('shell.upload.attach')} aria-label={t('shell.upload.attach')}>
+						<PaperclipIcon size={17} />
+					</button>
+					<input
+						bind:this={picker}
+						type="file"
+						multiple
+						hidden
+						onchange={(e) => {
+							const input = e.currentTarget;
+							attach([...(input.files ?? [])]);
+							input.value = '';
+						}}
+					/>
+					{#if bcaps.approvalModes}
+						<div class="footsel">
+							<button
+								type="button"
+								class="flatbtn mode"
+								class:warn={approvalCurrent.tone === 'warn'}
+								class:on={approvalOpen}
+								disabled={!connected && !draft}
+								onclick={() => (approvalOpen = !approvalOpen)}
+								title={t('chat.approvalModeTitle')}
+								aria-haspopup="menu"
+								aria-expanded={approvalOpen}
+							>
+								{#if approvalCurrent.icon}<approvalCurrent.icon size={16} />{/if}<span>{approvalCurrent.label}</span>
+							</button>
+							{#if approvalOpen}
+								<PopMenu
+									title={isAgent ? t('chat.approvalAgent') : t('chat.approvalQuestion')}
+									items={APPROVAL}
+									placement="up-left"
+									onSelect={pickMode}
+									onClose={() => (approvalOpen = false)}
+								/>
+							{/if}
+						</div>
+					{/if}
 					<div class="cspace"></div>
 					{#if chat.model}
 						<button
@@ -395,8 +614,10 @@
 						<button type="button" class="cact stop" disabled={stopping} onclick={stop} aria-label={t('chat.stopTitle')} title={t('chat.stopTitle')}>
 							{#if stopping}<CircleNotchIcon size={15} class="spin" />{:else}<SquareIcon size={15} weight="fill" />{/if}
 						</button>
-					{:else}
-						<button type="submit" class="cact send" disabled={!text.trim() || (!connected && !draft)} aria-label={t('chat.sendTitle')} title={t('chat.sendTitle')}>
+					{/if}
+					<!-- Mid-turn, sending queues the message (插话). -->
+					{#if !chat.busy || text.trim() || attached.length}
+						<button type="submit" class="cact send" disabled={(!text.trim() && !attached.length) || uploading || (!connected && !draft)} aria-label={t('chat.sendTitle')} title={t('chat.sendTitle')}>
 							{#if opening && text.trim()}<CircleNotchIcon size={15} class="spin" />{:else}<ArrowUpIcon size={17} />{/if}
 						</button>
 					{/if}
@@ -723,5 +944,107 @@
 	}
 	.cact.stop:disabled {
 		cursor: default;
+	}
+	.footsel {
+		position: relative;
+		min-width: 0;
+	}
+	.flatbtn.attach {
+		padding: 5px;
+		color: var(--dim);
+	}
+	.attachments {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+		padding-bottom: 8px;
+	}
+	.att {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		max-width: 220px;
+		padding: 3px 4px 3px 3px;
+		border: 1px solid var(--border);
+		border-radius: var(--r-sm);
+		background: var(--surface);
+		font-size: var(--fs-xs);
+		color: var(--dim);
+	}
+	.att.failed {
+		border-color: color-mix(in oklab, var(--err) 50%, transparent);
+		color: var(--err);
+	}
+	.att img {
+		width: 28px;
+		height: 28px;
+		border-radius: var(--r-xs);
+		object-fit: cover;
+	}
+	.att-name {
+		min-width: 0;
+		color: var(--text);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.att-state {
+		flex: none;
+		font-family: var(--font-mono);
+	}
+	.att button {
+		display: inline-flex;
+		flex: none;
+		padding: 2px;
+		border: none;
+		background: none;
+		color: var(--dim2);
+		cursor: pointer;
+	}
+	.flatbtn.mode {
+		color: var(--dim);
+	}
+	.flatbtn.mode span {
+		white-space: nowrap;
+	}
+	.flatbtn.mode.warn {
+		color: var(--warn);
+	}
+	/* Messages waiting for the running turn, over the composer. */
+	.queued {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		margin: 0 4px 8px;
+		overflow-x: auto;
+		font-size: var(--fs-xs);
+		color: var(--dim);
+		animation: rise var(--t-fast) var(--ease-out);
+	}
+	.queued-label {
+		flex-shrink: 0;
+	}
+	.qchip {
+		max-width: 180px;
+		padding: 2px 8px;
+		border-radius: var(--r-full);
+		background: var(--surface2);
+		color: var(--text);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.qsteer {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		flex-shrink: 0;
+		padding: 2px 8px;
+		border: 1px solid var(--border);
+		border-radius: var(--r-full);
+		background: none;
+		color: var(--text);
+		font-size: var(--fs-xs);
+		cursor: pointer;
 	}
 </style>

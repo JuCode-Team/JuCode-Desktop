@@ -31,6 +31,8 @@
 	import { listedSessions } from '$lib/session.svelte';
 	import { CHATS_ENABLED, type Project, type Session } from '$lib/types';
 	import type { AgentView } from '$lib/agents.svelte';
+	import RequirementTag from '$lib/requirements/RequirementTag.svelte';
+	import { useRequirements } from '$lib/requirements.svelte';
 
 	let {
 		projects,
@@ -99,6 +101,7 @@
 		pendingCount?: number;
 		onDesk?: () => void;
 	} = $props();
+	const reqs = useRequirements();
 
 	// Which projects have their archived section expanded (collapsed by default).
 	let showArchived = $state<Record<string, boolean>>({});
@@ -301,6 +304,7 @@
 
 	{#snippet sessRow(s: Session, nested = false, selectable = false, p?: Project)}
 		{@const status = sessionStatus(s.chat)}
+		{@const req = s.chat.sessionId ? reqs.bySession.get(s.chat.sessionId) : undefined}
 		<!-- Listed rows (`p` given) drag within their project and pinned group. -->
 		<button
 			class="sess"
@@ -314,7 +318,6 @@
 			data-sid={s.id}
 			data-group={p ? `${p.id}:${s.pinned ? 'pin' : ''}` : undefined}
 			aria-pressed={selectable ? picked.includes(s.id) : undefined}
-			style:box-shadow={s.color ? `inset 2px 0 0 ${s.color}` : undefined}
 			onpointerdown={(e) => p && rowDown(e, p, s)}
 			onclick={() => (selectable ? togglePick(s.id) : onSelect(s.id))}
 			oncontextmenu={(e) => onSessionMenu(s.id, e)}
@@ -329,6 +332,9 @@
 			{:else if s.chat.agent}
 				{@const owner = agents.find((a) => a.id === s.chat.agent)}
 				{#if owner}<AgentAvatar agent={owner} size={14} />{/if}
+			{:else if s.color}
+				<!-- The tab colour the user picked, without an icon to carry it. -->
+				<span class="tag-dot" style:background={s.color}></span>
 			{/if}
 			{#if renaming === s.id}
 				<!-- svelte-ignore a11y_no_static_element_interactions (keep row clicks out of the editor) -->
@@ -350,6 +356,7 @@
 					role="presentation">{s.chat.title}</span
 				>
 			{/if}
+			{#if req}<RequirementTag id={req.id} title={req.title} />{/if}
 			<!-- A draft belongs to no backend until its first message. -->
 			{#if s.backendId && s.backendId !== 'jucode' && !s.draft}
 				<span class="backend-chip" title={BACKEND_LABELS[s.backendId]}><BackendIcon backend={s.backendId} size={12} /></span>
@@ -651,6 +658,12 @@
 	}
 	.row span:first-of-type {
 		flex: 1;
+	}
+	.tag-dot {
+		flex: none;
+		width: 7px;
+		height: 7px;
+		border-radius: var(--r-full);
 	}
 	.count {
 		flex: none !important;

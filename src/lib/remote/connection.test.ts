@@ -114,6 +114,46 @@ describe('HostConnection', () => {
 		expect(onB).not.toHaveBeenCalled();
 	});
 
+	it('drops a connection that does not answer when the page wakes, then reconnects', async () => {
+		vi.useFakeTimers({ toFake: ['setTimeout', 'setInterval', 'Date'] });
+		try {
+			const flush = (ms = 0) => vi.advanceTimersByTimeAsync(ms);
+			const a = computer('a');
+			started.push(a.conn);
+			a.conn.start();
+			await flush();
+			expect(a.conn.agents.status).toBe('on');
+
+			const woke = a.conn.wake();
+			await flush();
+			expect(a.sockets[0].sent.some((op) => op.op === 'ping')).toBe(true);
+			await flush(5000);
+			await woke;
+			expect(a.sockets[0].readyState).toBe(3);
+			expect(a.conn.agents.status).toBe('unreachable');
+
+			await flush(2000);
+			expect(a.sockets).toHaveLength(2);
+			expect(a.conn.agents.status).toBe('on');
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('keeps a connection that answers when the page wakes', async () => {
+		const a = computer('a');
+		started.push(a.conn);
+		a.conn.start();
+		await tick();
+		const woke = a.conn.wake();
+		await tick();
+		const ping = a.sockets[0].sent.find((op) => op.op === 'ping')!;
+		a.sockets[0].push({ type: 'pong', id: ping.id });
+		await woke;
+		expect(a.sockets[0].readyState).toBe(1);
+		expect(a.conn.agents.status).toBe('on');
+	});
+
 	it('disconnects for good when stopped', async () => {
 		const a = computer('a');
 		a.conn.start();

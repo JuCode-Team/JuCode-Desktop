@@ -72,6 +72,24 @@
 	let activeId = $state<string | null>(null);
 	const active = $derived(conns.find((c) => c.id === activeId) ?? conns[0] ?? null);
 
+	// A requirement a notification is about (`?requirement=`): shown on the
+	// computer that has it (the shown one first) once its list has arrived.
+	let wanted = $state<string | null>(null);
+	let showing = $state<{ conn: string; requirement: string; n: number } | null>(null);
+	function want(url: string) {
+		const id = new URL(url, location.origin).searchParams.get('requirement');
+		if (id) wanted = id;
+	}
+	$effect(() => {
+		const id = wanted;
+		if (!id) return;
+		const conn = [active, ...conns].find((c) => c?.requirements.get(id));
+		if (!conn) return;
+		wanted = null;
+		select(conn.id);
+		showing = { conn: conn.id, requirement: id, n: (showing?.n ?? 0) + 1 };
+	});
+
 	let mounted = $state(false);
 	/** The relay PWA, as opposed to a page served by a daemon on the LAN. */
 	let relayOrigin = $state(false);
@@ -183,6 +201,12 @@
 	}
 
 	onMount(() => {
+		want(location.href);
+		if (wanted) history.replaceState(null, '', location.pathname);
+		const fromWorker = (e: MessageEvent) => {
+			if (e.data?.type === 'jucode-open' && typeof e.data.url === 'string') want(e.data.url);
+		};
+		navigator.serviceWorker?.addEventListener('message', fromWorker);
 		const link = parsePairLink(location.href);
 		const fromQr = new URLSearchParams(location.search).get('pair');
 		if (link || fromQr || location.hash) {
@@ -220,9 +244,16 @@
 				.catch(() => {});
 		}
 		return () => {
+			navigator.serviceWorker?.removeEventListener('message', fromWorker);
 			for (const conn of conns) conn.stop();
 		};
 	});
+
+	/** Back in the foreground or online again: check every computer's
+	 *  connection now (see HostConnection.wake). */
+	function wakeAll() {
+		for (const conn of conns) void conn.wake();
+	}
 
 	// LAN pairing with a code shown on the desktop.
 	let code = $state('');
@@ -337,7 +368,8 @@
 	<title>JuCode</title>
 </svelte:head>
 
-<svelte:window onkeydown={(e) => switchMenu && e.key === 'Escape' && (switchMenu = false)} />
+<svelte:window onkeydown={(e) => switchMenu && e.key === 'Escape' && (switchMenu = false)} ononline={wakeAll} />
+<svelte:document onvisibilitychange={() => document.visibilityState === 'visible' && wakeAll()} />
 
 <!-- The computer switcher: the shown computer and how its connection is
      doing; the menu switches, adds, renames and forgets computers. -->
@@ -501,6 +533,7 @@
 			onAdd={startAdding}
 			onForget={(ask) => forget(conn, ask)}
 			onRepair={repair}
+			show={showing?.conn === conn.id ? showing : null}
 		/>
 	{/each}
 </div>

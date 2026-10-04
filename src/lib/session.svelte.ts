@@ -8,6 +8,8 @@ import { clearDraft, dispatch, dropHeldOps, holdOps, ioFor, markDraft, registerA
 import { buildBackendOpts, defaultBackendFor } from './backends/settings';
 import { toEngineMode } from './approval';
 import { t } from '$lib/i18n';
+import { saveComposerText } from './composerText';
+import { toast } from './ui/toast.svelte';
 import { normalizeColor, parseTabIcon, type TabIcon } from './workbench/tabChrome';
 import { CHATS_ENABLED, type Project, type Session, type WorktreeMeta } from './types';
 
@@ -235,6 +237,14 @@ export class SessionStore {
 						s.chat.sessionId = daemon.sessionOf(s.id) ?? '';
 						// A group picked while it was a draft goes in with its id.
 						if (s.group) this.#share(s, { group: s.group });
+						// Started on a requirement: it works on it from now on.
+						if (s.requirement && s.chat.sessionId) {
+							const requirement = s.requirement;
+							s.requirement = undefined;
+							daemon
+								.request({ op: 'requirement_link', requirement, session: s.chat.sessionId })
+								.catch((e) => toast.error(String(e)));
+						}
 					}
 				})
 			)
@@ -530,6 +540,7 @@ export class SessionStore {
 		if (!s.dormant && !s.draft) closeSession(id).catch(() => {});
 		unregisterAdapter(id);
 		clearDraft(id);
+		saveComposerText(id, '');
 		dropHeldOps(id);
 		const p = this.projects.find((pr) => pr.sessions.includes(s));
 		if (p) p.sessions = p.sessions.filter((x) => x !== s);

@@ -11,6 +11,9 @@
 	import Notice from '$lib/ui/Notice.svelte';
 	import AgentAvatar from '$lib/AgentAvatar.svelte';
 	import DeskCard from '$lib/DeskCard.svelte';
+	import RequirementTag from '$lib/requirements/RequirementTag.svelte';
+	import { statusLabel } from '$lib/requirements/labels';
+	import type { Requirement } from '$lib/requirements.svelte';
 	import type { AgentView, ReportView } from '$lib/agents.svelte';
 	import { useAgents } from '$lib/agentScope';
 	import { t } from '$lib/i18n';
@@ -19,7 +22,9 @@
 		onOpenSession,
 		onOpenAgent,
 		agent,
-		agents
+		agents,
+		requirements = [],
+		onOpenRequirement
 	}: {
 		/** Show a daemon session. */
 		onOpenSession: (session: string) => void;
@@ -28,6 +33,9 @@
 		agent?: string;
 		/** Only these agents' items (the workbench's workspace scope). */
 		agents?: string[];
+		/** Requirements on the user's turn, listed first. */
+		requirements?: Requirement[];
+		onOpenRequirement?: (id: string) => void;
 	} = $props();
 
 	// The app's directory; on the remote page, the shown computer's.
@@ -36,7 +44,7 @@
 	const questions = $derived(agentDirectory.questions.filter((q) => inScope(q.agent)));
 	const actions = $derived(agentDirectory.actions.filter((a) => inScope(agentDirectory.agentOfSession(a.session_id)?.id)));
 	const reports = $derived(agentDirectory.reports.filter((r) => inScope(r.agent)));
-	const pending = $derived(questions.length + actions.length);
+	const pending = $derived(questions.length + actions.length + requirements.length);
 
 	let expanded = $state<Record<string, boolean>>({});
 
@@ -78,6 +86,16 @@
 		<p class="empty">{t('shell.desk.nothingPending')}</p>
 	{/if}
 	<div class="cards">
+		{#each requirements as r (r.id)}
+			<button class="req" onclick={() => onOpenRequirement?.(r.id)}>
+				<span class="req-head">
+					<RequirementTag id={r.id} />
+					<span class="req-title">{r.title}</span>
+					<span class="req-status {r.status}">{statusLabel(r.status)}</span>
+				</span>
+				{#if r.last_reply}<span class="req-tail">{r.last_reply.replace(/\s+/g, ' ')}</span>{/if}
+			</button>
+		{/each}
 		{#each questions as q (q.id)}
 			<DeskCard question={q} {onOpenSession} {onOpenAgent} />
 		{/each}
@@ -295,5 +313,53 @@
 	.report.unread .title {
 		font-weight: 600;
 		color: var(--text);
+	}
+	.req {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		width: 100%;
+		padding: 11px 13px;
+		border: 1px solid var(--hairline);
+		border-radius: var(--r-lg);
+		background: var(--panel);
+		color: var(--text);
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+		transition: border-color var(--t-fast) var(--ease-out);
+	}
+	.req:hover {
+		border-color: var(--border-strong);
+	}
+	.req-head {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		min-width: 0;
+		font-size: var(--fs-sm);
+	}
+	.req-title {
+		flex: 1;
+		min-width: 0;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.req-status {
+		flex: none;
+		font-size: var(--fs-xs);
+		color: var(--warn);
+	}
+	.req-status.approval,
+	.req-status.failed {
+		color: var(--err);
+	}
+	.req-tail {
+		font-size: var(--fs-xs);
+		color: var(--dim);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 </style>

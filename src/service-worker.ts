@@ -62,7 +62,10 @@ sw.addEventListener('notificationclick', (event) => {
 	event.waitUntil(
 		sw.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
 			const open = windows.find((w) => new URL(w.url).pathname.startsWith(SHELL));
-			return open ? open.focus() : sw.clients.openWindow(url);
+			if (!open) return sw.clients.openWindow(url);
+			// The open page shows what the notification is about (a requirement).
+			open.postMessage({ type: 'jucode-open', url });
+			return open.focus();
 		})
 	);
 });

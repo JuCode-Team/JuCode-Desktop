@@ -241,6 +241,9 @@ export class ChatState {
 	 *  this placeholder. */
 	title = $state(UNTITLED);
 	pendingFill = $state<string | null>(null);
+	// Files to attach in the composer once its pane is up (a requirement's
+	// screenshots when a session starts on it).
+	pendingAttach = $state<string[]>([]);
 	trustPrompt = $state<{ cwd: string; repoRoot: string | null } | null>(null);
 	goal = $state<Goal | null>(null);
 	plan = $state<PlanStep[]>([]);
@@ -296,6 +299,10 @@ export class ChatState {
 	// sync never pushes the desktop's mode over it, and its mode is not
 	// persisted as the desktop's.
 	agent = $state('');
+	// Show the engine's approval mode as it is and never push this client's
+	// last choice onto it at startup (the remote page: the session belongs to
+	// the computer, and only an explicit pick there changes its mode).
+	followEngineMode = false;
 	// Whether this engine incarnation's startup approval_mode was processed;
 	// later approval_mode events are engine-driven changes (e.g. /approvals).
 	#modeSynced = false;
@@ -795,7 +802,7 @@ export class ChatState {
 				break;
 			case 'approval_mode': {
 				const engineMode = str(ev.mode);
-				if (this.agent) {
+				if (this.agent || this.followEngineMode) {
 					this.approvalMode = reconcileMode(this.approvalMode, engineMode);
 					break;
 				}

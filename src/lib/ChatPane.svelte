@@ -71,6 +71,10 @@
 	import FindBar from '$lib/shell/FindBar.svelte';
 	import { autoRetry } from '$lib/autoRetry.svelte';
 	import { parseDelivery } from '$lib/delivery';
+	import { loadComposerText, saveComposerText } from '$lib/composerText';
+	import RequirementTag from '$lib/requirements/RequirementTag.svelte';
+	import { statusLabel } from '$lib/requirements/labels';
+	import { useRequirements } from '$lib/requirements.svelte';
 
 	// One full conversation (transcript + composer + approvals + pickers) for a
 	// single session, extracted from the page so several chats can tile side by
@@ -85,7 +89,8 @@
 		onRegister,
 		onUnregister,
 		onOpenSettings,
-		onOpenAgent
+		onOpenAgent,
+		onOpenRequirement
 	}: {
 		session: Session;
 		store: SessionStore;
@@ -101,14 +106,37 @@
 		onOpenSettings?: (section: SectionKey) => void;
 		/** Show an agent on the workbench. */
 		onOpenAgent?: (agent: string) => void;
+		/** Show a requirement on the workbench. */
+		onOpenRequirement?: (id: string) => void;
 	} = $props();
 
 	const chat = $derived(session.chat);
 	/** The long-lived agent this session belongs to. */
 	const owner = $derived(chat.agent ? agentDirectory.agents.find((a) => a.id === chat.agent) : undefined);
 	const project = $derived(store.projects.find((p) => p.sessions.some((s) => s.id === session.id)));
+	// The requirement this session works on (or, a draft, will once it starts).
+	const reqs = useRequirements();
+	const linked = $derived(chat.sessionId ? reqs.bySession.get(chat.sessionId) : undefined);
+	const willLink = $derived(!linked && session.requirement ? reqs.get(session.requirement) : undefined);
+	/** A passage of a reply, noted as a requirement about this session's project. */
+	async function noteRequirement(text: string) {
+		try {
+			const r = await reqs.create({
+				text,
+				...(chat.sessionId ? { session: chat.sessionId } : project ? { projects: [project.path] } : {})
+			});
+			toast.success(t('shell.requirement.noted', { id: r.id }), {
+				action: { label: t('shell.requirement.undo'), run: () => void reqs.remove(r.id).catch(() => {}) }
+			});
+		} catch (e) {
+			toast.error(e instanceof Error ? e.message : String(e));
+		}
+	}
 
-	let input = $state('');
+	// Unsent text is kept per session: it survives switching away and restarts.
+	// svelte-ignore state_referenced_locally
+	let input = $state(loadComposerText(session.id));
+	$effect(() => saveComposerText(session.id, input));
 	let attachments = $state<{ path: string; image: boolean }[]>([]);
 	// Videos attach as extracted keyframes (images) + a text description — the
 	// engine protocol only understands image paths.
@@ -531,6 +559,12 @@
 			input = chat.pendingFill;
 			chat.pendingFill = null;
 		}
+	});
+	$effect(() => {
+		if (!chat.pendingAttach.length) return;
+		const paths = chat.pendingAttach;
+		chat.pendingAttach = [];
+		for (const path of paths) addAttachment(path);
 	});
 	// This pane became the workbench-active one: its unread marker clears.
 	$effect(() => {
@@ -979,6 +1013,21 @@
 			{#if onOpenAgent}<button class="owner-link" onclick={() => onOpenAgent(owner.id)}>{t('chat.agentOnDesk')}</button>{/if}
 		</div>
 	{/if}
+	{#if linked}
+		<div class="owner">
+			<RequirementTag id={linked.id} />
+			<span class="owner-name">{linked.title}</span>
+			<span class="owner-role">{statusLabel(linked.status)}</span>
+			{#if onOpenRequirement}<button class="owner-link" onclick={() => onOpenRequirement(linked.id)}>{t('shell.requirement.viewRequirement')}</button>{/if}
+		</div>
+	{:else if willLink}
+		<div class="owner">
+			<RequirementTag id={willLink.id} />
+			<span class="owner-name">{t('shell.requirement.willLink', { id: willLink.id })}</span>
+			<span class="owner-role">{willLink.title}</span>
+			<button class="owner-link" onclick={() => (session.requirement = undefined)}>{t('shell.requirement.unlink')}</button>
+		</div>
+	{/if}
 	{#if Object.keys(chat.subagents).length}
 		<div class="agents">
 			{#each Object.entries(chat.subagents) as [path, info] (path)}
@@ -1004,7 +1053,7 @@
 	<div class="mainwrap" class:resizing={dragW !== null} bind:clientWidth={wrapW}>
 	<main bind:this={scroller} onscroll={onScroll}>
 		<div bind:this={contentEl}>
-			<MessageList bind:this={messageList} bind:mark messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} />
+			<MessageList bind:this={messageList} bind:mark messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onNote={noteRequirement} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} />
 		</div>
 		{#if chat.booting && chat.engineState !== 'exited'}
 			<div class="welcome spawning">
