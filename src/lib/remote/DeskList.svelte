@@ -136,8 +136,8 @@
 		min-width: 18px;
 		padding: 0 6px;
 		border-radius: var(--r-full);
-		background: color-mix(in oklab, var(--warn) 22%, transparent);
-		color: var(--text);
+		background: var(--accent);
+		color: var(--on-accent);
 		font-size: var(--fs-2xs);
 		line-height: 18px;
 		text-align: center;

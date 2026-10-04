@@ -74,9 +74,9 @@
 		gap: 8px;
 		margin: 6px 0 2px;
 		padding: 10px 12px;
-		border: 1px solid color-mix(in oklab, var(--warn) 30%, var(--border));
+		border: 1px solid var(--border);
 		border-radius: var(--r-md);
-		background: color-mix(in oklab, var(--warn) 7%, transparent);
+		background: var(--surface);
 		font-size: var(--fs-sm);
 	}
 	.head {
@@ -138,10 +138,10 @@
 		background: var(--surface2);
 	}
 	.bar span.done {
-		background: color-mix(in oklab, var(--warn) 70%, transparent);
+		background: var(--dim2);
 	}
 	.bar span.now {
-		background: var(--warn);
+		background: var(--text);
 		animation: pulse 1.2s ease-in-out infinite;
 	}
 	@keyframes pulse {

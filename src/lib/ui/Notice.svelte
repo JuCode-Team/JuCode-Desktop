@@ -50,7 +50,10 @@
 		color: var(--err);
 	}
 	.warn {
-		background: color-mix(in oklab, var(--warn) 12%, transparent);
+		background: var(--surface2);
+		color: var(--text);
+	}
+	.warn .ico {
 		color: var(--warn);
 	}
 	.info {

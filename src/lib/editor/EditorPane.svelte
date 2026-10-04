@@ -503,8 +503,8 @@
 		justify-content: space-between;
 		gap: 12px;
 		padding: 8px 12px;
-		background: color-mix(in oklab, var(--warn) 10%, var(--panel));
-		border-bottom: 1px solid color-mix(in oklab, var(--warn) 35%, transparent);
+		background: var(--panel);
+		border-bottom: 1px solid var(--border);
 		flex-shrink: 0;
 	}
 	.conflict-text {

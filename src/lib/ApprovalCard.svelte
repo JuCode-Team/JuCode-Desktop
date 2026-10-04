@@ -268,27 +268,15 @@
 </div>
 
 <style>
+	/* Every prompt (an action to allow, a question, a plan) is the same raised
+	   card as the composer it sits on: it stands out by elevation, not tint. */
 	.approval {
 		padding: 12px 14px;
-		background: color-mix(in oklab, var(--warn) 9%, var(--panel));
-		border: 1px solid color-mix(in oklab, var(--warn) 38%, transparent);
-		border-radius: var(--r-md);
+		background: var(--panel);
+		border: 1px solid var(--border);
+		border-radius: var(--r-lg);
+		box-shadow: var(--shadow-float);
 		animation: rise var(--t-slow) var(--ease-out) both;
-	}
-	/* AskUserQuestion uses the accent (not the warn) palette — it's a prompt. */
-	.approval.ask {
-		background: color-mix(in oklab, var(--accent) 8%, var(--panel));
-		border-color: color-mix(in oklab, var(--accent) 38%, transparent);
-	}
-	.approval.ask .approval-head {
-		color: var(--accent-bright);
-	}
-	.approval.plan {
-		background: color-mix(in oklab, var(--accent) 6%, var(--panel));
-		border-color: color-mix(in oklab, var(--accent) 32%, transparent);
-	}
-	.approval.plan .approval-head {
-		color: var(--accent-bright);
 	}
 	.plan-body {
 		margin-top: 10px;
@@ -308,7 +296,12 @@
 		align-items: center;
 		gap: 8px;
 		font-size: var(--fs-sm);
-		color: var(--warn);
+		font-weight: 500;
+		color: var(--text);
+	}
+	.approval-head > :global(svg) {
+		flex-shrink: 0;
+		color: var(--dim);
 	}
 	.questions {
 		display: flex;
@@ -428,7 +421,6 @@
 	}
 	.approval-sum.cmd {
 		color: var(--text);
-		border-left: 2px solid var(--warn);
 	}
 	.approval-actions {
 		display: flex;

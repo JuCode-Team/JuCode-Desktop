@@ -110,8 +110,6 @@
 	}
 	.badge.blocked {
 		color: var(--warn);
-		background: color-mix(in oklab, var(--warn) 14%, transparent);
-		border-color: color-mix(in oklab, var(--warn) 35%, transparent);
 	}
 	.badge.complete {
 		color: var(--ok);

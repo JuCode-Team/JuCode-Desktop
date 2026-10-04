@@ -134,7 +134,7 @@
 		background: var(--surface);
 	}
 	.card.high {
-		border-color: color-mix(in oklab, var(--warn) 45%, var(--hairline));
+		border-color: var(--border-strong);
 	}
 	.card-head {
 		display: flex;

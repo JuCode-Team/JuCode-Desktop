@@ -245,15 +245,12 @@
 		color: color-mix(in oklab, var(--err) 70%, var(--dim));
 	}
 	.body {
-		margin: 2px 0 6px 6px;
-		border-left: 2px solid var(--hairline);
-		padding-left: 12px;
+		margin: 2px 0 6px 20px;
 	}
 	.partial {
 		font-size: var(--fs-2xs);
-		color: var(--warn);
-		background: color-mix(in oklab, var(--warn) 12%, transparent);
-		border: 1px solid color-mix(in oklab, var(--warn) 30%, transparent);
+		color: var(--dim);
+		background: var(--surface2);
 		border-radius: var(--r-full);
 		padding: 0 7px;
 		flex-shrink: 0;

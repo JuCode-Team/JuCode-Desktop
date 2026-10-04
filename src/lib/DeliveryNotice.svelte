@@ -80,8 +80,7 @@
 		transform: rotate(90deg);
 	}
 	.dbody {
-		padding-left: 12px;
-		border-left: 2px solid var(--hairline);
+		padding-left: 18px;
 		color: var(--dim);
 		font-size: var(--fs-sm);
 		line-height: 1.6;

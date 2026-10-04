@@ -459,7 +459,6 @@
 	}
 	.badge.warn {
 		color: var(--warn);
-		background: color-mix(in oklab, var(--warn) 14%, transparent);
 	}
 	.state {
 		display: inline-flex;

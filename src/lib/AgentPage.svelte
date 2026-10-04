@@ -702,8 +702,8 @@
 		color: var(--dim);
 	}
 	.count.alert {
-		background: color-mix(in oklab, var(--warn) 18%, transparent);
-		color: var(--warn);
+		background: var(--accent);
+		color: var(--on-accent);
 	}
 	.tab-body {
 		padding-top: 6px;

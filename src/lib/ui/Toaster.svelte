@@ -94,13 +94,12 @@
 			transform var(--t-med) var(--ease-spring),
 			opacity var(--t-med) var(--ease-out);
 	}
-	/* Tones tint the card from the status colour; neutral info stays on --panel. */
+	/* Errors tint the card; other tones colour only their icon. */
 	.toast.error {
 		background: color-mix(in oklab, var(--err) 12%, var(--panel));
 		color: var(--err);
 	}
-	.toast.warn {
-		background: color-mix(in oklab, var(--warn) 12%, var(--panel));
+	.toast.warn .ico {
 		color: var(--warn);
 	}
 	.toast.success .ico {

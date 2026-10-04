@@ -158,9 +158,9 @@
 		flex-direction: column;
 		gap: 10px;
 		padding: 14px;
-		border: 1px solid color-mix(in oklab, var(--warn) 40%, var(--hairline));
+		border: 1px solid var(--border);
 		border-radius: var(--r-lg);
-		background: color-mix(in oklab, var(--warn) 6%, var(--surface));
+		background: var(--surface);
 	}
 	.decide p {
 		margin: 0;

@@ -166,8 +166,8 @@
 		margin-left: 6px;
 		padding: 1px 7px;
 		border-radius: var(--r-full);
-		background: color-mix(in oklab, var(--warn) 16%, transparent);
-		color: var(--warn);
+		background: var(--surface2);
+		color: var(--dim);
 		font-size: var(--fs-2xs);
 	}
 	.task.off .name {

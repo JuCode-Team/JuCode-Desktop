@@ -176,7 +176,6 @@
 		font-size: var(--fs-2xs);
 		color: var(--dim);
 		padding: 2px 4px;
-		border-left: 2px solid var(--hairline);
 		margin-bottom: 2px;
 		white-space: pre-wrap;
 		word-break: break-word;

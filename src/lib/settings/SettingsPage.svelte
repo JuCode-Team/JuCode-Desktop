@@ -1246,8 +1246,8 @@
 	}
 	.optlock {
 		font-size: var(--fs-2xs);
-		color: var(--warn);
-		border: 1px solid color-mix(in oklab, var(--warn) 35%, transparent);
+		color: var(--dim);
+		border: 1px solid var(--border);
 		border-radius: var(--r-xs);
 		padding: 0 5px;
 		flex-shrink: 0;
