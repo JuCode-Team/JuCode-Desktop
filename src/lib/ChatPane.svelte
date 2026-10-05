@@ -868,8 +868,28 @@
 		pickerKey(e);
 	}
 
+	// The position this pane last pinned to the end, and the last one seen.
+	let pinnedTop = -1;
+	let lastTop = 0;
 	function onScroll() {
-		if (scroller) atBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 60;
+		if (!scroller) return;
+		const top = scroller.scrollTop;
+		// The scroll event of our own pin says nothing about the reader.
+		// Otherwise follow again once they scroll down near the end, never
+		// while they scroll up.
+		if (top !== pinnedTop) atBottom = top >= lastTop && scroller.scrollHeight - top - scroller.clientHeight < 60;
+		lastTop = top;
+	}
+	/** Wheel up leaves the end. Caught at the input: WebKit applies the
+	 *  scroll a frame later, and while a reply streams the next pin would
+	 *  undo it before any scroll event shows it. */
+	function onWheel(e: WheelEvent) {
+		if (e.deltaY < 0) atBottom = false;
+	}
+	function pin() {
+		if (!scroller) return;
+		scroller.scrollTop = scroller.scrollHeight;
+		pinnedTop = scroller.scrollTop;
 	}
 	// Stick to the bottom as content grows (streaming text, tool output, new cards).
 	// The smoothed reveal changes height every frame, which a scroll-event listener
@@ -878,7 +898,7 @@
 	$effect(() => {
 		if (!contentEl || !scroller) return;
 		const ro = new ResizeObserver(() => {
-			if (atBottom && scroller) scroller.scrollTop = scroller.scrollHeight;
+			if (atBottom) pin();
 		});
 		ro.observe(contentEl);
 		return () => ro.disconnect();
@@ -886,7 +906,7 @@
 	async function scrollToEnd(force = false) {
 		await tick();
 		if (scroller && (atBottom || force)) {
-			scroller.scrollTop = scroller.scrollHeight;
+			pin();
 			atBottom = true;
 		}
 	}
@@ -1097,7 +1117,7 @@
 	{/if}
 
 	<div class="mainwrap" class:resizing={dragW !== null} bind:clientWidth={wrapW}>
-	<main bind:this={scroller} onscroll={onScroll}>
+	<main bind:this={scroller} onscroll={onScroll} onwheel={onWheel}>
 		<div bind:this={contentEl}>
 			<MessageList bind:this={messageList} bind:mark messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onNote={noteRequirement} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} traceOf={traceable ? traceOf : undefined} />
 		</div>

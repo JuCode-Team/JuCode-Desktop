@@ -152,13 +152,37 @@
 	// Stick to the bottom while the content grows (the snapshot, streaming
 	// text, new cards) unless the reader scrolled up, as the desktop does.
 	let atBottom = $state(true);
+	// The position last pinned to the end, and the last one seen.
+	let pinnedTop = -1;
+	let lastTop = 0;
 	function onScroll() {
-		if (scroller) atBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 60;
+		if (!scroller) return;
+		const top = scroller.scrollTop;
+		// The scroll event of our own pin says nothing about the reader.
+		// Otherwise follow again once they scroll down near the end, never
+		// while they scroll up.
+		if (top !== pinnedTop) atBottom = top >= lastTop && scroller.scrollHeight - top - scroller.clientHeight < 60;
+		lastTop = top;
+	}
+	// Scrolling up leaves the end. Caught at the input (wheel up, a finger
+	// dragging down): WebKit applies the scroll later, and while a reply
+	// streams the next pin would undo it before any scroll event shows it.
+	let touchY = 0;
+	function onWheel(e: WheelEvent) {
+		if (e.deltaY < 0) atBottom = false;
+	}
+	function onTouchMove(e: TouchEvent) {
+		const y = e.touches[0]?.clientY ?? touchY;
+		if (y > touchY) atBottom = false;
+		touchY = y;
 	}
 	$effect(() => {
 		if (!contentEl || !scroller) return;
 		const ro = new ResizeObserver(() => {
-			if (atBottom && scroller) scroller.scrollTop = scroller.scrollHeight;
+			if (atBottom && scroller) {
+				scroller.scrollTop = scroller.scrollHeight;
+				pinnedTop = scroller.scrollTop;
+			}
 		});
 		ro.observe(contentEl);
 		return () => ro.disconnect();
@@ -551,7 +575,14 @@
 			<div class="trace-body"><AgentRunsPanel {chat} onOp={send} /></div>
 		</div>
 	{/if}
-	<main class="scroll" bind:this={scroller} onscroll={onScroll}>
+	<main
+		class="scroll"
+		bind:this={scroller}
+		onscroll={onScroll}
+		onwheel={onWheel}
+		ontouchstart={(e) => (touchY = e.touches[0]?.clientY ?? 0)}
+		ontouchmove={onTouchMove}
+	>
 		<div class="thread" bind:this={contentEl}>
 			<MessageList
 				messages={chat.messages}
