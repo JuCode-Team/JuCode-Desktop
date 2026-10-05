@@ -666,6 +666,17 @@ describe('claude session extras', () => {
 		expect(c.messages).toEqual([]);
 	});
 
+	it('shows the images a message was sent with, live and in a transcript', () => {
+		const c = new ChatState();
+		c.handle({ type: 'user_message', content: 'look', images: ['/u/a.png'] });
+		expect(c.messages.at(-1)).toEqual({ kind: 'user', text: 'look', images: ['/u/a.png'] });
+		c.handle({ type: 'transcript', items: [{ role: 'user', content: 'look', images: ['/u/a.png'] }, { role: 'user', content: 'plain' }] });
+		expect(c.messages).toEqual([
+			{ kind: 'user', text: 'look', images: ['/u/a.png'] },
+			{ kind: 'user', text: 'plain' }
+		]);
+	});
+
 	it('keeps an elicitation page with its approval', () => {
 		const c = new ChatState();
 		c.handle({ type: 'approval_request', call_id: 'a', name: 'mcp_elicitation', summary: 'jira: sign in', url: 'https://x.test/auth', hunks: null });

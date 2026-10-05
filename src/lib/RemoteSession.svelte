@@ -331,7 +331,7 @@
 		// runs it as the next turn (others, listed here until that turn).
 		if (chat.busy) {
 			if (!bcaps.steer) queued = [...queued, content];
-		} else chat.optimisticUser(content);
+		} else chat.optimisticUser(content, images.length ? images : undefined);
 		send({ op: 'user_message', content, images: images.length ? images : undefined });
 		text = '';
 		for (const a of attachments) if (a.url) URL.revokeObjectURL(a.url);
@@ -462,6 +462,20 @@
 		pendingTimer = setTimeout(() => (pendingModel = ''), 15_000);
 		send({ op: 'command', input: `/model ${model}` });
 	}
+	// Sent images live on the computer: read them there, once each.
+	const imageData = new Map<string, Promise<string>>();
+	function loadImage(path: string): Promise<string> {
+		let got = imageData.get(path);
+		if (!got) {
+			got = daemon.request({ op: 'fs_image', path }).then((r) => {
+				if (typeof r.data !== 'string') throw new Error(String(r.message ?? 'no image'));
+				return r.data;
+			});
+			got.catch(() => imageData.delete(path));
+			imageData.set(path, got);
+		}
+		return got;
+	}
 	// The agent trace sheet (AgentRunsPanel).
 	let traceOpen = $state(false);
 	function openTrace(agentId: string | null) {
@@ -536,6 +550,7 @@
 				call={chat.call}
 				compactionTokens={chat.compactionTokens}
 				traceOf={bcaps.agentTrace ? traceOf : undefined}
+				{loadImage}
 				{scroller}
 				onEdit={(value) => {
 					text = value;

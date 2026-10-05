@@ -985,7 +985,8 @@ export class ChatState {
 				this.autoRetries = 0;
 				this.autoRetry = null;
 				// No send state: claude echoes after the reply, when it would stick.
-				this.messages.push({ kind: 'user', text });
+				const images = arr<string>(ev.images).filter((p) => typeof p === 'string');
+				this.messages.push({ kind: 'user', text, ...(images.length ? { images } : {}) });
 				this.#resetCurrent();
 				break;
 			}
@@ -1199,7 +1200,10 @@ export class ChatState {
 						const role = str(it.role);
 						if (role === 'user' && str(it.content) === AUTO_CONTINUE)
 							return { kind: 'system', text: t('chat.autoRetry.resumed') };
-						if (role === 'user') return { kind: 'user', text: str(it.content) };
+						if (role === 'user') {
+							const images = arr<string>(it.images).filter((p) => typeof p === 'string');
+							return { kind: 'user', text: str(it.content), ...(images.length ? { images } : {}) };
+						}
 						if (role === 'assistant') return { kind: 'assistant', text: str(it.content) };
 						if (role === 'tool')
 							return {

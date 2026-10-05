@@ -21,7 +21,7 @@
 	import { prefs } from '$lib/prefs.svelte';
 	import { fmtDur, turnParts } from '$lib/turnStats';
 	import { SvelteSet } from 'svelte/reactivity';
-	import { convertFileSrc } from '@tauri-apps/api/core';
+	import UserImage from '$lib/UserImage.svelte';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import QuotesIcon from 'phosphor-svelte/lib/QuotesIcon';
 	import ListPlusIcon from 'phosphor-svelte/lib/ListPlusIcon';
@@ -48,6 +48,7 @@
 		backend = '',
 		onErrorAction,
 		traceOf,
+		loadImage,
 		mark = $bindable(-1)
 	}: {
 		messages: Msg[];
@@ -83,6 +84,8 @@
 		onErrorAction?: (action: ErrorAction) => void;
 		/** A tool call whose run the agent trace shows (claude's Agent / Workflow). */
 		traceOf?: (m: Msg) => { label: string; run: () => void } | null;
+		/** Reads a sent image where the desktop can't open its path (the remote page). */
+		loadImage?: (path: string) => Promise<string>;
 		/** Ordinal of the user message in view: at or above the upper third. */
 		mark?: number;
 	} = $props();
@@ -453,7 +456,7 @@
 				<button class="uedit" onclick={() => onEdit(m.text)} aria-label="quote" title={t('chat.quoteTitle')}><PencilSimpleIcon size={12} /></button>
 				<div class="ucol">
 					<!-- One line: the bubble is pre-wrap, so template whitespace would show. -->
-					<div class="bubble" class:pending={m.state === 'sending'}>{#if m.images?.length}<div class="uimgs">{#each m.images as p (p)}<img src={convertFileSrc(p)} alt="" />{/each}</div>{/if}{#each userBlocks(m.text) as block, b (b)}{#if block.quote}<span class="uquote">{block.text}</span>{:else}<span class="utext">{#each userSegments(block.text) as seg, j (j)}{#if seg.image}<span class="utoken">{t('chat.imageToken', { n: seg.image })}</span>{:else}{seg.text}{/if}{/each}</span>{/if}{/each}</div>
+					<div class="bubble" class:pending={m.state === 'sending'}>{#if m.images?.length}<div class="uimgs">{#each m.images as p (p)}<UserImage path={p} load={loadImage} />{/each}</div>{/if}{#each userBlocks(m.text) as block, b (b)}{#if block.quote}<span class="uquote">{block.text}</span>{:else}<span class="utext">{#each userSegments(block.text) as seg, j (j)}{#if seg.image}<span class="utoken">{t('chat.imageToken', { n: seg.image })}</span>{:else}{seg.text}{/if}{/each}</span>{/if}{/each}</div>
 					{#if m.state}
 						{#key m.state}
 							<div class="sendstate {m.state}" in:fade={{ duration: 160 }}>
@@ -776,13 +779,6 @@
 		flex-wrap: wrap;
 		gap: 6px;
 		margin-bottom: 8px;
-	}
-	.uimgs img {
-		max-width: 220px;
-		max-height: 160px;
-		border-radius: var(--r-md);
-		object-fit: cover;
-		display: block;
 	}
 	.uquote,
 	.utext {
