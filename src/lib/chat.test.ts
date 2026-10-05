@@ -283,6 +283,14 @@ describe('ChatState.handle', () => {
 		expect(c.cost).toBeCloseTo(90, 5);
 	});
 
+	it('mirrors claude ultracode from model_status; other engines leave it off', () => {
+		const c = new ChatState();
+		c.handle({ type: 'model_status', model: 'claude-opus-5-5', ultracode: true, ultracode_available: true, state: 'idle' });
+		expect([c.ultracode, c.ultracodeAvailable]).toEqual([true, true]);
+		c.handle({ type: 'model_status', model: 'gpt-5.5', state: 'idle' });
+		expect([c.ultracode, c.ultracodeAvailable]).toEqual([false, false]);
+	});
+
 	it('defers to the engine cost once it reports one (no double count)', () => {
 		const c = new ChatState();
 		c.handle({ type: 'model_status', model: 'gpt-5.5', state: 'idle' });
@@ -568,3 +576,100 @@ describe('reply timing', () => {
 		}
 	});
 });
+
+describe('claude session extras', () => {
+	it('lists background tasks with their progress and announces finished ones', () => {
+		setLocale('zh');
+		const c = new ChatState();
+		c.handle({ type: 'background_tasks', tasks: [{ id: 'w1', kind: 'local_workflow', description: 'Review' }] });
+		c.handle({ type: 'task_progress', task_id: 'w1', message: 'Find: bugs-0' });
+		expect(c.bgTasks).toEqual([{ id: 'w1', kind: 'local_workflow', description: 'Review', message: 'Find: bugs-0' }]);
+		// A new listing keeps a task's latest progress line.
+		c.handle({ type: 'background_tasks', tasks: [{ id: 'w1', kind: 'local_workflow', description: 'Review' }] });
+		expect(c.bgTasks[0].message).toBe('Find: bugs-0');
+		c.handle({ type: 'background_tasks', tasks: [] });
+		c.handle({ type: 'task_done', task_id: 'w1', kind: 'local_workflow', status: 'completed', summary: 'Review done' });
+		expect(c.bgTasks).toEqual([]);
+		expect(c.messages.at(-1)).toEqual({ kind: 'system', text: '多智能体编排已完成：Review done' });
+		c.handle({ type: 'task_output', task_id: 'b1', output: 'ok', truncated: true });
+		expect(c.taskOutputs.b1).toEqual({ output: 'ok', truncated: true, error: '' });
+	});
+
+	it('fills a pending /btw answer in place', () => {
+		const c = new ChatState();
+		c.sideAnswers.push({ question: 'why?', answer: '', error: '', pending: true });
+		c.handle({ type: 'side_answer', question: 'why?', answer: 'Because.' });
+		expect(c.sideAnswers).toEqual([{ question: 'why?', answer: 'Because.', error: '', pending: false }]);
+		// The conversation is untouched.
+		expect(c.messages).toEqual([]);
+	});
+
+	it('keeps a suggestion until the next turn starts', () => {
+		const c = new ChatState();
+		c.handle({ type: 'prompt_suggestion', text: 'run the tests' });
+		expect(c.suggestion).toBe('run the tests');
+		c.handle({ type: 'connecting' });
+		expect(c.suggestion).toBe('');
+	});
+
+	it('names fallbacks, subagents and session switches', () => {
+		setLocale('zh');
+		const c = new ChatState();
+		c.handle({ type: 'model_fallback', from: 'Opus 5.5', to: 'Sonnet 5.5', reason: 'overloaded' });
+		expect(c.messages.at(-1)).toEqual({ kind: 'system', text: '模型已从 Opus 5.5 切换到 Sonnet 5.5（原模型过载）' });
+		c.handle({ type: 'subagent_lifecycle', path: 'a1', label: 'Scan auth', status: 'running', message: 'Reading' });
+		expect(c.subagents.a1).toEqual({ status: 'running', message: 'Reading', label: 'Scan auth' });
+		c.handle({ type: 'subagent_lifecycle', path: 'a1', label: 'Scan auth', status: 'completed', message: '' });
+		expect(c.subagents.a1).toBeUndefined();
+		c.handle({ type: 'tool_start', call_id: 't2', name: 'read', subagent: 'Scan auth' });
+		expect(c.messages.at(-1)).toMatchObject({ kind: 'tool', subagent: 'Scan auth' });
+		c.handle({ type: 'model_status', model: 'claude-opus-5-5', fast: true, fast_available: true, thinking_summaries: false, state: 'idle' });
+		expect([c.fast, c.fastAvailable, c.thinkingSummaries]).toEqual([true, true, false]);
+		c.handle({ type: 'model_status', model: 'gpt-5.5', state: 'idle' });
+		expect([c.fast, c.fastAvailable, c.thinkingSummaries]).toEqual([false, false, null]);
+	});
+
+	it('reads the agent trace and a subagent conversation', () => {
+		const c = new ChatState();
+		c.handle({
+			type: 'agent_runs',
+			workflows: [
+				{
+					id: 'w1',
+					tool_use_id: 't0',
+					name: 'review',
+					status: 'running',
+					started_at: 100,
+					tokens: 900,
+					phases: [{ index: 1, title: 'Find' }],
+					agents: [{ id: 'a1', label: 'bugs-0', phase: 1, state: 'running', started_at: 120, tokens: 900, tool_calls: 2 }]
+				}
+			],
+			agents: [{ id: 'a9', label: 'Read a.txt', status: 'completed', tool_use_id: 't1', tokens: 30420, duration_ms: 4529 }]
+		});
+		expect(c.agentRuns.workflows[0].agents[0]).toMatchObject({ id: 'a1', phase: 1, state: 'running', toolCalls: 2 });
+		expect(c.agentRuns.agents[0]).toMatchObject({ id: 'a9', state: 'completed', toolUseId: 't1', durationMs: 4529 });
+		c.handle({
+			type: 'subagent_transcript',
+			agent_id: 'a1',
+			items: [
+				{ role: 'user', content: 'Find bugs' },
+				{ role: 'reasoning', content: 'Look.' },
+				{ role: 'tool', call_id: 't2', name: 'read', output: '{"path":"/a"}', running: false, is_error: false },
+				{ role: 'assistant', content: 'None.' }
+			]
+		});
+		const tr = c.subagentTranscripts.a1;
+		expect(tr.task).toBe('Find bugs');
+		expect(tr.messages.map((m) => m.kind)).toEqual(['reasoning', 'tool', 'assistant']);
+		// The session's own conversation is untouched.
+		expect(c.messages).toEqual([]);
+	});
+
+	it('keeps an elicitation page with its approval', () => {
+		const c = new ChatState();
+		c.handle({ type: 'approval_request', call_id: 'a', name: 'mcp_elicitation', summary: 'jira: sign in', url: 'https://x.test/auth', hunks: null });
+		expect(c.pendingApproval?.url).toBe('https://x.test/auth');
+	});
+});
+

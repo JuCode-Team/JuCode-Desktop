@@ -108,12 +108,17 @@ export function selectionState(hunks: ApprovalHunk[], selected: string[]): Selec
 	return picked === hunks.length ? 'all' : 'some';
 }
 
+/** This session only, saved for this project, or for every project. */
+export type AlwaysScope = 'session' | 'project' | 'user';
+
 export interface ApproveOp {
 	op: 'approve';
 	call_id: string;
 	decision: 'allow' | 'deny';
 	hunks?: string[];
 	always?: boolean;
+	/** Where an always-allow rule is kept (claude); the session when absent. */
+	always_scope?: AlwaysScope;
 	/** AskUserQuestion answers, keyed by the full question text → picked label(s).
 	 *  Fed back to the model as the tool result via the permission response. */
 	answers?: Record<string, string>;
@@ -163,12 +168,13 @@ export function parseQuestions(raw: unknown): Question[] | null {
 export function buildApproveOp(
 	callId: string,
 	decision: 'allow' | 'deny',
-	opts: { hunks?: string[]; always?: boolean } = {}
+	opts: { hunks?: string[]; always?: boolean; scope?: AlwaysScope } = {}
 ): ApproveOp {
 	if (opts.hunks && opts.always) throw new Error('always approval cannot select hunks');
 	if (opts.hunks && decision !== 'allow') throw new Error('hunks require decision: allow');
 	const op: ApproveOp = { op: 'approve', call_id: callId, decision };
 	if (opts.hunks) op.hunks = opts.hunks;
 	if (opts.always) op.always = true;
+	if (opts.always && opts.scope && opts.scope !== 'session') op.always_scope = opts.scope;
 	return op;
 }

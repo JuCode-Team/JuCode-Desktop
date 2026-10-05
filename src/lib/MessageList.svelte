@@ -47,6 +47,7 @@
 		onDismiss,
 		backend = '',
 		onErrorAction,
+		traceOf,
 		mark = $bindable(-1)
 	}: {
 		messages: Msg[];
@@ -80,6 +81,8 @@
 		backend?: string;
 		/** An error notice's fix (restart, sign in, compact …). */
 		onErrorAction?: (action: ErrorAction) => void;
+		/** A tool call whose run the agent trace shows (claude's Agent / Workflow). */
+		traceOf?: (m: Msg) => { label: string; run: () => void } | null;
 		/** Ordinal of the user message in view: at or above the upper third. */
 		mark?: number;
 	} = $props();
@@ -534,12 +537,12 @@
 				{#if open}
 					<div class="tg-list">
 						{#each run as x (x)}
-							{#if x.kind === 'tool'}<ToolCard name={x.name} output={x.output} running={x.running} isError={x.isError} />{/if}
+							{#if x.kind === 'tool'}<ToolCard name={x.name} output={x.output} running={x.running} isError={x.isError} subagent={x.subagent} trace={traceOf?.(x) ?? undefined} />{/if}
 						{/each}
 					</div>
 				{/if}
 			{:else}
-				<ToolCard name={m.name} output={m.output} running={m.running} isError={m.isError} />
+				<ToolCard name={m.name} output={m.output} running={m.running} isError={m.isError} subagent={m.subagent} trace={traceOf?.(m) ?? undefined} />
 			{/if}
 		{:else if m.kind === 'error'}
 			<ErrorNotice text={m.text} {backend} onAction={onErrorAction} onDismiss={onDismiss ? () => onDismiss(m) : undefined} />

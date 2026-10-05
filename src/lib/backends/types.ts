@@ -73,6 +73,17 @@ export interface BackendCaps {
 	transcriptReplay: boolean;
 	/** Generic slash-command support (/compact, /stats, custom commands…). */
 	slashCommands: boolean;
+	/** The engine keeps its own MCP config (claude): its servers can be toggled
+	 *  and reconnected per session, not added or edited here. */
+	mcpEngineOwned: boolean;
+	/** Always-allow rules can be saved for the project or the user, and the
+	 *  engine lists its permission rules (claude). */
+	ruleScopes: boolean;
+	/** `/btw <question>`: answered beside the conversation (side_answer events). */
+	sideQuestions: boolean;
+	/** The agent trace panel: Workflows and subagents with their own
+	 *  conversations (agent_runs / subagent_transcript). */
+	agentTrace: boolean;
 }
 
 /** Normalized events are the existing jucode AgentEvent dialect — adapters

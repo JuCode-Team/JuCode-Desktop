@@ -12,7 +12,29 @@ const dock = {
 			git: 'Git',
 			term: '终端',
 			browser: '浏览器',
-			diag: '诊断'
+			diag: '诊断',
+			agents: '智能体'
+		},
+		agents: {
+			title: '智能体追踪',
+			summary: '{w} 个编排 · {a} 个子智能体 · 共 {tokens} tokens',
+			subagents: '子智能体（Agent 工具）',
+			back: '返回列表',
+			task: '任务',
+			loading: '读取会话中',
+			noMessages: '还没有输出',
+			noAgentsYet: '还没有派出智能体',
+			tokens: '{n} tokens',
+			toolCalls: '{n} 次工具调用',
+			progress: '{done}/{total} 个智能体',
+			empty: '还没有子智能体运行',
+			emptyHint: '开启 Ultracode，或让 Claude 调用 Agent 工具后，这里会显示每个智能体的运行轨迹、耗时和 token 消耗。',
+			col: { agent: '智能体', timeline: '时间线', time: '耗时', tokens: 'Tokens', tools: '工具' },
+			state: { running: '运行中', done: '已完成', failed: '失败', stopped: '已停止', queued: '排队中' },
+			unit: { s: '秒', m: '分', h: '小时' },
+			open: '查看追踪',
+			result: '结果',
+			openAgent: '查看子智能体会话'
 		},
 		dock: {
 			empty: '没有打开的面板',
@@ -200,7 +222,29 @@ const dock = {
 			git: 'Git',
 			term: 'Terminal',
 			browser: 'Browser',
-			diag: 'Diagnostics'
+			diag: 'Diagnostics',
+			agents: 'Agents'
+		},
+		agents: {
+			title: 'Agent trace',
+			summary: '{w} workflows · {a} subagents · {tokens} tokens in all',
+			subagents: 'Subagents (Agent tool)',
+			back: 'Back to the list',
+			task: 'Task',
+			loading: 'Reading the conversation',
+			noMessages: 'No output yet',
+			noAgentsYet: 'No agents started yet',
+			tokens: '{n} tokens',
+			toolCalls: '{n} tool calls',
+			progress: '{done}/{total} agents',
+			empty: 'No subagents have run',
+			emptyHint: 'Turn on Ultracode, or have Claude use the Agent tool, to see each agent’s path, time and tokens here.',
+			col: { agent: 'Agent', timeline: 'Timeline', time: 'Time', tokens: 'Tokens', tools: 'Tools' },
+			state: { running: 'Running', done: 'Done', failed: 'Failed', stopped: 'Stopped', queued: 'Queued' },
+			unit: { s: 's', m: 'm', h: 'h' },
+			open: 'View trace',
+			result: 'Result',
+			openAgent: 'View the subagent’s conversation'
 		},
 		dock: {
 			empty: 'No open panels',

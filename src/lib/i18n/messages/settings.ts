@@ -256,7 +256,26 @@ const settings = {
 			includeProjectInstructions: '包含项目说明',
 			includeProjectInstructionsSub: '加载 AGENTS.md 等项目级指令'
 		},
+		rules: {
+			title: 'Claude Code 权限规则',
+			hint: '当前会话生效的规则，来自设置文件和本会话的授权。在审批时选「始终允许」可保存到本项目或所有项目。',
+			noSession: '打开一个 Claude Code 会话后可查看。',
+			loading: '读取中',
+			empty: '没有权限规则。',
+			behavior: { allow: '允许', ask: '每次询问', deny: '拒绝' },
+			source: {
+				userSettings: '所有项目',
+				projectSettings: '项目（共享）',
+				localSettings: '本项目',
+				session: '本会话',
+				cliArg: '启动参数',
+				policySettings: '组织策略',
+				other: '其他'
+			}
+		},
 		mcp: {
+			claudeHint: 'Claude Code 自己配置的 MCP 服务器。在这里可以对当前会话启用、停用或重连；增删服务器请用 claude mcp 命令。',
+			claudeEmpty: '当前 Claude Code 会话没有 MCP 服务器。',
 			groupLabel: 'MCP 服务器',
 			hint: '管理 Model Context Protocol 服务器。更改会写入 ~/.jucode/config.json。',
 			empty: 'MCP 让智能体接入外部工具（文件、搜索、数据库等标准化服务器）。',
@@ -674,7 +693,26 @@ const settings = {
 			includeProjectInstructions: 'Include project instructions',
 			includeProjectInstructionsSub: 'Load project-level instructions such as AGENTS.md'
 		},
+		rules: {
+			title: 'Claude Code permission rules',
+			hint: 'The rules in effect for this session, from settings files and this session’s approvals. Pick “Always allow” on an approval to save one for the project or every project.',
+			noSession: 'Open a Claude Code session to see them.',
+			loading: 'Loading',
+			empty: 'No permission rules.',
+			behavior: { allow: 'Allow', ask: 'Ask each time', deny: 'Deny' },
+			source: {
+				userSettings: 'All projects',
+				projectSettings: 'Project (shared)',
+				localSettings: 'This project',
+				session: 'This session',
+				cliArg: 'Launch flag',
+				policySettings: 'Organization policy',
+				other: 'Other'
+			}
+		},
 		mcp: {
+			claudeHint: 'MCP servers from Claude Code’s own config. Switch or reconnect them for this session here; add or remove servers with claude mcp.',
+			claudeEmpty: 'This Claude Code session has no MCP servers.',
 			groupLabel: 'MCP servers',
 			hint: 'Manage Model Context Protocol servers. Changes are written to ~/.jucode/config.json.',
 			empty: 'MCP lets the agent use external tools (files, search, databases and other standardized servers).',

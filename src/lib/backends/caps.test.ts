@@ -27,8 +27,10 @@ describe('caps() gating helper', () => {
 		// (list_models/set_model control requests), /compact (stream-json slash
 		// text) and the resume picker (the daemon's session history, with transcript
 		// replay) and rewind (reopened with --resume-session-at) are live;
-		// steer (stdin is already a queue), plan/goal tabs, tree, skills and MCP
-		// mutations stay hidden.
+		// so are subagents and background tasks (system/task_*), the CLI's own
+		// slash commands, and its MCP servers (switch / reconnect, not edit);
+		// steer (stdin is already a queue), plan/goal tabs, tree and skills stay
+		// hidden.
 		const cl = caps({ backendId: 'claude' });
 		expect(cl.approvalModes).toBe(true);
 		expect(cl.interrupt).toBe(true);
@@ -39,9 +41,12 @@ describe('caps() gating helper', () => {
 		expect(cl.checkpoints).toBe(true); // conversation rewind via --resume-session-at respawn
 		expect(cl.resume).toBe(true);
 		expect(cl.skills).toBe(false);
-		expect(cl.mcpManage).toBe(false);
+		expect(cl.mcpManage).toBe(true);
+		expect(cl.mcpEngineOwned).toBe(true);
+		expect(cl.ruleScopes).toBe(true);
+		expect(cl.subagents).toBe(true);
 		expect(cl.modelPicker).toBe(true);
-		expect(cl.slashCommands).toBe(false);
+		expect(cl.slashCommands).toBe(true);
 		expect(cl.compact).toBe(true);
 		expect(cl.transcriptReplay).toBe(true);
 		// jucode: manual /compact stays available.

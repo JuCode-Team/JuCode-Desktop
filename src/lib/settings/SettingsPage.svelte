@@ -68,6 +68,7 @@
 	import AcpSection from './AcpSection.svelte';
 	import DaemonSection from './DaemonSection.svelte';
 	import McpSection from './McpSection.svelte';
+	import PermissionRulesSection from './PermissionRulesSection.svelte';
 	import UpdateCard from './UpdateCard.svelte';
 	import ThirdPartyNotices from './ThirdPartyNotices.svelte';
 	import ProviderAccountCard from './ProviderAccountCard.svelte';
@@ -858,6 +859,7 @@
 					</SettingsSection>
 				{:else if current === 'agents'}
 					<BackendSection />
+					{#if chat && caps(chat).ruleScopes}<PermissionRulesSection {sessionId} {chat} />{/if}
 					<div class="deps" id="set-dependencies"><Dependencies ids={['node', 'ffmpeg', 'git', 'gh']} /></div>
 				{:else if current === 'acp'}
 					<AcpSection />

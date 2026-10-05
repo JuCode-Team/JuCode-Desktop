@@ -13,7 +13,7 @@ export const CLAUDE_CAPS: BackendCaps = {
 	branchTree: false,
 	goals: false,
 	skills: false,
-	mcpManage: false,
+	mcpManage: true,
 	checkpoints: true, // conversation rewind: the daemon reopens it with --resume-session-at
 	contextUsage: true, // stream_event usage + result modelUsage.contextWindow
 	compact: true, // "/compact" as stream-json user text → compacting/compact_boundary frames
@@ -21,9 +21,13 @@ export const CLAUDE_CAPS: BackendCaps = {
 	// stream-json has no session listing: the /resume picker lists the daemon's
 	// session_history for the project, and a pick opens it in a new tab.
 	resume: true,
-	subagents: false,
+	subagents: true, // system/task_* frames: Task subagents and background tasks
 	transcriptReplay: true, // the daemon replays the session file's user/assistant text
-	slashCommands: false
+	slashCommands: true, // the CLI's own commands as stream-json user text (/context, /usage, /doctor…)
+	mcpEngineOwned: true, // mcp_status / mcp_toggle / mcp_reconnect on Claude Code's own config
+	ruleScopes: true, // can_use_tool updatedPermissions destination + list_permission_rules
+	sideQuestions: true, // side_question control request
+	agentTrace: true // system/task_* + the session's saved workflows/subagents files
 };
 
 export const CODEX_CAPS: BackendCaps = {
@@ -43,7 +47,11 @@ export const CODEX_CAPS: BackendCaps = {
 	resume: true, // thread/list picker + thread/resume
 	subagents: false,
 	transcriptReplay: true, // thread/resume replays thread.turns[].items
-	slashCommands: false
+	slashCommands: false,
+	mcpEngineOwned: false,
+	ruleScopes: false,
+	sideQuestions: false,
+	agentTrace: false
 };
 
 export const ACP_CAPS: BackendCaps = {
@@ -63,5 +71,9 @@ export const ACP_CAPS: BackendCaps = {
 	resume: false, // session/load is optional (jucode acp: loadSession false)
 	subagents: false,
 	transcriptReplay: false,
-	slashCommands: false // available_commands have no invocation RPC (prompt text only)
+	slashCommands: false, // available_commands have no invocation RPC (prompt text only)
+	mcpEngineOwned: false,
+	ruleScopes: false,
+	sideQuestions: false,
+	agentTrace: false
 };

@@ -46,7 +46,7 @@
 	} from '$lib/protocol';
 	import { buildModelRows, toolModels, type ToolModel } from '$lib/composer/modelRows';
 	import { confirm } from '$lib/ui/confirm.svelte';
-	import { BACKEND_LABELS } from '$lib/backends';
+	import { BACKEND_LABELS, caps } from '$lib/backends';
 	import { defaultEffort } from '$lib/composer/effort';
 	import { dispatch } from '$lib/backends/router';
 	import { browser } from '$lib/browser.svelte';
@@ -62,6 +62,9 @@
 	import ApprovalCard from '$lib/ApprovalCard.svelte';
 	import RateLimitBanner from '$lib/RateLimitBanner.svelte';
 	import Button from '$lib/ui/Button.svelte';
+	import TaskStrip from '$lib/TaskStrip.svelte';
+	import type { Msg } from '$lib/chat.svelte';
+	import type { SessionSwitch } from '$lib/composer/SessionSwitches.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
 	import Picker from '$lib/shell/Picker.svelte';
@@ -91,7 +94,8 @@
 		onUnregister,
 		onOpenSettings,
 		onOpenAgent,
-		onOpenRequirement
+		onOpenRequirement,
+		onOpenTrace
 	}: {
 		session: Session;
 		store: SessionStore;
@@ -109,6 +113,8 @@
 		onOpenAgent?: (agent: string) => void;
 		/** Show a requirement on the workbench. */
 		onOpenRequirement?: (id: string) => void;
+		/** Opens the agent trace panel (it shows `chat.agentFocus`). */
+		onOpenTrace?: () => void;
 	} = $props();
 
 	const chat = $derived(session.chat);
@@ -436,8 +442,24 @@
 		completed: 'completed',
 		done: 'completed',
 		interrupted: 'interrupted',
+		stopped: 'interrupted',
+		failed: 'failed',
 		closed: 'closed'
 	};
+	// The agent trace (AgentRunsPanel, a workbench panel) of this session.
+	const traceable = $derived(caps(chat).agentTrace && !!onOpenTrace);
+	function openTrace(agentId: string | null) {
+		chat.agentFocus = agentId;
+		store.activeId = session.id;
+		onOpenTrace?.();
+	}
+	function traceOf(m: Msg): { label: string; run: () => void } | null {
+		if (m.kind !== 'tool' || !m.callId) return null;
+		const agent = chat.agentRuns.agents.find((a) => a.toolUseId === m.callId);
+		if (agent) return { label: t('dock.agents.openAgent'), run: () => openTrace(agent.id) };
+		if (chat.agentRuns.workflows.some((w) => w.toolUseId === m.callId)) return { label: t('dock.agents.open'), run: () => openTrace(null) };
+		return null;
+	}
 	const agentStatus = (s: string) => (AGENT_STATUS_KEY[s] ? t(`shell.agentStatus.${AGENT_STATUS_KEY[s]}`) : s);
 
 	// pickers (tree / model / resume) — this pane's session
@@ -644,6 +666,8 @@
 		const text = input.trim();
 		if (!text && attachments.length === 0 && videos.length === 0) return;
 		if (text.startsWith('/')) {
+			const btw = caps(chat).sideQuestions ? text.match(/^\/btw\s+([\s\S]+)/) : null;
+			if (btw) chat.sideAnswers.push({ question: btw[1].trim(), answer: '', error: '', pending: true });
 			send({ op: 'command', input: text });
 		} else {
 			const sent = [...new Set(
@@ -808,6 +832,11 @@
 			return;
 		}
 		if (chat.model && !pendingModel && !chat.switching) send({ op: 'command', input: `/model ${chat.model} ${effort}` });
+	}
+	// Claude Code's session switches (SessionSwitches).
+	function setSwitch(name: SessionSwitch, on: boolean) {
+		const command = name === 'ultracode' ? '/effort ultracode' : `/${name}`;
+		send({ op: 'command', input: `${command} ${on ? 'on' : 'off'}` });
 	}
 	function pickerKey(e: KeyboardEvent) {
 		if (!chat.picker) return;
@@ -1033,10 +1062,20 @@
 	{#if Object.keys(chat.subagents).length}
 		<div class="agents">
 			{#each Object.entries(chat.subagents) as [path, info] (path)}
-				<span class="agent">{path} · {agentStatus(info.status)}</span>
+				{#if info.label && traceable}
+					<button class="agent link" onclick={() => openTrace(path)} title={t('dock.agents.openAgent')}>{info.label} · {agentStatus(info.status)}{#if info.message}<span class="agent-msg">{info.message}</span>{/if}</button>
+				{:else}
+					<span class="agent">{info.label || path} · {agentStatus(info.status)}{#if info.message}<span class="agent-msg">{info.message}</span>{/if}</span>
+				{/if}
 			{/each}
 		</div>
 	{/if}
+	<TaskStrip
+		{chat}
+		onStop={(id) => send({ op: 'stop_task', task_id: id })}
+		onOutput={(id) => send({ op: 'task_output', task_id: id })}
+		onTrace={traceable ? () => openTrace(null) : undefined}
+	/>
 
 	{#if showFind}
 		<FindBar
@@ -1055,7 +1094,7 @@
 	<div class="mainwrap" class:resizing={dragW !== null} bind:clientWidth={wrapW}>
 	<main bind:this={scroller} onscroll={onScroll}>
 		<div bind:this={contentEl}>
-			<MessageList bind:this={messageList} bind:mark messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onNote={noteRequirement} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} />
+			<MessageList bind:this={messageList} bind:mark messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onNote={noteRequirement} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} traceOf={traceable ? traceOf : undefined} />
 		</div>
 		{#if chat.booting && chat.engineState !== 'exited'}
 			<div class="welcome spawning">
@@ -1111,7 +1150,7 @@
 		{#if chat.pendingApproval && !chat.pendingApproval.questions?.length}
 			<div class="approval-wrap">
 				{#key chat.pendingApproval.callId}
-					<ApprovalCard approval={chat.pendingApproval} onRespond={respondApproval} />
+					<ApprovalCard approval={chat.pendingApproval} onRespond={respondApproval} ruleScopes={caps(chat).ruleScopes} />
 				{/key}
 			</div>
 		{/if}
@@ -1161,6 +1200,7 @@
 			bind:pickerQuery
 		bind:pickerSelIdx={selIdx}
 			onEffort={setEffort}
+			onSwitch={setSwitch}
 			effortDisabled={!!pendingModel || chat.switching}
 			onApproval={setApprovalMode}
 			onRespond={respondApproval}
@@ -1345,6 +1385,23 @@
 		font-family: var(--font-mono);
 		font-size: var(--fs-2xs);
 		color: var(--dim);
+		min-width: 0;
+	}
+	button.agent {
+		border: none;
+		background: none;
+		padding: 0;
+		cursor: pointer;
+	}
+	button.agent:hover {
+		color: var(--text);
+	}
+	.agent-msg {
+		color: var(--dim2);
+		max-width: 360px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.mainwrap {

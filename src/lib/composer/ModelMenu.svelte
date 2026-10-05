@@ -6,6 +6,7 @@
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
 	import CaretLeftIcon from 'phosphor-svelte/lib/CaretLeftIcon';
 	import IconButton from '$lib/ui/IconButton.svelte';
+	import SessionSwitches, { type SessionSwitch } from '$lib/composer/SessionSwitches.svelte';
 	import Vendor from '$lib/Vendor.svelte';
 	import BackendIcon from '$lib/BackendIcon.svelte';
 	import { acpAgentsList, checkBackend, type AcpAgent } from '$lib/protocol';
@@ -40,6 +41,7 @@
 		onClose,
 		onSelect,
 		onEffort,
+		onSwitch,
 		onBackend,
 		onRefreshModels
 	}: {
@@ -60,6 +62,7 @@
 		onClose: () => void;
 		onSelect: (command: string) => void;
 		onEffort: (effort: string) => void;
+		onSwitch: (name: SessionSwitch, on: boolean) => void;
 		onBackend?: (b: BackendId, acpAgent?: { id: string; name: string }) => void | Promise<void>;
 		/** Re-request the model catalog (after an agent switch). */
 		onRefreshModels: () => void;
@@ -192,6 +195,8 @@
 				<EffortSlider efforts={chat.efforts} effort={chat.effort} disabled={effortDisabled} {onEffort} {accent} bind:current={shownEffort} />
 			</section>
 		{/if}
+
+		<SessionSwitches {chat} {onSwitch} />
 
 		{#if chat.backendId === 'jucode' && chat.provider === 'jucode' && chat.model}
 			{#key chat.model}<GroupPicker model={chat.model} />{/key}

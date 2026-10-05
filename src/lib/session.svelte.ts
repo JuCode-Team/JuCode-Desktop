@@ -196,6 +196,9 @@ export class SessionStore {
 		// engine (or the one being replaced).
 		holdOps(s.id);
 		s.chat.restarting = true;
+		// Background tasks belong to the engine process being replaced.
+		s.chat.bgTasks = [];
+		s.chat.taskOutputs = {};
 		// What this chat already shows of a claude conversation is richer than
 		// the daemon's replay of it.
 		if (s.backendId === 'claude' && s.chat.messages.some((m) => m.kind === 'user')) s.chat.keepNextTranscript = true;
@@ -214,7 +217,12 @@ export class SessionStore {
 							...gateway,
 							...program,
 							...(extraOpts?.model ? { model: extraOpts.model } : {}),
-							...(extraOpts?.resume_session_at ? { resume_at: extraOpts.resume_session_at } : {})
+							...(extraOpts?.resume_session_at ? { resume_at: extraOpts.resume_session_at } : {}),
+							// A restarted engine keeps the session's settings.
+							...(s.chat.ultracode ? { ultracode: true } : {}),
+							...(s.chat.fast ? { fast: true } : {}),
+							...(s.chat.effort ? { effort: s.chat.effort } : {}),
+							...(s.chat.thinkingSummaries === false ? { thinking: false } : {})
 						}
 					})
 				: s.backendId === 'codex'

@@ -31,6 +31,7 @@
 	import AttachmentChips from '$lib/composer/AttachmentChips.svelte';
 	import ContextIndicator from '$lib/composer/ContextIndicator.svelte';
 	import ModelMenu from '$lib/composer/ModelMenu.svelte';
+	import type { SessionSwitch } from '$lib/composer/SessionSwitches.svelte';
 	import type { ToolProvider } from '$lib/composer/GroupPicker.svelte';
 	import Vendor from '$lib/Vendor.svelte';
 	import { modelColor, isTopEffort } from '$lib/modelColor';
@@ -69,6 +70,7 @@
 		onModelSelect,
 		onModelClose,
 		onEffort,
+		onSwitch,
 		effortDisabled = false,
 		onApproval,
 		onRespond
@@ -107,6 +109,7 @@
 		onModelSelect?: (command: string) => void;
 		onModelClose?: () => void;
 		onEffort: (effort: string) => void;
+		onSwitch: (name: SessionSwitch, on: boolean) => void;
 		effortDisabled?: boolean;
 		onApproval: (mode: ApprovalMode) => void;
 		/** Answers a pending agent question (AskUserQuestion) shown in the tray. */
@@ -443,9 +446,13 @@
 	const traySections = $derived.by((): TraySection[] => {
 		if (trayMode === 'question' && currentQ) {
 			const multi = currentQ.multiSelect;
+			// An MCP form's yes/no field answers "true"/"false".
+			const elicit = question?.name === 'mcp_elicitation';
+			const optionTitle = (label: string) =>
+				elicit && (label === 'true' || label === 'false') ? t(label === 'true' ? 'chat.yes' : 'chat.no') : label;
 			const options: TrayItem[] = currentQ.options.map((o, i) => ({
 				id: `opt-${i}`,
-				title: o.label,
+				title: optionTitle(o.label),
 				desc: o.description,
 				box: multi,
 				checked: multi ? picks.includes(o.label) : undefined,
@@ -488,6 +495,8 @@
 		if (trayMode !== 'question' || !question?.questions) return '';
 		const n = question.questions.length;
 		return [
+			// What the MCP server asks, over its form's fields.
+			question.name === 'mcp_elicitation' && flow.step === 0 ? question.summary : '',
 			currentQ?.header,
 			n > 1 ? t('chat.questionProgress', { n: flow.step + 1, m: n }) : '',
 			question.subagentId ? t('chat.subagentChip', { id: question.subagentId }) : ''
@@ -624,6 +633,13 @@
 				input += ' ';
 				return;
 			}
+		}
+		// Tab in an empty editor takes the engine's suggested next prompt.
+		if (e.key === 'Tab' && !e.shiftKey && input === '' && chat.suggestion && !trayMode) {
+			e.preventDefault();
+			input = chat.suggestion;
+			chat.suggestion = '';
+			return;
 		}
 		// The tray owns navigation keys; for a question only while the editor is
 		// empty, so a typed answer keeps normal caret keys and Enter sends it.
@@ -793,7 +809,9 @@
 			contenteditable="true"
 			role="combobox"
 			tabindex="0"
-			data-placeholder={t(currentQ ? 'chat.questionPlaceholder' : chat.isChatMode ? 'chat.chatPlaceholder' : 'chat.composerPlaceholder')}
+			data-placeholder={chat.suggestion && !currentQ
+				? t('chat.suggestionPlaceholder', { text: chat.suggestion })
+				: t(currentQ ? 'chat.questionPlaceholder' : chat.isChatMode ? 'chat.chatPlaceholder' : 'chat.composerPlaceholder')}
 			oninput={syncFromDom}
 			onkeydown={onKey}
 			onpaste={onPaste}
@@ -860,6 +878,7 @@
 								class:effort-max={isTopEffort(chat.effort, chat.efforts)}
 								style:--effort-accent={modelColor(chat.model) || 'var(--text)'}>{effortLabel(chat.effort) || t('chat.effortTitle')}</span
 							>{/key}{/if}
+					{#if chat.ultracode}<span class="e">· Ultracode</span>{/if}
 				</button>
 			{:else if chat.model}
 				<span class="flatbtn model static"><BackendIcon backend={chat.backendId} size={15} /><span>{chat.modelLabel || chat.model}</span></span>
@@ -879,6 +898,7 @@
 					onClose={closeModelPopover}
 					onSelect={selectFromPopover}
 					onEffort={setEffort}
+					{onSwitch}
 					{onBackend}
 					onRefreshModels={() => onModel()}
 				/>

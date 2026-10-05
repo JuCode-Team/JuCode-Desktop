@@ -47,7 +47,16 @@ export type Op =
 	| { op: 'shutdown' }
 	// Structured approval answer: `hunks` (edit tools, partial approval) is only
 	// valid with decision "allow"; `always` is whole-call only (never with hunks).
-	| { op: 'approve'; call_id: string; decision: 'allow' | 'deny'; hunks?: string[]; always?: boolean; answers?: Record<string, string> }
+	// claude: `always_scope` saves the always-allow rule for the project or the user.
+	| {
+			op: 'approve';
+			call_id: string;
+			decision: 'allow' | 'deny';
+			hunks?: string[];
+			always?: boolean;
+			always_scope?: 'session' | 'project' | 'user';
+			answers?: Record<string, string>;
+	  }
 	// Engine-level auto-approval policy; acknowledged by an `approval_mode` event.
 	| { op: 'set_approval_mode'; mode: 'read-only' | 'plan' | 'auto' | 'auto-edit' | 'full-auto' }
 	// MCP server management (engine config is global; any live session's engine
@@ -55,7 +64,16 @@ export type Op =
 	| { op: 'mcp_list' }
 	| { op: 'mcp_set'; server: McpServerEntry }
 	| { op: 'mcp_remove'; name: string }
-	| { op: 'mcp_toggle'; name: string; enabled: boolean };
+	| { op: 'mcp_toggle'; name: string; enabled: boolean }
+	// claude: a session's own servers (Claude Code's config), its background
+	// tasks and its permission rules.
+	| { op: 'mcp_reconnect'; name: string }
+	| { op: 'stop_task'; task_id: string }
+	| { op: 'task_output'; task_id: string }
+	| { op: 'permission_rules' }
+	// claude: the agent trace (Workflows, Task subagents) and one subagent's conversation.
+	| { op: 'agent_runs' }
+	| { op: 'subagent_transcript'; agent_id: string };
 
 /** Saves an MCP server change (`mcp_set` / `mcp_remove` / `mcp_toggle`) for
  *  every session; open JuCode sessions apply it at once. */

@@ -17,13 +17,17 @@
 		selectionState,
 		toggleHunk,
 		type ApprovalHunk,
+		type AlwaysScope,
 		type ApproveOp,
 		type Question
 	} from '$lib/approval';
+	import PopMenu from '$lib/ui/PopMenu.svelte';
+	import { openExternal } from '$lib/openExternal';
 
 	let {
 		approval,
-		onRespond
+		onRespond,
+		ruleScopes = false
 	}: {
 		approval: {
 			callId: string;
@@ -32,9 +36,29 @@
 			subagentId: string | null;
 			hunks: ApprovalHunk[] | null;
 			questions?: Question[] | null;
+			/** An MCP elicitation's page to open. */
+			url?: string;
 		};
 		onRespond: (op: ApproveOp) => void;
+		/** 始终允许 asks where to keep the rule (caps.ruleScopes). */
+		ruleScopes?: boolean;
 	} = $props();
+
+	// An MCP server asking the user (claude elicitation): accept / decline,
+	// with its page to open when it names one; never an always-allow rule.
+	const isElicitation = $derived(approval.name === 'mcp_elicitation');
+	let scopeOpen = $state(false);
+	const scopeItems = $derived(
+		(['session', 'project', 'user'] as const).map((key) => ({
+			key,
+			label: t(`shell.alwaysScope.${key}`),
+			desc: t(`shell.alwaysScope.${key}Desc`)
+		}))
+	);
+	function allowAlways(scope?: AlwaysScope) {
+		scopeOpen = false;
+		onRespond(buildApproveOp(approval.callId, 'allow', { always: true, scope }));
+	}
 
 	// --- AskUserQuestion: an interactive picker instead of allow/deny ---
 	const questions = $derived(approval.questions ?? null);
@@ -246,22 +270,39 @@
 					: approval.summary}</pre>
 		{/if}
 		<div class="approval-actions">
+			{#if isElicitation && approval.url}
+				<Button variant="secondary" size="sm" onclick={() => openExternal(approval.url!)}>{t('shell.elicitOpen')}</Button>
+			{/if}
 			<Button
 				variant="primary"
 				size="sm"
 				onclick={() => onRespond(buildApproveOp(approval.callId, 'allow'))}
-				>{t('shell.allowOnce')}</Button
+				>{isElicitation ? t('shell.elicitAccept') : t('shell.allowOnce')}</Button
 			>
-			<Button
-				variant="secondary"
-				size="sm"
-				onclick={() => onRespond(buildApproveOp(approval.callId, 'allow', { always: true }))}
-				>{t('shell.allowAlways')}</Button
-			>
+			{#if !isElicitation}
+				<span class="scope-anchor">
+					<Button
+						variant="secondary"
+						size="sm"
+						onclick={() => (ruleScopes ? (scopeOpen = !scopeOpen) : allowAlways())}
+						>{ruleScopes ? t('shell.allowAlwaysScoped') : t('shell.allowAlways')}</Button
+					>
+					{#if scopeOpen}
+						<PopMenu
+							title={t('shell.alwaysScope.title')}
+							items={scopeItems}
+							placement="up-left"
+							onSelect={(key) => allowAlways(key as AlwaysScope)}
+							onClose={() => (scopeOpen = false)}
+						/>
+					{/if}
+				</span>
+			{/if}
 			<Button
 				variant="danger"
 				size="sm"
-				onclick={() => onRespond(buildApproveOp(approval.callId, 'deny'))}>{t('shell.deny')}</Button
+				onclick={() => onRespond(buildApproveOp(approval.callId, 'deny'))}
+				>{isElicitation ? t('shell.elicitDecline') : t('shell.deny')}</Button
 			>
 		</div>
 	{/if}
@@ -426,6 +467,10 @@
 		display: flex;
 		gap: 8px;
 		margin-top: 10px;
+	}
+	.scope-anchor {
+		position: relative;
+		display: inline-flex;
 	}
 	/* --- hunk list --- */
 	.hunks {

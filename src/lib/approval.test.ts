@@ -94,6 +94,22 @@ describe('hunk selection', () => {
 });
 
 describe('buildApproveOp', () => {
+	it('carries where an always-allow rule is kept, never the session default', () => {
+		expect(buildApproveOp('c', 'allow', { always: true, scope: 'project' })).toEqual({
+			op: 'approve',
+			call_id: 'c',
+			decision: 'allow',
+			always: true,
+			always_scope: 'project'
+		});
+		expect(buildApproveOp('c', 'allow', { always: true, scope: 'session' })).toEqual({
+			op: 'approve',
+			call_id: 'c',
+			decision: 'allow',
+			always: true
+		});
+	});
+
 	it('builds a whole-call allow (no hunks / always keys)', () => {
 		expect(buildApproveOp('call_1', 'allow')).toEqual({
 			op: 'approve',

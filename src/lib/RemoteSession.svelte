@@ -26,6 +26,11 @@
 	import { sendFile, type Uploaded } from '$lib/upload';
 	import { loadSession, saveSession } from '$lib/remote/cache';
 	import ModelMenu from '$lib/remote/ModelMenu.svelte';
+	import TaskStrip from '$lib/TaskStrip.svelte';
+	import AgentRunsPanel from '$lib/AgentRunsPanel.svelte';
+	import TreeStructureIcon from 'phosphor-svelte/lib/TreeStructureIcon';
+	import type { Msg } from '$lib/chat.svelte';
+	import type { SessionSwitch } from '$lib/composer/SessionSwitches.svelte';
 	import MessageList from '$lib/MessageList.svelte';
 	import ApprovalCard from '$lib/ApprovalCard.svelte';
 	import Vendor from '$lib/Vendor.svelte';
@@ -314,6 +319,14 @@
 			await connect();
 		}
 		if (!connected) return;
+		// /btw asks beside the conversation (claude): the answer shows in the task strip.
+		const btw = !attached.length && bcaps.sideQuestions ? typed.match(/^\/btw\s+([\s\S]+)/) : null;
+		if (btw) {
+			chat.sideAnswers.push({ question: btw[1].trim(), answer: '', error: '', pending: true });
+			send({ op: 'command', input: typed });
+			text = '';
+			return;
+		}
 		// A busy session queues the message: the engine lists it (jucode) or
 		// runs it as the next turn (others, listed here until that turn).
 		if (chat.busy) {
@@ -449,8 +462,26 @@
 		pendingTimer = setTimeout(() => (pendingModel = ''), 15_000);
 		send({ op: 'command', input: `/model ${model}` });
 	}
+	// The agent trace sheet (AgentRunsPanel).
+	let traceOpen = $state(false);
+	function openTrace(agentId: string | null) {
+		chat.agentFocus = agentId;
+		traceOpen = true;
+	}
+	function traceOf(m: Msg): { label: string; run: () => void } | null {
+		if (m.kind !== 'tool' || !m.callId) return null;
+		const agent = chat.agentRuns.agents.find((a) => a.toolUseId === m.callId);
+		if (agent) return { label: t('dock.agents.openAgent'), run: () => openTrace(agent.id) };
+		if (chat.agentRuns.workflows.some((w) => w.toolUseId === m.callId)) return { label: t('dock.agents.open'), run: () => openTrace(null) };
+		return null;
+	}
 	function setEffort(effort: string) {
 		if (chat.model && !pendingModel) send({ op: 'command', input: `/model ${chat.model} ${effort}` });
+	}
+	// Claude Code's session switches (SessionSwitches).
+	function setSwitch(name: SessionSwitch, on: boolean) {
+		const command = name === 'ultracode' ? '/effort ultracode' : `/${name}`;
+		send({ op: 'command', input: `${command} ${on ? 'on' : 'off'}` });
 	}
 	const shownModel = $derived.by(() => {
 		if (!pendingModel) return { id: chat.model, label: chat.modelLabel || chat.model };
@@ -474,10 +505,27 @@
 			{#if hostName}<span class="host"><DesktopIcon size={11} /><span>{hostName}</span></span>{/if}
 		</span>
 		{#if chat.busy}<span class="busy pulse"></span>{/if}
+		{#if bcaps.agentTrace && connected}<button class="back" onclick={() => openTrace(null)} aria-label={t('dock.agents.title')}><TreeStructureIcon size={18} /></button>{/if}
 		{#if onFiles}<button class="back" onclick={onFiles} aria-label={t('shell.remote.files')}><FilesIcon size={18} /></button>{/if}
 		{#if onChanges}<button class="back" onclick={onChanges} aria-label={t('shell.remote.changes')}><GitDiffIcon size={18} /></button>{/if}
 	</header>
 
+	<TaskStrip
+		{chat}
+		onStop={(id) => send({ op: 'stop_task', task_id: id })}
+		onOutput={(id) => send({ op: 'task_output', task_id: id })}
+		onTrace={bcaps.agentTrace ? () => openTrace(null) : undefined}
+	/>
+	{#if traceOpen}
+		<!-- The agent trace, full screen over the session. -->
+		<div class="trace-sheet" role="dialog" aria-label={t('dock.agents.title')}>
+			<header>
+				<button class="back" onclick={() => (traceOpen = false)} aria-label={t('shell.remote.back')}><ArrowLeftIcon size={18} /></button>
+				<span class="heading"><span class="title">{t('dock.agents.title')}</span></span>
+			</header>
+			<div class="trace-body"><AgentRunsPanel {chat} onOp={send} /></div>
+		</div>
+	{/if}
 	<main class="scroll" bind:this={scroller} onscroll={onScroll}>
 		<div class="thread" bind:this={contentEl}>
 			<MessageList
@@ -487,6 +535,7 @@
 				phase={chat.phase}
 				call={chat.call}
 				compactionTokens={chat.compactionTokens}
+				traceOf={bcaps.agentTrace ? traceOf : undefined}
 				{scroller}
 				onEdit={(value) => {
 					text = value;
@@ -512,7 +561,7 @@
 		{#if chat.pendingApproval}
 			<div class="approval">
 				{#key chat.pendingApproval.callId}
-					<ApprovalCard approval={chat.pendingApproval} onRespond={respond} />
+					<ApprovalCard approval={chat.pendingApproval} onRespond={respond} ruleScopes={caps(chat).ruleScopes} />
 				{/key}
 			</div>
 		{/if}
@@ -677,12 +726,25 @@
 				: undefined}
 			onPick={pickModel}
 			onEffort={setEffort}
+			onSwitch={setSwitch}
 			onClose={closeModels}
 		/>
 	{/if}
 </div>
 
 <style>
+	.trace-sheet {
+		position: fixed;
+		inset: 0;
+		z-index: 20;
+		display: flex;
+		flex-direction: column;
+		background: var(--bg);
+	}
+	.trace-body {
+		flex: 1;
+		min-height: 0;
+	}
 	.session {
 		position: fixed;
 		inset: 0;

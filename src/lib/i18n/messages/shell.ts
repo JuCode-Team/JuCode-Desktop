@@ -21,6 +21,7 @@ const shell = {
 			running: '运行中',
 			completed: '已完成',
 			interrupted: '已中断',
+			failed: '失败',
 			closed: '已关闭'
 		},
 
@@ -183,6 +184,19 @@ const shell = {
 		answerCancel: '取消',
 		allowOnce: '允许一次',
 		allowAlways: '本会话始终允许',
+		allowAlwaysScoped: '始终允许…',
+		alwaysScope: {
+			title: '始终允许，范围',
+			session: '本会话',
+			sessionDesc: '关闭会话后失效',
+			project: '本项目',
+			projectDesc: '保存到项目的 .claude/settings.local.json',
+			user: '所有项目',
+			userDesc: '保存到 ~/.claude/settings.json'
+		},
+		elicitOpen: '打开链接',
+		elicitAccept: '提交',
+		elicitDecline: '拒绝',
 		deny: '拒绝',
 		allowAll: '全部允许',
 		allowSelected: '允许选中 ({n})',
@@ -840,6 +854,7 @@ const shell = {
 			running: 'Running',
 			completed: 'Completed',
 			interrupted: 'Interrupted',
+			failed: 'Failed',
 			closed: 'Closed'
 		},
 
@@ -1002,6 +1017,19 @@ const shell = {
 		answerCancel: 'Cancel',
 		allowOnce: 'Allow once',
 		allowAlways: 'Always allow this session',
+		allowAlwaysScoped: 'Always allow…',
+		alwaysScope: {
+			title: 'Always allow, for',
+			session: 'This session',
+			sessionDesc: 'Until the session closes',
+			project: 'This project',
+			projectDesc: 'Saved to the project’s .claude/settings.local.json',
+			user: 'All projects',
+			userDesc: 'Saved to ~/.claude/settings.json'
+		},
+		elicitOpen: 'Open link',
+		elicitAccept: 'Submit',
+		elicitDecline: 'Decline',
 		deny: 'Deny',
 		allowAll: 'Allow all',
 		allowSelected: 'Allow selected ({n})',

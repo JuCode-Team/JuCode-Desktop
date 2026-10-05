@@ -38,6 +38,7 @@
 	import Switch from '$lib/ui/Switch.svelte';
 	import { t } from '$lib/i18n';
 	import { isDraft } from '$lib/backends/router';
+	import { caps } from '$lib/backends';
 	import SettingsSection from './SettingsSection.svelte';
 	import SettingsRow from './SettingsRow.svelte';
 
@@ -46,6 +47,9 @@
 	// A live engine reports the servers' state; an exited one can't, and a
 	// draft has none (asking would start it).
 	const live = $derived(!!chat && !!sessionId && chat.engineState !== 'exited' && !isDraft(sessionId));
+	// A Claude Code session: its servers are Claude Code's own config, so they
+	// can be switched and reconnected for this session, not edited here.
+	const owned = $derived(!!chat && caps(chat).mcpEngineOwned);
 
 	// Persisted config entries (edit-form source + no-session fallback), kept in
 	// sync optimistically on every mutation we send.
@@ -65,6 +69,10 @@
 	];
 
 	onMount(() => {
+		if (owned) {
+			if (live) dispatch(sessionId, { op: 'mcp_list' }, (e) => (opError = String(e)));
+			return;
+		}
 		readConfig()
 			.then((cfg) => {
 				configEntries = parseConfigServers(cfg);
@@ -117,18 +125,23 @@
 		if (editing === name) editing = null;
 	}
 	function toggle(row: McpRow, enabled: boolean) {
+		if (owned) {
+			dispatch(sessionId, { op: 'mcp_toggle', name: row.name, enabled }, (e) => (opError = String(e)));
+			return;
+		}
 		send({ op: 'mcp_toggle', name: row.name, enabled });
 		if (row.entry) upsertLocal({ ...row.entry, enabled });
 	}
 	// Reconnect = resend the full entry via mcp_set (the engine reconnects on set).
 	function reconnect(row: McpRow) {
-		if (row.entry) send({ op: 'mcp_set', server: row.entry });
+		if (owned) dispatch(sessionId, { op: 'mcp_reconnect', name: row.name }, (e) => (opError = String(e)));
+		else if (row.entry) send({ op: 'mcp_set', server: row.entry });
 	}
 
 	const stateOf = (row: McpRow) => row.view?.state ?? 'unknown';
 </script>
 
-<SettingsSection id="mcp-servers" title={t('settings.mcp.groupLabel')} description={t('settings.mcp.hint')}>
+<SettingsSection id="mcp-servers" title={t('settings.mcp.groupLabel')} description={t(owned ? 'settings.mcp.claudeHint' : 'settings.mcp.hint')}>
 	{#if !live}
 		<div class="pad"><Notice tone="info">{t('settings.mcp.noSession')}</Notice></div>
 	{/if}
@@ -138,10 +151,12 @@
 
 	{#if rows.length === 0 && editing !== '__new__'}
 		<div class="mcp-empty">
-			<p>{t('settings.mcp.empty')}</p>
-			<Button variant="primary" size="sm" onclick={openCreate}>
-				<PlusIcon size={14} /> {t('settings.mcp.addServer')}
-			</Button>
+			<p>{t(owned ? 'settings.mcp.claudeEmpty' : 'settings.mcp.empty')}</p>
+			{#if !owned}
+				<Button variant="primary" size="sm" onclick={openCreate}>
+					<PlusIcon size={14} /> {t('settings.mcp.addServer')}
+				</Button>
+			{/if}
 		</div>
 	{:else if rows.length > 0}
 		{#each rows as row (row.name)}
@@ -170,7 +185,7 @@
 						<span class="chev" class:up={expanded === row.name}><CaretDownIcon size={14} /></span>
 					</button>
 					<span class="sacts">
-						{#if live && stateOf(row) === 'failed' && row.entry}
+						{#if live && stateOf(row) === 'failed' && (row.entry || owned)}
 							<IconButton size="sm" title={t('settings.mcp.reconnect')} onclick={() => reconnect(row)}>
 								<ArrowClockwiseIcon size={14} />
 							</IconButton>
@@ -178,16 +193,18 @@
 						<span class="swwrap">
 							<Switch bind:checked={() => row.enabled, (v) => toggle(row, v)} label={row.name} />
 						</span>
-						<IconButton size="sm" title={t('settings.mcp.edit')} onclick={() => openEdit(row)}>
-							<PencilSimpleIcon size={14} />
-						</IconButton>
-						<IconButton
-							size="sm"
-							title={t('common.delete')}
-							onclick={() => (confirmDelete = confirmDelete === row.name ? null : row.name)}
-						>
-							<TrashIcon size={14} />
-						</IconButton>
+						{#if !owned}
+							<IconButton size="sm" title={t('settings.mcp.edit')} onclick={() => openEdit(row)}>
+								<PencilSimpleIcon size={14} />
+							</IconButton>
+							<IconButton
+								size="sm"
+								title={t('common.delete')}
+								onclick={() => (confirmDelete = confirmDelete === row.name ? null : row.name)}
+							>
+								<TrashIcon size={14} />
+							</IconButton>
+						{/if}
 					</span>
 				</div>
 				{#if confirmDelete === row.name}
@@ -286,7 +303,7 @@
 				<Button variant="primary" size="sm" onclick={submit}>{t('settings.mcp.form.save')}</Button>
 			</div>
 		</div>
-	{:else if rows.length > 0}
+	{:else if rows.length > 0 && !owned}
 		<button class="addsrv" onclick={openCreate}>
 			<PlusIcon size={15} /> {t('settings.mcp.addServer')}
 		</button>

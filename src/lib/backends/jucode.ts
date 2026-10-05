@@ -23,7 +23,11 @@ export const JUCODE_CAPS: BackendCaps = {
 	resume: true,
 	subagents: true,
 	transcriptReplay: true,
-	slashCommands: true
+	slashCommands: true,
+	mcpEngineOwned: false,
+	ruleScopes: false,
+	sideQuestions: false,
+	agentTrace: false
 };
 
 /** Wire protocol version this desktop speaks (`hello.protocol`). */

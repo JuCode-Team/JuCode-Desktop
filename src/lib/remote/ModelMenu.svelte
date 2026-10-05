@@ -12,6 +12,7 @@
 	import ArrowCounterClockwiseIcon from 'phosphor-svelte/lib/ArrowCounterClockwiseIcon';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import IconButton from '$lib/ui/IconButton.svelte';
+	import SessionSwitches, { type SessionSwitch } from '$lib/composer/SessionSwitches.svelte';
 	import Vendor from '$lib/Vendor.svelte';
 	import EffortSlider from '$lib/composer/EffortSlider.svelte';
 	import { defaultEffort, effortLabel } from '$lib/composer/effort';
@@ -28,6 +29,7 @@
 		tool,
 		onPick,
 		onEffort,
+		onSwitch,
 		onClose
 	}: {
 		chat: ChatState;
@@ -47,6 +49,7 @@
 		};
 		onPick: (model: string) => void;
 		onEffort: (effort: string) => void;
+		onSwitch: (name: SessionSwitch, on: boolean) => void;
 		onClose: () => void;
 	} = $props();
 
@@ -158,6 +161,7 @@
 			</div>
 			<EffortSlider efforts={chat.efforts} effort={chat.effort} disabled={!!pendingModel} {onEffort} {accent} bind:current={shownEffort} />
 		</section>
+		<SessionSwitches {chat} {onSwitch} />
 		{#if tool && running && providerCount > 1}
 			<section class="providers" aria-label={t('chat.provider')}>
 				<div class="elabel phead">{t('chat.provider')}</div>

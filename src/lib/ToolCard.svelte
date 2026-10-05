@@ -7,8 +7,23 @@
 	import Notice from '$lib/ui/Notice.svelte';
 	import { parseToolOutput, toolIcon, toolTarget, toolVerb, unwrapShell } from '$lib/toolSummary';
 
-	let { name, output, running, isError }: { name: string; output: string; running: boolean; isError: boolean } =
-		$props();
+	let {
+		name,
+		output,
+		running,
+		isError,
+		subagent = '',
+		trace
+	}: {
+		name: string;
+		output: string;
+		running: boolean;
+		isError: boolean;
+		/** The Task subagent that made the call. */
+		subagent?: string;
+		/** An Agent / Workflow call: opens what it ran in the agent trace. */
+		trace?: { label: string; run: () => void };
+	} = $props();
 
 	// Auto-expand while the tool runs, auto-collapse once it finishes. Starts in
 	// that state (a card remounting — windowed back in, its group reopened — must
@@ -120,6 +135,7 @@
 		<span class="ico"><Icon size={14} /></span>
 		<span class="verb">{verb}</span>
 		{#if target}<span class="target">{target}</span>{/if}
+		{#if subagent}<span class="by" title={t('chat.bySubagent', { name: subagent })}>{subagent}</span>{/if}
 		{#if exitCode !== null && exitCode !== 0}
 			<span class="exit bad">exit {exitCode}</span>
 		{/if}
@@ -136,6 +152,9 @@
 		{/if}
 	</button>
 
+	{#if trace}
+		<button class="trace" onclick={trace.run}>{trace.label}</button>
+	{/if}
 	{#if !collapsed && !isRead}
 		<div class="body" transition:slide={{ duration: 180 }}>
 			{#if errorText}
@@ -227,6 +246,29 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+	.trace {
+		margin: 2px 0 2px 22px;
+		padding: 0;
+		border: none;
+		background: none;
+		color: var(--dim);
+		font-size: var(--fs-xs);
+		cursor: pointer;
+	}
+	.trace:hover {
+		color: var(--text);
+		text-decoration: underline;
+	}
+	.by {
+		flex-shrink: 1;
+		min-width: 0;
+		max-width: 180px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: var(--fs-2xs);
+		color: var(--dim2);
 	}
 	.exit {
 		font-family: var(--font-mono);

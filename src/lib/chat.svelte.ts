@@ -62,7 +62,16 @@ export type Msg =
 			turn?: TurnStats;
 	  }
 	| { kind: 'reasoning'; text: string; collapsed: boolean }
-	| { kind: 'tool'; callId: string; name: string; output: string; running: boolean; isError: boolean }
+	| {
+			kind: 'tool';
+			callId: string;
+			name: string;
+			output: string;
+			running: boolean;
+			isError: boolean;
+			/** The Task subagent that made this call (claude). */
+			subagent?: string;
+	  }
 	| { kind: 'system'; text: string }
 	| { kind: 'error'; text: string };
 
@@ -137,6 +146,72 @@ const arr = <T>(v: unknown) => (Array.isArray(v) ? (v as T[]) : []);
 
 /** Count added/removed lines in a unified-diff-ish string (ignoring +++/--- file
  *  headers). Used to attribute an edit's line delta to its turn. */
+/** A claude task type (`local_workflow`, `local_bash`, …) as the user says it. */
+export function taskKindLabel(kind: string): string {
+	const known = ['local_workflow', 'local_bash', 'local_agent', 'monitor'];
+	const key = known.find((k) => kind === k || kind.startsWith(k)) ?? 'other';
+	return t(`chat.taskKind.${key}`);
+}
+
+function fallbackReason(reason: string): string {
+	const known = ['overloaded', 'server_error', 'model_not_found', 'permission_denied', 'refusal'];
+	return t(`chat.fallbackReason.${known.includes(reason) ? reason : 'other'}`);
+}
+
+/** One agent of a Workflow, or a Task subagent (claude's agent trace). */
+export interface AgentRun {
+	id: string;
+	label: string;
+	/** Workflow agents: their phase index. */
+	phase: number;
+	model: string;
+	/** running / done / completed / failed / stopped / queued … as the engine says. */
+	state: string;
+	startedAt: number;
+	durationMs: number;
+	tokens: number;
+	toolCalls: number;
+	prompt: string;
+	result: string;
+	error: string;
+	/** Task subagents: the subagent type and the Agent call that started it. */
+	type: string;
+	toolUseId: string;
+}
+export interface WorkflowRun {
+	id: string;
+	toolUseId: string;
+	name: string;
+	description: string;
+	status: string;
+	startedAt: number;
+	durationMs: number;
+	tokens: number;
+	toolCalls: number;
+	phases: { index: number; title: string }[];
+	agents: AgentRun[];
+}
+
+function agentRun(raw: Record<string, unknown>): AgentRun {
+	const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+	return {
+		id: str(raw.id),
+		label: str(raw.label),
+		phase: n(raw.phase),
+		model: str(raw.model),
+		state: str(raw.state) || str(raw.status),
+		startedAt: n(raw.started_at),
+		durationMs: n(raw.duration_ms),
+		tokens: n(raw.tokens),
+		toolCalls: n(raw.tool_calls),
+		prompt: str(raw.prompt),
+		result: str(raw.result) || str(raw.summary),
+		error: str(raw.error),
+		type: str(raw.type),
+		toolUseId: str(raw.tool_use_id)
+	};
+}
+
 export function countDiffLines(diff: string): { added: number; removed: number } {
 	let added = 0;
 	let removed = 0;
@@ -218,6 +293,10 @@ export class ChatState {
 	sessionId = $state('');
 	effort = $state('');
 	efforts = $state<string[]>([]);
+	/** Claude Code: ultracode (standing Workflow orchestration) is on, and
+	 *  this model offers it. */
+	ultracode = $state(false);
+	ultracodeAvailable = $state(false);
 	engineState = $state('starting');
 	// True from session creation until the engine emits its first event — i.e.
 	// while the claude/codex/jucode child is still booting. Drives the spawn
@@ -258,8 +337,37 @@ export class ChatState {
 		hunks: ApprovalHunk[] | null;
 		/** Present for a claude AskUserQuestion — render an interactive picker. */
 		questions?: Question[] | null;
+		/** An MCP elicitation asking the user to open a page (claude). */
+		url?: string;
 	} | null>(null);
-	subagents = $state<Record<string, { status: string; message: string }>>({});
+	/** Subagents by id; `label` names them when the id doesn't (claude's task ids). */
+	subagents = $state<Record<string, { status: string; message: string; label?: string }>>({});
+	/** Background work of a claude session (Workflow, background shell or
+	 *  agent, Monitor), as the engine last listed it; `message` is the latest
+	 *  progress line. Per engine process: a restart clears it. */
+	bgTasks = $state<{ id: string; kind: string; description: string; message: string }[]>([]);
+	/** A background shell's output tail, by task id, once asked for. */
+	taskOutputs = $state<Record<string, { output: string; truncated: boolean; error: string }>>({});
+	/** /btw answers: asked beside the conversation, never part of it. */
+	sideAnswers = $state<{ question: string; answer: string; error: string; pending: boolean }[]>([]);
+	/** The engine's guess at the next prompt (claude), until the user types or sends. */
+	suggestion = $state('');
+	/** Claude fast mode: on, can be asked for, and whether thinking summaries
+	 *  show (null: the engine has no such switch). */
+	fast = $state(false);
+	fastAvailable = $state(false);
+	thinkingSummaries = $state<boolean | null>(null);
+	/** Claude's Workflows and Task subagents (agent_runs), oldest first. */
+	agentRuns = $state<{ workflows: WorkflowRun[]; agents: AgentRun[] }>({ workflows: [], agents: [] });
+	/** A subagent's own conversation by agent id: its task, then its messages. */
+	subagentTranscripts = $state<Record<string, { task: string; messages: Msg[]; error: string }>>({});
+	/** The subagent the agent trace panel shows (null: the run list). */
+	agentFocus = $state<string | null>(null);
+	/** Claude's permission rules (list_permission_rules), once asked for. */
+	permissionRules = $state<{
+		rules: { behavior: string; source: string; rule: string; editability: string }[];
+		directories: { path: string; source: string }[];
+	} | null>(null);
 	// Latest engine rate-limit / quota notice, shown as a persistent banner until
 	// the engine reports the limit cleared (status back to normal). null = no limit.
 	rateLimit = $state<{ level: 'warning' | 'limited'; message: string; resetsAt: number | null } | null>(null);
@@ -838,6 +946,11 @@ export class ChatState {
 				this.modelLabel = str(ev.model_label);
 				this.effort = str(ev.reasoning_effort);
 				this.efforts = arr<string>(ev.reasoning_efforts);
+				this.ultracode = ev.ultracode === true;
+				this.ultracodeAvailable = ev.ultracode_available === true;
+				this.fast = ev.fast === true;
+				this.fastAvailable = ev.fast_available === true;
+				this.thinkingSummaries = typeof ev.thinking_summaries === 'boolean' ? ev.thinking_summaries : null;
 				this.engineState = str(ev.state) || this.engineState;
 				this.contextWindow = num(ev.context_window);
 				this.contextLimit = num(ev.context_limit);
@@ -926,7 +1039,8 @@ export class ChatState {
 						name: str(ev.name),
 						output: '',
 						running: true,
-						isError: false
+						isError: false,
+						...(str(ev.subagent) ? { subagent: str(ev.subagent) } : {})
 					};
 					this.messages.push(toolMsg);
 					// Index the proxied copy: writes to the raw object would not render
@@ -1162,7 +1276,8 @@ export class ChatState {
 					summary: str(ev.summary),
 					subagentId: typeof ev.subagent_id === 'string' && ev.subagent_id ? ev.subagent_id : null,
 					hunks: parseHunks(ev.hunks),
-					questions: parseQuestions(ev.questions)
+					questions: parseQuestions(ev.questions),
+					...(str(ev.url) ? { url: str(ev.url) } : {})
 				};
 				break;
 			case 'command_list':
@@ -1210,9 +1325,123 @@ export class ChatState {
 			}
 			case 'subagent_lifecycle': {
 				const path = str(ev.path);
-				if (path) this.subagents[path] = { status: str(ev.status), message: str(ev.message) };
+				// A labelled (claude) subagent that ended leaves the strip: its
+				// card holds the result.
+				if (path && str(ev.label) && ['completed', 'failed', 'stopped'].includes(str(ev.status))) delete this.subagents[path];
+				else if (path)
+					this.subagents[path] = {
+						status: str(ev.status),
+						message: str(ev.message),
+						...(str(ev.label) ? { label: str(ev.label) } : {})
+					};
 				break;
 			}
+			case 'background_tasks': {
+				const before = new Map(this.bgTasks.map((x) => [x.id, x.message]));
+				this.bgTasks = arr<Record<string, unknown>>(ev.tasks).map((x) => ({
+					id: str(x.id),
+					kind: str(x.kind),
+					description: str(x.description),
+					message: before.get(str(x.id)) ?? ''
+				}));
+				break;
+			}
+			case 'task_progress': {
+				const task = this.bgTasks.find((x) => x.id === str(ev.task_id));
+				if (task) task.message = str(ev.message);
+				break;
+			}
+			case 'task_done':
+				this.messages.push({
+					kind: 'system',
+					text: t('chat.taskDone', {
+						kind: taskKindLabel(str(ev.kind)),
+						status: t(`chat.taskStatus.${['completed', 'failed', 'stopped'].includes(str(ev.status)) ? str(ev.status) : 'completed'}`),
+						summary: str(ev.summary)
+					})
+				});
+				break;
+			case 'task_output':
+				this.taskOutputs[str(ev.task_id)] = {
+					output: str(ev.output),
+					truncated: ev.truncated === true,
+					error: str(ev.error)
+				};
+				break;
+			case 'side_answer': {
+				const q = str(ev.question);
+				const entry = this.sideAnswers.find((x) => x.pending && x.question === q);
+				const answer = { question: q, answer: str(ev.answer), error: str(ev.error), pending: false };
+				if (entry) Object.assign(entry, answer);
+				else this.sideAnswers.push(answer);
+				break;
+			}
+			case 'prompt_suggestion':
+				this.suggestion = str(ev.text);
+				break;
+			case 'model_fallback':
+				this.messages.push({
+					kind: 'system',
+					text: t('chat.modelFallback', { from: str(ev.from), to: str(ev.to), reason: fallbackReason(str(ev.reason)) })
+				});
+				break;
+			case 'agent_runs': {
+				const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+				this.agentRuns = {
+					workflows: arr<Record<string, unknown>>(ev.workflows).map((w) => ({
+						id: str(w.id),
+						toolUseId: str(w.tool_use_id),
+						name: str(w.name),
+						description: str(w.description),
+						status: str(w.status),
+						startedAt: n(w.started_at),
+						durationMs: n(w.duration_ms),
+						tokens: n(w.tokens),
+						toolCalls: n(w.tool_calls),
+						phases: arr<Record<string, unknown>>(w.phases).map((p) => ({ index: n(p.index), title: str(p.title) })),
+						agents: arr<Record<string, unknown>>(w.agents).map(agentRun)
+					})),
+					agents: arr<Record<string, unknown>>(ev.agents).map(agentRun)
+				};
+				break;
+			}
+			case 'subagent_transcript': {
+				const items = arr<Record<string, unknown>>(ev.items);
+				// The first user item is the subagent's task; the rest is its work.
+				const task = items[0] && str(items[0].role) === 'user' ? str(items[0].content) : '';
+				const messages = items
+					.slice(task ? 1 : 0)
+					.map((it): Msg | null => {
+						const role = str(it.role);
+						if (role === 'assistant') return { kind: 'assistant', text: str(it.content) };
+						if (role === 'reasoning') return { kind: 'reasoning', text: str(it.content), collapsed: true };
+						if (role === 'user') return { kind: 'system', text: str(it.content) };
+						if (role === 'tool')
+							return {
+								kind: 'tool',
+								callId: str(it.call_id),
+								name: str(it.name),
+								output: str(it.output),
+								running: it.running === true,
+								isError: it.is_error === true
+							};
+						return null;
+					})
+					.filter((m): m is Msg => m !== null);
+				this.subagentTranscripts[str(ev.agent_id)] = { task, messages, error: str(ev.error) };
+				break;
+			}
+			case 'permission_rules':
+				this.permissionRules = {
+					rules: arr<Record<string, unknown>>(ev.rules).map((r) => ({
+						behavior: str(r.behavior),
+						source: str(r.source),
+						rule: str(r.rule),
+						editability: str(r.editability)
+					})),
+					directories: arr<Record<string, unknown>>(ev.directories).map((d) => ({ path: str(d.path), source: str(d.source) }))
+				};
+				break;
 			case 'plan_usage': {
 				const windows = arr<Record<string, unknown>>(ev.windows)
 					.filter((w) => typeof w.used === 'number')
@@ -1237,6 +1466,7 @@ export class ChatState {
 			}
 			case 'connecting':
 				this.engineState = 'connecting';
+				this.suggestion = '';
 				this.#startTurn();
 				this.#requestStarted();
 				if (this.#sending?.state === 'sending') this.#setSend('connecting');
