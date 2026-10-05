@@ -270,10 +270,14 @@ export class DaemonClient {
 	}
 
 	/** The connection dropped: every hosted session looks exited to the
-	 *  desktop, whose restart logic reopens them on a new connection. */
+	 *  desktop, whose restart logic reopens them on a new connection; the
+	 *  daemon killed this connection's terminals. */
 	#lost() {
 		this.#socket = null;
 		this.onDisconnect();
+		const terms = [...this.#terms];
+		this.#terms.clear();
+		for (const [term, handler] of terms) handler({ type: 'term_exit', term, code: null });
 		for (const pending of this.#pending.values())
 			pending.reject(new Error('connection to jucode daemon lost'));
 		this.#pending.clear();

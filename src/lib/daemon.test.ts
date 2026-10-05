@@ -151,4 +151,14 @@ describe('DaemonClient', () => {
 		expect(env.exits.sort()).toEqual(['desk-1', 'desk-2']);
 		expect(env.client.owns('desk-1')).toBe(false);
 	});
+
+	it('a dropped connection ends its terminals, as the daemon kills them', async () => {
+		const env = setup();
+		const socket = await openCreated(env, 'desk-1', 'sess-1');
+		const seen: unknown[] = [];
+		env.client.onTerm('t-1', (frame) => seen.push(frame.type));
+		socket.push({ type: 'term_output', term: 't-1', data: '' });
+		socket.close();
+		expect(seen).toEqual(['term_output', 'term_exit']);
+	});
 });

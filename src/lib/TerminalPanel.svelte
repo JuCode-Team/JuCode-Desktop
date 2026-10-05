@@ -4,8 +4,8 @@
 	import { Terminal } from '@xterm/xterm';
 	import { FitAddon } from '@xterm/addon-fit';
 	import '@xterm/xterm/css/xterm.css';
+	import { terminalLook, useWebgl } from './terminal';
 	import { ptyOpen, ptyWrite, ptyResize, ptyClose } from '$lib/protocol';
-	import { themeState, terminalPalette } from '$lib/theme.svelte';
 
 	let { cwd = '' }: { cwd?: string } = $props();
 	let host = $state<HTMLDivElement | null>(null);
@@ -14,24 +14,24 @@
 	const id = `term-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 	let cleanups: Array<() => void> = [];
 
-	function palette() {
-		return terminalPalette();
+	/** Fit the grid to the panel and tell the shell its new size. */
+	function refit() {
+		try {
+			fit?.fit();
+			if (term) ptyResize(id, term.cols, term.rows).catch(() => {});
+		} catch {
+			/* ignore */
+		}
 	}
 
 	onMount(() => {
 		let disposed = false;
 		(async () => {
-			term = new Terminal({
-				fontFamily:
-					"'MesloLGL Nerd Font Mono', 'MesloLGS NF', 'JetBrainsMono Nerd Font', 'Hack Nerd Font', 'FiraCode Nerd Font', 'Symbols Nerd Font', 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace, 'Apple Color Emoji'",
-				fontSize: 12.5,
-				cursorBlink: true,
-				allowProposedApi: true,
-				theme: palette()
-			});
+			term = new Terminal({ ...terminalLook(), cursorBlink: true, allowProposedApi: true });
 			fit = new FitAddon();
 			term.loadAddon(fit);
 			if (host) term.open(host);
+			useWebgl(term);
 			fit.fit();
 
 			const unOut = await listen<{ id: string; data: string }>('pty-output', (e) => {
@@ -45,14 +45,7 @@
 			term.onData((d) => ptyWrite(id, d));
 			await ptyOpen(id, term.cols, term.rows, cwd || undefined);
 
-			const ro = new ResizeObserver(() => {
-				try {
-					fit?.fit();
-					if (term) ptyResize(id, term.cols, term.rows);
-				} catch {
-					/* ignore */
-				}
-			});
+			const ro = new ResizeObserver(refit);
 			if (host) ro.observe(host);
 			cleanups.push(() => ro.disconnect());
 
@@ -63,8 +56,12 @@
 		};
 	});
 
+	// Theme and font changes; a new font size changes the grid.
 	$effect(() => {
-		if (term) term.options.theme = palette();
+		const look = terminalLook();
+		if (!term) return;
+		Object.assign(term.options, look);
+		refit();
 	});
 
 	onDestroy(() => {

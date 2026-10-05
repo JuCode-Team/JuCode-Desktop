@@ -24,6 +24,10 @@ type PrefsShape = {
 	cacheMissAlert: boolean;
 	/** Send anonymous usage counts (telemetry.svelte.ts). */
 	telemetry: boolean;
+	/** Terminal font family (CSS list) tried before the built-in ones; empty
+	 *  for the defaults. */
+	terminalFont: string;
+	terminalFontSize: number;
 };
 
 export const TURN_STAT_KEYS = ['elapsed', 'ttft', 'tokens', 'files', 'tools', 'cost', 'model'] as const;
@@ -35,8 +39,13 @@ const DEFAULTS: PrefsShape = {
 	turnStats: ['elapsed', 'tokens', 'files'],
 	chatWidth: 844,
 	cacheMissAlert: true,
-	telemetry: true
+	telemetry: true,
+	terminalFont: '',
+	terminalFontSize: 12.5
 };
+
+/** A terminal font size within 8–32 px; anything else is the default. */
+const fontSize = (v: unknown) => (typeof v === 'number' && v >= 8 && v <= 32 ? v : DEFAULTS.terminalFontSize);
 
 function load(): PrefsShape {
 	try {
@@ -82,6 +91,8 @@ class PrefsStore {
 	chatWidth = $state(DEFAULTS.chatWidth);
 	cacheMissAlert = $state(DEFAULTS.cacheMissAlert);
 	telemetry = $state(DEFAULTS.telemetry);
+	terminalFont = $state(DEFAULTS.terminalFont);
+	terminalFontSize = $state(DEFAULTS.terminalFontSize);
 
 	init() {
 		const p = load();
@@ -93,6 +104,8 @@ class PrefsStore {
 		this.chatWidth = Number.isFinite(p.chatWidth) ? p.chatWidth : DEFAULTS.chatWidth;
 		this.cacheMissAlert = p.cacheMissAlert !== false;
 		this.telemetry = p.telemetry !== false;
+		this.terminalFont = typeof p.terminalFont === 'string' ? p.terminalFont : DEFAULTS.terminalFont;
+		this.terminalFontSize = fontSize(p.terminalFontSize);
 		this.#applyVibrancy();
 		if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
 			invoke<string | null>('window_effect')
@@ -114,7 +127,9 @@ class PrefsStore {
 					turnStats: this.turnStats,
 					chatWidth: this.chatWidth,
 					cacheMissAlert: this.cacheMissAlert,
-					telemetry: this.telemetry
+					telemetry: this.telemetry,
+					terminalFont: this.terminalFont,
+					terminalFontSize: this.terminalFontSize
 				})
 			);
 		} catch {
@@ -156,6 +171,16 @@ class PrefsStore {
 
 	setTelemetry(v: boolean) {
 		this.telemetry = v;
+		this.#save();
+	}
+
+	setTerminalFont(v: string) {
+		this.terminalFont = v;
+		this.#save();
+	}
+
+	setTerminalFontSize(v: number) {
+		this.terminalFontSize = fontSize(v);
 		this.#save();
 	}
 
