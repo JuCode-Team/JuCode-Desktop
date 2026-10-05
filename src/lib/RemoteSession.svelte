@@ -27,6 +27,7 @@
 	import { loadSession, saveSession } from '$lib/remote/cache';
 	import ModelMenu from '$lib/remote/ModelMenu.svelte';
 	import TaskStrip from '$lib/TaskStrip.svelte';
+	import { parseFileHref } from '$lib/fileRefs';
 	import AgentRunsPanel from '$lib/AgentRunsPanel.svelte';
 	import TreeStructureIcon from 'phosphor-svelte/lib/TreeStructureIcon';
 	import type { Msg } from '$lib/chat.svelte';
@@ -60,6 +61,7 @@
 		register,
 		onBack,
 		onFiles,
+		onFile,
 		onChanges
 	}: {
 		/** An existing session; omit to start a new one as `agent`, in `cwd`,
@@ -77,6 +79,8 @@
 		hostName?: string;
 		/** Shows the project's files / changes. */
 		onFiles?: () => void;
+		/** Shows a file a reply named, at its line. */
+		onFile?: (path: string, line?: number) => void;
 		onChanges?: () => void;
 		/** Routes daemon frames and exits for `id` here; returns an unregister. */
 		register: (id: string, onFrame: (raw: string) => void, onExit: () => void) => () => void;
@@ -476,6 +480,13 @@
 		}
 		return got;
 	}
+	// A file a reply named: relative to the session's directory.
+	function openReplyFile(href: string) {
+		const ref = parseFileHref(href);
+		if (!ref.path) return;
+		const base = (cwd ?? '').replace(/\/+$/, '');
+		onFile?.(ref.path.startsWith('/') || !base ? ref.path : `${base}/${ref.path.replace(/^\.?\//, '')}`, ref.line);
+	}
 	// The agent trace sheet (AgentRunsPanel).
 	let traceOpen = $state(false);
 	function openTrace(agentId: string | null) {
@@ -551,6 +562,7 @@
 				compactionTokens={chat.compactionTokens}
 				traceOf={bcaps.agentTrace ? traceOf : undefined}
 				{loadImage}
+				onFile={onFile ? openReplyFile : undefined}
 				{scroller}
 				onEdit={(value) => {
 					text = value;
@@ -572,6 +584,9 @@
 	<div class="bottom">
 		{#if !atBottom}
 			<button class="jump" onclick={jumpToBottom} aria-label={t('shell.remote.back')}><CaretDownIcon size={18} /></button>
+		{/if}
+		{#if chat.inTerminal}
+			<div class="interm"><Notice tone="info">{t('chat.inTerminal')}</Notice></div>
 		{/if}
 		{#if chat.pendingApproval}
 			<div class="approval">
@@ -748,6 +763,9 @@
 </div>
 
 <style>
+	.interm {
+		margin: 0 0 8px;
+	}
 	.trace-sheet {
 		position: fixed;
 		inset: 0;

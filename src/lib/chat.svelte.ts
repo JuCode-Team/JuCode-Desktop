@@ -343,6 +343,9 @@ export class ChatState {
 		/** Where an always-allow can be kept, when the engine says (codex). */
 		scopes?: AlwaysScope[];
 	} | null>(null);
+	/** The conversation is open in its engine's TUI (on this or another
+	 *  client): its GUI ops wait until the TUI exits. */
+	inTerminal = $state(false);
 	/** An MCP server's sign-in page, to open once (codex mcp_login). */
 	mcpLoginUrl = $state('');
 	/** Subagents by id; `label` names them when the id doesn't (claude's task ids). */
@@ -1289,6 +1292,13 @@ export class ChatState {
 					...(str(ev.url) ? { url: str(ev.url) } : {}),
 					...(Array.isArray(ev.scopes) ? { scopes: arr<AlwaysScope>(ev.scopes) } : {})
 				};
+				break;
+			// The conversation moved to its engine's own TUI on some client, or
+			// came back: the transcript that follows is the whole conversation,
+			// what the TUI added included.
+			case 'surface':
+				this.inTerminal = ev.surface === 'tui';
+				if (ev.surface === 'gui') this.keepNextTranscript = false;
 				break;
 			case 'mcp_login':
 				this.mcpLoginUrl = str(ev.url);

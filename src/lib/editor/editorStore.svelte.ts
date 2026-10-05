@@ -34,6 +34,10 @@ const baseName = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
 
 export class EditorStore {
 	tabs = $state<EditorTab[]>([]);
+	/** A position to show once the file is the active tab (a file a reply
+	 *  named with its line); `seq` repeats a reveal of the same place. */
+	reveal = $state<{ path: string; line: number; col: number; seq: number } | null>(null);
+	#revealSeq = 0;
 	activePath = $state('');
 	visible = $state(false);
 	/** Project root the open files belong to (rel-path display + git HEAD). */
@@ -66,13 +70,14 @@ export class EditorStore {
 	 * Rejects when the file can't be read as text (caller falls back to the
 	 * legacy preview).
 	 */
-	async open(path: string, root?: string): Promise<EditorTab> {
+	async open(path: string, root?: string, at?: { line: number; col?: number }): Promise<EditorTab> {
 		if (root) this.root = root.replace(/\/+$/, '');
 		const abs = this.#abs(path);
 		const existing = this.tab(abs);
 		if (existing) {
 			this.activePath = abs;
 			this.visible = true;
+			if (at) this.reveal = { path: abs, line: at.line, col: at.col ?? 1, seq: ++this.#revealSeq };
 			return existing;
 		}
 		const doc = await readText(abs); // throws for binary / oversized / escaping paths
@@ -102,6 +107,7 @@ export class EditorStore {
 		this.tabs.push(tab);
 		this.activePath = abs;
 		this.visible = true;
+		if (at) this.reveal = { path: abs, line: at.line, col: at.col ?? 1, seq: ++this.#revealSeq };
 		this.#loadHead(tab);
 		return tab;
 	}

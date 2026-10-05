@@ -11,7 +11,7 @@
 	import { Terminal } from '@xterm/xterm';
 	import { FitAddon } from '@xterm/addon-fit';
 	import '@xterm/xterm/css/xterm.css';
-	import { ptyOpen, ptyWrite, ptyResize, ptyClose } from '$lib/protocol';
+	import { ptyOpen, ptyWrite, ptyResize, ptyClose, daemon } from '$lib/protocol';
 	import type { BackendId } from '$lib/backends/types';
 	import { loadBackendSettings } from '$lib/backends/settings';
 	import { themeState, terminalPalette } from '$lib/theme.svelte';
@@ -24,10 +24,15 @@
 		cwd = '',
 		args = [],
 		resumeCommand,
+		session,
 		onBackToGui,
 		onOpenSettings
 	}: {
 		backend: BackendId;
+		/** A daemon-hosted conversation: the daemon stops its engine and runs
+		 *  the engine's own TUI on a terminal (`session_tui`), with the session's
+		 *  gateway; the engine resumes when the TUI exits. */
+		session?: string;
 		cwd?: string;
 		/** Session-handoff resume argv (must match the Rust TUI allowlist,
 		 *  e.g. `['--resume', '<id>']`). Empty for standalone TUI tabs. */
@@ -62,8 +67,58 @@
 		return terminalPalette();
 	}
 
+	// The daemon's terminal for a hosted session: its id, and the exit it
+	// reports once the TUI is gone (the engine starts again after it).
+	let daemonTerm = '';
+	let daemonExit: Promise<void> = Promise.resolve();
+	const encoder = new TextEncoder();
+	const base64 = (bytes: Uint8Array) => btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(''));
+	const unbase64 = (data: string) => Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
+
+	function write(data: string) {
+		if (session) {
+			if (daemonTerm) daemon.post({ op: 'term_input', term: daemonTerm, data: base64(encoder.encode(data)) }).catch(() => {});
+		} else ptyWrite(id, data).catch(() => {});
+	}
+	function resize(cols: number, rows: number) {
+		if (session) {
+			if (daemonTerm) daemon.post({ op: 'term_resize', term: daemonTerm, cols, rows }).catch(() => {});
+		} else ptyResize(id, cols, rows).catch(() => {});
+	}
+
+	async function launchDaemon() {
+		if (!term || !session) return;
+		status = 'starting';
+		errMsg = '';
+		try {
+			fit?.fit();
+			let exited: () => void = () => {};
+			daemonExit = new Promise((resolve) => (exited = resolve));
+			const reply = await daemon.request({ op: 'session_tui', session, cols: term.cols, rows: term.rows });
+			daemonTerm = String(reply.term ?? '');
+			cleanups.push(
+				daemon.onTerm(daemonTerm, (frame) => {
+					if (frame.type === 'term_output') term?.write(unbase64(String(frame.data ?? '')));
+					else {
+						exited();
+						// The TUI ended (the user quit it): the conversation is the
+						// GUI's again, its engine already resuming.
+						if (!closing && onBackToGui) void backToGui();
+						else status = 'exited';
+					}
+				})
+			);
+			status = 'running';
+		} catch (e) {
+			if (disposed || closing) return;
+			status = 'error';
+			errMsg = String(e);
+		}
+	}
+
 	async function launch() {
 		if (!term) return;
+		if (session) return launchDaemon();
 		const launchId = id;
 		status = 'starting';
 		errMsg = '';
@@ -93,7 +148,8 @@
 	}
 
 	function restart() {
-		if (disposed || closing) return;
+		// A hosted session's TUI ending hands the conversation back instead.
+		if (disposed || closing || session) return;
 		ptyClose(id).catch(() => {});
 		id = newId();
 		term?.reset();
@@ -106,6 +162,21 @@
 	async function backToGui() {
 		if (!onBackToGui || closing) return;
 		closing = true;
+		if (session) {
+			// Quitting the TUI hands the conversation back: the daemon starts
+			// the engine again once the TUI has exited.
+			try {
+				if (daemonTerm) await daemon.post({ op: 'term_close', term: daemonTerm });
+				await daemonExit;
+				await onBackToGui();
+			} catch (e) {
+				if (disposed) return;
+				closing = false;
+				status = 'error';
+				errMsg = String(e);
+			}
+			return;
+		}
 		const ptyId = id;
 		try {
 			await ptyClose(ptyId);
@@ -146,9 +217,7 @@
 			});
 			cleanups.push(unOut, unExit);
 
-			term.onData((d) => {
-				ptyWrite(id, d).catch(() => {});
-			});
+			term.onData(write);
 
 			if (disposed || closing) {
 				cleanups.forEach((f) => f());
@@ -160,7 +229,7 @@
 			const ro = new ResizeObserver(() => {
 				try {
 					fit?.fit();
-					if (term) ptyResize(id, term.cols, term.rows).catch(() => {});
+					if (term) resize(term.cols, term.rows);
 				} catch {
 					/* ignore */
 				}
@@ -184,7 +253,9 @@
 		disposed = true;
 		closing = true;
 		cleanups.forEach((f) => f());
-		ptyClose(id).catch(() => {});
+		if (session) {
+			if (daemonTerm) daemon.post({ op: 'term_close', term: daemonTerm }).catch(() => {});
+		} else ptyClose(id).catch(() => {});
 		term?.dispose();
 	});
 </script>

@@ -226,7 +226,22 @@ export class DaemonClient {
 		return this.#connecting;
 	}
 
+	#terms = new Map<string, (frame: Frame) => void>();
+
+	/** Routes a terminal's `term_output` / `term_exit` frames to `handler`
+	 *  (this connection's terminals only); returns the unsubscribe. */
+	onTerm(term: string, handler: (frame: Frame) => void): () => void {
+		this.#terms.set(term, handler);
+		return () => {
+			if (this.#terms.get(term) === handler) this.#terms.delete(term);
+		};
+	}
+
 	#receive(frame: Frame, raw: string) {
+		if ((frame.type === 'term_output' || frame.type === 'term_exit') && typeof frame.term === 'string') {
+			this.#terms.get(frame.term)?.(frame);
+			return;
+		}
 		if (typeof frame.id === 'number' && this.#pending.has(frame.id)) {
 			const pending = this.#pending.get(frame.id)!;
 			this.#pending.delete(frame.id);

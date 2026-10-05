@@ -94,6 +94,27 @@
 	.md :global(a:hover) {
 		text-decoration: underline;
 	}
+	/* A file the reply names: mono like code, the link colour, opened in the
+	   editor (at its line) on click. */
+	.md :global(a.fileref) {
+		font-family: var(--font-mono);
+		font-size: 0.88em;
+		text-decoration: underline;
+		text-decoration-color: color-mix(in oklab, var(--brand-bright) 40%, transparent);
+		text-underline-offset: 3px;
+		overflow-wrap: anywhere;
+	}
+	.md :global(a.fileref:hover) {
+		text-decoration-color: currentColor;
+	}
+	.md :global(a.fileref code) {
+		font-size: 1em;
+		color: inherit;
+	}
+	.md :global(.cb-head .fileref) {
+		margin: 0 auto 0 10px;
+		font-size: var(--fs-2xs);
+	}
 	.md :global(strong) {
 		font-weight: 700;
 	}

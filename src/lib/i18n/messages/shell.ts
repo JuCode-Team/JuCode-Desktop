@@ -750,6 +750,8 @@ const shell = {
 		paletteEmpty: '没有匹配的命令',
 		paletteFoot: '↑↓ 选择 · Enter 执行 · Esc 关闭',
 		cmd: {
+			tuiHint: '在引擎自己的终端界面中继续，退出后回到这里',
+			tuiKw: 'tui cli 终端 命令行 terminal',
 			feedback: '反馈问题',
 			feedbackKw: 'feedback bug 反馈 问题 建议 日志 工单',
 			newSession: '新建会话',
@@ -1585,6 +1587,8 @@ const shell = {
 		paletteEmpty: 'No matching commands',
 		paletteFoot: '↑↓ Navigate · Enter Run · Esc Close',
 		cmd: {
+			tuiHint: 'Continue in the engine’s own terminal UI; quit it to come back',
+			tuiKw: 'tui cli terminal command line',
 			feedback: 'Send feedback',
 			feedbackKw: 'feedback bug report suggestion logs ticket',
 			newSession: 'New session',

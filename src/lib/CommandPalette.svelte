@@ -13,6 +13,7 @@
 	import StethoscopeIcon from 'phosphor-svelte/lib/StethoscopeIcon';
 	import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon';
 	import GitForkIcon from 'phosphor-svelte/lib/GitForkIcon';
+	import TerminalWindowIcon from 'phosphor-svelte/lib/TerminalWindowIcon';
 	import StorefrontIcon from 'phosphor-svelte/lib/StorefrontIcon';
 	import SettingsIcon from 'phosphor-svelte/lib/GearIcon';
 	import SidebarSimpleIcon from 'phosphor-svelte/lib/SidebarSimpleIcon';
@@ -45,7 +46,9 @@
 		onSetup,
 		onHistory,
 		onShortcuts,
-		onFeedback
+		onFeedback,
+		canOpenTui = false,
+		onOpenTui
 	}: {
 		chat: ChatState | undefined;
 		hasProject: boolean;
@@ -69,6 +72,9 @@
 		onHistory: () => void;
 		onShortcuts: () => void;
 		onFeedback: () => void;
+		/** The active conversation can continue in its engine's own TUI. */
+		canOpenTui?: boolean;
+		onOpenTui?: () => void;
 	} = $props();
 
 	type Action = {
@@ -105,6 +111,7 @@
 			{ id: 'new-task', label: t('shell.cmd.newTask'), hint: t('shell.cmd.newTaskHint'), icon: GitForkIcon, keywords: t('shell.cmd.newTaskKw'), disabled: !canNewTask, run: wrap(onNewTask) },
 			{ id: 'model', label: t('shell.cmd.model'), keys: shortcutLabel('model'), icon: CpuIcon, keywords: t('shell.cmd.modelKw'), cap: 'modelPicker', run: wrap(() => onRun('/model')) },
 			{ id: 'rewind', label: t('shell.cmd.rewind'), hint: t('shell.cmd.rewindHint'), icon: ArrowCounterClockwiseIcon, keywords: t('shell.cmd.rewindKw'), cap: 'checkpoints', run: wrap(() => onRun('/rewind')) },
+			{ id: 'tui', label: t('chat.tuiContinue'), hint: t('shell.cmd.tuiHint'), icon: TerminalWindowIcon, keywords: t('shell.cmd.tuiKw'), disabled: !canOpenTui || !onOpenTui, run: wrap(() => onOpenTui?.()) },
 			{ id: 'history', label: t('shell.history'), keys: shortcutLabel('history'), icon: ClockCounterClockwiseIcon, keywords: t('shell.cmd.resumeKw'), disabled: !hasProject, run: wrap(onHistory) },
 			{ id: 'resume', label: t('shell.cmd.resume'), icon: ClockCounterClockwiseIcon, keywords: t('shell.cmd.resumeKw'), cap: 'resume', run: wrap(() => onRun('/resume')) },
 			{ id: 'tree', label: t('shell.cmd.tree'), icon: GitBranchIcon, keywords: t('shell.cmd.treeKw'), cap: 'branchTree', run: wrap(() => onRun('/tree')) },

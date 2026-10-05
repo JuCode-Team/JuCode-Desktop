@@ -191,6 +191,27 @@
 		});
 	});
 
+	// A position asked for (a file a reply named with its line): once its
+	// file is the one showing, put the cursor there and centre it.
+	$effect(() => {
+		const target = store.reveal;
+		const path = store.active?.path;
+		if (!target || target.path !== path) return;
+		untrack(() => {
+			const v = view;
+			if (!v || shownPath !== path) return;
+			const doc = v.state.doc;
+			const line = doc.line(Math.min(Math.max(target.line, 1), doc.lines));
+			const pos = Math.min(line.from + Math.max(target.col - 1, 0), line.to);
+			v.dispatch({
+				selection: { anchor: pos },
+				effects: EditorView.scrollIntoView(pos, { y: 'center' })
+			});
+			v.focus();
+			store.reveal = null;
+		});
+	});
+
 	// Re-theme on app theme change.
 	$effect(() => {
 		const dark = themeState.value === 'dark';

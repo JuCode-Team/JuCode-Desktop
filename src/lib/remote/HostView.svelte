@@ -97,7 +97,7 @@
 		| { kind: 'session'; session?: string; agent?: string; cwd?: string; chat?: boolean; engine?: string; title: string }
 		| { kind: 'project'; project: ProjectView }
 		| { kind: 'add' }
-		| { kind: 'files' | 'changes'; root: string; title: string }
+		| { kind: 'files' | 'changes'; root: string; title: string; file?: string; line?: number }
 		| { kind: 'dispatch'; id: string }
 		| { kind: 'compose' }
 		| { kind: 'desk'; item: string }
@@ -356,6 +356,7 @@
 								register={conn.register}
 								onBack={pop}
 								onFiles={root ? () => push({ kind: 'files', root, title: baseName(root) }) : undefined}
+								onFile={root ? (file: string, line?: number) => push({ kind: 'files', root, title: baseName(root), file, line }) : undefined}
 								onChanges={root ? () => push({ kind: 'changes', root, title: baseName(root) }) : undefined}
 							/>
 						{:else}
@@ -407,7 +408,7 @@
 						/>
 					{:else if screen.kind === 'files'}
 						{#if screens.FilesScreen}
-							<screens.FilesScreen root={screen.root} title={screen.title} onBack={pop} />
+							<screens.FilesScreen root={screen.root} title={screen.title} file={screen.file} line={screen.line} onBack={pop} />
 						{:else}
 							{@render loadingPage(screen.title)}
 						{/if}

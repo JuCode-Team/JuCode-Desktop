@@ -33,6 +33,15 @@ binary and environment from Settings, and claude's `resume_at` for a rewind.
   opens it when it is first shown.
 - A daemon that can't be reached is retried with backoff for about 4.5
   minutes before the tab shows an error.
+- "Continue in TUI" (`SessionStore.openInTui`) sets the tab's surface to
+  `tui`; `TuiPanel` with `session` asks the daemon for `session_tui` and
+  draws the engine's own TUI with xterm in the same tile. Quitting it returns
+  the tab to the chat (`returnToGui`); the daemon restarts the engine and
+  sends the transcript with the TUI's turns. Other clients see a notice
+  while the conversation is in the terminal (`ChatState.inTerminal`).
+- File paths in replies (`src/a.ts:12`, a code block titled with a path)
+  become links (`fileRefs.ts`, `markdown.ts`); clicking one opens the file in
+  the editor at that line, or in the files screen on a paired device.
 
 ## The adapter (`types.ts`, `jucode.ts`)
 

@@ -83,7 +83,6 @@ export class SessionStore {
 	/** The saved tabs of stale projects, by project id: kept so they are saved
 	 *  back as they were, should the worktree come back. */
 	#staleTabs = new Map<string, SavedProject['tabs']>();
-	#surfaceTransitions = new Set<string>();
 	uid() {
 		return `s${Date.now().toString(36)}-${(this.#counter++).toString(36)}`;
 	}
@@ -652,10 +651,6 @@ export class SessionStore {
 		// render the TuiPanel (which resumes by id) and never start the GUI
 		// engine beside it — one process per conversation. `returnToGui`
 		// starts the engine again later.
-		if (surface === 'tui' && canHandOffToTui(backend)) {
-			s.surface = 'tui';
-			return s.id;
-		}
 		this.#spawn(s, project.path, undefined, this.#keepModel(s), sid).catch((e) => this.#engineFailed(s.chat, e));
 		return s.id;
 	}
@@ -1116,63 +1111,29 @@ export class SessionStore {
 		return !this.allSessions.includes(s);
 	}
 
-	/** Hand a conversation to the native TUI (same chat tile, `surface` flips
-	 *  to 'tui'): the tile re-renders as a TuiPanel resuming the same engine
-	 *  session by id (claude `--resume <id>`, codex `resume <id>`, jucode
-	 *  `/resume <id>` written into the pty). The GUI engine is closed FIRST so
-	 *  two processes never hold the same conversation. Requires a usable
-	 *  engine session id — resume-by-id is the product, never a TUI picker —
-	 *  so a fresh empty chat and ACP sessions are a no-op. */
-	async openInTui(id: string) {
+	/** Hand a conversation to its engine's own TUI (same chat tile, `surface`
+	 *  flips to 'tui'): the tile renders a TuiPanel on the daemon's terminal
+	 *  for this session, and the daemon stops the engine while the TUI runs
+	 *  (one process per conversation) with the session's gateway and mode.
+	 *  The session stays open for every client. Requires a conversation the
+	 *  TUI can resume, so a fresh empty chat and ACP sessions are a no-op. */
+	openInTui(id: string) {
 		const s = this.allSessions.find((x) => x.id === id);
-		if (
-			!s ||
-			s.surface === 'tui' ||
-			s.chat.switching ||
-			this.#surfaceTransitions.has(id) ||
-			!canHandOffToTui(s.backendId)
-		)
-			return;
-		// The engine persisted the conversation only once a user turn exists
-		// (or it was restored); the TUI could not resume it before.
+		if (!s || s.surface === 'tui' || s.chat.switching || s.chat.busy || !canHandOffToTui(s.backendId)) return;
 		if (!isValidResumeSessionId(s.chat.sessionId) || !(s.chat.resumable || s.restored)) return;
-		// Keep a second click from issuing another close that could resolve first
-		// and expose the TUI while the original GUI child is still shutting down.
-		this.#surfaceTransitions.add(id);
-		// Intentional close — handleExit must not auto-restart the GUI engine
-		// underneath the TUI.
-		s.chat.switching = true;
-		try {
-			await closeSession(id);
-		} catch {
-			// A failed close cannot establish exclusive ownership. Leave the GUI
-			// surface in place rather than starting a second process.
-			s.chat.switching = false;
-			return;
-		} finally {
-			this.#surfaceTransitions.delete(id);
-		}
-		// The tab/project may have been removed while the close was in flight.
-		if (!this.allSessions.includes(s)) return;
+		if (!daemon.sessionOf(id)) return;
 		s.surface = 'tui';
-		// TUI ownership is established: a late exit event from the closed GUI
-		// child lands on handleExit's `surface === 'tui'` branch, and if the
-		// engine was already dead no exit event arrives at all — so the flag
-		// must be cleared here or it latches forever.
-		s.chat.switching = false;
 	}
 
-	/** Bring a handed-off conversation back to the GUI. TuiPanel invokes this
-	 *  only after `ptyClose` has completed, so flipping ownership and resuming
-	 *  the GUI engine cannot overlap the native TUI process. */
-	async returnToGui(id: string) {
+	/** Back to the GUI once the TUI has exited: the daemon has started the
+	 *  engine again, and its transcript (what the TUI added included)
+	 *  replaces what this chat showed. */
+	returnToGui(id: string) {
 		const s = this.allSessions.find((x) => x.id === id);
 		if (!s || s.surface !== 'tui') return;
 		s.surface = 'gui';
-		// Never carry a latched handoff flag back to the GUI — it would block
-		// later openInTui calls and make handleExit swallow the next real crash.
 		s.chat.switching = false;
-		this.restartSession(id, true);
+		s.chat.keepNextTranscript = false;
 	}
 
 	/** Snapshot of the layout + open tabs for persistence. Every session is
@@ -1208,7 +1169,6 @@ export class SessionStore {
 					...(s.backendId === 'acp' && s.acpAgent ? { acpAgent: s.acpAgent } : {}),
 					...(s.archived ? { archived: true } : {}),
 					...(s.pinned ? { pinned: true } : {}),
-					...(s.surface === 'tui' ? { surface: 'tui' as const } : {}),
 					...(s.color ? { color: s.color } : {}),
 					...(s.icon ? { icon: s.icon } : {}),
 				}))
@@ -1247,8 +1207,9 @@ export class SessionStore {
 			};
 			// With a conversation to resume, resume it; an empty window comes
 			// back as a draft. Both keep the saved desktop id (pre-id files mint anew).
-			// A tab handed to the TUI restores as a TUI surface (no engine).
-			const surface = t.surface === 'tui' && sid ? ('tui' as const) : undefined;
+			// A tab left in the TUI comes back in the GUI: its terminal ended
+			// with the connection, and the daemon resumed the engine.
+			const surface = undefined;
 			// The conversation waits in the daemon: list it now and open it
 			// when it is shown (ACP needs its agent start path below).
 			const dormant = sid && !surface && backend !== 'acp';

@@ -150,7 +150,9 @@ const chat = {
 			busy: 'AI 运行中，结束后才能切换分支'
 		},
 		tuiContinue: '在 TUI 中继续',
-		tuiContinueTitle: '关闭 GUI 引擎，在原生 TUI 中恢复此会话',
+		inTerminal: '此对话正在终端界面（TUI）中打开。退出 TUI 后可在这里继续。',
+		fileOpenFailed: '打不开 {path}：{error}',
+		tuiContinueTitle: '在引擎自己的终端界面中继续此会话，退出后回到这里',
 		tuiContinueUnavailable: '发送第一条消息后可在 TUI 中继续',
 		context: '上下文',
 		toCompaction: '{pct}% · 到压缩点',
@@ -402,7 +404,9 @@ const chat = {
 			busy: 'The AI is working; switch branches when it finishes'
 		},
 		tuiContinue: 'Continue in TUI',
-		tuiContinueTitle: 'Close the GUI engine and resume this session in the native TUI',
+		inTerminal: 'This conversation is open in its terminal UI (TUI). Quit the TUI to continue here.',
+		fileOpenFailed: 'Cannot open {path}: {error}',
+		tuiContinueTitle: 'Continue this conversation in the engine’s own terminal UI; quit it to come back',
 		tuiContinueUnavailable: 'Send the first message before continuing in TUI',
 		context: 'Context',
 		toCompaction: '{pct}% · to compaction',

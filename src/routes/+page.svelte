@@ -76,7 +76,7 @@
 		reconcileLayout
 	} from '$lib/workbench/canvas';
 	import { tuiBackendOf, tuiTabTitle } from '$lib/workbench/tuiTab';
-	import { canHandOffToTui, isValidResumeSessionId, tuiResumeArgs, tuiResumeCommand } from '$lib/tuiHandoff';
+	import { canHandOffToTui, isValidResumeSessionId } from '$lib/tuiHandoff';
 	import type { WorkspaceEntry } from '$lib/workbench/workspaces';
 	import type { TabIcon } from '$lib/workbench/tabChrome';
 	import Mosaic from '$lib/workbench/Mosaic.svelte';
@@ -392,7 +392,8 @@
 		return !!session &&
 			isValidResumeSessionId(session.chat.sessionId) &&
 			(session.chat.resumable || !!session.restored) &&
-			!session.chat.switching;
+			!session.chat.switching &&
+			!session.chat.busy;
 	}
 
 	// A tool tab is an *instance* of a panel kind (two terminals are two tabs);
@@ -1325,8 +1326,7 @@
 											<TuiPanel
 												backend={sess.backendId}
 												cwd={store.projectPathOf(sid) ?? ''}
-												args={tuiResumeArgs(sess.backendId, sess.chat.sessionId)}
-												resumeCommand={tuiResumeCommand(sess.backendId, sess.chat.sessionId)}
+												session={daemon.sessionOf(sid)}
 												onBackToGui={() => store.returnToGui(sid)}
 												onOpenSettings={() => openSettings('agents')}
 											/>
@@ -1552,6 +1552,8 @@
 			onHistory={() => activeProject && store.openHistory(activeProject)}
 			onShortcuts={() => (showShortcuts = true)}
 			onFeedback={() => (showFeedback = true)}
+			canOpenTui={!!active && active.surface !== 'tui' && canHandOffToTui(active.backendId) && tuiReady(active.id)}
+			onOpenTui={() => active && store.openInTui(active.id)}
 		/>
 	{/if}
 	{#if showShortcuts}

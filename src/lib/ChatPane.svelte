@@ -63,6 +63,8 @@
 	import RateLimitBanner from '$lib/RateLimitBanner.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import TaskStrip from '$lib/TaskStrip.svelte';
+	import { parseFileHref } from '$lib/fileRefs';
+	import Notice from '$lib/ui/Notice.svelte';
 	import type { Msg } from '$lib/chat.svelte';
 	import type { SessionSwitch } from '$lib/composer/SessionSwitches.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
@@ -959,14 +961,17 @@
 	function openChatFile(href: string) {
 		const cwd = project?.path;
 		if (!cwd) return;
-		const rel = href.replace(/^file:\/\//, '').split(/[?#]/)[0].trim();
+		// A file a reply names, maybe at a line (`src/a.ts#L12:4`).
+		const ref = parseFileHref(href);
+		const rel = ref.path;
 		if (!rel) return;
 		const abs = rel.startsWith('/') ? rel : `${cwd.replace(/\/+$/, '')}/${rel.replace(/^\.?\//, '')}`;
 		const ext = abs.split('/').pop()?.split('.').pop()?.toLowerCase() ?? '';
 		if ((ext === 'html' || ext === 'htm') && prefs.htmlOpenInBrowser) {
 			browser.open(`file://${abs}`);
 		} else {
-			editorStore.open(abs, cwd).catch((e) => console.error('open chat file', e));
+			const at = ref.line ? { line: ref.line, col: ref.col } : undefined;
+			editorStore.open(abs, cwd, at).catch((e) => toast.error(t('chat.fileOpenFailed', { path: ref.path, error: String(e) })));
 		}
 	}
 
@@ -1155,6 +1160,9 @@
 			</div>
 		{/if}
 
+		{#if chat.inTerminal}
+			<div class="interm"><Notice tone="info">{t('chat.inTerminal')}</Notice></div>
+		{/if}
 		{#if chat.rateLimit}
 			<RateLimitBanner rateLimit={chat.rateLimit} onDismiss={() => (chat.rateLimit = null)} />
 		{/if}
@@ -1386,6 +1394,9 @@
 		font-size: var(--fs-2xs);
 		color: var(--dim);
 		min-width: 0;
+	}
+	.interm {
+		margin-bottom: 8px;
 	}
 	button.agent {
 		border: none;

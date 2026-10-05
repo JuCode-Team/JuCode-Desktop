@@ -952,216 +952,52 @@ describe('SessionStore GUI ⇄ TUI handoff', () => {
 		return s;
 	}
 
-	it('openInTui closes the GUI engine before flipping the surface', async () => {
+	it('openInTui hands the tile to the daemon-run TUI without closing the session', () => {
 		const store = new SessionStore();
 		const p = proj();
 		store.projects.push(p);
 		const s = readySession(store, p, 'claude');
-		let surfaceAtClose: string | undefined = 'not-called';
-		vi.mocked(closeSession).mockImplementationOnce(async () => {
-			surfaceAtClose = s.surface;
-		});
-		await store.openInTui(s.id);
-		expect(closeSession).toHaveBeenCalledWith(s.id);
-		expect(surfaceAtClose).toBeUndefined(); // still on the GUI when the engine died
+		vi.mocked(closeSession).mockClear();
+		store.openInTui(s.id);
 		expect(s.surface).toBe('tui');
-		// Once the TUI owns the conversation the flag must not stay latched —
-		// handleExit's `surface === 'tui'` branch already suppresses auto-restart.
-		expect(s.chat.switching).toBe(false);
-	});
-
-	it('openInTui serializes concurrent requests behind the GUI close', async () => {
-		const store = new SessionStore();
-		const p = proj();
-		store.projects.push(p);
-		const s = readySession(store, p, 'claude');
-		let releaseClose!: () => void;
-		vi.mocked(closeSession).mockImplementationOnce(
-			() =>
-				new Promise<void>((resolve) => {
-					releaseClose = resolve;
-				})
-		);
-
-		const first = store.openInTui(s.id);
-		const second = store.openInTui(s.id);
-		expect(closeSession).toHaveBeenCalledTimes(1);
-		expect(s.surface).toBeUndefined();
-
-		releaseClose();
-		await Promise.all([first, second]);
-		expect(s.surface).toBe('tui');
-	});
-
-	it('openInTui keeps GUI ownership when its engine cannot be closed', async () => {
-		const store = new SessionStore();
-		const p = proj();
-		store.projects.push(p);
-		const s = readySession(store, p, 'claude');
-		vi.mocked(closeSession).mockRejectedValueOnce(new Error('close failed'));
-
-		await store.openInTui(s.id);
-		expect(s.surface).toBeUndefined();
-		expect(s.chat.switching).toBe(false);
-	});
-
-	it('an intentional GUI exit cannot auto-restart underneath the TUI', async () => {
-		const store = new SessionStore();
-		const p = proj();
-		store.projects.push(p);
-		const s = readySession(store, p, 'claude');
-		await store.openInTui(s.id);
-		vi.clearAllMocks();
-
-		store.handleExit(s.id);
-		store.restartSession(s.id, true);
-		await flush();
-		expect(hostSession).not.toHaveBeenCalled();
-		expect(s.surface).toBe('tui');
-		expect(s.chat.switching).toBe(false);
-	});
-
-	it('openInTui on an already-exited engine does not latch switching', async () => {
-		const store = new SessionStore();
-		const p = proj();
-		store.projects.push(p);
-		const s = readySession(store, p, 'claude');
-		// The GUI engine already exited (e.g. crash budget exhausted): the close
-		// is a no-op and no exit event will ever arrive to clear `switching`.
-		s.chat.engineState = 'exited';
-
-		await store.openInTui(s.id);
-		expect(s.surface).toBe('tui');
-		expect(s.chat.switching).toBe(false);
-
-		await store.returnToGui(s.id);
-		expect(s.surface).toBe('gui');
-		expect(s.chat.switching).toBe(false);
-
-		// The switching guard must not reject a later handoff.
-		vi.clearAllMocks();
-		await store.openInTui(s.id);
-		expect(closeSession).toHaveBeenCalledWith(s.id);
-		expect(s.surface).toBe('tui');
-		expect(s.chat.switching).toBe(false);
-	});
-
-	it('openInTui refuses acp sessions', async () => {
-		const store = new SessionStore();
-		const p = proj();
-		store.projects.push(p);
-		const id = store.addSession(p, undefined, 'acp', { id: 'gemini', name: 'Gemini CLI' });
-		const s = p.sessions.find((x) => x.id === id)!;
-		s.chat.sessionId = SID;
-		s.chat.messages.push({ kind: 'user', text: 'hi' });
-		vi.clearAllMocks();
-		await store.openInTui(id);
+		// The daemon stops the engine itself; the session stays open for every client.
 		expect(closeSession).not.toHaveBeenCalled();
-		expect(s.surface).toBeUndefined();
 	});
 
-	it('openInTui without a usable engine session id is a no-op', async () => {
+	it('openInTui waits for a conversation to resume and for the turn to end', () => {
 		const store = new SessionStore();
 		const p = proj();
 		store.projects.push(p);
-		// jucode session with no engine session id at all.
-		const a = store.addSession(p, undefined, 'jucode');
-		// claude session with an id but no user turn (nothing to resume yet).
-		const b = store.addSession(p, undefined, 'claude');
-		p.sessions.find((x) => x.id === b)!.chat.sessionId = SID;
-		// resumable, but the id would fail the rust validator.
-		const c = store.addSession(p, undefined, 'jucode');
-		const sc = p.sessions.find((x) => x.id === c)!;
-		sc.chat.sessionId = 'a b';
-		sc.chat.messages.push({ kind: 'user', text: 'hi' });
-		vi.clearAllMocks();
-		for (const id of [a, b, c]) await store.openInTui(id);
-		expect(closeSession).not.toHaveBeenCalled();
-		for (const s of p.sessions) expect(s.surface).toBeUndefined();
+		const freshId = store.addSession(p, undefined, 'claude');
+		const fresh = p.sessions.find((x) => x.id === freshId)!;
+		store.openInTui(fresh.id);
+		expect(fresh.surface).toBeUndefined();
+		const busy = readySession(store, p, 'codex');
+		busy.chat.handle({ type: 'connecting' });
+		store.openInTui(busy.id);
+		expect(busy.surface).toBeUndefined();
 	});
 
-	it('returnToGui reopens the claude conversation in the daemon', async () => {
+	it('returnToGui shows the whole conversation again, the TUI turns included', () => {
 		const store = new SessionStore();
 		const p = proj();
 		store.projects.push(p);
 		const s = readySession(store, p, 'claude');
-		await store.openInTui(s.id);
-		vi.clearAllMocks();
-		await store.returnToGui(s.id);
+		store.openInTui(s.id);
+		s.chat.keepNextTranscript = true;
+		store.returnToGui(s.id);
 		expect(s.surface).toBe('gui');
-		await flush();
-		const call = vi.mocked(hostSession).mock.calls.at(-1)!;
-		expect(call[2]).toBe(SID);
-		expect(call[5]).toMatchObject({ engine: 'claude' });
+		expect(s.chat.keepNextTranscript).toBe(false);
 	});
 
-	it('returnToGui reopens a jucode conversation by id, without /resume', async () => {
+	it('a tab saved in the TUI comes back in the GUI', () => {
 		const store = new SessionStore();
 		const p = proj();
 		store.projects.push(p);
-		const s = readySession(store, p, 'jucode');
-		await store.openInTui(s.id);
-		vi.clearAllMocks();
-		await store.returnToGui(s.id);
-		await flush();
-		expect(hostSession).toHaveBeenCalledWith(s.id, p.path, SID, undefined, false, undefined);
-		expect(sendLine).not.toHaveBeenCalledWith(s.id, expect.stringContaining('/resume'));
-	});
-
-	it('serialize writes surface only for tui tabs', async () => {
-		const store = new SessionStore();
-		const p = proj();
-		store.projects.push(p);
-		const tui = readySession(store, p, 'claude');
-		const gui = readySession(store, p, 'jucode');
-		await store.openInTui(tui.id);
-		const tabs = store.serialize()[0].tabs!;
-		expect(tabs.find((t) => t.id === tui.id)?.surface).toBe('tui');
-		expect('surface' in tabs.find((t) => t.id === gui.id)!).toBe(false);
-	});
-
-	it('a restored tui tab spawns no engine until returnToGui resumes it', async () => {
-		const store = new SessionStore();
-		await store.restore([
-			{
-				id: 'p1',
-				name: 'p1',
-				path: '/tmp/p1',
-				tabs: [{ id: 'live-a', sid: SID, title: 'A', backend: 'claude', surface: 'tui' }]
-			}
-		]);
-		const s = store.projects[0].sessions[0];
-		expect(s.surface).toBe('tui');
-		expect(s.dormant).toBeUndefined();
-		expect(s.chat.sessionId).toBe(SID);
-		await flush();
-		// The TUI owns the conversation — no GUI engine beside it.
-		expect(hostSession).not.toHaveBeenCalled();
-		await store.returnToGui('live-a');
-		expect(s.surface).toBe('gui');
-		await flush();
-		const call = vi.mocked(hostSession).mock.calls.at(-1)!;
-		expect(call[2]).toBe(SID);
-		expect(call[5]).toMatchObject({ engine: 'claude' });
-	});
-
-	it('an invalid persisted sid never restores a TUI owner', async () => {
-		const store = new SessionStore();
-		await store.restore([
-			{
-				id: 'p1',
-				name: 'p1',
-				path: '/tmp/p1',
-				tabs: [{ id: 'live-a', sid: 'a b', title: 'A', surface: 'tui' }]
-			}
-		]);
-		const s = store.projects[0].sessions[0];
-		expect(s.surface).toBeUndefined();
-		expect(s.restored).toBeUndefined();
-		expect(s.draft).toBe(true);
-		begin('live-a');
-		await flush();
-		expect(hostSession).toHaveBeenCalledWith('live-a', '/tmp/p1', undefined, undefined, false, undefined);
+		const s = readySession(store, p, 'claude');
+		store.openInTui(s.id);
+		const saved = store.serialize();
+		expect(JSON.stringify(saved)).not.toContain('"surface"');
 	});
 });
 
