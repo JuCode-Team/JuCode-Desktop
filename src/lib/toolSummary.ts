@@ -28,7 +28,15 @@ const VERBS: Record<string, string> = {
 	ripgrep: 'Searched',
 	outline: 'Outlined',
 	web_search: 'Searched web',
-	web_fetch: 'Fetched'
+	web_fetch: 'Fetched',
+	spawn_agent: 'Started subagent',
+	agent_wait: 'Waited for subagents',
+	agent_sendInput: 'Messaged subagent',
+	agent_sendMessage: 'Messaged subagent',
+	agent_closeAgent: 'Closed subagent',
+	agent_interruptAgent: 'Interrupted subagent',
+	agent_resumeAgent: 'Resumed subagent',
+	agent_listAgents: 'Listed subagents'
 };
 
 // One glyph per kind of tool, so a run of calls scans at a glance.

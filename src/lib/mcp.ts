@@ -18,6 +18,10 @@ export interface McpServerView {
 	state: McpState;
 	tools: McpTool[];
 	error?: string;
+	/** The engine's server can't be switched here (Codex: its config). */
+	fixed?: boolean;
+	/** Signing in would connect it (Codex: OAuth). */
+	needsAuth?: boolean;
 }
 
 /** One `mcp_servers` config entry — the payload of the `mcp_set` op. */
@@ -219,6 +223,8 @@ export function parseMcpServersEvent(ev: Record<string, unknown>): McpServerView
 				.filter((t) => t.name)
 		};
 		if (typeof s.error === 'string' && s.error) view.error = s.error;
+		if (s.can_toggle === false) view.fixed = true;
+		if (s.needs_auth === true) view.needsAuth = true;
 		out.push(view);
 	}
 	return out;

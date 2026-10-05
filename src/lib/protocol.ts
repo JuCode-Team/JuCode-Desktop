@@ -54,7 +54,7 @@ export type Op =
 			decision: 'allow' | 'deny';
 			hunks?: string[];
 			always?: boolean;
-			always_scope?: 'session' | 'project' | 'user';
+			always_scope?: 'session' | 'project' | 'user' | 'rule';
 			answers?: Record<string, string>;
 	  }
 	// Engine-level auto-approval policy; acknowledged by an `approval_mode` event.
@@ -68,6 +68,7 @@ export type Op =
 	// claude: a session's own servers (Claude Code's config), its background
 	// tasks and its permission rules.
 	| { op: 'mcp_reconnect'; name: string }
+	| { op: 'mcp_login'; name: string }
 	| { op: 'stop_task'; task_id: string }
 	| { op: 'task_output'; task_id: string }
 	| { op: 'permission_rules' }

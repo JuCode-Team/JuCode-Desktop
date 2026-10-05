@@ -226,7 +226,17 @@ export class SessionStore {
 						}
 					})
 				: s.backendId === 'codex'
-					? Promise.resolve({ engine: 'codex', options: { approval_mode: mode, ...gateway, ...program } })
+					? Promise.resolve({
+							engine: 'codex',
+							options: {
+								approval_mode: mode,
+								...gateway,
+								...program,
+								// A restarted engine keeps the session's switches.
+								...(s.chat.fast ? { fast: true } : {}),
+								...(s.chat.thinkingSummaries === false ? { thinking: false } : {})
+							}
+						})
 					: s.backendId === 'acp'
 						? // An ACP agent runs the command its registry entry names.
 							acpAgentsList().then((agents) => {

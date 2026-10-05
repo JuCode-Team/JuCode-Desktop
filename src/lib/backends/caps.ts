@@ -32,26 +32,26 @@ export const CLAUDE_CAPS: BackendCaps = {
 
 export const CODEX_CAPS: BackendCaps = {
 	approvalModes: true, // thread/start approvalPolicy+sandbox, per-turn overrides
-	extendedApprovalModes: false, // codex has no plan/auto modes
+	extendedApprovalModes: true, // plan: collaborationMode plan; auto: the auto_review approvals reviewer
 	hunkApproval: false, // codex approvals are whole-patch accept/decline
-	steer: false,
+	steer: true, // the daemon holds mid-turn messages; turn/steer joins them to the running turn
 	interrupt: true, // turn/interrupt
 	branchTree: false,
 	goals: true, // thread/goal/set|get|clear + thread/goal/updated|cleared
 	skills: false,
-	mcpManage: false,
-	checkpoints: true, // conversation rewind via thread/rollback (files handled desktop-side)
+	mcpManage: true, // mcpServerStatus/list, config/mcpServer/reload, mcpServer/oauth/login
+	checkpoints: true, // conversation rewind via thread/revert (files handled desktop-side)
 	contextUsage: true, // thread/tokenUsage/updated
 	compact: true, // thread/compact/start + contextCompaction item lifecycle
 	modelPicker: true, // model/list catalog + per-turn model/effort overrides
 	resume: true, // thread/list picker + thread/resume
-	subagents: false,
+	subagents: true, // subagent threads (subAgentActivity + their own notifications)
 	transcriptReplay: true, // thread/resume replays thread.turns[].items
 	slashCommands: false,
-	mcpEngineOwned: false,
+	mcpEngineOwned: true, // Codex's own config: listed, reloaded and signed in to, not edited
 	ruleScopes: false,
 	sideQuestions: false,
-	agentTrace: false
+	agentTrace: true // subagent threads, read back with thread/turns/list
 };
 
 export const ACP_CAPS: BackendCaps = {

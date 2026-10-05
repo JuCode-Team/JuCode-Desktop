@@ -109,7 +109,7 @@ export function selectionState(hunks: ApprovalHunk[], selected: string[]): Selec
 }
 
 /** This session only, saved for this project, or for every project. */
-export type AlwaysScope = 'session' | 'project' | 'user';
+export type AlwaysScope = 'session' | 'project' | 'user' | 'rule';
 
 export interface ApproveOp {
 	op: 'approve';

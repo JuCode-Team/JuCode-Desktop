@@ -38,6 +38,9 @@
 			questions?: Question[] | null;
 			/** An MCP elicitation's page to open. */
 			url?: string;
+			/** Where this request's always-allow can be kept (Codex: the session,
+			 *  or a rule for commands like it). */
+			scopes?: AlwaysScope[];
 		};
 		onRespond: (op: ApproveOp) => void;
 		/** 始终允许 asks where to keep the rule (caps.ruleScopes). */
@@ -48,8 +51,11 @@
 	// with its page to open when it names one; never an always-allow rule.
 	const isElicitation = $derived(approval.name === 'mcp_elicitation');
 	let scopeOpen = $state(false);
+	const scopeKeys = $derived<AlwaysScope[] | null>(
+		approval.scopes?.length ? approval.scopes : ruleScopes ? ['session', 'project', 'user'] : null
+	);
 	const scopeItems = $derived(
-		(['session', 'project', 'user'] as const).map((key) => ({
+		(scopeKeys ?? []).map((key) => ({
 			key,
 			label: t(`shell.alwaysScope.${key}`),
 			desc: t(`shell.alwaysScope.${key}Desc`)
@@ -284,8 +290,8 @@
 					<Button
 						variant="secondary"
 						size="sm"
-						onclick={() => (ruleScopes ? (scopeOpen = !scopeOpen) : allowAlways())}
-						>{ruleScopes ? t('shell.allowAlwaysScoped') : t('shell.allowAlways')}</Button
+						onclick={() => (scopeKeys ? (scopeOpen = !scopeOpen) : allowAlways())}
+						>{scopeKeys ? t('shell.allowAlwaysScoped') : t('shell.allowAlways')}</Button
 					>
 					{#if scopeOpen}
 						<PopMenu

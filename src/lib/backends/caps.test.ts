@@ -61,7 +61,13 @@ describe('caps() gating helper', () => {
 		expect(cx.goals).toBe(true);
 		expect(cx.transcriptReplay).toBe(true);
 		expect(cx.slashCommands).toBe(false);
-		expect(cx.checkpoints).toBe(true); // conversation rewind via thread/rollback
+		expect(cx.checkpoints).toBe(true); // conversation rewind via thread/revert
+		// steering, plan / auto modes, subagents with the agent trace and its
+		// own MCP servers are wired too.
+		expect(cx.steer).toBe(true);
+		expect(cx.extendedApprovalModes).toBe(true);
+		expect(cx.agentTrace).toBe(true);
+		expect(cx.mcpEngineOwned).toBe(true);
 	});
 
 	it('every backend declares the full flag set', () => {

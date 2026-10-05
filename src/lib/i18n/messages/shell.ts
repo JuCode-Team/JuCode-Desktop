@@ -192,7 +192,9 @@ const shell = {
 			project: '本项目',
 			projectDesc: '保存到项目的 .claude/settings.local.json',
 			user: '所有项目',
-			userDesc: '保存到 ~/.claude/settings.json'
+			userDesc: '保存到 ~/.claude/settings.json',
+			rule: '以后都允许',
+			ruleDesc: '为这类命令写入 Codex 的执行规则'
 		},
 		elicitOpen: '打开链接',
 		elicitAccept: '提交',
@@ -1025,7 +1027,9 @@ const shell = {
 			project: 'This project',
 			projectDesc: 'Saved to the project’s .claude/settings.local.json',
 			user: 'All projects',
-			userDesc: 'Saved to ~/.claude/settings.json'
+			userDesc: 'Saved to ~/.claude/settings.json',
+			rule: 'Always, from now on',
+			ruleDesc: 'Writes a Codex exec rule for commands like this'
 		},
 		elicitOpen: 'Open link',
 		elicitAccept: 'Submit',

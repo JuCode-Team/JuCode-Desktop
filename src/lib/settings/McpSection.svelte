@@ -39,6 +39,7 @@
 	import { t } from '$lib/i18n';
 	import { isDraft } from '$lib/backends/router';
 	import { caps } from '$lib/backends';
+	import { openExternal } from '$lib/openExternal';
 	import SettingsSection from './SettingsSection.svelte';
 	import SettingsRow from './SettingsRow.svelte';
 
@@ -124,6 +125,16 @@
 		if (expanded === name) expanded = null;
 		if (editing === name) editing = null;
 	}
+	// Codex signs in to a server through its OAuth page, opened once.
+	function signIn(row: McpRow) {
+		dispatch(sessionId, { op: 'mcp_login', name: row.name }, (e) => (opError = String(e)));
+	}
+	$effect(() => {
+		const url = chat?.mcpLoginUrl;
+		if (!url || !chat) return;
+		chat.mcpLoginUrl = '';
+		openExternal(url);
+	});
 	function toggle(row: McpRow, enabled: boolean) {
 		if (owned) {
 			dispatch(sessionId, { op: 'mcp_toggle', name: row.name, enabled }, (e) => (opError = String(e)));
@@ -141,7 +152,7 @@
 	const stateOf = (row: McpRow) => row.view?.state ?? 'unknown';
 </script>
 
-<SettingsSection id="mcp-servers" title={t('settings.mcp.groupLabel')} description={t(owned ? 'settings.mcp.claudeHint' : 'settings.mcp.hint')}>
+<SettingsSection id="mcp-servers" title={t('settings.mcp.groupLabel')} description={t(owned ? (chat?.backendId === 'codex' ? 'settings.mcp.codexHint' : 'settings.mcp.claudeHint') : 'settings.mcp.hint')}>
 	{#if !live}
 		<div class="pad"><Notice tone="info">{t('settings.mcp.noSession')}</Notice></div>
 	{/if}
@@ -185,13 +196,15 @@
 						<span class="chev" class:up={expanded === row.name}><CaretDownIcon size={14} /></span>
 					</button>
 					<span class="sacts">
-						{#if live && stateOf(row) === 'failed' && (row.entry || owned)}
+						{#if live && row.view?.needsAuth}
+							<Button size="sm" onclick={() => signIn(row)}>{t('settings.mcp.signIn')}</Button>
+						{:else if live && stateOf(row) === 'failed' && (row.entry || owned)}
 							<IconButton size="sm" title={t('settings.mcp.reconnect')} onclick={() => reconnect(row)}>
 								<ArrowClockwiseIcon size={14} />
 							</IconButton>
 						{/if}
 						<span class="swwrap">
-							<Switch bind:checked={() => row.enabled, (v) => toggle(row, v)} label={row.name} />
+							{#if !row.view?.fixed}<Switch bind:checked={() => row.enabled, (v) => toggle(row, v)} label={row.name} />{/if}
 						</span>
 						{#if !owned}
 							<IconButton size="sm" title={t('settings.mcp.edit')} onclick={() => openEdit(row)}>

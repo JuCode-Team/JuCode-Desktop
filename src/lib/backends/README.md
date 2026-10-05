@@ -82,6 +82,16 @@ is (re)starting; `dispatch(sessionId, op)` is how every UI call site sends.
 The single gating helper is `caps(chat)` from `$lib/backends` — components
 never test `backendId` directly.
 
+### Codex specifics
+
+- Mid-turn messages wait in the daemon (`pending_messages`, the composer's
+  queue strip); the strip's steer button joins them to the running turn.
+- Plan and auto modes, the agent trace (subagent threads), its own MCP
+  servers (reconnect, sign in; no switch) and session switches (fast =
+  service tier `priority`, thinking = reasoning summaries) as for Claude.
+- A command approval may offer `scopes` (`session`, `rule`): the
+  always-allow menu shows exactly those.
+
 ### Claude specifics the desktop still drives
 
 - **Yolo** (`bypassPermissions`) can't be set live: `respawnClaudeYolo` closes

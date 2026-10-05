@@ -276,6 +276,8 @@ const settings = {
 		mcp: {
 			claudeHint: 'Claude Code 自己配置的 MCP 服务器。在这里可以对当前会话启用、停用或重连；增删服务器请用 claude mcp 命令。',
 			claudeEmpty: '当前 Claude Code 会话没有 MCP 服务器。',
+			codexHint: 'Codex 自己配置的 MCP 服务器。可以在这里重连或登录；启用、停用和增删请改 ~/.codex/config.toml。',
+			signIn: '登录',
 			groupLabel: 'MCP 服务器',
 			hint: '管理 Model Context Protocol 服务器。更改会写入 ~/.jucode/config.json。',
 			empty: 'MCP 让智能体接入外部工具（文件、搜索、数据库等标准化服务器）。',
@@ -713,6 +715,8 @@ const settings = {
 		mcp: {
 			claudeHint: 'MCP servers from Claude Code’s own config. Switch or reconnect them for this session here; add or remove servers with claude mcp.',
 			claudeEmpty: 'This Claude Code session has no MCP servers.',
+			codexHint: 'MCP servers from Codex’s own config. Reconnect or sign in to them here; switch, add or remove them in ~/.codex/config.toml.',
+			signIn: 'Sign in',
 			groupLabel: 'MCP servers',
 			hint: 'Manage Model Context Protocol servers. Changes are written to ~/.jucode/config.json.',
 			empty: 'MCP lets the agent use external tools (files, search, databases and other standardized servers).',

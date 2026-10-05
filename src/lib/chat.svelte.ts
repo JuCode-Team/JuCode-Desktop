@@ -8,6 +8,7 @@ import {
 	parseQuestions,
 	reconcileMode,
 	toEngineMode,
+	type AlwaysScope,
 	type ApprovalHunk,
 	type ApprovalMode,
 	type EngineApprovalMode,
@@ -339,7 +340,11 @@ export class ChatState {
 		questions?: Question[] | null;
 		/** An MCP elicitation asking the user to open a page (claude). */
 		url?: string;
+		/** Where an always-allow can be kept, when the engine says (codex). */
+		scopes?: AlwaysScope[];
 	} | null>(null);
+	/** An MCP server's sign-in page, to open once (codex mcp_login). */
+	mcpLoginUrl = $state('');
 	/** Subagents by id; `label` names them when the id doesn't (claude's task ids). */
 	subagents = $state<Record<string, { status: string; message: string; label?: string }>>({});
 	/** Background work of a claude session (Workflow, background shell or
@@ -1281,8 +1286,12 @@ export class ChatState {
 					subagentId: typeof ev.subagent_id === 'string' && ev.subagent_id ? ev.subagent_id : null,
 					hunks: parseHunks(ev.hunks),
 					questions: parseQuestions(ev.questions),
-					...(str(ev.url) ? { url: str(ev.url) } : {})
+					...(str(ev.url) ? { url: str(ev.url) } : {}),
+					...(Array.isArray(ev.scopes) ? { scopes: arr<AlwaysScope>(ev.scopes) } : {})
 				};
+				break;
+			case 'mcp_login':
+				this.mcpLoginUrl = str(ev.url);
 				break;
 			case 'command_list':
 				this.commands = arr<CommandItem>(ev.commands);
