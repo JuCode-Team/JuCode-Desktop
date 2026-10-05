@@ -950,7 +950,8 @@
 	.composer-bar {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: 4px;
+		container-type: inline-size;
 	}
 	.cspace {
 		flex: 1;
@@ -966,7 +967,7 @@
 		background: none;
 		color: var(--text);
 		font-family: var(--font-sans);
-		font-size: var(--fs-sm);
+		font-size: var(--fs-xs);
 		cursor: pointer;
 		transition:
 			background var(--t-fast) var(--ease-out),
@@ -984,14 +985,31 @@
 		opacity: 0.5;
 		cursor: default;
 	}
+	/* The model and its effort always show in full; the approval mode gives
+	   way (its icon stays). */
+	.flatbtn.model,
 	.flatbtn.model span {
-		min-width: 0;
+		flex-shrink: 0;
 		white-space: nowrap;
+	}
+	.flatbtn.model {
+		gap: 5px;
+		padding-inline: 6px;
+	}
+	.footsel {
+		min-width: 0;
+	}
+	.flatbtn.mode {
+		max-width: 100%;
+	}
+	.flatbtn.mode span {
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
-	.flatbtn.model .m {
-		max-width: min(220px, 42vw);
+	@container (max-width: 360px) {
+		.flatbtn.mode span {
+			display: none;
+		}
 	}
 	.flatbtn.model.pending {
 		opacity: 0.6;

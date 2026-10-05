@@ -301,6 +301,10 @@
 		z-index: 21;
 		width: min(340px, calc(100vw - 24px));
 		max-height: min(72vh, 620px);
+		/* Taller than that (switches, providers): the menu scrolls rather than
+		   running over the composer. */
+		overflow-y: auto;
+		overscroll-behavior: contain;
 		gap: 0;
 		padding: 6px;
 		transform-origin: bottom right;
