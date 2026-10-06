@@ -138,6 +138,15 @@
 	// The requirements on this computer (the daemon's list).
 	const requirements = new Requirements(daemon);
 	provideRequirements(requirements);
+	// A session at a requirement's start gate is held read-only by the daemon:
+	// it shows the engine's mode, and this client's mode is neither pushed
+	// over it nor saved from it (also when it was started elsewhere).
+	$effect(() => {
+		for (const s of allSessions) {
+			const sid = s.chat.sessionId;
+			if (sid && requirements.bySession.get(sid)?.gate?.session === sid) s.chat.followEngineMode = true;
+		}
+	});
 
 	let providers = $state<string[]>([]);
 
