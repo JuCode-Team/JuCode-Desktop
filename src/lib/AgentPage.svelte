@@ -36,12 +36,15 @@
 
 	let {
 		agentId,
+		projects = [],
 		onDeleted,
 		onOpenSession,
 		onOpenAgent,
 		onNewSession
 	}: {
 		agentId: string;
+		/** The open workspace's projects, for 所属项目. */
+		projects?: { id: string; name: string }[];
 		onDeleted: () => void;
 		onOpenSession: (session: string) => void;
 		onOpenAgent: (agent: string) => void;
@@ -392,6 +395,21 @@
 								value={agentWorkspace(detail.agent, workspaces.workspaces)}
 								options={workspaces.workspaces.map((w) => ({ value: w.id, label: w.name }))}
 								onChange={(workspace) => change({ workspace })}
+							/>
+						</div>
+					</SettingsRow>
+					<SettingsRow title={t('shell.agentPage.project')} description={t('shell.agentPage.projectHint')}>
+						<div class="pick">
+							<Select
+								value={detail.agent.project ?? ''}
+								options={[
+									{ value: '', label: t('shell.agents.noProject') },
+									...projects.map((p) => ({ value: p.id, label: p.name })),
+									...(detail.agent.project && !projects.some((p) => p.id === detail!.agent.project)
+										? [{ value: detail.agent.project, label: detail.agent.project }]
+										: [])
+								]}
+								onChange={(project) => change({ project: project || null })}
 							/>
 						</div>
 					</SettingsRow>

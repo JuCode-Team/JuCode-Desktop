@@ -1,6 +1,7 @@
 <script lang="ts">
 	// Noting an idea: a line of words (Enter notes it, Shift+Enter breaks the
-	// line) and screenshots pasted, dropped or picked. No project needed.
+	// line), screenshots pasted, dropped or picked, and its project (the
+	// default one unless the user picks another, or none).
 	import ImageIcon from 'phosphor-svelte/lib/ImageIcon';
 	import XIcon from 'phosphor-svelte/lib/XIcon';
 	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
@@ -10,9 +11,21 @@
 	import { telemetry } from '$lib/telemetry.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
 	import { loadComposerText, saveComposerText } from '$lib/composerText';
+	import ProjectPick from './ProjectPick.svelte';
 	import { t } from '$lib/i18n';
 
-	let { focusSignal = 0, onNoted }: { focusSignal?: number; onNoted?: (id: string) => void } = $props();
+	let {
+		focusSignal = 0,
+		project = '',
+		projects = [],
+		onNoted
+	}: {
+		focusSignal?: number;
+		/** The default project's id ('' for none). */
+		project?: string;
+		projects?: { id: string; name: string }[];
+		onNoted?: (id: string) => void;
+	} = $props();
 
 	const reqs = useRequirements();
 	// Unsent words survive leaving the page, like a composer's.
@@ -21,6 +34,9 @@
 	/** Screenshots to note, with their previews. */
 	let images = $state<{ file: File; url: string }[]>([]);
 	let busy = $state(false);
+	/** The user's pick; null follows the default. */
+	let picked = $state<string | null>(null);
+	const target = $derived(picked ?? project);
 	let field = $state<HTMLTextAreaElement | null>(null);
 	let picker = $state<HTMLInputElement | null>(null);
 
@@ -63,7 +79,7 @@
 		try {
 			const paths = [];
 			for (const image of images) paths.push((await sendFile(daemon, image.file)).path);
-			const r = await reqs.create({ text: words, images: paths, source: 'desktop' });
+			const r = await reqs.create({ text: words, images: paths, source: 'desktop', project: target || null });
 			telemetry.track('requirement_create');
 			text = '';
 			for (const image of images) URL.revokeObjectURL(image.url);
@@ -115,6 +131,9 @@
 			</div>
 		{/if}
 	</div>
+	{#if projects.length}
+		<span class="where"><ProjectPick value={target} {projects} placement="down-left" onChange={(p) => (picked = p)} /></span>
+	{/if}
 	<button class="icon" title={t('shell.requirement.addImage')} aria-label={t('shell.requirement.addImage')} onclick={() => picker?.click()}>
 		<ImageIcon size={17} />
 	</button>
@@ -202,6 +221,11 @@
 		background: color-mix(in oklab, var(--bg) 80%, transparent);
 		color: var(--text);
 		cursor: pointer;
+	}
+	.where {
+		flex: none;
+		display: inline-flex;
+		margin-top: 5px;
 	}
 	.icon {
 		flex: none;

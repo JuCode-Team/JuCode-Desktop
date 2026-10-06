@@ -31,6 +31,8 @@ export interface AgentView {
 	avatar_seed?: string;
 	/** The workspace it is listed in (see agentWorkspace); older agents have none. */
 	workspace?: string;
+	/** The project (its id) it belongs to; its `cwd` is the project's directory. */
+	project?: string | null;
 }
 
 /** The workspace an agent is listed in: its own, else (none yet, or that
@@ -66,7 +68,7 @@ export type AgentChanges = Partial<
 		| 'color'
 		| 'avatar_seed'
 	>
-> & { role?: string; workspace?: string | null };
+> & { role?: string; workspace?: string | null; project?: string | null };
 
 export interface DaemonSessionView {
 	session: string;
@@ -164,6 +166,8 @@ export interface NewAgent {
 	avatar_seed?: string;
 	/** The workspace it is created in. */
 	workspace?: string;
+	/** The project it belongs to (the daemon runs it in its directory). */
+	project?: string;
 }
 
 /** Reconnect backoff: 1 s, doubling to 30 s; reset by a good connection. */
@@ -423,7 +427,8 @@ export class AgentDirectory {
 			cwd: agent.cwd,
 			role: agent.role,
 			...(agent.avatar_seed ? { avatar_seed: agent.avatar_seed } : {}),
-			...(agent.workspace ? { workspace: agent.workspace } : {})
+			...(agent.workspace ? { workspace: agent.workspace } : {}),
+			...(agent.project ? { project: agent.project } : {})
 		});
 		return reply.agent as AgentView;
 	}

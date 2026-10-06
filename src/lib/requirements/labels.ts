@@ -10,7 +10,17 @@ export const statusLabel = (status: RequirementStatus) => t(`shell.requirement.s
 export const sessionStateLabel = (state: SessionState | undefined) => t(`shell.requirement.session${cap(state ?? 'idle')}`);
 
 export const sourceLabel = (source: Requirement['source']) =>
-	source === 'phone' ? t('shell.requirement.fromPhone') : t('shell.requirement.fromDesktop');
+	source === 'phone'
+		? t('shell.requirement.fromPhone')
+		: source === 'agent'
+			? t('shell.requirement.fromAgent')
+			: t('shell.requirement.fromDesktop');
+
+/** The project `id` names among `projects`; none: 未归属. */
+export function projectLabel(id: string | null | undefined, projects: { id: string; name: string }[]): string {
+	if (!id) return t('shell.requirement.noProject');
+	return projects.find((p) => p.id === id)?.name ?? id;
+}
 
 /** A date and time, short (month/day hour:minute). */
 export function when(ms: number): string {

@@ -1,17 +1,16 @@
 <script lang="ts" module>
-	/** How to start a session on a requirement (the page carries it out). */
-	export type StartHow = { project?: string; backend?: string; mode?: 'worktree' | 'dispatch' };
+	/** How to start a session on a requirement (the page carries it out):
+	 *  `project` is a project's path. */
+	export type StartHow = { project?: string; backend?: string; mode?: 'worktree' };
 </script>
 
 <script lang="ts">
 	// 开始 on a requirement: one click starts in its project on the last
-	// backend; the menu picks another project, a backend, a parallel task
-	// (worktree) or, across projects, Dispatch. With no project yet, the click
-	// opens the menu.
+	// backend; the menu picks another project, a backend or a parallel task
+	// (worktree). With no project yet, the click opens the menu.
 	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
 	import FolderIcon from 'phosphor-svelte/lib/FolderIcon';
 	import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon';
-	import ArrowsSplitIcon from 'phosphor-svelte/lib/ArrowsSplitIcon';
 	import CpuIcon from 'phosphor-svelte/lib/CpuIcon';
 	import PopMenu, { type PopMenuItem } from '$lib/ui/PopMenu.svelte';
 	import { BACKEND_LABELS } from '$lib/backends';
@@ -27,22 +26,19 @@
 	}: {
 		requirement: Requirement;
 		/** The projects to offer: the open workspace's. */
-		projects: { path: string; name: string }[];
+		projects: { id: string; path: string; name: string }[];
 		size?: 'sm' | 'md';
 		primary?: boolean;
 		onStart: (how: StartHow) => void;
 	} = $props();
 
 	let open = $state(false);
-	const base = (p: string) => p.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || p;
-	/** Its own projects first, then the workspace's others. */
-	const offered = $derived([
-		...requirement.projects.map((path) => ({ path, name: base(path) })),
-		...projects.filter((p) => !requirement.projects.includes(p.path))
-	]);
+	/** Its own project first, then the workspace's others. */
+	const own = $derived(projects.find((p) => p.id === requirement.project));
+	const offered = $derived([...(own ? [own] : []), ...projects.filter((p) => p !== own)]);
 	const items = $derived<PopMenuItem[]>([
 		...offered.slice(0, 6).map((p) => ({ key: `p:${p.path}`, label: t('shell.requirement.startIn', { project: p.name }), icon: FolderIcon })),
-		...(requirement.projects.length
+		...(own
 			? [
 					...(['jucode', 'claude', 'codex'] as const).map((b) => ({
 						key: `b:${b}`,
@@ -51,9 +47,6 @@
 					})),
 					{ key: 'worktree', label: t('shell.requirement.worktree'), desc: t('shell.requirement.worktreeDesc'), icon: GitBranchIcon }
 				]
-			: []),
-		...(requirement.projects.length > 1
-			? [{ key: 'dispatch', label: t('shell.requirement.dispatch'), desc: t('shell.requirement.dispatchDesc'), icon: ArrowsSplitIcon }]
 			: [])
 	]);
 
@@ -61,11 +54,11 @@
 		open = false;
 		if (key.startsWith('p:')) onStart({ project: key.slice(2) });
 		else if (key.startsWith('b:')) onStart({ backend: key.slice(2) });
-		else onStart({ mode: key as 'worktree' | 'dispatch' });
+		else onStart({ mode: 'worktree' });
 	}
 	function main(e: MouseEvent) {
 		e.stopPropagation();
-		if (requirement.projects.length) onStart({});
+		if (own) onStart({});
 		else open = !open;
 	}
 </script>

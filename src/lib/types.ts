@@ -51,9 +51,13 @@ export interface Session {
 	/** Claude Code: the model a restored session last ran on, until its engine
 	 *  reports one (see SessionStore.#keepModel). */
 	model?: string;
-	/** The requirement a new session starts on: linked to it once the daemon
+	/** The requirement a new session starts on: begun on it once the daemon
 	 *  names the session (not persisted). */
 	requirement?: string;
+	/** How it starts on `requirement` (a draft shows the start card until
+	 *  the user starts it): with a plan to confirm, the user's words, and
+	 *  the mode the work runs in (see `Requirements.begin`). */
+	requirementStart?: { plan: boolean; text?: string; mode?: string };
 }
 
 /** 并行任务（git worktree）项目的元数据，随项目布局持久化。 */
@@ -72,6 +76,9 @@ export interface Project {
 	id: string;
 	name: string;
 	path: string;
+	/** 附加目录（绝对路径，不含主目录 path）：引擎在主目录启动时也能读写这些目录。
+	 *  随 workspaces.json 保存并同步给后台服务。 */
+	dirs?: string[];
 	sessions: Session[];
 	/** 并行任务 worktree 项目才有；普通项目为 undefined。 */
 	worktree?: WorktreeMeta;

@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Noting an idea from the phone: a line of words, screenshots (camera or
-	// photos) and, if the user wants, its project. The words are kept on this
-	// device until noted. A page of its own on a phone; the Requirements tab's
+	// photos) and its project (the one last noted in, or none). The words
+	// and that project are kept on this device. A page of its own on a phone; the Requirements tab's
 	// pane on a wide page.
 	import ImageIcon from 'phosphor-svelte/lib/ImageIcon';
 	import XIcon from 'phosphor-svelte/lib/XIcon';
@@ -33,7 +33,8 @@
 	let images = $state<{ file: File; url: string }[]>([]);
 	/** Bytes sent of all screenshots, while noting. */
 	let progress = $state<{ sent: number; total: number } | null>(null);
-	let project = $state('');
+	const PROJECT_KEY = `${conn.id}:requirement-project`;
+	let project = $state(localStorage.getItem(PROJECT_KEY) ?? '');
 	let busy = $state(false);
 	let error = $state('');
 	let picker = $state<HTMLInputElement | null>(null);
@@ -42,8 +43,12 @@
 		const seen = new Set<string>();
 		return conn.projects.workspaces
 			.flatMap((w) => w.projects)
-			.filter((p) => !p.chats && !seen.has(p.path) && !!seen.add(p.path))
-			.map((p) => ({ value: p.path, label: p.name }));
+			.filter((p) => !p.chats && !seen.has(p.id) && !!seen.add(p.id))
+			.map((p) => ({ value: p.id, label: p.name }));
+	});
+	// A project since removed: none.
+	$effect(() => {
+		if (project && projects.length && !projects.some((p) => p.value === project)) project = '';
 	});
 	const options = $derived([{ value: '', label: t('shell.requirement.noProject') }, ...projects]);
 
@@ -79,8 +84,9 @@
 				text: words,
 				images: paths,
 				source: 'phone',
-				...(project ? { projects: [project] } : {})
+				project: project || null
 			});
+			localStorage.setItem(PROJECT_KEY, project);
 			text = '';
 			for (const image of images) URL.revokeObjectURL(image.url);
 			images = [];

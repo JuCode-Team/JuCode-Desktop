@@ -33,6 +33,7 @@
 		chatView,
 		navWidth,
 		projects,
+		currentProject,
 		captureSignal = 0,
 		currentStep,
 		onClose,
@@ -57,7 +58,9 @@
 		navWidth: number;
 		/** The open workspace's projects: its requirements are those about them
 		 *  (or about none), and sessions start in them. */
-		projects: { path: string; name: string }[];
+		projects: { id: string; path: string; name: string }[];
+		/** The open project's id: new requirements are noted in it. */
+		currentProject?: string;
 		/** Bumped to focus the box that notes an idea. */
 		captureSignal?: number;
 		/** What a running session is doing now, when this computer shows it. */
@@ -72,12 +75,18 @@
 	} = $props();
 
 	const reqs = useRequirements();
-	const norm = (p: string) => p.replace(/[\\/]+$/, '');
-	const projectPaths = $derived(new Set(projects.map((p) => norm(p.path))));
+	const projectIds = $derived(new Set(projects.map((p) => p.id)));
 	/** The open workspace's requirements: about its projects, or about none. */
-	const shownReqs = $derived(
-		reqs.list.filter((r) => !r.projects.length || r.projects.some((p) => projectPaths.has(norm(p))))
-	);
+	const shownReqs = $derived(reqs.list.filter((r) => !r.project || projectIds.has(r.project)));
+	/** An agent's project, by name (any workspace's). */
+	function projectName(id: string | null | undefined): string {
+		if (!id) return '';
+		return (
+			projects.find((p) => p.id === id)?.name ??
+			workspaces.workspaces.flatMap((w) => w.projects).find((p) => p.id === id)?.name ??
+			''
+		);
+	}
 	const yourTurn = $derived(
 		shownReqs.filter(needsYou).sort((a, b) => b.updated_at - a.updated_at)
 	);
@@ -193,7 +202,7 @@
 					<AgentAvatar agent={a} size={22} />
 					<span class="two">
 						<span class="label">{a.name}</span>
-						<span class="sub" class:live={a.busy && a.enabled}>{showAll ? [workspaceName(a), status(a)].filter(Boolean).join(' · ') : status(a)}</span>
+						<span class="sub" class:live={a.busy && a.enabled}>{[showAll ? workspaceName(a) : '', projectName(a.project), status(a)].filter(Boolean).join(' · ')}</span>
 					</span>
 					{#if waiting}<span class="badge" title={t('shell.desk.pendingFor', { n: waiting })}>{waiting}</span>
 					{:else if a.busy && a.enabled}<CircleNotchIcon size={14} class="spin busy" />{/if}
@@ -220,6 +229,7 @@
 				<div class="col">
 					<AgentPage
 						agentId={shown.id}
+						{projects}
 						onDeleted={() => (agentId = null)}
 						onOpenSession={(session) => onOpenSession(session, shown.id)}
 						onOpenAgent={openAgent}
@@ -249,6 +259,7 @@
 					<RequirementBoard
 						list={shownReqs}
 						{projects}
+						{currentProject}
 						focusSignal={captureSignal}
 						{currentStep}
 						onOpen={openRequirement}
@@ -268,6 +279,7 @@
 								<span class="card-head">
 									<AgentAvatar agent={a} size={28} />
 									<span class="card-name">{a.name}</span>
+									{#if projectName(a.project)}<span class="card-project">{projectName(a.project)}</span>{/if}
 									{#if waiting}<span class="badge">{waiting}</span>{/if}
 								</span>
 								<span class="card-status" class:live={a.busy && a.enabled}>
@@ -556,6 +568,15 @@
 		white-space: nowrap;
 		font-size: var(--fs-sm);
 		font-weight: 600;
+	}
+	.card-project {
+		flex: none;
+		max-width: 40%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: var(--fs-xs);
+		color: var(--dim2);
 	}
 	.card-status {
 		display: inline-flex;

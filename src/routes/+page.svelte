@@ -97,6 +97,7 @@
 	import TaskDialog from '$lib/TaskDialog.svelte';
 	import AgentDialog from '$lib/AgentDialog.svelte';
 	import DeskPage from '$lib/DeskPage.svelte';
+	import ProjectPage from '$lib/ProjectPage.svelte';
 	import FeedbackDialog from '$lib/FeedbackDialog.svelte';
 	import { telemetry } from '$lib/telemetry.svelte';
 	import { sendTelemetry } from '$lib/protocol';
@@ -167,6 +168,7 @@
 	function openSettings(section: SectionKey = 'general') {
 		settingsSection = section;
 		showDesk = false;
+		projectPageId = null;
 		showSettings = true;
 	}
 	function closeSettings() {
@@ -195,7 +197,27 @@
 		deskAgent = agent;
 		deskSession = null;
 		showSettings = false;
+		projectPageId = null;
 		showDesk = true;
+	}
+	// A project's page over the canvas (the sidebar stays); any session
+	// shown there closes it.
+	let projectPageId = $state<string | null>(null);
+	const pageProject = $derived(projectPageId ? store.userProjects.find((p) => p.id === projectPageId) : undefined);
+	function openProjectPage(p: Project) {
+		showDesk = false;
+		showSettings = false;
+		projectPageId = p.id;
+	}
+	$effect(() => {
+		void store.activeId;
+		projectPageId = null;
+	});
+	/** The project a new agent is created in ('' for none). */
+	let agentDialogProject = $state('');
+	function newAgent(project = '') {
+		agentDialogProject = project;
+		showAgentDialog = true;
 	}
 	/** The workbench's requirements page: one requirement, or the list. */
 	function openRequirements(id: string | null = null) {
@@ -204,28 +226,21 @@
 		deskRequirement = id;
 	}
 
-	/** Starts a session on requirement `r`: a new session in its project,
-	 *  its first message (the requirement and its progress) filled in for the
-	 *  user to edit and send, its screenshots attached; it is linked once it
-	 *  starts. Or a parallel task (worktree) with that message, or Dispatch
-	 *  across its projects. */
-	let taskRequirement = $state<{ id: string; name: string; description: string } | null>(null);
+	/** Starts a session on requirement `r`: a new draft in its project (or
+	 *  a parallel task's) that shows the start card; once the user starts
+	 *  it, the daemon has the agent explain its understanding first and wait
+	 *  for confirmation (see Requirements.begin). */
+	let taskRequirement = $state<{ id: string; name: string } | null>(null);
 	async function startRequirement(r: Requirement, how: StartHow) {
 		try {
-			const text = await requirements.prompt(r.id);
-			telemetry.track(how.mode === 'dispatch' ? 'dispatch_send' : 'requirement_start');
-			if (how.mode === 'dispatch') {
-				await daemon.request({ op: 'dispatch_send', text, plan: false, approval_mode: 'auto', requirement: r.id });
-				toast.success(t('shell.requirement.dispatched'));
-				return;
-			}
-			const path = how.project ?? r.projects[0];
+			telemetry.track('requirement_start');
+			const path = how.project ?? workspaceProjects.find((p) => p.id === r.project)?.path;
 			const project = path ? await openProjectPath(path, false) : null;
 			if (!project) return toast.warn(t('shell.requirement.pickProject'));
-			if (!r.projects.length) await requirements.update(r.id, { projects: [project.path] });
+			if (!r.project) await requirements.update(r.id, { project: project.id });
 			if (how.mode === 'worktree') {
 				// The id keeps the branch name readable whatever the title's script.
-				taskRequirement = { id: r.id, name: `${r.id} ${r.title}`, description: text };
+				taskRequirement = { id: r.id, name: `${r.id} ${r.title}` };
 				newTask(project);
 				return;
 			}
@@ -240,10 +255,10 @@
 			const session = store.allSessions.find((s) => s.id === id);
 			if (session) {
 				session.requirement = r.id;
-				session.chat.pendingFill = text;
-				session.chat.pendingAttach = [...r.images];
+				session.requirementStart = { plan: session.chat.approvalMode === 'plan' };
 			}
 			showDesk = false;
+			projectPageId = null;
 		} catch (e) {
 			toast.error(e instanceof Error ? e.message : String(e));
 		}
@@ -255,7 +270,7 @@
 		return chat?.plan.find((p) => p.status === 'in_progress')?.step;
 	}
 	const workspaceProjects = $derived(
-		projects.filter((p) => !p.worktree && !p.chats).map((p) => ({ path: p.path, name: p.name }))
+		projects.filter((p) => !p.worktree && !p.chats).map((p) => ({ id: p.id, path: p.path, name: p.name }))
 	);
 
 	/** Show a daemon session: an agent's on the workbench, a plain hosted one
@@ -274,6 +289,7 @@
 		const cwd = listed?.cwd ?? '';
 		store.openAgentSession({ id: '', name: base(cwd), cwd }, session, listed?.title);
 		showDesk = false;
+		projectPageId = null;
 	}
 	let showQuickOpen = $state(false);
 
@@ -902,9 +918,14 @@
 			store.activeId = existing.sessions[0]?.id ?? store.addSession(existing);
 			return;
 		}
-		const project = store.createProject(path, meta, description || undefined);
-		// Started on a requirement: its session is linked once the daemon names it.
-		if (requirement && project.sessions[0]) project.sessions[0].requirement = requirement;
+		// Started on a requirement: the description goes with its start (the
+		// start card), not as a first message.
+		const project = store.createProject(path, meta, (!requirement && description) || undefined);
+		const first = project.sessions[0];
+		if (requirement && first) {
+			first.requirement = requirement;
+			first.requirementStart = { plan: first.chat.approvalMode === 'plan', ...(description ? { text: description } : {}) };
+		}
 		if (requirement) showDesk = false;
 	}
 	/** 任务清理完成（worktree 已删除）后，把对应项目从侧边栏移除。 */
@@ -1244,7 +1265,7 @@
 		resizing={sbResizing}
 		sidebarOpen={showSidebar}
 		onToggleSidebar={toggleSidebar}
-		title={showSettings ? t('settings.title') : showDesk ? t('shell.desk.title') : (active?.chat.title ?? '')}
+		title={showSettings ? t('settings.title') : showDesk ? t('shell.desk.title') : pageProject ? pageProject.name : (active?.chat.title ?? '')}
 		subtitle={showSettings || showDesk ? '' : (activeProject?.name ?? '')}
 		addOptions={showSettings || showDesk ? [] : addOptions}
 		onAdd={(key) => mosaicAdd(focusedLeaf, key)}
@@ -1297,7 +1318,9 @@
 				{activeId}
 				width={showSidebar ? sidebarWidth : 0}
 				resizing={sbResizing}
-				onSelect={(id) => (store.activeId = id)}
+				onSelect={(id) => ((store.activeId = id), (projectPageId = null))}
+				onOpenProject={openProjectPage}
+				openProject={projectPageId}
 				onNewProject={addProject}
 				onNewTask={newTask}
 				onNewSession={(p) => newSession(p)}
@@ -1315,7 +1338,7 @@
 				agents={agentsOfWorkspace(agentDirectory.agents, workspaces.workspaces, workspaces.activeId)}
 				agentsStatus={agentDirectory.status}
 				onOpenAgent={(a) => openDesk(a.id)}
-				onNewAgent={() => (showAgentDialog = true)}
+				onNewAgent={() => newAgent()}
 				onAgentSession={(a) => store.openAgentSession(a, agentDirectory.latestSession(a.id)?.session)}
 				agentPending={(id) => agentDirectory.pendingFor(id)}
 				pendingCount={agentDirectory.pending}
@@ -1326,6 +1349,21 @@
 			<!-- THE CANVAS: workspace tabs on top, one mosaic for chats, tool panels,
 			     TUI and audit tiles below. -->
 			<div class="canvas">
+				{#if pageProject}
+					{#key pageProject.id}
+						<ProjectPage
+							project={pageProject}
+							projects={workspaceProjects}
+							{currentStep}
+							onClose={() => (projectPageId = null)}
+							onDirs={(dirs) => store.setProjectDirs(pageProject, dirs)}
+							onStartRequirement={startRequirement}
+							onOpenSession={(s) => openDaemonSession(s)}
+							onOpenAgent={(id) => openDesk(id)}
+							onNewAgent={() => newAgent(pageProject.id)}
+						/>
+					{/key}
+				{/if}
 
 				<div class="stage">
 					{#if store.loaded && store.shownProjects.length === 0}
@@ -1451,6 +1489,7 @@
 					bind:page={deskPage}
 					bind:requirementId={deskRequirement}
 					projects={workspaceProjects}
+					currentProject={activeProject?.id}
 					{captureSignal}
 					{currentStep}
 					onStartRequirement={startRequirement}
@@ -1458,7 +1497,7 @@
 					navWidth={sidebarWidth}
 					onClose={() => (showDesk = false)}
 					onOpenSession={openDaemonSession}
-					onNewAgent={() => (showAgentDialog = true)}
+					onNewAgent={() => newAgent()}
 					onNewSession={(agent) => {
 						deskSession = store.openAgentSession(agent);
 						deskAgent = agent.id;
@@ -1552,7 +1591,6 @@
 		<TaskDialog
 			project={taskDialogFor}
 			name={taskRequirement?.name}
-			description={taskRequirement?.description}
 			onClose={() => ((taskDialogFor = null), (taskRequirement = null))}
 			onCreated={openTaskProject}
 		/>
@@ -1561,6 +1599,8 @@
 	{#if showAgentDialog}
 		<AgentDialog
 			defaultDir={store.activeProject?.path ?? ''}
+			projects={workspaceProjects}
+			defaultProject={agentDialogProject}
 			onClose={() => (showAgentDialog = false)}
 			onCreated={(agent) => {
 				showAgentDialog = false;

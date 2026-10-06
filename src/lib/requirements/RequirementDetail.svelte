@@ -8,16 +8,15 @@
 	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
 	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
 	import TrashIcon from 'phosphor-svelte/lib/TrashIcon';
-	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
-	import XIcon from 'phosphor-svelte/lib/XIcon';
 	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import ArrowBendDownRightIcon from 'phosphor-svelte/lib/ArrowBendDownRightIcon';
 	import PopMenu, { type PopMenuItem } from '$lib/ui/PopMenu.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import RequirementTag from './RequirementTag.svelte';
+	import ProjectPick from './ProjectPick.svelte';
 	import StartButton, { type StartHow } from './StartButton.svelte';
-	import { PROGRESS_SECTIONS, useRequirements, type Requirement, type RequirementState } from '$lib/requirements.svelte';
+	import { PROGRESS_SECTIONS, gateNext, useRequirements, type Requirement, type RequirementState } from '$lib/requirements.svelte';
 	import { useAgents } from '$lib/agentScope';
 	import { BACKEND_LABELS, normalizeBackendId } from '$lib/backends';
 	import { confirm } from '$lib/ui/confirm.svelte';
@@ -34,7 +33,7 @@
 		onOpenSession
 	}: {
 		requirement: Requirement;
-		projects: { path: string; name: string }[];
+		projects: { id: string; path: string; name: string }[];
 		onBack: () => void;
 		onStart: (r: Requirement, how: StartHow) => void;
 		onOpenSession: (session: string) => void;
@@ -95,12 +94,19 @@
 		if (ok) await run(async () => (await reqs.remove(r.id), onBack()));
 	}
 
-	// Projects: its own, and the workspace's others to add.
-	let addingProject = $state(false);
-	const addable = $derived<PopMenuItem[]>(
-		projects.filter((p) => !r.projects.includes(p.path)).map((p) => ({ key: p.path, label: p.name }))
+	const setProject = (project: string) => run(() => reqs.update(r.id, { project: project || null }));
+	// One of another workspace keeps its name in the list.
+	const pickable = $derived(
+		r.project && !projects.some((p) => p.id === r.project) ? [...projects, { id: r.project, path: '', name: r.project }] : projects
 	);
-	const setProjects = (list: string[]) => run(() => reqs.update(r.id, { projects: list }));
+
+	// What waits for the user: an agent's proposal, or the start's gate.
+	const proposer = $derived(
+		r.proposal ? (agents.agents.find((a) => a.id === r.proposal!.agent)?.name ?? r.proposal.agent) : ''
+	);
+	const proposed = $derived(!!r.proposal || r.state === 'proposed');
+	const answer = (accept: boolean) => run(() => reqs.answerProposal(r.id, accept));
+	const confirmGate = () => run(() => reqs.confirm(r.id));
 
 	// Its sessions, newest last as linked.
 	const sessions = $derived(
@@ -188,6 +194,31 @@
 		</div>
 	</header>
 
+	{#if proposed}
+		<div class="waiting">
+			<div class="w-text">
+				<span class="w-title">
+					{r.proposal?.kind === 'close'
+						? t('shell.requirement.proposalClose', { agent: proposer, outcome: statusLabel(r.proposal.outcome ?? 'done') })
+						: t('shell.requirement.proposalCreate', { agent: proposer || t('shell.requirement.fromAgent') })}
+				</span>
+				{#if r.proposal?.reason}<span class="w-sub">{r.proposal.reason}</span>{/if}
+			</div>
+			<Button size="sm" variant="ghost" onclick={() => answer(false)}>{t('shell.requirement.reject')}</Button>
+			<Button size="sm" variant="primary" onclick={() => answer(true)}>{t('shell.requirement.accept')}</Button>
+		</div>
+	{:else if r.status === 'confirm' && r.gate}
+		{@const gate = r.gate}
+		<div class="waiting">
+			<div class="w-text">
+				<span class="w-title">{gate.stage === 'plan' ? t('shell.requirement.gatePlan') : t('shell.requirement.gateUnderstand')}</span>
+				<span class="w-sub">{t('shell.requirement.confirmHint')}</span>
+			</div>
+			<Button size="sm" variant="ghost" onclick={() => onOpenSession(gate.session)}>{t('shell.requirement.openSession')}</Button>
+			<Button size="sm" variant="primary" onclick={confirmGate}>{t(`shell.requirement.${gateNext(gate)}`)}</Button>
+		</div>
+	{/if}
+
 	<div class="cols">
 		<div class="left">
 			<h5>
@@ -211,22 +242,7 @@
 				</div>
 			{/if}
 			<div class="projects">
-				{#each r.projects as p (p)}
-					<span class="chip">
-						{base(p)}
-						<button aria-label={t('shell.requirement.removeProject')} title={t('shell.requirement.removeProject')} onclick={() => setProjects(r.projects.filter((x) => x !== p))}><XIcon size={10} /></button>
-					</span>
-				{:else}
-					<span class="chip none">{t('shell.requirement.noProject')}</span>
-				{/each}
-				{#if addable.length}
-					<span class="add-project">
-						<button class="chip ghost" onclick={() => (addingProject = !addingProject)}><PlusIcon size={11} />{t('shell.requirement.addProject')}</button>
-						{#if addingProject}
-							<PopMenu items={addable} placement="down-right" onSelect={(p) => ((addingProject = false), setProjects([...r.projects, p]))} onClose={() => (addingProject = false)} />
-						{/if}
-					</span>
-				{/if}
+				<ProjectPick value={r.project ?? ''} projects={pickable} onChange={setProject} />
 			</div>
 
 			<div class="progress">
@@ -364,7 +380,10 @@
 		border-radius: var(--r-full);
 		background: var(--dim2);
 	}
-	.dot.review {
+	.dot.review,
+	.dot.confirm,
+	.dot.proposed,
+	.dot.proposal {
 		background: var(--warn);
 	}
 	.dot.approval,
@@ -456,36 +475,33 @@
 		gap: 6px;
 		margin-top: 12px;
 	}
-	.chip {
-		display: inline-flex;
+	.waiting {
+		display: flex;
 		align-items: center;
-		gap: 4px;
-		padding: 1px 8px;
-		border: none;
-		border-radius: var(--r-full);
-		background: var(--surface2);
-		color: var(--dim);
-		font: inherit;
+		gap: 10px;
+		padding: 12px 14px;
+		border: 1px solid var(--hairline);
+		border-radius: var(--r-lg);
+		background: var(--panel);
+		box-shadow: var(--shadow-sm);
+	}
+	.w-text {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+	}
+	.w-title {
+		font-size: var(--fs-sm);
+		font-weight: 500;
+		color: var(--text);
+	}
+	.w-sub {
 		font-size: var(--fs-xs);
-	}
-	.chip button {
-		display: inline-flex;
-		padding: 1px;
-		border: none;
-		background: none;
-		color: var(--dim2);
-		cursor: pointer;
-	}
-	.chip.ghost {
-		background: none;
-		border: 1px dashed var(--border-strong);
-		cursor: pointer;
-	}
-	.chip.none {
-		color: var(--dim2);
-	}
-	.add-project {
-		position: relative;
+		line-height: 1.55;
+		color: var(--dim);
+		white-space: pre-wrap;
 	}
 	.progress {
 		margin-top: 22px;

@@ -9,9 +9,23 @@ import type { DaemonClient } from '$lib/daemon';
 import { getLocale } from '$lib/i18n';
 import { sendFile, type Uploaded } from '$lib/upload';
 
-export type RequirementState = 'idea' | 'open' | 'done' | 'parked';
-/** `state`, except while open: what its sessions are doing (see the daemon). */
-export type RequirementStatus = 'idea' | 'open' | 'running' | 'approval' | 'failed' | 'review' | 'done' | 'parked';
+/** `proposed`: an agent proposed it; the user accepts or rejects it. */
+export type RequirementState = 'idea' | 'open' | 'done' | 'parked' | 'proposed';
+/** `state`, except while open: what its sessions are doing (see the daemon).
+ *  `confirm`: its start waits for the user to confirm (see `gate`);
+ *  `proposal`: an agent proposes to close it. */
+export type RequirementStatus =
+	| 'idea'
+	| 'open'
+	| 'running'
+	| 'approval'
+	| 'failed'
+	| 'review'
+	| 'confirm'
+	| 'proposed'
+	| 'proposal'
+	| 'done'
+	| 'parked';
 export type SessionState = 'running' | 'waiting' | 'failed' | 'idle';
 
 export interface RequirementProgress {
@@ -24,6 +38,28 @@ export interface RequirementProgress {
 	files: string[];
 }
 
+/** A session starting on it: the agent first says how it understands it
+ *  (`understand`), then, when asked for, its plan (`plan`); each waits for
+ *  the user's confirmation, then the session switches to `mode` and works. */
+export interface RequirementGate {
+	session: string;
+	stage: 'understand' | 'plan';
+	plan: boolean;
+	mode: string;
+	/** A turn ended at this stage (only then is it the user's to confirm). */
+	answered?: boolean;
+}
+
+/** An agent's proposal: a new requirement, or closing this one. */
+export interface RequirementProposal {
+	kind: 'create' | 'close';
+	outcome?: 'done' | 'parked';
+	agent: string;
+	session?: string;
+	reason: string;
+	at: number;
+}
+
 export interface Requirement {
 	id: string;
 	/** The user's words. */
@@ -31,7 +67,10 @@ export interface Requirement {
 	title: string;
 	/** Screenshots: paths on the computer (fetch with `image`). */
 	images: string[];
-	projects: string[];
+	/** The project (its id) it belongs to; null: none yet. */
+	project: string | null;
+	gate?: RequirementGate;
+	proposal?: RequirementProposal;
 	state: RequirementState;
 	status: RequirementStatus;
 	/** Linked sessions, oldest first. */
@@ -41,7 +80,7 @@ export interface Requirement {
 	progress_at?: number;
 	/** The end of the latest reply, on the user's turn. */
 	last_reply?: string;
-	source: 'desktop' | 'phone' | 'session';
+	source: 'desktop' | 'phone' | 'session' | 'agent';
 	source_session?: string | null;
 	created_at: number;
 	updated_at: number;
@@ -56,6 +95,9 @@ export function groupOf(status: RequirementStatus): RequirementGroup {
 		case 'approval':
 		case 'failed':
 		case 'review':
+		case 'confirm':
+		case 'proposed':
+		case 'proposal':
 			return 'attention';
 		case 'running':
 		case 'open':
@@ -68,6 +110,22 @@ export function groupOf(status: RequirementStatus): RequirementGroup {
 }
 
 export const needsYou = (r: Requirement) => groupOf(r.status) === 'attention';
+
+/** What confirming `gate` does next: from the understanding to the plan or
+ *  to the work, or from the plan to the work. */
+export function gateNext(gate: RequirementGate): 'understandPlan' | 'understandGo' | 'planGo' {
+	if (gate.stage === 'plan') return 'planGo';
+	return gate.plan ? 'understandPlan' : 'understandGo';
+}
+
+/** The gate open on `session` (it waits for the user once the turn ends). */
+export function gateOf(r: Requirement | undefined, session: string | undefined): RequirementGate | undefined {
+	return r?.gate && session && r.gate.session === session ? r.gate : undefined;
+}
+
+/** The mode a session started on a requirement works in once confirmed: the
+ *  composer's, except plan (the plan comes from the gate). */
+export const workMode = (mode: string) => (mode === 'plan' ? 'edits' : mode);
 
 /** `list` by group; within one, the latest change first. */
 export function grouped(list: Requirement[]): Record<RequirementGroup, Requirement[]> {
@@ -105,11 +163,12 @@ export class Requirements {
 	// The requirement's id travels as `requirement`: `id` is the request's.
 	async create(fields: {
 		text: string;
-		projects?: string[];
+		/** The project's id; none: the session's project, else none. */
+		project?: string | null;
 		/** Paths of uploaded screenshots (`upload`). */
 		images?: string[];
 		source?: 'desktop' | 'phone';
-		/** Noted in this session (its project, when `projects` is empty). */
+		/** Noted in this session (its project, when `project` is not given). */
 		session?: string;
 	}): Promise<Requirement> {
 		const reply = await this.daemon.request({ op: 'requirement_create', ...fields });
@@ -121,7 +180,8 @@ export class Requirements {
 		return sendFile(this.daemon, file, onProgress);
 	}
 
-	async update(id: string, fields: { text?: string; projects?: string[]; state?: RequirementState }) {
+	/** `project: null` leaves it without a project. */
+	async update(id: string, fields: { text?: string; project?: string | null; state?: RequirementState }) {
 		await this.daemon.request({ op: 'requirement_update', requirement: id, ...fields });
 	}
 
@@ -150,17 +210,37 @@ export class Requirements {
 		return data;
 	}
 
-	/** The first message of a session that starts on it, with `feedback`. */
-	async prompt(id: string, feedback = ''): Promise<string> {
-		const reply = await this.daemon.request({ op: 'requirement_prompt', requirement: id, text: feedback, lang: getLocale() });
-		return String(reply.text ?? '');
+	/** Starts `session` on it: linked, read-only until the user confirms
+	 *  the agent's understanding (and its plan, with `plan`), then in `mode`.
+	 *  `text`: the user's words to go with it. */
+	async begin(id: string, fields: { session: string; plan: boolean; mode: string; text?: string }) {
+		await this.daemon.request({
+			op: 'requirement_begin',
+			requirement: id,
+			session: fields.session,
+			plan: fields.plan,
+			mode: fields.mode,
+			text: fields.text ?? '',
+			lang: getLocale()
+		});
+	}
+
+	/** Confirms its gate's stage: on to the plan, or to the work. */
+	async confirm(id: string, text = '') {
+		await this.daemon.request({ op: 'requirement_confirm', requirement: id, text, lang: getLocale() });
+	}
+
+	/** Accepts or rejects an agent's proposal. */
+	async answerProposal(id: string, accept: boolean) {
+		await this.daemon.request({ op: 'requirement_proposal', requirement: id, accept });
 	}
 
 	/** Sends `text` to its latest session, or starts a new one (asked for,
-	 *  or none yet) in `cwd` on `engine`; resolves with that session. */
+	 *  or none yet) in `cwd` on `engine`, through the confirmations (`plan`,
+	 *  then `mode`; see `begin`); resolves with that session. */
 	async reply(
 		id: string,
-		fields: { text?: string; newSession?: boolean; cwd?: string; engine?: string }
+		fields: { text?: string; newSession?: boolean; cwd?: string; engine?: string; plan?: boolean; mode?: string }
 	): Promise<string> {
 		const reply = await this.daemon.request({
 			op: 'requirement_reply',
@@ -169,7 +249,9 @@ export class Requirements {
 			new_session: !!fields.newSession,
 			lang: getLocale(),
 			...(fields.cwd ? { cwd: fields.cwd } : {}),
-			...(fields.engine ? { engine: fields.engine } : {})
+			...(fields.engine ? { engine: fields.engine } : {}),
+			...(fields.plan ? { plan: true } : {}),
+			...(fields.mode ? { mode: fields.mode } : {})
 		});
 		return String(reply.session);
 	}

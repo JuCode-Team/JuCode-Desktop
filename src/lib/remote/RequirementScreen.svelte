@@ -2,16 +2,19 @@
 	// One requirement on the remote page: its status, the latest reply and
 	// what comes next on top (what the user looks at when notified), then a
 	// reply (to the last session, or a new one with the progress), done and
-	// park; below, the user's words, screenshots, full progress and sessions.
-	// An idea starts here too: in one of its projects, on a chosen backend.
+	// park; below, the user's words, screenshots, project, full progress and
+	// sessions. An agent's proposal is accepted or rejected here, and the
+	// start's confirmation given. An idea starts here too: in its project or
+	// another, on a chosen backend, with a plan first if the user wants.
 	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import PaperPlaneTiltIcon from 'phosphor-svelte/lib/PaperPlaneTiltIcon';
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import Select from '$lib/ui/Select.svelte';
+	import Switch from '$lib/ui/Switch.svelte';
 	import RequirementTag from '$lib/requirements/RequirementTag.svelte';
-	import { PROGRESS_SECTIONS, type RequirementState } from '$lib/requirements.svelte';
+	import { PROGRESS_SECTIONS, gateNext, type RequirementState } from '$lib/requirements.svelte';
 	import { sessionStateLabel, statusLabel, when } from '$lib/requirements/labels';
 	import { BACKEND_LABELS, normalizeBackendId } from '$lib/backends';
 	import { loadComposerText, saveComposerText } from '$lib/composerText';
@@ -31,7 +34,6 @@
 
 	const conn = useHost();
 	const r = $derived(conn.requirements.get(id));
-	const base = (p: string) => p.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || p;
 	const DAY = 24 * 60 * 60 * 1000;
 
 	let shots = $state<string[]>([]);
@@ -78,38 +80,59 @@
 	$effect(() => saveComposerText(KEY, notes));
 	let chosenNew = $state<boolean | null>(null);
 	const toNew = $derived(chosenNew ?? (!latest?.at || Date.now() - latest.at > DAY));
+	/** A new session gives its plan for confirmation before it works. */
+	let planFirst = $state(false);
 	let sentTo = $state('');
 	function send() {
 		const text = notes.trim();
 		if (!text) return;
 		void run(async () => {
-			sentTo = await conn.requirements.reply(id, { text, newSession: toNew });
+			sentTo = await conn.requirements.reply(id, { text, newSession: toNew, ...(toNew ? { plan: planFirst, mode: 'auto' } : {}) });
 			notes = '';
 			chosenNew = null;
 		});
 	}
 
-	// Starting an idea: where and on which backend.
-	const projectOptions = $derived.by(() => {
+	// Its project, and the computer's others.
+	const projects = $derived.by(() => {
 		const seen = new Set<string>();
-		const own = (r?.projects ?? []).map((p) => ({ value: p, label: base(p) }));
-		for (const o of own) seen.add(o.value);
-		const others = conn.projects.workspaces
-			.flatMap((w) => w.projects)
-			.filter((p) => !p.chats && !seen.has(p.path) && !!seen.add(p.path))
-			.map((p) => ({ value: p.path, label: p.name }));
-		return [...own, ...others];
+		return conn.projects.workspaces.flatMap((w) => w.projects).filter((p) => !p.chats && !seen.has(p.id) && !!seen.add(p.id));
 	});
+	const projectOptions = $derived([
+		{ value: '', label: t('shell.requirement.noProject') },
+		...projects.map((p) => ({ value: p.id, label: p.name }))
+	]);
+	const setProject = (project: string) => run(() => conn.requirements.update(id, { project: project || null }));
+
+	// What waits for the user: an agent's proposal, or the start's gate.
+	const proposer = $derived(
+		r?.proposal ? (conn.agents.agents.find((a) => a.id === r.proposal!.agent)?.name ?? r.proposal.agent) : ''
+	);
+	const answer = (accept: boolean) => run(() => conn.requirements.answerProposal(id, accept));
+	const confirmGate = () => run(() => conn.requirements.confirm(id));
+
+	// Starting an idea: where (its project first) and on which backend.
+	const startOptions = $derived(
+		[...projects]
+			.sort((a, b) => Number(b.id === r?.project) - Number(a.id === r?.project))
+			.map((p) => ({ value: p.path, label: p.name }))
+	);
 	let startProject = $state('');
 	$effect(() => {
-		if (!startProject && projectOptions.length) startProject = projectOptions[0].value;
+		if (!startProject && startOptions.length) startProject = startOptions[0].value;
 	});
 	let engine = $state('jucode');
 	const engines = (['jucode', 'claude', 'codex'] as const).map((b) => ({ value: b, label: BACKEND_LABELS[b] }));
 	function start() {
 		if (!startProject) return;
 		void run(async () => {
-			const session = await conn.requirements.reply(id, { cwd: startProject, engine, newSession: true });
+			const session = await conn.requirements.reply(id, {
+				cwd: startProject,
+				engine,
+				newSession: true,
+				plan: planFirst,
+				mode: 'auto'
+			});
 			onOpenSession(session);
 		});
 	}
@@ -132,6 +155,31 @@
 				<span class="status {r.status}">{statusLabel(r.status)}</span>
 			</div>
 
+			{#if r.proposal || r.state === 'proposed'}
+				<section class="waiting">
+					<p class="w-title">
+						{r.proposal?.kind === 'close'
+							? t('shell.requirement.proposalClose', { agent: proposer, outcome: statusLabel(r.proposal.outcome ?? 'done') })
+							: t('shell.requirement.proposalCreate', { agent: proposer || t('shell.requirement.fromAgent') })}
+					</p>
+					{#if r.proposal?.reason}<p class="w-sub">{r.proposal.reason}</p>{/if}
+					<div class="actions">
+						<Button size="sm" variant="primary" disabled={busy} onclick={() => answer(true)}>{t('shell.requirement.accept')}</Button>
+						<Button size="sm" variant="ghost" disabled={busy} onclick={() => answer(false)}>{t('shell.requirement.reject')}</Button>
+					</div>
+				</section>
+			{:else if r.status === 'confirm' && r.gate}
+				{@const gate = r.gate}
+				<section class="waiting">
+					<p class="w-title">{gate.stage === 'plan' ? t('shell.requirement.gatePlan') : t('shell.requirement.gateUnderstand')}</p>
+					<p class="w-sub">{t('shell.requirement.confirmHint')}</p>
+					<div class="actions">
+						<Button size="sm" variant="primary" disabled={busy} onclick={confirmGate}>{t(`shell.requirement.${gateNext(gate)}`)}</Button>
+						<Button size="sm" variant="ghost" onclick={() => onOpenSession(gate.session)}>{t('shell.requirement.openSession')}</Button>
+					</div>
+				</section>
+			{/if}
+
 			{#if r.last_reply && latest}
 				<section>
 					<h5>{t('shell.requirement.lastReply')} · {latest.title}</h5>
@@ -152,6 +200,9 @@
 						<span>{toNew ? t('shell.requirement.againNew') : t('shell.requirement.againTo')}</span>
 						<button class="link" onclick={() => (chosenNew = !toNew)}>{toNew ? t('shell.requirement.toLatest') : t('shell.requirement.toNew')}</button>
 						<span class="grow"></span>
+						{#if toNew}
+							<label class="plan"><Switch bind:checked={planFirst} label={t('shell.requirement.planFirst')} />{t('shell.requirement.planFirst')}</label>
+						{/if}
 						<Button size="sm" variant="primary" disabled={!notes.trim() || busy} onclick={send}>
 							{#if busy}<CircleNotchIcon size={13} class="spin" />{:else}<PaperPlaneTiltIcon size={13} />{/if}{t('shell.requirement.send')}
 						</Button>
@@ -165,9 +216,10 @@
 				</section>
 			{:else if r.state !== 'done' && r.state !== 'parked'}
 				<section class="start">
-					{#if projectOptions.length}
-						<Select bind:value={startProject} options={projectOptions} />
+					{#if startOptions.length}
+						<Select bind:value={startProject} options={startOptions} />
 						<Select bind:value={engine} options={engines} />
+						<label class="plan"><Switch bind:checked={planFirst} label={t('shell.requirement.planFirst')} />{t('shell.requirement.planFirst')}</label>
 						<Button variant="primary" full disabled={busy || !startProject} onclick={start}>
 							{#if busy}<CircleNotchIcon size={15} class="spin" />{/if}{t('shell.requirement.start')}
 						</Button>
@@ -196,8 +248,8 @@
 						{#each shots as src, i (i)}<a class="shot" href={src} target="_blank" rel="noreferrer"><img {src} alt="" /></a>{/each}
 					</div>
 				{/if}
-				{#if r.projects.length}
-					<div class="chips">{#each r.projects as p (p)}<span class="chip">{base(p)}</span>{/each}</div>
+				{#if projects.length}
+					<div class="project"><Select value={r.project ?? ''} options={projectOptions} onChange={setProject} /></div>
 				{/if}
 			</section>
 
@@ -253,7 +305,10 @@
 		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
-	.status.review {
+	.status.review,
+	.status.confirm,
+	.status.proposed,
+	.status.proposal {
 		color: var(--warn);
 	}
 	.status.approval,
@@ -351,17 +406,35 @@
 		height: 100%;
 		object-fit: cover;
 	}
-	.chips {
-		display: flex;
-		flex-wrap: wrap;
+	.waiting {
 		gap: 6px;
+		padding: 12px 14px;
+		border: 1px solid var(--hairline);
+		border-radius: var(--r-md);
+		background: var(--panel);
+		box-shadow: var(--shadow-sm);
 	}
-	.chip {
-		padding: 1px 8px;
-		border-radius: var(--r-full);
-		background: var(--surface2);
-		color: var(--dim);
+	.w-title {
+		margin: 0;
+		font-size: var(--fs-sm);
+		font-weight: 500;
+	}
+	.w-sub {
+		margin: 0;
 		font-size: var(--fs-xs);
+		line-height: 1.55;
+		color: var(--dim);
+		white-space: pre-wrap;
+	}
+	.plan {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		font-size: var(--fs-xs);
+		color: var(--dim);
+	}
+	.project {
+		max-width: 280px;
 	}
 	.goal {
 		margin: 0;

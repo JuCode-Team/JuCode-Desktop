@@ -79,7 +79,8 @@
 	import { loadComposerText, saveComposerText } from '$lib/composerText';
 	import RequirementTag from '$lib/requirements/RequirementTag.svelte';
 	import { statusLabel } from '$lib/requirements/labels';
-	import { useRequirements } from '$lib/requirements.svelte';
+	import { gateNext, gateOf, useRequirements } from '$lib/requirements.svelte';
+	import RequirementStart, { beginRequirement } from '$lib/requirements/RequirementStart.svelte';
 	import { telemetry } from '$lib/telemetry.svelte';
 
 	// One full conversation (transcript + composer + approvals + pickers) for a
@@ -127,12 +128,30 @@
 	const reqs = useRequirements();
 	const linked = $derived(chat.sessionId ? reqs.bySession.get(chat.sessionId) : undefined);
 	const willLink = $derived(!linked && session.requirement ? reqs.get(session.requirement) : undefined);
+	/** A draft made for a requirement shows its start card until started. */
+	const starting = $derived(session.draft && session.requirementStart ? willLink : undefined);
+	/** The start's confirmation, once this session's turn has ended. */
+	const gate = $derived(linked?.status === 'confirm' && !chat.busy ? gateOf(linked, chat.sessionId) : undefined);
+	let confirming = $state(false);
+	/** Confirms the gate's stage, with the composer's words. */
+	async function confirmGate() {
+		if (!linked || confirming) return;
+		confirming = true;
+		try {
+			await reqs.confirm(linked.id, input.trim());
+			input = '';
+		} catch (e) {
+			toast.error(e instanceof Error ? e.message : String(e));
+		} finally {
+			confirming = false;
+		}
+	}
 	/** A passage of a reply, noted as a requirement about this session's project. */
 	async function noteRequirement(text: string) {
 		try {
 			const r = await reqs.create({
 				text,
-				...(chat.sessionId ? { session: chat.sessionId } : project ? { projects: [project.path] } : {})
+				...(chat.sessionId ? { session: chat.sessionId } : project ? { project: project.id } : {})
 			});
 			telemetry.track('requirement_create');
 			toast.success(t('shell.requirement.noted', { id: r.id }), {
@@ -667,6 +686,12 @@
 	function submit() {
 		const text = input.trim();
 		if (!text && attachments.length === 0 && videos.length === 0) return;
+		// A draft made for a requirement starts from it; the words go with it.
+		if (starting && !text.startsWith('/')) {
+			beginRequirement(session, text);
+			input = '';
+			return;
+		}
 		if (text.startsWith('/')) {
 			const btw = caps(chat).sideQuestions ? text.match(/^\/btw\s+([\s\S]+)/) : null;
 			if (btw) chat.sideAnswers.push({ question: btw[1].trim(), answer: '', error: '', pending: true });
@@ -1082,7 +1107,7 @@
 			<RequirementTag id={willLink.id} />
 			<span class="owner-name">{t('shell.requirement.willLink', { id: willLink.id })}</span>
 			<span class="owner-role">{willLink.title}</span>
-			<button class="owner-link" onclick={() => (session.requirement = undefined)}>{t('shell.requirement.unlink')}</button>
+			<button class="owner-link" onclick={() => ((session.requirement = undefined), (session.requirementStart = undefined))}>{t('shell.requirement.unlink')}</button>
 		</div>
 	{/if}
 	{#if Object.keys(chat.subagents).length}
@@ -1126,6 +1151,10 @@
 			<div class="welcome spawning">
 				<span class="spawn-spin"><CircleNotchIcon size={26} class="spin" /></span>
 				<p class="welcome-tip">{t('shell.spawning')}</p>
+			</div>
+		{:else if starting && chat.messages.length === 0}
+			<div class="welcome">
+				<RequirementStart requirement={starting} {session} />
 			</div>
 		{:else if chat.messages.length === 0 && !chat.busy}
 			<div class="welcome">
@@ -1189,6 +1218,15 @@
 		{/if}
 
 		<StatusStrip items={chat.statusLog} />
+
+		{#if gate && !chat.pendingApproval}
+			<div class="approval-wrap">
+				<div class="gate">
+					<span class="gate-hint">{t('shell.requirement.confirmHint')}</span>
+					<Button size="sm" variant="primary" disabled={confirming} onclick={confirmGate}>{t(`shell.requirement.${gateNext(gate)}`)}</Button>
+				</div>
+			</div>
+		{/if}
 
 		<Composer
 			{chat}
@@ -1383,6 +1421,16 @@
 		width: 100%;
 		margin: 0 auto;
 		padding: 0 var(--chat-pad) 10px;
+	}
+	.gate {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 12px;
+	}
+	.gate-hint {
+		font-size: var(--fs-xs);
+		color: var(--dim2);
 	}
 	.enginedown {
 		display: flex;

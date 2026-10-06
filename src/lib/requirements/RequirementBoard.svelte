@@ -1,7 +1,8 @@
 <script lang="ts">
 	// The workbench's requirements page: noting an idea, then the list by
 	// whose turn it is (the user's first, then work in progress, then ideas;
-	// done and parked folded). A row opens the requirement.
+	// done and parked folded), all projects' or one's. A row opens the
+	// requirement. A project's page shows its own (`project`).
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
 	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
@@ -12,14 +13,17 @@
 	import RequirementCapture from './RequirementCapture.svelte';
 	import RequirementTag from './RequirementTag.svelte';
 	import StartButton, { type StartHow } from './StartButton.svelte';
+	import Select from '$lib/ui/Select.svelte';
 	import { grouped, type Requirement } from '$lib/requirements.svelte';
 	import { useAgents } from '$lib/agentScope';
-	import { statusLabel, sourceLabel, when } from './labels';
+	import { projectLabel, statusLabel, sourceLabel, when } from './labels';
 	import { t } from '$lib/i18n';
 
 	let {
 		list,
 		projects,
+		project,
+		currentProject,
 		focusSignal = 0,
 		currentStep,
 		onOpen,
@@ -27,7 +31,11 @@
 	}: {
 		/** The requirements shown (the open workspace's). */
 		list: Requirement[];
-		projects: { path: string; name: string }[];
+		projects: { id: string; path: string; name: string }[];
+		/** A project's page: only its requirements, no filter, no heading. */
+		project?: string;
+		/** The project a new one is noted in by default (the open one). */
+		currentProject?: string;
 		focusSignal?: number;
 		/** What a running session is doing now, when this computer shows it. */
 		currentStep?: (session: string) => string | undefined;
@@ -36,9 +44,24 @@
 	} = $props();
 
 	const agents = useAgents();
-	const groups = $derived(grouped(list));
+	// The filter: '*' all, '' none, else a project's id.
+	let filter = $state('*');
+	const filterOptions = $derived([
+		{ value: '*', label: t('shell.requirement.allProjects') },
+		...projects.map((p) => ({ value: p.id, label: p.name })),
+		{ value: '', label: t('shell.requirement.noProject') }
+	]);
+	const shown = $derived(
+		project !== undefined
+			? list.filter((r) => r.project === project)
+			: filter === '*'
+				? list
+				: list.filter((r) => (r.project ?? '') === filter)
+	);
+	const groups = $derived(grouped(shown));
 	let showClosed = $state(false);
-	const base = (p: string) => p.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || p;
+	/** Where a new one is noted: the page's project, the filtered one, else the open one. */
+	const noteIn = $derived(project ?? (filter !== '*' ? filter : (currentProject ?? '')));
 	const counts = $derived({
 		done: groups.closed.filter((r) => r.status === 'done').length,
 		parked: groups.closed.filter((r) => r.status === 'parked').length
@@ -65,13 +88,16 @@
 				<span class="tt">
 					<span class="title">{r.title}</span>
 					{#if r.images.length}<ImageIcon size={13} class="dim2" />{/if}
-					{#each r.projects as p (p)}<span class="chip">{base(p)}</span>{/each}
+					{#if project === undefined && r.project}<span class="chip">{projectLabel(r.project, projects)}</span>{/if}
 					{#if r.status === 'approval' || r.status === 'failed'}
 						<span class="chip {r.status}">{statusLabel(r.status)}</span>
 					{/if}
 				</span>
 				<span class="sub">
-					{#if r.status === 'review' || r.status === 'failed'}
+					{#if r.proposal || r.status === 'proposed'}
+						<span class="q">{statusLabel(r.status)}{r.proposal?.reason ? ` · ${r.proposal.reason}` : ''}</span>
+					{:else if r.status === 'review' || r.status === 'failed' || r.status === 'confirm'}
+						{#if r.status === 'confirm'}<span class="q-lead">{statusLabel(r.status)}</span>{/if}
 						{#if r.last_reply}<ChatCircleTextIcon size={13} /><span class="q">{r.last_reply.replace(/\s+/g, ' ')}</span>{/if}
 					{:else if r.status === 'approval'}
 						<span class="q">{statusLabel(r.status)}</span>
@@ -82,7 +108,7 @@
 						<span class="q">
 							{r.source === 'session'
 								? t('shell.requirement.fromSession', { title: sessionTitle(r.source_session) })
-								: sourceLabel(r.source)} · {when(r.created_at)}{r.projects.length ? '' : ` · ${t('shell.requirement.noProject')}`}
+								: sourceLabel(r.source)} · {when(r.created_at)}{r.project || project !== undefined ? '' : ` · ${t('shell.requirement.noProject')}`}
 						</span>
 					{/if}
 				</span>
@@ -95,11 +121,16 @@
 	</div>
 {/snippet}
 
-<h1>{t('shell.requirement.title')}</h1>
-<p class="lede">{t('shell.requirement.lede')}</p>
-<RequirementCapture {focusSignal} />
+{#if project === undefined}
+	<div class="top">
+		<h1>{t('shell.requirement.title')}</h1>
+		{#if projects.length}<div class="filter"><Select bind:value={filter} options={filterOptions} /></div>{/if}
+	</div>
+	<p class="lede">{t('shell.requirement.lede')}</p>
+{/if}
+<RequirementCapture {focusSignal} project={noteIn} {projects} />
 
-{#if !list.length}
+{#if !shown.length}
 	<p class="empty">{t('shell.requirement.empty')}</p>
 {/if}
 {#if groups.attention.length}
@@ -133,6 +164,19 @@
 {/if}
 
 <style>
+	.top {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+	}
+	.filter {
+		width: 180px;
+	}
+	.q-lead {
+		flex: none;
+		color: var(--text);
+	}
 	h1 {
 		margin: 0;
 		font-size: var(--fs-xl);

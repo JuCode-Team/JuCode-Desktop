@@ -1,14 +1,15 @@
 <script lang="ts">
 	// The Requirements tab's list on the remote page: noting an idea, then the
-	// requirements on this computer by whose turn it is (the user's first);
-	// done and parked folded. A row opens the requirement as a page.
+	// requirements on this computer by whose turn it is (the user's first),
+	// each with its project; done and parked folded. A row opens the
+	// requirement as a page.
 	import PencilSimpleLineIcon from 'phosphor-svelte/lib/PencilSimpleLineIcon';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
 	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
 	import RequirementTag from '$lib/requirements/RequirementTag.svelte';
 	import { grouped, type Requirement, type RequirementGroup } from '$lib/requirements.svelte';
-	import { statusLabel, when } from '$lib/requirements/labels';
+	import { projectLabel, statusLabel, when } from '$lib/requirements/labels';
 	import { t } from '$lib/i18n';
 	import { useHost } from './connection.svelte';
 
@@ -38,10 +39,14 @@
 		done: groups.closed.filter((r) => r.status === 'done').length,
 		parked: groups.closed.filter((r) => r.status === 'parked').length
 	});
+	const projects = $derived(conn.projects.workspaces.flatMap((w) => w.projects));
 	function sub(r: Requirement): string {
-		if (r.last_reply && (r.status === 'review' || r.status === 'failed')) return r.last_reply.replace(/\s+/g, ' ');
-		if (r.status === 'idea') return when(r.created_at);
-		return statusLabel(r.status);
+		const where = projectLabel(r.project, projects);
+		if (r.proposal?.reason) return `${where} · ${statusLabel(r.status)} · ${r.proposal.reason}`;
+		if (r.last_reply && (r.status === 'review' || r.status === 'failed' || r.status === 'confirm'))
+			return `${where} · ${r.status === 'confirm' ? `${statusLabel(r.status)} · ` : ''}${r.last_reply.replace(/\s+/g, ' ')}`;
+		if (r.status === 'idea') return `${where} · ${when(r.created_at)}`;
+		return `${where} · ${statusLabel(r.status)}`;
 	}
 </script>
 
@@ -179,7 +184,10 @@
 		border-radius: var(--r-full);
 		background: var(--dim2);
 	}
-	.mark.review .dot {
+	.mark.review .dot,
+	.mark.confirm .dot,
+	.mark.proposed .dot,
+	.mark.proposal .dot {
 		background: var(--warn);
 	}
 	.mark.approval .dot,

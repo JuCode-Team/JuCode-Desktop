@@ -7,7 +7,8 @@ import { createJucodeAdapter } from './backends/jucode';
 import { clearDraft, dispatch, dropHeldOps, holdOps, ioFor, markDraft, registerAdapter, startDraft, unregisterAdapter } from './backends/router';
 import { buildBackendOpts, defaultBackendFor } from './backends/settings';
 import { toEngineMode } from './approval';
-import { t } from '$lib/i18n';
+import { getLocale, t } from '$lib/i18n';
+import { workMode } from './requirements.svelte';
 import { saveComposerText } from './composerText';
 import { toast } from './ui/toast.svelte';
 import { telemetry } from './telemetry.svelte';
@@ -53,12 +54,16 @@ export interface SavedProject extends SavedTabChrome {
 	lastAcpAgent?: { id: string; name: string };
 	/** 对话分组（见 Project.chats）。 */
 	chats?: boolean;
+	/** 附加目录（见 Project.dirs）。 */
+	dirs?: string[];
 }
 
 /** Waits between attempts to reach an unreachable daemon, ms (~4.5 min). */
 const DAEMON_RETRY_DELAYS = [1000, 2000, 4000, 8000, 15000, 30000, 30000, 30000, 30000, 30000, 30000, 30000];
 
 const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
+/** A Unix, drive-letter or UNC absolute path (the daemon takes no other). */
+const isAbsolute = (p: string) => /^(\/|[A-Za-z]:[\\/]|\\\\)/.test(p);
 const samePath = (a: string, b: string) => a.replace(/[\\/]+$/, '') === b.replace(/[\\/]+$/, '');
 
 /** A project's sessions as the sidebar lists them: pinned first, each group
@@ -189,7 +194,17 @@ export class SessionStore {
 		// engine started in another mode than the desktop's would then be
 		// restarted mid-turn (yolo can't be set live), losing a turn it had not
 		// saved yet. Start it in the desktop's mode.
-		const mode = String(extraOpts?.permission_mode ?? toEngineMode(s.chat.approvalMode));
+		// Started on a requirement: read-only until the user confirms (the
+		// daemon's gate switches it later), and this client's last mode is
+		// neither pushed over it nor saved from it.
+		if (s.requirementStart) {
+			// The mode to work in, as picked before the engine reports read-only.
+			s.requirementStart.mode ??= workMode(s.chat.approvalMode);
+			s.chat.followEngineMode = true;
+		}
+		const mode = s.requirementStart
+			? 'read-only'
+			: String(extraOpts?.permission_mode ?? toEngineMode(s.chat.approvalMode));
 		if (s.backendId === 'claude') s.spawnedMode = mode === 'full-auto' ? 'bypassPermissions' : mode;
 		// Ops sent until the engine is up wait for it instead of reaching no
 		// engine (or the one being replaced).
@@ -256,12 +271,23 @@ export class SessionStore {
 						s.chat.sessionId = daemon.sessionOf(s.id) ?? '';
 						// A group picked while it was a draft goes in with its id.
 						if (s.group) this.#share(s, { group: s.group });
-						// Started on a requirement: it works on it from now on.
+						// Started on a requirement: the daemon links it and has the
+						// agent explain its understanding first (see Requirements.begin).
 						if (s.requirement && s.chat.sessionId) {
 							const requirement = s.requirement;
+							const start = s.requirementStart;
 							s.requirement = undefined;
+							s.requirementStart = undefined;
 							daemon
-								.request({ op: 'requirement_link', requirement, session: s.chat.sessionId })
+								.request({
+									op: 'requirement_begin',
+									requirement,
+									session: s.chat.sessionId,
+									plan: !!start?.plan,
+									mode: start?.mode ?? workMode(s.chat.approvalMode),
+									text: start?.text ?? '',
+									lang: getLocale()
+								})
 								.catch((e) => toast.error(String(e)));
 						}
 					}
@@ -589,10 +615,12 @@ export class SessionStore {
 		worktree?: WorktreeMeta;
 		color?: unknown;
 		icon?: unknown;
+		dirs?: unknown;
 	}) {
 		if (this.userProjects.some((x) => x.id === project.id || samePath(x.path, project.path))) return;
 		const p: Project = { id: project.id, name: project.name, path: project.path, sessions: [] };
 		if (project.chats) p.chats = true;
+		this.setProjectDirs(p, project.dirs);
 		if (project.worktree) p.worktree = project.worktree;
 		this.setProjectChrome(p, project);
 		this.projects.push(p);
@@ -627,6 +655,16 @@ export class SessionStore {
 		if (chrome.icon === undefined) return;
 		const icon = parseTabIcon(chrome.icon);
 		if (JSON.stringify(icon) !== JSON.stringify(p.icon)) p.icon = icon;
+	}
+
+	/** Set a project's extra directories (only absolute paths; none clears).
+	 *  An unchanged list is left as it is, so the daemon's echo saves nothing. */
+	setProjectDirs(p: Project, dirs: unknown) {
+		const list = Array.isArray(dirs)
+			? [...new Set(dirs.filter((d): d is string => typeof d === 'string' && isAbsolute(d)))]
+			: [];
+		const next = list.length ? list : undefined;
+		if (JSON.stringify(next) !== JSON.stringify(p.dirs)) p.dirs = next;
 	}
 
 	/** Re-open a persisted conversation in a new session: the daemon reopens
@@ -1164,6 +1202,7 @@ export class SessionStore {
 			path: p.path,
 			...(p.worktree ? { worktree: p.worktree } : {}),
 			...(p.chats ? { chats: true } : {}),
+			...(p.dirs?.length ? { dirs: p.dirs } : {}),
 			...(p.lastBackend && p.lastBackend !== 'jucode' ? { lastBackend: p.lastBackend } : {}),
 			...(p.lastBackend === 'acp' && p.lastAcpAgent ? { lastAcpAgent: p.lastAcpAgent } : {}),
 			...(p.color ? { color: p.color } : {}),
@@ -1265,6 +1304,7 @@ export class SessionStore {
 				}
 				const proj: Project = { id: p.id, name: p.name, path: p.path, sessions: [] };
 				if (p.chats === true) proj.chats = true;
+				this.setProjectDirs(proj, p.dirs);
 				this.setProjectChrome(proj, p);
 				if (p.lastBackend) proj.lastBackend = normalizeBackendId(p.lastBackend);
 				if (

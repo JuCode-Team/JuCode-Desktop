@@ -40,6 +40,8 @@
 		width,
 		resizing = false,
 		onSelect,
+		onOpenProject = () => {},
+		openProject = null,
 		onNewProject,
 		onNewSession,
 		onNewChat,
@@ -69,6 +71,10 @@
 		/** True while the user drags the resizer — disables the width transition. */
 		resizing?: boolean;
 		onSelect: (id: string) => void;
+		/** A project row clicked: its page. */
+		onOpenProject?: (p: Project) => void;
+		/** The project whose page is shown. */
+		openProject?: string | null;
 		onNewProject: () => void;
 		onNewSession: (p: Project) => void;
 		onNewChat: () => void;
@@ -520,8 +526,16 @@
 				{@const open = !collapsed[p.id] || !!query}
 				{@const w = p.sessions.some((s) => s.id === activeId) ? 'fill' : 'regular'}
 				{#if !query || active.length || arch.length}
-					<div class="folder" class:stale={p.stale}>
-						<button class="folder-row" onclick={() => (collapsed[p.id] = !collapsed[p.id])} oncontextmenu={(e) => onProjectMenu(p, e)} title={p.worktree ? t('shell.task.worktreeTip', { branch: p.worktree.branch, base: p.worktree.baseBranch || '?' }) : p.path}>
+					<div class="folder" class:stale={p.stale} class:on={openProject === p.id}>
+						<button
+							class="caret"
+							class:open
+							aria-expanded={open}
+							aria-label={t('shell.projectPage.toggle')}
+							title={t('shell.projectPage.toggle')}
+							onclick={() => (collapsed[p.id] = !collapsed[p.id])}><CaretRightIcon size={11} /></button
+						>
+						<button class="folder-row" onclick={() => onOpenProject(p)} oncontextmenu={(e) => onProjectMenu(p, e)} title={p.worktree ? t('shell.task.worktreeTip', { branch: p.worktree.branch, base: p.worktree.baseBranch || '?' }) : p.path}>
 							{#if p.icon}<TabGlyph icon={p.icon} color={p.color ?? 'var(--dim)'} active={w === 'fill'} size={16} />{:else if p.worktree}<GitBranchIcon size={18} weight={w} color={p.color} />{:else if open}<FolderOpenIcon size={18} weight={w} color={p.color} />{:else}<FolderIcon size={18} weight={w} color={p.color} />{/if}
 							<span class="folder-name">{p.name}</span>
 						</button>
@@ -945,6 +959,34 @@
 	.folder-row {
 		flex: 1;
 		min-width: 0;
+		padding-left: 2px;
+	}
+	.folder.on {
+		background: var(--surface2);
+	}
+	.caret {
+		flex: none;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 18px;
+		height: 24px;
+		margin-left: 4px;
+		padding: 0;
+		border: none;
+		border-radius: var(--r-xs);
+		background: none;
+		color: var(--dim2);
+		cursor: pointer;
+	}
+	.caret:hover {
+		color: var(--text);
+	}
+	.caret :global(svg) {
+		transition: transform var(--t-fast) var(--ease-out);
+	}
+	.caret.open :global(svg) {
+		transform: rotate(90deg);
 	}
 	.folder-row:hover {
 		background: none;

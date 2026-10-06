@@ -1,6 +1,7 @@
 <script lang="ts">
-	// New long-lived agent: id, name, working directory and role. Created in
-	// the local jucode daemon; the parent opens its first session.
+	// New long-lived agent: id, name, project, working directory and role.
+	// Created in the local jucode daemon; the parent opens its first session.
+	// With a project, it works in the project's main directory.
 	import { onMount, tick } from 'svelte';
 	import RobotIcon from 'phosphor-svelte/lib/RobotIcon';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
@@ -9,6 +10,7 @@
 	import Button from '$lib/ui/Button.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
+	import Select from '$lib/ui/Select.svelte';
 	import AgentAvatar from '$lib/AgentAvatar.svelte';
 	import { workspaces } from '$lib/workbench/workspaceStore.svelte';
 	import { agentDirectory, type AgentView } from '$lib/agents.svelte';
@@ -17,10 +19,16 @@
 
 	let {
 		defaultDir = '',
+		projects = [],
+		defaultProject = '',
 		onClose,
 		onCreated
 	}: {
 		defaultDir?: string;
+		/** The open workspace's projects. */
+		projects?: { id: string; path: string; name: string }[];
+		/** The project it is created in ('' for none). */
+		defaultProject?: string;
 		onClose: () => void;
 		onCreated: (agent: AgentView) => void;
 	} = $props();
@@ -29,6 +37,16 @@
 	let id = $state('');
 	let idEdited = $state(false);
 	let cwd = $state('');
+	let project = $state('');
+	const projectOptions = $derived([
+		{ value: '', label: t('shell.agents.noProject') },
+		...projects.map((p) => ({ value: p.id, label: p.name }))
+	]);
+	/** A project's agent works in its main directory. */
+	function pickProject(id: string) {
+		const p = projects.find((x) => x.id === id);
+		if (p) cwd = p.path;
+	}
 	let role = $state('');
 	// The avatar it will have; 「换一个」 draws another.
 	let seed = $state(newAvatarSeed());
@@ -41,6 +59,8 @@
 
 	onMount(() => {
 		cwd = defaultDir;
+		project = projects.some((p) => p.id === defaultProject) ? defaultProject : '';
+		pickProject(project);
 		tick().then(() => nameEl?.focus());
 	});
 
@@ -71,7 +91,8 @@
 				cwd: cwd.trim(),
 				role: role.trim(),
 				avatar_seed: seed,
-				workspace: workspaces.activeId
+				workspace: workspaces.activeId,
+				...(project ? { project } : {})
 			});
 			onCreated(agent);
 		} catch (e) {
@@ -114,11 +135,17 @@
 		/>
 		<small>{t('shell.agents.idHint')}</small>
 	</label>
+	{#if projects.length}
+		<div class="field">
+			<span>{t('shell.agents.projectLabel')}</span>
+			<Select bind:value={project} options={projectOptions} onChange={pickProject} />
+		</div>
+	{/if}
 	<div class="field">
 		<span>{t('shell.agents.dirLabel')}</span>
 		<div class="dir">
-			<input class="mono" bind:value={cwd} />
-			<Button size="sm" onclick={browse}>{t('shell.agents.browse')}</Button>
+			<input class="mono" bind:value={cwd} disabled={!!project} />
+			<Button size="sm" onclick={browse} disabled={!!project}>{t('shell.agents.browse')}</Button>
 		</div>
 	</div>
 	<label class="field">
