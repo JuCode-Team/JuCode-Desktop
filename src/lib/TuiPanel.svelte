@@ -33,7 +33,7 @@
 		session?: string;
 		cwd?: string;
 		/** Present only for session handoffs: hand the conversation back to
-		 *  the GUI chat (shows the "back to GUI" bar). */
+		 *  the GUI chat (the tile's title bar offers it). */
 		onBackToGui?: () => void | Promise<void>;
 		onOpenSettings?: () => void;
 	} = $props();
@@ -92,7 +92,9 @@
 			fit?.fit();
 			let exited: () => void = () => {};
 			daemonExit = new Promise((resolve) => (exited = resolve));
-			const reply = await daemon.request({ op: 'session_tui', session, cols: term.cols, rows: term.rows });
+			// `force`: the page asked the user before cutting a running reply
+			// or background task short.
+			const reply = await daemon.request({ op: 'session_tui', session, cols: term.cols, rows: term.rows, force: true });
 			daemonTerm = String(reply.term ?? '');
 			const off = daemon.onTerm(daemonTerm, (frame) => {
 				if (frame.type === 'term_output') term?.write(unbase64(String(frame.data ?? '')));
@@ -158,7 +160,7 @@
 	/** Establish exclusive ownership in the other direction too: the callback
 	 *  flips the session to GUI and respawns its engine, so it must not run
 	 *  until the current (or still-opening) pty has definitely been reaped. */
-	async function backToGui() {
+	export async function backToGui() {
 		if (!onBackToGui || closing) return;
 		closing = true;
 		if (session) {
@@ -253,12 +255,6 @@
 </script>
 
 <div class="tui-wrap">
-	{#if onBackToGui}
-		<div class="handoffbar">
-			<span class="hb-text">{t('dock.tui.handoff')}</span>
-			<Button size="sm" disabled={closing} onclick={backToGui}>{t('dock.tui.backToGui')}</Button>
-		</div>
-	{/if}
 	<div class="term-host" bind:this={host}></div>
 	{#if status === 'missing' || status === 'error'}
 		<div class="failed">
@@ -295,22 +291,6 @@
 		flex-direction: column;
 		height: 100%;
 		width: 100%;
-	}
-	.handoffbar {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 10px;
-		padding: 4px 10px;
-		font-size: var(--fs-xs);
-		color: var(--dim);
-		background: var(--surface);
-		border-bottom: 1px solid var(--hairline);
-	}
-	.hb-text {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
 	}
 	.term-host {
 		flex: 1;

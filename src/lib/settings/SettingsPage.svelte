@@ -604,6 +604,16 @@
 								<Switch checked={prefs.sidebarVibrancy} label={t('settings.behavior.vibrancy')} onChange={(on) => prefs.setSidebarVibrancy(on)} />
 							</SettingsRow>
 						{/if}
+						<SettingsRow id="default-surface" title={t('settings.behavior.defaultSurface')} description={t('settings.behavior.defaultSurfaceHint')}>
+							<Segmented
+								value={prefs.defaultSurface}
+								options={[
+									{ value: 'gui', label: 'GUI' },
+									{ value: 'tui', label: 'TUI' }
+								]}
+								onChange={(v) => prefs.setDefaultSurface(v === 'tui' ? 'tui' : 'gui')}
+							/>
+						</SettingsRow>
 						<SettingsRow id="terminal-font" title={t('settings.behavior.terminalFont')} description={t('settings.behavior.terminalFontHint')}>
 							<TextField mono placeholder="MesloLGS NF" bind:value={() => prefs.terminalFont, (v) => prefs.setTerminalFont(String(v ?? ''))} />
 						</SettingsRow>

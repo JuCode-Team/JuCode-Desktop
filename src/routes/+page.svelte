@@ -5,6 +5,7 @@
 	import { invoke } from '@tauri-apps/api/core';
 	import { getCurrentWebview } from '@tauri-apps/api/webview';
 	import TerminalWindowIcon from 'phosphor-svelte/lib/TerminalWindowIcon';
+	import ChatCircleTextIcon from 'phosphor-svelte/lib/ChatCircleTextIcon';
 	import SessionMark from '$lib/SessionMark.svelte';
 	import { sessionStatus } from '$lib/sessionStatus';
 	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
@@ -101,7 +102,9 @@
 	import { sendTelemetry } from '$lib/protocol';
 	import { Requirements, provideRequirements, type Requirement } from '$lib/requirements.svelte';
 	import type { StartHow } from '$lib/requirements/StartButton.svelte';
-	import { normalizeBackendId } from '$lib/backends';
+	import { normalizeBackendId, BACKEND_LABELS, type BackendId } from '$lib/backends';
+	import Modal from '$lib/ui/Modal.svelte';
+	import BackendIcon from '$lib/BackendIcon.svelte';
 	import { agentDirectory, agentsOfWorkspace } from '$lib/agents.svelte';
 	import { CHATS_ENABLED, type Project, type WorktreeMeta } from '$lib/types';
 	import PlanPanel from '$lib/PlanPanel.svelte';
@@ -276,7 +279,17 @@
 
 	function refreshAuth() {
 		readAuthProviders()
-			.then((p) => (providers = p))
+			.then(async (p) => {
+				if (p.includes('jucode') && !providers.includes('jucode')) {
+					try {
+						await refreshJucodeModels();
+						loadProviders();
+					} catch (e) {
+						toast.error(t('settings.page.saveFailed', { msg: String(e) }));
+					}
+				}
+				providers = p;
+			})
 			.catch(() => {});
 	}
 
@@ -392,9 +405,50 @@
 		return !!session &&
 			isValidResumeSessionId(session.chat.sessionId) &&
 			(session.chat.resumable || !!session.restored) &&
-			!session.chat.switching &&
-			!session.chat.busy;
+			!session.chat.switching;
 	}
+	/** A new conversation: in the chat, or (the TUI by default) in the TUI of
+	 *  the backend the user picks. */
+	let tuiPick = $state<Project | null>(null);
+	function newSession(p: Project) {
+		if (prefs.defaultSurface === 'tui' && !p.chats) tuiPick = p;
+		else store.addSession(p);
+	}
+	function pickTuiBackend(backend: BackendId) {
+		const p = tuiPick;
+		tuiPick = null;
+		if (p) store.addTuiSession(p, backend);
+	}
+	// The TUI panel of each conversation in its TUI, for the title bar's way back.
+	const tuiPanels: Record<string, TuiPanel | undefined> = $state({});
+	/** Into the TUI. A running reply or background task ends with the engine,
+	 *  so the user confirms that first. */
+	async function continueInTui(sid: string) {
+		const chat = sessionMap.get(sid)?.chat;
+		if (!chat) return;
+		if (chat.busy || chat.bgTasks.length) {
+			const ok = await confirm({
+				title: t('chat.tuiInterruptTitle'),
+				message: t('chat.tuiInterruptMessage'),
+				confirmLabel: t('chat.tuiContinue'),
+				danger: true
+			});
+			if (!ok) return;
+		}
+		store.openInTui(sid);
+	}
+	// "Open in the TUI" by default: an existing conversation moves there once,
+	// when it first can; back in the chat, it stays.
+	const openedInTui = new Set<string>();
+	$effect(() => {
+		if (prefs.defaultSurface !== 'tui') return;
+		for (const [sid, session] of sessionMap) {
+			if (openedInTui.has(sid) || !session.restored || !canHandOffToTui(session.backendId)) continue;
+			if (!tuiReady(sid) || !daemon.sessionOf(sid)) continue;
+			openedInTui.add(sid);
+			if (!session.chat.busy && !session.chat.bgTasks.length) store.openInTui(sid);
+		}
+	});
 
 	// A tool tab is an *instance* of a panel kind (two terminals are two tabs);
 	// chat tabs derive their id from the session instead.
@@ -454,7 +508,7 @@
 			const p = activeProject ?? store.shownProjects[0];
 			if (!p) return;
 			if (leafId) focusedLeaf = leafId;
-			store.addSession(p); // the activeId effect opens its tile in the focused leaf
+			newSession(p); // the activeId effect opens its tile in the focused leaf
 			return;
 		}
 		// The embedded browser is a singleton native webview — a second tab
@@ -952,7 +1006,7 @@
 				captureSignal += 1;
 			});
 		if (matches(e, 'find') && chat) return act(() => pane?.toggleFind());
-		if (matches(e, 'newSession')) return act(() => activeProject && store.addSession(activeProject));
+		if (matches(e, 'newSession')) return act(() => activeProject && newSession(activeProject));
 		if (matches(e, 'settings')) return act(() => !showSettings && openSettings());
 		if (matches(e, 'sidebar')) return act(toggleSidebar);
 		if (matches(e, 'audit')) return act(toggleAudit);
@@ -1104,7 +1158,7 @@
 			// 托盘菜单「新建会话」：在当前项目（或第一个项目）里开新会话。
 			const untray = await listen('tray-new-session', () => {
 				const p = store.activeProject ?? store.shownProjects[0];
-				if (p) store.addSession(p);
+				if (p) newSession(p);
 			});
 			// Quitting (tray menu, Cmd+Q): save the workspaces first; the app
 			// waits for this (see begin_quit in src-tauri).
@@ -1147,20 +1201,17 @@
 			cleanups.push(() => clearTimeout(updateTimer), () => clearInterval(updateEvery));
 			loadProviders();
 			readAuthProviders()
-				.then((p) => {
-					providers = p;
-					// Display names and windows the gateway changed since the models
-					// were picked (the engines read them from config.json).
-					if (p.includes('jucode'))
-						refreshJucodeModels()
-							.then((changed) => changed && loadProviders())
-							.catch(() => {});
-					// First run: show the setup wizard only when nothing is configured yet
-					// (a genuinely fresh machine). Pre-configured users skip it silently.
-					if (!localStorage.getItem('jucode-setup-done')) {
-						if (p.length > 0) localStorage.setItem('jucode-setup-done', '1');
-						else showSetup = true;
+				.then(async (p) => {
+					if (p.includes('jucode')) {
+						try {
+							if (await refreshJucodeModels()) loadProviders();
+						} catch (e) {
+							toast.error(t('settings.page.saveFailed', { msg: String(e) }));
+						}
 					}
+					providers = p;
+					// A configured provider is not proof that onboarding was completed.
+					if (!localStorage.getItem('jucode-setup-done')) showSetup = true;
 				})
 				.catch(() => {});
 		})();
@@ -1199,13 +1250,17 @@
 		onAdd={(key) => mosaicAdd(focusedLeaf, key)}
 	>
 		{#snippet actions()}
-			{#if !showSettings && !showDesk && active && active.surface !== 'tui' && canHandOffToTui(active.backendId)}
+			{#if !showSettings && !showDesk && active && active.surface === 'tui'}
+				<button class="tile-action" title={t('dock.tui.backToGui')} aria-label={t('dock.tui.backToGui')} onclick={() => active && tuiPanels[active.id]?.backToGui()}>
+					<ChatCircleTextIcon size={16} />
+				</button>
+			{:else if !showSettings && !showDesk && active && canHandOffToTui(active.backendId)}
 				<button
 					class="tile-action"
 					disabled={!tuiReady(active.id)}
 					title={tuiReady(active.id) ? t('chat.tuiContinueTitle') : t('chat.tuiContinueUnavailable')}
 					aria-label={t('chat.tuiContinue')}
-					onclick={() => active && store.openInTui(active.id)}
+					onclick={() => active && continueInTui(active.id)}
 				>
 					<TerminalWindowIcon size={16} />
 				</button>
@@ -1245,7 +1300,7 @@
 				onSelect={(id) => (store.activeId = id)}
 				onNewProject={addProject}
 				onNewTask={newTask}
-				onNewSession={(p) => store.addSession(p)}
+				onNewSession={(p) => newSession(p)}
 				onNewChat={() => store.newChat()}
 				onCloseSession={removeSession}
 				onCloseProject={removeProject}
@@ -1302,13 +1357,17 @@
 								{#snippet actions(tab)}
 									{@const sid = chatSessionOf(tab.panel)}
 									{@const session = sid ? sessionMap.get(sid) : undefined}
-									{#if sid && session && session.surface !== 'tui' && canHandOffToTui(session.backendId)}
+									{#if sid && session?.surface === 'tui'}
+										<button class="tile-action" title={t('dock.tui.backToGui')} aria-label={t('dock.tui.backToGui')} onclick={() => tuiPanels[sid]?.backToGui()}>
+											<ChatCircleTextIcon size={13} />
+										</button>
+									{:else if sid && session && canHandOffToTui(session.backendId)}
 										<button
 											class="tile-action"
 											disabled={!tuiReady(sid)}
 											title={tuiReady(sid) ? t('chat.tuiContinueTitle') : t('chat.tuiContinueUnavailable')}
 											aria-label={t('chat.tuiContinue')}
-											onclick={() => store.openInTui(sid)}
+											onclick={() => continueInTui(sid)}
 										>
 											<TerminalWindowIcon size={13} />
 										</button>
@@ -1322,14 +1381,18 @@
 									{#if sess}
 										{#if sess.surface === 'tui'}
 											<!-- Session handoff: the same chat tile renders the native TUI
-											     resuming this conversation by id (never a standalone tui:* tab). -->
+											     resuming this conversation by id (never a standalone tui:* tab),
+											     once the engine has its daemon session (a new one is starting). -->
+											{#if sess.chat.sessionId && daemon.sessionOf(sid)}
 											<TuiPanel
+												bind:this={tuiPanels[sid]}
 												backend={sess.backendId}
 												cwd={store.projectPathOf(sid) ?? ''}
 												session={daemon.sessionOf(sid)}
 												onBackToGui={() => store.returnToGui(sid)}
 												onOpenSettings={() => openSettings('agents')}
 											/>
+											{/if}
 										{:else}
 											<ChatPane
 												session={sess}
@@ -1434,18 +1497,28 @@
 		<Welcome
 			sessionId={activeId}
 			startAt={setupView}
+			hidden={showSettings}
 			{chat}
 			loggedIn={providers.includes('jucode')}
 			configured={providers.length > 0}
 			onRefreshAuth={refreshAuth}
-			onOpenSettings={(section) => {
+			onOpenSettings={openSettings}
+			onClose={async (choice) => {
+				// Apply the explicit model choice to the initial draft, not just its menus.
+				if (activeId) {
+					await store.switchBackend(activeId, choice.backend);
+					if (choice.backend === 'claude' || choice.backend === 'codex') {
+						await store.applyToolProfile(activeId, choice.gateway ? 'jucode' : 'system', choice.model);
+					} else if (active?.draft) {
+						active.chat.model = choice.model;
+						active.chat.effort = choice.effort;
+						active.draftPick = { model: choice.model, effort: choice.effort };
+					} else {
+						dispatch(activeId, { op: 'command', input: `/model ${choice.model}${choice.effort ? ` ${choice.effort}` : ''}` });
+					}
+				}
+				localStorage.setItem('jucode-setup-done', '1');
 				showSetup = false;
-				openSettings(section);
-			}}
-			onClose={() => {
-				showSetup = false;
-				// The session opened on first run starts with the agent picked there.
-				if (activeId) store.switchBackend(activeId, loadBackendSettings().default);
 			}}
 		/>
 	{/if}
@@ -1529,6 +1602,20 @@
 		</TabChromePopover>
 	{/if}
 
+	{#if tuiPick}
+		<Modal title={t('chat.tuiNewTitle')} width={380} onClose={() => (tuiPick = null)}>
+			<p class="tui-pick-hint">{t('chat.tuiNewHint')}</p>
+			<div class="tui-pick">
+				{#each ['claude', 'codex', 'jucode'] as const as backend (backend)}
+					<button class="tui-pick-item" onclick={() => pickTuiBackend(backend)}>
+						<BackendIcon {backend} size={18} />
+						<span>{BACKEND_LABELS[backend]}</span>
+					</button>
+				{/each}
+			</div>
+		</Modal>
+	{/if}
+
 	{#if showPalette}
 		<CommandPalette
 			{chat}
@@ -1537,7 +1624,7 @@
 			panelOptions={panelKeys.map((k) => ({ key: k, label: t(`dock.tabs.${k}`) }))}
 			onClose={() => (showPalette = false)}
 			onRun={runCommand}
-			onNewSession={() => activeProject && store.addSession(activeProject)}
+			onNewSession={() => activeProject && newSession(activeProject)}
 			onNewProject={addProject}
 			onNewTask={() => newTask(activeProject)}
 			onSettings={() => openSettings()}
@@ -1553,7 +1640,7 @@
 			onShortcuts={() => (showShortcuts = true)}
 			onFeedback={() => (showFeedback = true)}
 			canOpenTui={!!active && active.surface !== 'tui' && canHandOffToTui(active.backendId) && tuiReady(active.id)}
-			onOpenTui={() => active && store.openInTui(active.id)}
+			onOpenTui={() => active && continueInTui(active.id)}
 		/>
 	{/if}
 	{#if showShortcuts}
@@ -1697,5 +1784,33 @@
 	}
 	.resizer.hidden {
 		display: none;
+	}
+	.tui-pick-hint {
+		margin: 0 0 12px;
+		font-size: var(--fs-sm);
+		color: var(--dim);
+	}
+	.tui-pick {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+	.tui-pick-item {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 10px 12px;
+		border: 1px solid var(--border);
+		border-radius: var(--r-md);
+		background: var(--surface);
+		color: var(--text);
+		font-size: var(--fs-sm);
+		text-align: left;
+		cursor: pointer;
+		transition: border-color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out);
+	}
+	.tui-pick-item:hover {
+		border-color: var(--accent);
+		background: var(--surface2);
 	}
 </style>

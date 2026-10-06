@@ -29,6 +29,13 @@ export function markDraft(sessionId: string, start: () => void): void {
 	drafts.set(sessionId, start);
 }
 
+/** Start a draft's engine now, with no first message. */
+export function startDraft(sessionId: string): void {
+	const start = drafts.get(sessionId);
+	drafts.delete(sessionId);
+	start?.();
+}
+
 /** No engine yet (see `markDraft`). */
 export function isDraft(sessionId: string): boolean {
 	return drafts.has(sessionId);

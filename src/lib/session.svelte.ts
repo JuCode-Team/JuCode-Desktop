@@ -4,7 +4,7 @@ import type { EngineSpec } from './daemon';
 import { canHandOffToTui, isValidResumeSessionId } from './tuiHandoff';
 import { normalizeBackendId, type BackendId } from './backends';
 import { createJucodeAdapter } from './backends/jucode';
-import { clearDraft, dispatch, dropHeldOps, holdOps, ioFor, markDraft, registerAdapter, unregisterAdapter } from './backends/router';
+import { clearDraft, dispatch, dropHeldOps, holdOps, ioFor, markDraft, registerAdapter, startDraft, unregisterAdapter } from './backends/router';
 import { buildBackendOpts, defaultBackendFor } from './backends/settings';
 import { toEngineMode } from './approval';
 import { t } from '$lib/i18n';
@@ -313,6 +313,19 @@ export class SessionStore {
 			dispatch(s.id, { op: 'user_message', content: firstMessage });
 		}
 		return s.id;
+	}
+
+	/** A new session that opens in its backend's TUI: its engine starts at
+	 *  once (the TUI takes over the daemon session), and the TUI starts the
+	 *  conversation. */
+	addTuiSession(project: Project, backend: BackendId) {
+		const id = this.addSession(project, undefined, backend);
+		const s = this.allSessions.find((x) => x.id === id);
+		if (s && canHandOffToTui(s.backendId)) {
+			s.surface = 'tui';
+			startDraft(id);
+		}
+		return id;
 	}
 
 	/** No engine yet: the menus show what the backend reported last time, and
@@ -1119,7 +1132,7 @@ export class SessionStore {
 	 *  TUI can resume, so a fresh empty chat and ACP sessions are a no-op. */
 	openInTui(id: string) {
 		const s = this.allSessions.find((x) => x.id === id);
-		if (!s || s.surface === 'tui' || s.chat.switching || s.chat.busy || !canHandOffToTui(s.backendId)) return;
+		if (!s || s.surface === 'tui' || s.chat.switching || !canHandOffToTui(s.backendId)) return;
 		if (!isValidResumeSessionId(s.chat.sessionId) || !(s.chat.resumable || s.restored)) return;
 		if (!daemon.sessionOf(id)) return;
 		s.surface = 'tui';

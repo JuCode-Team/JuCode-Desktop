@@ -28,6 +28,9 @@ type PrefsShape = {
 	 *  for the defaults. */
 	terminalFont: string;
 	terminalFontSize: number;
+	/** The view an existing conversation opens in: the chat, or its
+	 *  engine's own TUI. */
+	defaultSurface: 'gui' | 'tui';
 };
 
 export const TURN_STAT_KEYS = ['elapsed', 'ttft', 'tokens', 'files', 'tools', 'cost', 'model'] as const;
@@ -41,7 +44,8 @@ const DEFAULTS: PrefsShape = {
 	cacheMissAlert: true,
 	telemetry: true,
 	terminalFont: '',
-	terminalFontSize: 12.5
+	terminalFontSize: 12.5,
+	defaultSurface: 'gui'
 };
 
 /** A terminal font size within 8–32 px; anything else is the default. */
@@ -93,6 +97,7 @@ class PrefsStore {
 	telemetry = $state(DEFAULTS.telemetry);
 	terminalFont = $state(DEFAULTS.terminalFont);
 	terminalFontSize = $state(DEFAULTS.terminalFontSize);
+	defaultSurface = $state(DEFAULTS.defaultSurface);
 
 	init() {
 		const p = load();
@@ -106,6 +111,7 @@ class PrefsStore {
 		this.telemetry = p.telemetry !== false;
 		this.terminalFont = typeof p.terminalFont === 'string' ? p.terminalFont : DEFAULTS.terminalFont;
 		this.terminalFontSize = fontSize(p.terminalFontSize);
+		this.defaultSurface = p.defaultSurface === 'tui' ? 'tui' : 'gui';
 		this.#applyVibrancy();
 		if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
 			invoke<string | null>('window_effect')
@@ -129,7 +135,8 @@ class PrefsStore {
 					cacheMissAlert: this.cacheMissAlert,
 					telemetry: this.telemetry,
 					terminalFont: this.terminalFont,
-					terminalFontSize: this.terminalFontSize
+					terminalFontSize: this.terminalFontSize,
+					defaultSurface: this.defaultSurface
 				})
 			);
 		} catch {
@@ -171,6 +178,11 @@ class PrefsStore {
 
 	setTelemetry(v: boolean) {
 		this.telemetry = v;
+		this.#save();
+	}
+
+	setDefaultSurface(v: 'gui' | 'tui') {
+		this.defaultSurface = v;
 		this.#save();
 	}
 

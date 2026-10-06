@@ -64,7 +64,6 @@
 	import Button from '$lib/ui/Button.svelte';
 	import TaskStrip from '$lib/TaskStrip.svelte';
 	import { parseFileHref } from '$lib/fileRefs';
-	import Notice from '$lib/ui/Notice.svelte';
 	import type { Msg } from '$lib/chat.svelte';
 	import type { SessionSwitch } from '$lib/composer/SessionSwitches.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
@@ -1181,7 +1180,7 @@
 		{/if}
 
 		{#if chat.inTerminal}
-			<div class="interm"><Notice tone="info">{t('chat.inTerminal')}</Notice></div>
+			<p class="interm">{t('chat.inTerminal')}</p>
 		{/if}
 		{#if chat.rateLimit}
 			<RateLimitBanner rateLimit={chat.rateLimit} onDismiss={() => (chat.rateLimit = null)} />
@@ -1416,7 +1415,10 @@
 		min-width: 0;
 	}
 	.interm {
-		margin-bottom: 8px;
+		margin: 0 0 8px;
+		font-size: var(--fs-xs);
+		color: var(--dim);
+		text-align: center;
 	}
 	button.agent {
 		border: none;

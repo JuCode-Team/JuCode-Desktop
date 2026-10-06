@@ -617,7 +617,7 @@
 			<button class="jump" onclick={jumpToBottom} aria-label={t('shell.remote.back')}><CaretDownIcon size={18} /></button>
 		{/if}
 		{#if chat.inTerminal}
-			<div class="interm"><Notice tone="info">{t('chat.inTerminal')}</Notice></div>
+			<p class="interm">{t('chat.inTerminal')}</p>
 		{/if}
 		{#if chat.pendingApproval}
 			<div class="approval">
@@ -796,6 +796,9 @@
 <style>
 	.interm {
 		margin: 0 0 8px;
+		font-size: var(--fs-xs);
+		color: var(--dim);
+		text-align: center;
 	}
 	.trace-sheet {
 		position: fixed;

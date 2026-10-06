@@ -964,7 +964,7 @@ describe('SessionStore GUI ⇄ TUI handoff', () => {
 		expect(closeSession).not.toHaveBeenCalled();
 	});
 
-	it('openInTui waits for a conversation to resume and for the turn to end', () => {
+	it('openInTui waits for a conversation to resume, not for the turn to end', () => {
 		const store = new SessionStore();
 		const p = proj();
 		store.projects.push(p);
@@ -974,8 +974,21 @@ describe('SessionStore GUI ⇄ TUI handoff', () => {
 		expect(fresh.surface).toBeUndefined();
 		const busy = readySession(store, p, 'codex');
 		busy.chat.handle({ type: 'connecting' });
+		// The page asked the user first: the daemon cuts the turn short.
 		store.openInTui(busy.id);
-		expect(busy.surface).toBeUndefined();
+		expect(busy.surface).toBe('tui');
+	});
+
+	it('addTuiSession starts a new conversation in its TUI at once', () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addTuiSession(p, 'codex');
+		const s = p.sessions.find((x) => x.id === id)!;
+		expect(s.backendId).toBe('codex');
+		expect(s.surface).toBe('tui');
+		// No first message: the engine starts now, for the TUI to take over.
+		expect(s.draft).toBe(false);
 	});
 
 	it('returnToGui shows the whole conversation again, the TUI turns included', () => {
