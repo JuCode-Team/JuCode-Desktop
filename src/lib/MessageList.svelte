@@ -1,7 +1,5 @@
 <script lang="ts">
 	import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon';
-	import CopyIcon from 'phosphor-svelte/lib/CopyIcon';
-	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
 	import ArrowCounterClockwiseIcon from 'phosphor-svelte/lib/ArrowCounterClockwiseIcon';
 	import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon';
@@ -263,15 +261,6 @@
 		cite = null;
 	}
 
-	let copied = $state<unknown>(null);
-	function copy(text: string, m: unknown) {
-		navigator.clipboard?.writeText(text).catch(() => {});
-		copied = m;
-		setTimeout(() => {
-			if (copied === m) copied = null;
-		}, 1500);
-	}
-
 	// A sent message's state shows on its bubble; the bottom indicator would
 	// say the same thing ("connecting"), so it stays quiet meanwhile.
 	const sendingShown = $derived.by(() => {
@@ -478,23 +467,19 @@
 					<div class="stream">{rt.slice(si)}</div>
 				{:else}
 					<Markdown text={m.text} {onFile} />
-					<div class="foot">
-						<!-- A turn of one segment: its time is the turn's. -->
-						{#if m.segMs !== undefined && (m.turn?.segments ?? 2) > 1}
-							<span class="stat mono" title={t('chat.stat.segment')}>{t('chat.stat.segShort', { t: fmtDur(m.segMs) })}</span>
-						{/if}
-						{#if m.turn}
+					<!-- Only the turn's last reply carries the request's totals. -->
+					{#if m.turn}
+						<div class="foot">
 							{#each turnParts(m.turn, prefs.turnStats) as part, j (j)}
 								<span class="stat" class:mono={part.mono} title={part.title}>{part.text}</span>
 							{/each}
-						{:else if m.elapsed}
+						</div>
+					{:else if m.elapsed}
+						<div class="foot">
 							<span class="mono">{fmtDur(m.elapsed)}</span>
 							{#if m.tokens}<span class="mono">{t('chat.tokens', { n: m.tokens })}</span>{/if}
-						{/if}
-						<button class="copy" onclick={() => copy(m.text, m)} aria-label="copy">
-							{#if copied === m}<CheckIcon size={13} /> {t('common.copied')}{:else}<CopyIcon size={13} /> {t('common.copy')}{/if}
-						</button>
-					</div>
+						</div>
+					{/if}
 				{/if}
 			</div>
 		{:else if m.kind === 'reasoning'}
@@ -833,26 +818,6 @@
 	}
 	.mono {
 		font-family: var(--font-mono);
-	}
-	.copy {
-		display: inline-flex;
-		align-items: center;
-		gap: 5px;
-		border: none;
-		background: none;
-		color: var(--dim2);
-		cursor: pointer;
-		padding: 2px 6px;
-		border-radius: var(--r-sm);
-		font-size: var(--fs-2xs);
-		transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
-	}
-	.copy:hover {
-		background: var(--surface2);
-		color: var(--text);
-	}
-	.copy:active {
-		transform: scale(0.94);
 	}
 	.reason-head {
 		display: inline-flex;
