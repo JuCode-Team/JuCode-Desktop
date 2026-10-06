@@ -2032,6 +2032,50 @@ fn walk_files(root: &Path, dir: &Path, out: &mut Vec<String>) {
     }
 }
 
+/// Resolves a relative file path a reply names. Agents write paths relative to
+/// the directory they worked in, which in a multi-repo project is often a nested
+/// repo rather than the project root: try `root/rel` first, then `dir/rel` for
+/// every directory up to REF_DEPTH below the root, and answer only when exactly
+/// one file matches.
+#[tauri::command]
+fn resolve_file_ref(root: String, rel: String) -> Option<String> {
+    let root = PathBuf::from(root).canonicalize().ok()?;
+    let rel = Path::new(&rel);
+    let direct = root.join(rel);
+    if direct.is_file() {
+        return Some(direct.display().to_string());
+    }
+    let mut found = Vec::new();
+    find_ref(&root, rel, 0, &mut found);
+    match found.as_slice() {
+        [one] => one.canonicalize().ok().filter(|p| p.starts_with(&root)).map(|p| p.display().to_string()),
+        _ => None,
+    }
+}
+
+const REF_DEPTH: usize = 4;
+
+fn find_ref(dir: &Path, rel: &Path, depth: usize, out: &mut Vec<PathBuf>) {
+    if depth >= REF_DEPTH || out.len() > 1 {
+        return;
+    }
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
+        let name = entry.file_name();
+        if !is_dir || SKIP_DIRS.contains(&name.to_string_lossy().as_ref()) {
+            continue;
+        }
+        let candidate = entry.path().join(rel);
+        if candidate.is_file() {
+            out.push(candidate);
+        }
+        find_ref(&entry.path(), rel, depth + 1, out);
+    }
+}
+
 /// Writes pasted image bytes to a temp file and returns its path, so the composer
 /// can attach it the same way as a dragged/picked file (the protocol only accepts
 /// local paths, not inline data).
@@ -3245,6 +3289,7 @@ pub fn run() {
             list_providers,
             list_dir,
             list_files,
+            resolve_file_ref,
             read_text,
             stat_text,
             write_text,
@@ -3305,7 +3350,25 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{read_json_strict, valid_app_data_name};
+    use super::{read_json_strict, resolve_file_ref, valid_app_data_name};
+
+    #[test]
+    fn resolve_file_ref_finds_a_unique_nested_match() {
+        let root = std::env::temp_dir().join(format!("jucode-ref-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        for p in ["a/repo/src/x.ts", "a/repo/src/y.ts", "b/src/y.ts", "top.ts"] {
+            let f = root.join(p);
+            std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+            std::fs::write(&f, "").unwrap();
+        }
+        let r = root.display().to_string();
+        let canon = root.canonicalize().unwrap();
+        assert_eq!(resolve_file_ref(r.clone(), "top.ts".into()), Some(canon.join("top.ts").display().to_string()));
+        assert_eq!(resolve_file_ref(r.clone(), "src/x.ts".into()), Some(canon.join("a/repo/src/x.ts").display().to_string()));
+        assert_eq!(resolve_file_ref(r.clone(), "src/y.ts".into()), None);
+        assert_eq!(resolve_file_ref(r.clone(), "src/z.ts".into()), None);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
 
     #[test]
     fn installer_windows_dirs_cover_fresh_system_and_npm_installs() {

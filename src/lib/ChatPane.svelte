@@ -42,6 +42,7 @@
 		git,
 		gitCheckpointCapture,
 		gitCheckpointRestore,
+		resolveFileRef,
 		type Op
 	} from '$lib/protocol';
 	import { buildModelRows, toolModels, type ToolModel } from '$lib/composer/modelRows';
@@ -977,14 +978,15 @@
 	// Open a workspace file referenced by a chat link. HTML opens in the built-in
 	// browser (rendered) or the editor (source) per preference; everything else
 	// opens in the editor. Paths resolve relative to this session's project root.
-	function openChatFile(href: string) {
+	async function openChatFile(href: string) {
 		const cwd = project?.path;
 		if (!cwd) return;
 		// A file a reply names, maybe at a line (`src/a.ts#L12:4`).
 		const ref = parseFileHref(href);
 		const rel = ref.path;
 		if (!rel) return;
-		const abs = rel.startsWith('/') ? rel : `${cwd.replace(/\/+$/, '')}/${rel.replace(/^\.?\//, '')}`;
+		const joined = `${cwd.replace(/\/+$/, '')}/${rel.replace(/^\.?\//, '')}`;
+		const abs = rel.startsWith('/') ? rel : ((await resolveFileRef(cwd, rel).catch(() => null)) ?? joined);
 		const ext = abs.split('/').pop()?.split('.').pop()?.toLowerCase() ?? '';
 		if ((ext === 'html' || ext === 'htm') && prefs.htmlOpenInBrowser) {
 			browser.open(`file://${abs}`);

@@ -508,6 +508,10 @@ export interface InstallDoneEvent {
 export function listFiles(cwd?: string): Promise<string[]> {
 	return invoke('list_files', { cwd });
 }
+/** A reply's relative path → the one file it names under `root` (maybe in a nested repo). */
+export function resolveFileRef(root: string, rel: string): Promise<string | null> {
+	return invoke('resolve_file_ref', { root, rel });
+}
 
 export interface ProviderInfo {
 	id: string;
