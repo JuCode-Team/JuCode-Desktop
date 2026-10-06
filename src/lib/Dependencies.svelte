@@ -12,7 +12,7 @@
 	import Button from '$lib/ui/Button.svelte';
 	import { t } from '$lib/i18n';
 
-	let { ids }: { ids?: string[] } = $props();
+	let { ids, heading = true }: { ids?: string[]; heading?: boolean } = $props();
 
 	// Brand marks (Simple Icons, CC0) for the tools that are not engines.
 	const MARKS: Record<string, string> = {
@@ -30,10 +30,12 @@
 
 <div class="deps">
 	<div class="head">
-		<div class="htext">
-			<h3>{t('setup.deps.title')}</h3>
-			<p class="sub">{t('setup.deps.sub')}</p>
-		</div>
+		{#if heading}
+			<div class="htext">
+				<h3>{t('setup.deps.title')}</h3>
+				<p class="sub">{t('setup.deps.sub')}</p>
+			</div>
+		{/if}
 		<Button variant="ghost" size="sm" onclick={recheckDeps} disabled={deps.loading}>
 			{#if deps.loading}<CircleNotchIcon size={14} class="spin" />{:else}<ArrowsClockwiseIcon size={14} />{/if}
 			{t('setup.deps.recheck')}

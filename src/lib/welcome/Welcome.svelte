@@ -1,7 +1,7 @@
 <script lang="ts">
 	// The welcome page over the whole window: sign-in first (over the website's
 	// Signal Raster), then a walkthrough in the manner of VS Code's Get Started —
-	// account, coding agent, model, environment, appearance, basics — each
+	// environment, account, coding agent, model, appearance, basics — each
 	// writing the same settings as the Settings page. Shown on first run and
 	// from the command palette.
 	import { onMount, untrack } from 'svelte';
@@ -11,7 +11,8 @@
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import UserCircleIcon from 'phosphor-svelte/lib/UserCircleIcon';
 	import ArrowRightIcon from 'phosphor-svelte/lib/ArrowRightIcon';
-	import { checkEnvironment, type EnvReport } from '$lib/protocol';
+	import { deps, recheckDeps } from '$lib/deps.svelte';
+	import { STEPS, canVisitStep, canFinishSetup, requiredDepsReady, type StepKey } from './flow';
 	import { dispatch } from '$lib/backends/router';
 	import { loadBackendSettings } from '$lib/backends/settings';
 	import type { BackendId } from '$lib/backends';
@@ -37,6 +38,7 @@
 		loggedIn,
 		configured,
 		startAt,
+		hidden = false,
 		onRefreshAuth,
 		onOpenSettings,
 		onClose
@@ -48,19 +50,17 @@
 		loggedIn: boolean;
 		/** Any provider has a login or key (JuCode or the user's own). */
 		configured: boolean;
-		/** The first view; by default sign-in unless already signed in. */
+		/** Palette sign-in can open the login screen; first run starts with dependencies. */
 		startAt?: 'login' | 'guide';
+		hidden?: boolean;
 		onRefreshAuth: () => void;
 		onOpenSettings: (section: SectionKey) => void;
-		onClose: () => void;
+		onClose: (choice: { backend: BackendId; model: string; effort: string; gateway: boolean }) => Promise<void> | void;
 	} = $props();
 
-	type StepKey = 'account' | 'agent' | 'model' | 'env' | 'appearance' | 'basics';
-	const STEPS: StepKey[] = ['account', 'agent', 'model', 'env', 'appearance', 'basics'];
 
-	// Signed-in users (opened from the palette) go straight to the walkthrough.
-	let view = $state<'login' | 'guide'>(untrack(() => startAt ?? (loggedIn ? 'guide' : 'login')));
-	let step = $state<StepKey>('account');
+	let view = $state<'login' | 'guide'>(untrack(() => startAt ?? 'guide'));
+	let step = $state<StepKey>('env');
 	let visited = $state<StepKey[]>([]);
 	$effect(() => {
 		if (view === 'guide' && !visited.includes(step)) visited.push(step);
@@ -69,29 +69,42 @@
 	let backend = $state<BackendId>(loadBackendSettings().default);
 	let agentReady = $state(false);
 	let modelReady = $state(false);
-	let env = $state<EnvReport | null>(null);
-	let checking = $state(true);
-	async function runCheck() {
-		checking = true;
-		try {
-			env = await checkEnvironment();
-		} catch {
-			/* the step shows "not detected" */
-		} finally {
-			checking = false;
+	let selectedModel = $state('');
+	let selectedEffort = $state('');
+	let selectedGateway = $state(false);
+	let modelBackend = $state<BackendId>(untrack(() => backend));
+	let refreshToken = $state(0);
+	let finishing = $state(false);
+	let finishError = $state('');
+	onMount(recheckDeps);
+	let wasHidden = false;
+	$effect(() => {
+		if (wasHidden && !hidden) { refreshToken++; void recheckDeps(); onRefreshAuth(); }
+		wasHidden = hidden;
+	});
+	$effect(() => {
+		if (backend !== modelBackend) {
+			selectedModel = '';
+			modelReady = false;
+			modelBackend = backend;
 		}
-	}
-	onMount(runCheck);
+	});
 
 	const done = $derived<Record<StepKey, boolean>>({
 		account: loggedIn || configured,
 		agent: agentReady,
 		model: modelReady,
-		env: !!env?.git.present && !!env?.engine.present,
+		env: !deps.loading && !deps.error && requiredDepsReady(deps.list),
 		appearance: visited.includes('appearance'),
 		basics: visited.includes('basics')
 	});
 	const doneCount = $derived(STEPS.filter((s) => done[s]).length);
+	const canFinish = $derived(canFinishSetup(step, done));
+	function next() {
+		if (!done[step]) return;
+		const following = STEPS[STEPS.indexOf(step) + 1];
+		if (following && canVisitStep(following, done)) step = following;
+	}
 
 	// ---------- JuCode login ----------
 	let loggingIn = $state(false);
@@ -122,7 +135,7 @@
 		if (loggedIn && loggingIn) {
 			loggingIn = false;
 			view = 'guide';
-			step = 'agent';
+			step = requiredDepsReady(deps.list) ? 'account' : 'env';
 		}
 	});
 
@@ -130,12 +143,20 @@
 	const legalTitle = (doc: LegalDocId) => LEGAL[doc][getLocale() === 'zh' ? 'zh' : 'en'].title;
 
 	function openSettings(section: SectionKey) {
-		localStorage.setItem('jucode-setup-done', '1');
+
 		onOpenSettings(section);
 	}
-	function finish() {
-		localStorage.setItem('jucode-setup-done', '1');
-		onClose();
+	async function finish() {
+		if (!canFinish || finishing) return;
+		finishing = true;
+		finishError = '';
+		try {
+			await onClose({ backend, model: selectedModel, effort: selectedEffort, gateway: selectedGateway });
+		} catch (e) {
+			finishError = t('settings.page.saveFailed', { msg: String(e) });
+		} finally {
+			finishing = false;
+		}
 	}
 
 	const KEYS: { label: string; key: string }[] = $derived([
@@ -151,7 +172,7 @@
 	]);
 </script>
 
-<div class="welcome" role="dialog" aria-modal="true" aria-label={t('setup.welcome.label')}>
+<div class="welcome" class:concealed={hidden} role="dialog" aria-modal="true" aria-label={t('setup.welcome.label')}>
 	<div class="drag" data-tauri-drag-region></div>
 
 	{#if view === 'login'}
@@ -195,7 +216,7 @@
 			<div class="gbody">
 				<nav class="steps" aria-label={t('setup.welcome.guide.title')}>
 					{#each STEPS as key (key)}
-						<button class="step" class:on={step === key} aria-current={step === key ? 'step' : undefined} onclick={() => (step = key)}>
+						<button class="step" class:on={step === key} disabled={!canVisitStep(key, done)} aria-current={step === key ? 'step' : undefined} onclick={() => (step = key)}>
 							<span class="mark" class:done={done[key]} aria-hidden="true">{#if done[key]}<CheckIcon size={11} weight="bold" />{/if}</span>
 							<span class="stitle">{t(`setup.welcome.${key}.title`)}</span>
 						</button>
@@ -228,17 +249,20 @@
 									{#if loginError}<div class="err"><Notice onDismiss={() => (loginError = '')}>{loginError}</Notice></div>{/if}
 								{/if}
 							{:else if step === 'agent'}
-								<AgentStep bind:selected={backend} bind:ready={agentReady} onOpenSettings={() => openSettings('acp')} />
+								<AgentStep bind:selected={backend} bind:ready={agentReady} onInstall={() => (step = 'env')} onOpenSettings={() => openSettings('acp')} />
 							{:else if step === 'model'}
 								<ModelStep
 									{loggedIn}
 									{backend}
 									bind:ready={modelReady}
+									bind:selectedModel
+									{refreshToken}
+									onSelected={(model, effort, gateway) => { selectedModel = model; selectedEffort = effort; selectedGateway = gateway; }}
 									onLogin={() => (view = 'login')}
 									onOpenProviders={() => openSettings('providers')}
 								/>
 							{:else if step === 'env'}
-								<EnvStep {env} {checking} onRecheck={runCheck} />
+								<EnvStep />
 							{:else if step === 'appearance'}
 								<div class="field">
 									<span class="flabel">{t('settings.theme')}</span>
@@ -257,13 +281,7 @@
 								<p class="more">{t('setup.welcome.basics.all')} <kbd>{shortcutLabel('shortcuts')}</kbd></p>
 							{/if}
 
-							{#if step !== STEPS[STEPS.length - 1]}
-								<div class="next">
-									<Button variant="ghost" size="sm" onclick={() => (step = STEPS[STEPS.indexOf(step) + 1])}>
-										{t('setup.nav.next')} <ArrowRightIcon size={13} />
-									</Button>
-								</div>
-							{/if}
+
 						</div>
 					{/key}
 				</div>
@@ -271,8 +289,13 @@
 
 			<footer class="gfoot">
 				{#if !loggedIn}<button class="later" onclick={() => (view = 'login')}>{t('setup.welcome.guide.backToLogin')}</button>{/if}
+				{#if finishError}<Notice>{finishError}</Notice>{/if}
 				<div class="spacer"></div>
-				<Button variant="primary" onclick={finish}>{t('setup.nav.start')}</Button>
+				{#if step === STEPS[STEPS.length - 1]}
+					<Button variant="primary" onclick={finish} disabled={!canFinish || finishing}>{#if finishing}<CircleNotchIcon size={14} class="spin" />{/if}{t('setup.nav.start')}</Button>
+				{:else}
+					<Button variant="primary" onclick={next} disabled={!done[step]}>{t('setup.nav.next')} <ArrowRightIcon size={13} /></Button>
+				{/if}
 			</footer>
 		</section>
 	{/if}
@@ -283,6 +306,8 @@
 {/if}
 
 <style>
+	.welcome.concealed { display: none; }
+	.step:disabled { opacity: 0.45; cursor: not-allowed; }
 	/* Under Modal (z 100), so the model picker and legal docs open on top. On
 	   Windows/Linux the window controls are drawn in the title bar, which stays
 	   visible above the page; macOS keeps its native traffic lights. */
@@ -653,9 +678,7 @@
 		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
-	.next {
-		margin-top: 28px;
-	}
+
 	.gfoot {
 		display: flex;
 		align-items: center;

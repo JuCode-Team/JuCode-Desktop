@@ -18,6 +18,7 @@
 	import { fetchJucodeModels, readConfig, writeConfig, type JucodeModel } from '$lib/protocol';
 	import { fmtContext } from '$lib/composer/modelRows';
 	import { savedModel } from '$lib/jucodeModels';
+	import { DEFAULT_MODELS } from '$lib/defaultModels';
 	import { t } from '$lib/i18n';
 
 	let { onClose }: { onClose: () => void } = $props();
@@ -51,28 +52,7 @@
 	}
 	const problems = $derived(models.map(windowProblem).filter(Boolean));
 
-	// Vendor families by model-name prefix; the order is the display order.
-	// Preselected when nothing was chosen yet; mirrors the engine's
-	// DEFAULT_JUCODE_MODELS (agent-core/src/core.rs).
-	const DEFAULT_MODELS = [
-		'gpt-6.1-sol',
-		'codex-auto-review',
-		'gpt-6-astra',
-		'gpt-6-sol',
-		'gpt-6-luna',
-		'gpt-5.6-sol',
-		'gpt-5.6-terra',
-		'gpt-5.6-luna',
-		'claude-sonnet-5-5',
-		'claude-opus-5-5',
-		'claude-fable-5-1',
-		'claude-opus-5',
-		'claude-opus-4-8',
-		'claude-sonnet-5',
-		'deepseek-v4.1-flash',
-		'glm-5.3-flash',
-		'kimi-k3'
-	];
+	// Curated menu defaults are shared; actual account availability stays authoritative.
 
 	const FAMILIES: [string, RegExp][] = [
 		['OpenAI', /^(gpt|o\d|chatgpt|codex)/i],

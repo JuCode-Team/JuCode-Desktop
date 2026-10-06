@@ -12,6 +12,10 @@
 	import { t } from '$lib/i18n';
 
 	let { dep }: { dep: DepReport } = $props();
+	const manualUrls: Record<string, string> = {
+		node: 'https://nodejs.org/en/download',
+		git: 'https://git-scm.com/downloads'
+	};
 </script>
 
 {#if dep.present}
@@ -32,6 +36,12 @@
 	<span class="badge warn">{t('setup.deps.needsNode')}</span>
 {:else}
 	<span class="badge">{t('setup.deps.notInstalled')}</span>
+{/if}
+
+{#if !dep.present && manualUrls[dep.id]}
+	<Button variant="ghost" size="sm" onclick={() => openUrl(manualUrls[dep.id])}>
+		<ArrowSquareOutIcon size={14} /> {t('setup.deps.manualInstall')}
+	</Button>
 {/if}
 
 <style>

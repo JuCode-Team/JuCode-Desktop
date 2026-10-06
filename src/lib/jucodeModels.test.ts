@@ -36,4 +36,51 @@ describe('refreshJucodeModels', () => {
 		expect(await refreshJucodeModels()).toBe(false);
 		expect(writeConfig).not.toHaveBeenCalled();
 	});
+
+	it('initializes first-login defaults instead of leaving the bootstrap gpt-5.5 model', async () => {
+		readConfig.mockResolvedValue({ provider: 'jucode', model: 'gpt-5.5', models: [{ name: 'gpt-5.5' }], jucode_models: [] });
+		fetchJucodeModels.mockResolvedValue([{ id: 'gpt-5.5' }, { id: 'claude-sonnet-5-5' }, { id: 'gpt-6.1-sol' }]);
+		expect(await refreshJucodeModels()).toBe(true);
+		const patch = writeConfig.mock.calls[0][0] as { model: string; models: { name: string }[]; jucode_models: unknown };
+		expect(patch.models.map((m) => m.name)).toEqual(['gpt-6.1-sol', 'claude-sonnet-5-5']);
+		expect(patch.models).toBe(patch.jucode_models);
+		expect(patch.model).toBe('gpt-6.1-sol');
+	});
+
+	it('repairs the active bootstrap list when saved account models already exist', async () => {
+		const saved = [savedModel({ id: 'gpt-6.1-sol' })];
+		readConfig.mockResolvedValue({ provider: 'jucode', model: 'gpt-5.5', models: [{ name: 'gpt-5.5' }], jucode_models: saved });
+		fetchJucodeModels.mockResolvedValue([{ id: 'gpt-6.1-sol' }]);
+		expect(await refreshJucodeModels()).toBe(true);
+		expect(writeConfig.mock.calls[0][0]).toMatchObject({ models: saved, model: 'gpt-6.1-sol' });
+	});
+
+	it('initializes account defaults without switching a BYOK provider', async () => {
+		readConfig.mockResolvedValue({ provider: 'deepseek', model: 'my-model', models: [{ name: 'my-model' }], jucode_models: [] });
+		fetchJucodeModels.mockResolvedValue([{ id: 'gpt-6.1-sol' }]);
+		expect(await refreshJucodeModels()).toBe(true);
+		expect(writeConfig.mock.calls[0][0]).toEqual({ jucode_models: [savedModel({ id: 'gpt-6.1-sol' })] });
+	});
+
+	it('does not overwrite an existing single-model user selection', async () => {
+		const saved = [savedModel({ id: 'gpt-5.5' })];
+		readConfig.mockResolvedValue({ provider: 'jucode', model: 'gpt-5.5', models: saved, jucode_models: saved });
+		fetchJucodeModels.mockResolvedValue([{ id: 'gpt-5.5' }, { id: 'gpt-6.1-sol' }]);
+		expect(await refreshJucodeModels()).toBe(false);
+		expect(writeConfig).not.toHaveBeenCalled();
+	});
+
+	it('keeps the current bootstrap config when the account catalog is empty', async () => {
+		readConfig.mockResolvedValue({ provider: 'jucode', model: 'gpt-5.5', models: [{ name: 'gpt-5.5' }], jucode_models: [] });
+		fetchJucodeModels.mockResolvedValue([]);
+		expect(await refreshJucodeModels()).toBe(false);
+		expect(writeConfig).not.toHaveBeenCalled();
+	});
+
+	it('uses available account models when none of the recommendations are served', async () => {
+		readConfig.mockResolvedValue({ provider: 'jucode', model: 'gpt-5.5', jucode_models: [] });
+		fetchJucodeModels.mockResolvedValue([{ id: 'private-model', reasoning_efforts: ['low', 'high'] }]);
+		expect(await refreshJucodeModels()).toBe(true);
+		expect(writeConfig.mock.calls[0][0]).toMatchObject({ model: 'private-model', reasoning_effort: 'low' });
+	});
 });

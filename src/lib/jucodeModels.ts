@@ -4,6 +4,7 @@
 // the saved entries are refreshed from /v1/models at startup.
 
 import { fetchJucodeModels, readConfig, writeConfig, type JucodeModel } from './protocol';
+import { DEFAULT_MODELS } from './defaultModels';
 
 /** One saved entry. Explicit unknowns (0 / ["none"]), as the engine's own
  *  login writes them: a missing field would read back as a default. */
@@ -19,21 +20,34 @@ export function savedModel(m: JucodeModel): Record<string, unknown> {
 	};
 }
 
-/** Brings the saved entries up to the gateway's metadata, keeping the user's
- *  picks and their order. True when config.json changed. */
+/** Refreshes saved metadata, or initializes recommendations after the first
+ * account login. Existing user selections and their order are preserved. */
 export async function refreshJucodeModels(): Promise<boolean> {
 	const [live, cfg] = await Promise.all([fetchJucodeModels(), readConfig()]);
 	const saved = Array.isArray(cfg.jucode_models) ? (cfg.jucode_models as Record<string, unknown>[]) : [];
-	if (!live.length || !saved.length) return false;
+	if (!live.length) return false;
 	const byId = new Map(live.map((m) => [m.id, m]));
-	const next = saved.map((s) => {
-		const m = byId.get(String(s.name));
-		return m ? savedModel(m) : s;
+	const recommended = DEFAULT_MODELS.flatMap((id) => {
+		const model = byId.get(id);
+		return model ? [savedModel(model)] : [];
 	});
-	if (JSON.stringify(next) === JSON.stringify(saved)) return false;
-	const patch: Record<string, unknown> = { jucode_models: next };
-	// On JuCode the active list is the same one (as ModelSetup saves it).
-	if (cfg.provider === 'jucode') patch.models = next;
+	const next = saved.length ? saved.map((entry) => {
+		const model = byId.get(String(entry.name));
+		return model ? savedModel(model) : entry;
+	}) : recommended.length ? recommended : live.slice(0, 6).map(savedModel);
+	const patch: Record<string, unknown> = {};
+	if (JSON.stringify(next) !== JSON.stringify(saved)) patch.jucode_models = next;
+	if (cfg.provider === 'jucode') {
+		if (JSON.stringify(cfg.models) !== JSON.stringify(next)) patch.models = next;
+		if (!next.some((model) => model.name === cfg.model)) {
+			patch.model = next[0].name;
+			const efforts = next[0].reasoning_efforts as string[];
+			if (!efforts.includes(String(cfg.reasoning_effort))) {
+				patch.reasoning_effort = efforts.includes('medium') ? 'medium' : efforts[0];
+			}
+		}
+	}
+	if (!Object.keys(patch).length) return false;
 	await writeConfig(patch);
 	return true;
 }

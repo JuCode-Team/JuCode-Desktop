@@ -5,12 +5,12 @@
 //! spawns a `Plan::Run` and pumps its output to the webview.
 //!
 //! Model per platform:
-//!   - system tools (node, ffmpeg): Windows → winget, macOS → brew, Linux → a
-//!     copyable `sudo <pkg-manager>` command (the GUI never runs sudo itself).
+//!   - system tools: Windows → winget (Node/Git also have official-download
+//!     fallbacks), macOS → brew, Linux → a copyable `sudo <pkg-manager>` command
+//!     (the GUI never runs sudo itself).
 //!   - npm tools (codex, jucode): `npm install -g <pkg>` on every platform,
 //!     gated on npm being present (else NeedsPrereq "node").
-//!   - claude: the official native installer (Windows PowerShell one-liner,
-//!     macOS/Linux curl|bash) — no sudo, user-local.
+//!   - claude: the official native installer — no sudo, user-local.
 
 use serde::Serialize;
 use std::path::Path;
@@ -142,6 +142,78 @@ fn npm_global(pkg: &str) -> Plan {
     }
 }
 
+/// PowerShell 5.1 ships with Windows. Turn terminating download/script errors
+/// into a nonzero process status so `install-done` never reports false success.
+fn powershell(script: &str) -> Plan {
+    Plan::Run {
+        program: "powershell".to_string(),
+        args: vec![
+            "-NoProfile".to_string(),
+            "-ExecutionPolicy".to_string(),
+            "Bypass".to_string(),
+            "-Command".to_string(),
+            format!("$ErrorActionPreference = 'Stop'; try {{\n{script}\n}} catch {{ Write-Error $_ -ErrorAction Continue; exit 1 }}"),
+        ],
+    }
+}
+
+const WINDOWS_NODE_INSTALL: &str = r#"
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+$arch = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
+$arch = switch ($arch.ToUpperInvariant()) {
+    'AMD64' { 'x64' }
+    'ARM64' { 'arm64' }
+    'X86' { 'x86' }
+    default { throw "Unsupported Windows architecture: $arch" }
+}
+$dir = Join-Path ([IO.Path]::GetTempPath()) ('jucode-node-' + [Guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $dir | Out-Null
+try {
+    Write-Output 'Finding the current Node.js LTS release...'
+    $releases = Invoke-RestMethod -Uri 'https://nodejs.org/dist/index.json'
+    $release = $releases | Where-Object { $_.lts -and $_.lts -ne $false } | Select-Object -First 1
+    if (!$release) { throw 'No Node.js LTS release was found.' }
+    $name = 'node-' + $release.version + '-' + $arch + '.msi'
+    $file = Join-Path $dir $name
+    Write-Output "Downloading $name..."
+    Invoke-WebRequest -UseBasicParsing -Uri ('https://nodejs.org/dist/' + $release.version + '/' + $name) -OutFile $file
+    Write-Output 'Installing Node.js and npm (an elevation prompt may appear)...'
+    $process = Start-Process -FilePath "$env:SystemRoot\System32\msiexec.exe" -ArgumentList @('/i', "`"$file`"", '/passive', '/norestart') -Wait -PassThru
+    if ($process.ExitCode -notin @(0, 3010)) { throw "Node.js installer exited with code $($process.ExitCode)." }
+    if ($process.ExitCode -eq 3010) { Write-Output 'Node.js installed; Windows requests a restart.' }
+    Write-Output 'Node.js and npm installation completed.'
+} finally {
+    Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction Continue
+}
+"#;
+
+const WINDOWS_GIT_INSTALL: &str = r#"
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+$arch = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
+$suffix = switch ($arch.ToUpperInvariant()) {
+    'AMD64' { '-64-bit.exe' }
+    'ARM64' { '-arm64.exe' }
+    default { throw "Unsupported Windows architecture: $arch" }
+}
+$dir = Join-Path ([IO.Path]::GetTempPath()) ('jucode-git-' + [Guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $dir | Out-Null
+try {
+    Write-Output 'Finding the latest Git for Windows release...'
+    $release = Invoke-RestMethod -Headers @{ 'User-Agent' = 'JuCode-Desktop'; 'Accept' = 'application/vnd.github+json' } -Uri 'https://api.github.com/repos/git-for-windows/git/releases/latest'
+    $asset = $release.assets | Where-Object { $_.name -like 'Git-*' -and $_.name.EndsWith($suffix) } | Select-Object -First 1
+    if (!$asset) { throw "No Git for Windows installer was found for $arch." }
+    $file = Join-Path $dir $asset.name
+    Write-Output "Downloading $($asset.name)..."
+    Invoke-WebRequest -UseBasicParsing -Uri $asset.browser_download_url -OutFile $file
+    Write-Output 'Installing Git (an elevation prompt may appear)...'
+    $process = Start-Process -FilePath $file -ArgumentList @('/VERYSILENT', '/NORESTART') -Wait -PassThru
+    if ($process.ExitCode -ne 0) { throw "Git installer exited with code $($process.ExitCode)." }
+    Write-Output 'Git installation completed.'
+} finally {
+    Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction Continue
+}
+"#;
+
 /// A system tool (node / ffmpeg): winget on Windows, brew on macOS, a copyable
 /// package-manager command on Linux, else the download page.
 fn system_plan(
@@ -186,6 +258,7 @@ fn system_plan(
 /// The install plan for `dep` on `os`, given an availability probe `has`.
 pub fn plan(dep: Dep, os: &str, has: &dyn Fn(&str) -> bool) -> Plan {
     match dep {
+        Dep::Node if os == "windows" && !has("winget") => powershell(WINDOWS_NODE_INSTALL),
         Dep::Node => system_plan(os, "OpenJS.NodeJS.LTS", "node", "nodejs npm", NODE_URL, has),
         Dep::Ffmpeg => system_plan(os, "Gyan.FFmpeg", "ffmpeg", "ffmpeg", FFMPEG_URL, has),
         // macOS git comes with the Command Line Tools (Homebrew needs them too).
@@ -193,6 +266,7 @@ pub fn plan(dep: Dep, os: &str, has: &dyn Fn(&str) -> bool) -> Plan {
             program: "xcode-select".to_string(),
             args: vec!["--install".to_string()],
         },
+        Dep::Git if os == "windows" && !has("winget") => powershell(WINDOWS_GIT_INSTALL),
         Dep::Git => system_plan(os, "Git.Git", "git", "git", GIT_URL, has),
         // Linux distributions name and carry gh differently: their own guide.
         Dep::Gh if os == "linux" => Plan::OpenUrl {
@@ -219,25 +293,15 @@ pub fn plan(dep: Dep, os: &str, has: &dyn Fn(&str) -> bool) -> Plan {
         }
         Dep::Claude => {
             if os == "windows" {
-                // Official Windows installer (PowerShell). `powershell.exe` (5.1)
-                // is always present; irm/iex are built in.
-                Plan::Run {
-                    program: "powershell".to_string(),
-                    args: vec![
-                        "-NoProfile".to_string(),
-                        "-ExecutionPolicy".to_string(),
-                        "Bypass".to_string(),
-                        "-Command".to_string(),
-                        "irm https://claude.ai/install.ps1 | iex".to_string(),
-                    ],
-                }
+                powershell("$global:LASTEXITCODE = 0; Invoke-RestMethod https://claude.ai/install.ps1 | Invoke-Expression; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }")
             } else {
                 // Official macOS/Linux installer — user-local, no sudo.
                 Plan::Run {
                     program: "sh".to_string(),
                     args: vec![
                         "-c".to_string(),
-                        "curl -fsSL https://claude.ai/install.sh | bash".to_string(),
+                        "script=$(curl -fsSL https://claude.ai/install.sh) && bash -c \"$script\""
+                            .to_string(),
                     ],
                 }
             }
@@ -345,11 +409,11 @@ mod tests {
             plan(Dep::Node, "windows", &avail(&["winget"])),
             winget("OpenJS.NodeJS.LTS")
         );
-        // Windows without winget → download page.
-        assert!(matches!(
+        // Windows without winget → the official Node.js LTS MSI.
+        assert_eq!(
             plan(Dep::Node, "windows", &avail(&[])),
-            Plan::OpenUrl { .. }
-        ));
+            powershell(WINDOWS_NODE_INSTALL)
+        );
         // macOS with brew → brew install node.
         assert_eq!(plan(Dep::Node, "macos", &avail(&["brew"])), brew("node"));
         // Linux with apt → copyable sudo command (nodejs + npm).
@@ -510,5 +574,76 @@ mod tests {
             plan(Dep::Gh, "linux", &avail(&["apt-get"])),
             Plan::OpenUrl { .. }
         ));
+    }
+    #[test]
+    fn windows_node_and_git_have_automatic_download_fallbacks() {
+        for dep in [Dep::Node, Dep::Git] {
+            match plan(dep, "windows", &avail(&[])) {
+                Plan::Run { program, args } => {
+                    assert_eq!(program, "powershell");
+                    let script = args.last().unwrap();
+                    assert!(script.contains("$ErrorActionPreference = 'Stop'"));
+                    assert!(script.contains("-Wait -PassThru"));
+                    assert!(script.contains(".ExitCode"));
+                    assert!(script.contains("finally"));
+                }
+                other => panic!("expected automatic download for {dep:?}, got {other:?}"),
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn claude_installer_preserves_download_and_installer_failures() {
+        use std::os::unix::fs::PermissionsExt;
+        use std::process::Command;
+
+        let dir = std::env::temp_dir().join(format!(
+            "jucode-installer-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        for (name, script) in [
+            (
+                "curl",
+                "#!/bin/sh\nprintf 'partial installer'\nexit \"$CURL_EXIT\"\n",
+            ),
+            (
+                "bash",
+                "#!/bin/sh\nprintf 'installer started'\nexit \"$BASH_EXIT\"\n",
+            ),
+        ] {
+            let path = dir.join(name);
+            std::fs::write(&path, script).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let Plan::Run { args, .. } = plan(Dep::Claude, "linux", &avail(&[])) else {
+            panic!("expected native installer");
+        };
+        for (curl_exit, bash_exit, expected, ran_installer) in
+            [(22, 0, 22, false), (0, 17, 17, true), (0, 0, 0, true)]
+        {
+            let output = Command::new("/bin/sh")
+                .args(&args)
+                .env("PATH", &dir)
+                .env("CURL_EXIT", curl_exit.to_string())
+                .env("BASH_EXIT", bash_exit.to_string())
+                .output()
+                .unwrap();
+            assert_eq!(
+                output.status.code(),
+                Some(expected),
+                "curl={curl_exit}, bash={bash_exit}"
+            );
+            assert_eq!(
+                String::from_utf8_lossy(&output.stdout).contains("installer started"),
+                ran_installer
+            );
+        }
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

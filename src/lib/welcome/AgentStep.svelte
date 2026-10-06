@@ -1,7 +1,5 @@
 <script lang="ts">
-	// Welcome → 编程智能体: which backend new sessions use. Each built-in backend
-	// is probed (check_backend) and offers its one-click install when missing;
-	// the pick is the same default as Settings → 智能体.
+	// Choose an installed coding agent. Installation is on the environment step.
 	import { onMount } from 'svelte';
 	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
 	import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon';
@@ -9,16 +7,16 @@
 	import { NATIVE_BACKEND_IDS, BACKEND_LABELS, type BackendId } from '$lib/backends';
 	import { loadBackendSettings, saveBackendSettings, versionLabel } from '$lib/backends/settings';
 	import BackendIcon from '$lib/BackendIcon.svelte';
-	import DepAction from '$lib/DepAction.svelte';
-	import DepDetails from '$lib/DepDetails.svelte';
+
 	import { deps, recheckDeps } from '$lib/deps.svelte';
 	import { t } from '$lib/i18n';
 
 	let {
 		selected = $bindable(),
 		ready = $bindable(false),
-		onOpenSettings
-	}: { selected: BackendId; ready?: boolean; onOpenSettings: () => void } = $props();
+		onOpenSettings,
+		onInstall
+	}: { selected: BackendId; ready?: boolean; onOpenSettings: () => void; onInstall: () => void } = $props();
 
 	let status = $state<Partial<Record<BackendId, BackendStatus | 'checking'>>>({});
 
@@ -78,10 +76,10 @@
 			</button>
 			{#if st && st !== 'checking' && !st.found && dep && !dep.present}
 				<div class="install">
-					<DepAction {dep} />
+					<button class="link" onclick={onInstall}>{t('setup.welcome.agent.installFirst')}</button>
 				</div>
 			{/if}
-			{#if dep}<div class="sub"><DepDetails {dep} /></div>{/if}
+
 		</div>
 	{/each}
 </div>
@@ -192,13 +190,7 @@
 	.install {
 		padding: 0 16px 12px 90px;
 	}
-	/* No vertical padding: collapses to nothing while DepDetails renders none. */
-	.sub {
-		padding: 0 16px 0 90px;
-	}
-	.sub :global(.details) {
-		padding-bottom: 12px;
-	}
+
 	.more {
 		margin: 16px 0 0;
 		font-size: var(--fs-xs);

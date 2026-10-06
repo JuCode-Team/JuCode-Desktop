@@ -1287,7 +1287,75 @@ pub(crate) fn which(cmd: &str) -> Option<PathBuf> {
             return Some(found);
         }
     }
-    which_in(cmd, std::env::var_os("PATH")?)
+    if let Some(path) = std::env::var_os("PATH") {
+        if let Some(found) = which_in(cmd, path) {
+            return Some(found);
+        }
+    }
+    // Installers update the registry's PATH, not this running GUI's environment
+    // (nor its terminal snapshot). Probe their standard locations immediately.
+    #[cfg(windows)]
+    {
+        let dirs = windows_install_dirs(cmd, &|key| std::env::var_os(key));
+        return which_in(cmd, std::env::join_paths(dirs).ok()?);
+    }
+    #[cfg(not(windows))]
+    None
+}
+
+#[cfg(any(windows, test))]
+fn windows_install_dirs(
+    cmd: &str,
+    env: &dyn Fn(&str) -> Option<std::ffi::OsString>,
+) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    match cmd {
+        "node" | "npm" | "node.exe" | "npm.cmd" => {
+            for key in ["ProgramW6432", "ProgramFiles", "ProgramFiles(x86)"] {
+                if let Some(root) = env(key) {
+                    dirs.push(PathBuf::from(root).join("nodejs"));
+                }
+            }
+            if let Some(root) = env("LOCALAPPDATA") {
+                let root = PathBuf::from(root);
+                dirs.push(root.join("Programs").join("nodejs"));
+                dirs.push(root.join("nodejs"));
+            }
+        }
+        "git" | "git.exe" => {
+            for key in ["ProgramW6432", "ProgramFiles", "ProgramFiles(x86)"] {
+                if let Some(root) = env(key) {
+                    dirs.push(PathBuf::from(root).join("Git").join("cmd"));
+                }
+            }
+            if let Some(root) = env("LOCALAPPDATA") {
+                dirs.push(PathBuf::from(root).join("Programs").join("Git").join("cmd"));
+            }
+        }
+        _ => {}
+    }
+    if let Some(root) = env("APPDATA") {
+        dirs.push(PathBuf::from(root).join("npm"));
+    }
+    dirs
+}
+
+/// npm.cmd launches `node` by name. An absolute npm path alone is insufficient
+/// after installing Node while Desktop is open; augment only the child's PATH.
+fn add_node_to_command_path(cmd: &mut Command, node: &Path) -> Result<(), String> {
+    let dir = node.parent().ok_or("resolved Node.js path has no parent")?;
+    let path = cmd
+        .get_envs()
+        .find(|(key, _)| *key == std::ffi::OsStr::new("PATH"))
+        .and_then(|(_, value)| value.map(std::ffi::OsStr::to_os_string))
+        .or_else(|| std::env::var_os("PATH"))
+        .unwrap_or_default();
+    let dirs = std::iter::once(dir.to_path_buf()).chain(std::env::split_paths(&path));
+    cmd.env(
+        "PATH",
+        std::env::join_paths(dirs).map_err(|e| e.to_string())?,
+    );
+    Ok(())
 }
 
 /// Executable extensions to try for a bare command name on Windows, from
@@ -1394,21 +1462,12 @@ fn git_install_advice(os: &str, has: &dyn Fn(&str) -> bool) -> InstallAdvice {
             command: Some("brew install git".to_string()),
             url: GIT_URL_GENERIC.to_string(),
         },
-        "windows" => {
-            if has("winget") {
-                InstallAdvice {
-                    kind: "auto".to_string(),
-                    command: Some("winget install --id Git.Git -e --source winget".to_string()),
-                    url: GIT_URL_WIN.to_string(),
-                }
-            } else {
-                InstallAdvice {
-                    kind: "open-url".to_string(),
-                    command: None,
-                    url: GIT_URL_WIN.to_string(),
-                }
-            }
-        }
+        "windows" => InstallAdvice {
+            kind: "auto".to_string(),
+            command: has("winget")
+                .then(|| "winget install --id Git.Git -e --source winget".to_string()),
+            url: GIT_URL_WIN.to_string(),
+        },
         "linux" => match linux_git_install_command(has) {
             Some(cmd) => InstallAdvice {
                 kind: "manual-command".to_string(),
@@ -1497,9 +1556,8 @@ enum InstallOutcome {
 /// Best-effort dependency install.
 /// - macOS: triggers Apple's Command Line Tools installer (which provides git)
 ///   via a native dialog — no sudo, returns immediately (started-install).
-/// - Windows: starts `winget install Git.Git` when winget exists
-///   (started-install; winget shows its own progress/UAC UI), else asks the UI
-///   to open the download page (open-url).
+/// - Windows: uses winget when available, else the official Git for Windows
+///   installer; waits for completion and reports installer errors.
 /// - Linux: never runs sudo from the GUI — returns the exact package-manager
 ///   command for the UI to display copyable (manual-command), or the download
 ///   page when no known package manager is present (open-url).
@@ -1525,35 +1583,31 @@ fn install_dependency(name: String) -> Result<InstallOutcome, String> {
             })
         }
         "windows" => {
-            if which("winget").is_some() {
-                // Long-running; run detached and let the user re-check when done.
-                let mut winget = Command::new("winget");
-                no_window(&mut winget);
-                winget
-                    .args([
-                        "install",
-                        "--id",
-                        "Git.Git",
-                        "-e",
-                        "--source",
-                        "winget",
-                        "--accept-source-agreements",
-                        "--accept-package-agreements",
-                    ])
-                    .stdin(Stdio::null())
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .spawn()
-                    .map_err(|e| format!("failed to start winget: {e}"))?;
-                Ok(InstallOutcome::StartedInstall {
-                    message: "已通过 winget 开始安装 Git（可能弹出授权窗口）。安装完成后点「重新检查」。 / Started installing Git via winget (an elevation prompt may appear). Click Re-check once it finishes.".to_string(),
-                })
-            } else {
-                Ok(InstallOutcome::OpenUrl {
-                    url: GIT_URL_WIN.to_string(),
-                    message: "未检测到 winget，请从官方下载页安装 Git。 / winget not found — please install Git from the official download page.".to_string(),
-                })
+            let installer::Plan::Run { program, args } =
+                installer::plan(installer::Dep::Git, "windows", &|cmd| which(cmd).is_some())
+            else {
+                return Err("no automated Git installer is available".to_string());
+            };
+            let bin = which(&program).unwrap_or_else(|| PathBuf::from(&program));
+            let mut cmd = Command::new(bin);
+            no_window(&mut cmd);
+            shell_env::merge_into(&mut cmd);
+            let output = cmd
+                .args(args)
+                .stdin(Stdio::null())
+                .output()
+                .map_err(|e| format!("failed to start Git installer: {e}"))?;
+            if !output.status.success() {
+                return Err(format!(
+                    "Git installer exited with {}: {} {}",
+                    output.status,
+                    String::from_utf8_lossy(&output.stdout).trim(),
+                    String::from_utf8_lossy(&output.stderr).trim()
+                ));
             }
+            Ok(InstallOutcome::Installed {
+                message: "Git 安装完成，点「重新检查」刷新状态。 / Git installation completed — click Re-check to refresh.".to_string(),
+            })
         }
         "linux" => match linux_git_install_command(&|cmd| which(cmd).is_some()) {
             Some(command) => Ok(InstallOutcome::ManualCommand {
@@ -1624,6 +1678,7 @@ fn check_dependencies() -> Vec<DepReport> {
                             .is_ok_and(|out| out.status.success())
                 })
             }
+            installer::Dep::Node => return which("node").filter(|_| has("npm")),
             _ => return which(dep.bin()),
         };
         let bin = backend::resolve_backend_bin(kind, None);
@@ -1746,6 +1801,10 @@ fn start_plan(
     // Installers lean on the terminal environment (proxies, credential helpers,
     // the user's npm prefix / PATH) — merge the snapshot without clearing.
     shell_env::merge_into(&mut cmd);
+    if program == "npm" {
+        let node = which("node").ok_or("Node.js is required to run npm; install Node.js first")?;
+        add_node_to_command_path(&mut cmd, &node)?;
+    }
     cmd.args(&args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -3249,6 +3308,48 @@ mod tests {
     use super::{read_json_strict, valid_app_data_name};
 
     #[test]
+    fn installer_windows_dirs_cover_fresh_system_and_npm_installs() {
+        use std::path::Path;
+        let env = |key: &str| match key {
+            "ProgramFiles" => Some(std::ffi::OsString::from("system")),
+            "LOCALAPPDATA" => Some(std::ffi::OsString::from("local")),
+            "APPDATA" => Some(std::ffi::OsString::from("roaming")),
+            _ => None,
+        };
+        for tool in ["node", "npm"] {
+            let dirs = super::windows_install_dirs(tool, &env);
+            assert!(dirs.contains(&Path::new("system").join("nodejs")));
+            assert!(dirs.contains(&Path::new("local").join("Programs").join("nodejs")));
+        }
+        let git = super::windows_install_dirs("git", &env);
+        assert!(git.contains(&Path::new("system").join("Git").join("cmd")));
+        assert!(git.contains(&Path::new("local").join("Programs").join("Git").join("cmd")));
+        let cli = super::windows_install_dirs("codex", &env);
+        assert_eq!(cli, vec![Path::new("roaming").join("npm")]);
+    }
+
+    #[test]
+    fn installer_npm_child_path_includes_node_without_changing_process_env() {
+        use std::{path::Path, process::Command};
+        let process_path = std::env::var_os("PATH");
+        let old_dir = Path::new("old-tools");
+        let node_dir = Path::new("new-node");
+        let mut cmd = Command::new("npm");
+        cmd.env("PATH", std::env::join_paths([old_dir]).unwrap());
+        super::add_node_to_command_path(&mut cmd, &node_dir.join("node.exe")).unwrap();
+        let child_path = cmd
+            .get_envs()
+            .find(|(key, _)| *key == "PATH")
+            .unwrap()
+            .1
+            .unwrap();
+        assert_eq!(
+            std::env::split_paths(child_path).collect::<Vec<_>>(),
+            vec![node_dir, old_dir]
+        );
+        assert_eq!(std::env::var_os("PATH"), process_path);
+    }
+    #[test]
     fn parses_ps_elapsed_times() {
         use std::time::Duration;
         assert_eq!(super::parse_etime("05:07"), Some(Duration::from_secs(307)));
@@ -3644,7 +3745,7 @@ mod tests {
     }
 
     #[test]
-    fn windows_advice_depends_on_winget() {
+    fn windows_advice_is_auto_even_without_winget() {
         let advice = git_install_advice("windows", &avail(&["winget"]));
         assert_eq!(advice.kind, "auto");
         assert!(advice
@@ -3652,7 +3753,8 @@ mod tests {
             .unwrap()
             .contains("winget install --id Git.Git"));
         let advice = git_install_advice("windows", &avail(&[]));
-        assert_eq!(advice.kind, "open-url");
+        assert_eq!(advice.kind, "auto");
+        assert_eq!(advice.command, None);
         assert_eq!(advice.url, "https://git-scm.com/download/win");
     }
 

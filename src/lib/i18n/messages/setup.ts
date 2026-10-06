@@ -25,6 +25,7 @@ const setup = {
 			agent: {
 				title: '编程智能体',
 				sub: '选择新对话默认使用的智能体。每个对话也可以单独切换。',
+				installFirst: '返回依赖安装，安装此智能体',
 				desc: {
 					jucode: 'JuCode 自带引擎，可使用账号内的模型和自定义服务商。',
 					claude: 'Anthropic 的 Claude Code，使用本机安装的 claude 命令。',
@@ -35,8 +36,12 @@ const setup = {
 			},
 			model: {
 				title: '模型',
-				sub: '设置 JuCode 引擎的默认模型和思考强度。',
-				otherBackend: '{name} 使用自己的模型设置，可在对话输入框的模型菜单中切换。以下设置只作用于 JuCode 引擎。',
+				sub: '必须选择使用的模型并保存，才能继续。',
+				nativeHint: '选择 {name} 要使用的模型。登录 JuCode 后可使用账号内对应系列的模型。',
+				chooseRequired: '请选择模型，再点击「确认模型」。预设默认值不会自动完成此步骤。',
+				saving: '保存中…',
+				confirm: '确认模型',
+				confirmed: '模型已确认',
 				empty: '还没有可用的模型。登录 JuCode 账号，或在设置中添加模型服务商。',
 				emptyLoggedIn: '还没有选择要显示的模型。',
 				pick: '选择要显示的模型',
@@ -44,8 +49,14 @@ const setup = {
 				defaultHint: '当前服务商：{provider}。新对话默认使用这个模型。'
 			},
 			env: {
-				title: '运行环境',
-				sub: 'JuCode 需要 Git 读取项目文件和管理版本。下面是本机的检测结果。'
+				title: '依赖安装',
+				sub: '先安装运行所需的工具，再选择智能体和模型。',
+				required: '必需工具',
+				requiredHint: 'Node.js（含 npm）和 Git 必须安装并通过检测。',
+				engines: '智能体安装',
+				enginesHint: '至少准备一个要使用的智能体。JuCode 正式安装包已内置引擎。',
+				optional: '可选工具',
+				optionalHint: 'FFmpeg 用于录屏，GitHub CLI 用于 Pull Request；可以跳过。'
 			},
 			appearance: {
 				title: '外观',
@@ -91,13 +102,18 @@ const setup = {
 			manualHint: '出于安全考虑不会自动执行 sudo，请复制命令到终端运行，完成后点「重新检测」。',
 			copy: '复制命令',
 			openPage: '打开下载页',
+			manualInstall: '手动安装',
 			logTitle: '安装输出',
-			doneOk: '安装完成，正在重新检测…',
+			doneOk: '安装完成，已重新检测',
 			doneFail: '安装失败（退出码 {code}）',
 			upgradeOk: '升级完成，新会话使用新版本',
 			dialogOpened: '已打开系统安装窗口，装完后点「重新检测」',
 			upgradeFail: '升级失败（退出码 {code}）',
 			startFailed: '无法启动安装：{e}',
+			verifyFailed: '安装程序已退出，但 Claude Code 无法运行。请查看安装输出后重试。',
+			verifyError: '无法验证安装结果：{e}',
+			checkFailed: '依赖检测失败：{e}',
+			notDetectedAfterInstall: '安装程序已退出，但仍未检测到此工具。请查看输出或手动安装后重新检测。',
 			tools: {
 				node: { name: 'Node.js / npm', desc: 'codex、jucode 等 CLI 的运行时' },
 				ffmpeg: { name: 'FFmpeg', desc: '录屏与视频关键帧提取' },
@@ -151,6 +167,7 @@ const setup = {
 			agent: {
 				title: 'Coding Agent',
 				sub: 'The agent new sessions start with. Each session can still switch on its own.',
+				installFirst: 'Back to dependencies to install this agent',
 				desc: {
 					jucode: 'The built-in JuCode engine, with your account models and custom providers.',
 					claude: 'Anthropic Claude Code, using the claude command installed on this machine.',
@@ -161,8 +178,12 @@ const setup = {
 			},
 			model: {
 				title: 'Model',
-				sub: 'The JuCode engine\'s default model and reasoning effort.',
-				otherBackend: '{name} keeps its own model settings; switch them from the model menu in the composer. The settings below apply to the JuCode engine only.',
+				sub: 'Choose and save the model you will use before continuing.',
+				nativeHint: 'Choose a model for {name}. Sign in to JuCode to use the matching model family on your account.',
+				chooseRequired: 'Choose a model, then click "Confirm model". A preset default does not complete this step.',
+				saving: 'Saving…',
+				confirm: 'Confirm model',
+				confirmed: 'Model confirmed',
 				empty: 'No models yet. Sign in to JuCode, or add a model provider in Settings.',
 				emptyLoggedIn: 'No models chosen to show yet.',
 				pick: 'Choose models to show',
@@ -170,8 +191,14 @@ const setup = {
 				defaultHint: 'Current provider: {provider}. New sessions start with this model.'
 			},
 			env: {
-				title: 'Environment',
-				sub: 'JuCode needs Git to read project files and manage versions. Here is what this machine has.'
+				title: 'Dependencies',
+				sub: 'Install the required tools first, then choose your agent and model.',
+				required: 'Required tools',
+				requiredHint: 'Node.js (including npm) and Git must be installed and detected.',
+				engines: 'Coding agents',
+				enginesHint: 'Prepare at least one agent you will use. Official JuCode installers include the engine.',
+				optional: 'Optional tools',
+				optionalHint: 'FFmpeg enables recording; GitHub CLI enables pull requests. You can skip both.'
 			},
 			appearance: {
 				title: 'Appearance',
@@ -217,13 +244,18 @@ const setup = {
 			manualHint: 'For safety the app never runs sudo itself. Copy the command into a terminal, then click "Re-check".',
 			copy: 'Copy command',
 			openPage: 'Open download page',
+			manualInstall: 'Install manually',
 			logTitle: 'Install output',
-			doneOk: 'Install complete, re-checking…',
+			doneOk: 'Installation complete; dependencies re-checked',
 			doneFail: 'Install failed (exit code {code})',
 			upgradeOk: 'Upgraded; new sessions use the new version',
 			dialogOpened: 'The system installer is open; click "Re-check" once it finishes',
 			upgradeFail: 'Upgrade failed (exit code {code})',
 			startFailed: 'Could not start install: {e}',
+			verifyFailed: 'The installer exited, but Claude Code cannot run. Check the install output and retry.',
+			verifyError: 'Could not verify installation: {e}',
+			checkFailed: 'Dependency check failed: {e}',
+			notDetectedAfterInstall: 'The installer exited, but the tool was not detected. Check its output or install manually, then re-check.',
 			tools: {
 				node: { name: 'Node.js / npm', desc: 'Runtime for the codex / jucode CLIs' },
 				ffmpeg: { name: 'FFmpeg', desc: 'Screen recording and video keyframes' },
