@@ -289,12 +289,14 @@
 		nodes.forEach((n) => frag.appendChild(n));
 		const lastNode = nodes[nodes.length - 1];
 		range.insertNode(frag);
+		// Sync (adding the tail <br>) before placing the caret: WebKit moves a caret
+		// after an unrendered trailing "\n" back before it, onto the line above.
+		syncFromDom();
 		const after = document.createRange();
 		after.setStartAfter(lastNode);
 		after.collapse(true);
 		sel?.removeAllRanges();
 		sel?.addRange(after);
-		syncFromDom();
 	}
 	function insertTextAtCaret(text: string) {
 		insertNodesAtCaret([document.createTextNode(text)]);
