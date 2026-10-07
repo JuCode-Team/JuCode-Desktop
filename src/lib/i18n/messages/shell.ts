@@ -12,7 +12,8 @@ const shell = {
 		notify: {
 			question: '提问：{text}',
 			action: '等你确认：{text}',
-			report: '汇报：{text}'
+			report: '汇报：{text}',
+			closed: '已关闭：{text}'
 		},
 
 		// agent lifecycle status
@@ -568,7 +569,15 @@ const shell = {
 			report: '汇报',
 			handled: '这件事已经处理了',
 			reportGone: '这份汇报已不在了',
-			nothingScheduled: '没有安排中的任务'
+			nothingScheduled: '没有安排中的任务',
+			close: '忽略',
+			closed: '最近关闭',
+			closedByUser: '你关闭的',
+			closedByAgent: '{agent} 判断已不需要',
+			closedSuperseded: '定时任务有了新一次运行',
+			reopen: '撤销',
+			showAllClosed: '全部 {n} 项',
+			showFewerClosed: '收起'
 		},
 		agentPage: {
 			settings: '设置',
@@ -682,6 +691,28 @@ const shell = {
 			delete: '删除',
 			deleteTitle: '删除定时任务「{name}」？',
 			deleteMessage: '已经运行过的会话会保留。',
+			pause: '暂停',
+			cancelTimer: '取消提醒',
+			cancelTimerTitle: '取消这条提醒？',
+			cancelTimerMessage: '取消后不会再唤醒 Agent。',
+			usage: '花费记录',
+			usageHint: '按运行会话统计（含后续追问）；复用同一会话时合并。实际费用已含分组倍率，估算美元费用单独列出。',
+			billedCost: '实际 {cost} 积分',
+			estimatedCost: '估算 ${cost}',
+			pendingCost: '{n} 次请求的费用待同步',
+			unknownCost: '{n} 次请求的价格未知',
+			usageRunning: '运行中，统计尚未结束',
+			billingFailed: '暂时无法读取实际费用：{error}',
+			refreshUsage: '刷新',
+			runSession: '运行会话',
+			olderRun: '打开历史会话',
+			inputTokens: '输入 token',
+			outputTokens: '输出 token',
+			cacheTokens: '输入中：缓存命中 {read}，缓存写入 {write}',
+			cost: '费用',
+			usageTotal: '累计',
+			noUsage: '暂无用量记录',
+
 			next: '下次 {time}',
 			off: '已停用',
 			done: '已完成',
@@ -881,7 +912,8 @@ const shell = {
 		notify: {
 			question: 'Asks: {text}',
 			action: 'Waiting for you: {text}',
-			report: 'Reports: {text}'
+			report: 'Reports: {text}',
+			closed: 'Closed: {text}'
 		},
 
 		// agent lifecycle status
@@ -1437,7 +1469,15 @@ const shell = {
 			report: 'Report',
 			handled: 'This one has been dealt with',
 			reportGone: 'This report is gone',
-			nothingScheduled: 'Nothing scheduled'
+			nothingScheduled: 'Nothing scheduled',
+			close: 'Ignore',
+			closed: 'Recently closed',
+			closedByUser: 'Closed by you',
+			closedByAgent: '{agent} found it no longer needed',
+			closedSuperseded: 'A newer run of its scheduled task started',
+			reopen: 'Undo',
+			showAllClosed: 'All {n}',
+			showFewerClosed: 'Fewer'
 		},
 		agentPage: {
 			settings: 'Settings',
@@ -1551,6 +1591,28 @@ const shell = {
 			delete: 'Delete',
 			deleteTitle: 'Delete scheduled task "{name}"?',
 			deleteMessage: 'Sessions from earlier runs stay.',
+			pause: 'Pause',
+			cancelTimer: 'Cancel reminder',
+			cancelTimerTitle: 'Cancel this reminder?',
+			cancelTimerMessage: 'It will no longer wake the agent.',
+			usage: 'Usage and cost',
+			usageHint: 'Per run session, including follow-ups; reused sessions are combined. Settled costs include group multipliers. USD estimates are separate.',
+			billedCost: 'Settled {cost} points',
+			estimatedCost: 'Estimated ${cost}',
+			pendingCost: 'Cost pending for {n} requests',
+			unknownCost: 'Price unknown for {n} requests',
+			usageRunning: 'Still running; totals are not final',
+			billingFailed: 'Settled costs are unavailable: {error}',
+			refreshUsage: 'Refresh',
+			runSession: 'Run session',
+			olderRun: 'Open earlier session',
+			inputTokens: 'Input tokens',
+			outputTokens: 'Output tokens',
+			cacheTokens: 'Within input: {read} cache read, {write} cache write',
+			cost: 'Cost',
+			usageTotal: 'Total',
+			noUsage: 'No usage recorded yet',
+
 			next: 'Next {time}',
 			off: 'Disabled',
 			done: 'Done',

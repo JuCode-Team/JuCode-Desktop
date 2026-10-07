@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { DaemonClient, type SocketLike } from './daemon';
 
 class FakeSocket implements SocketLike {
@@ -160,5 +160,58 @@ describe('DaemonClient', () => {
 		socket.push({ type: 'term_output', term: 't-1', data: '' });
 		socket.close();
 		expect(seen).toEqual(['term_output', 'term_exit']);
+	});
+});
+
+describe('session billing refresh', () => {
+	it('coalesces events, follows pending settlement and drops detached replies', async () => {
+		const env = setup();
+		const socket = await openCreated(env, 'desk-1', 'sess-1');
+		vi.useFakeTimers();
+		try {
+			for (let i = 0; i < 100; i++) socket.push({ type: 'usage', session: 'sess-1' });
+			await vi.advanceTimersByTimeAsync(2000);
+			expect(socket.sent.filter(op => op.op === 'session_usage')).toHaveLength(1);
+			// Usage during a ledger lookup needs a subsequent snapshot, not a second in-flight query.
+			socket.push({ type: 'usage', session: 'sess-1' });
+			await vi.advanceTimersByTimeAsync(10_000);
+			expect(socket.sent.filter(op => op.op === 'session_usage')).toHaveLength(1);
+			socket.reply({ type: 'session_usage', session: 'sess-1', totals: { gateway_cost: 0.05, pending_requests: 1 } });
+			await vi.advanceTimersByTimeAsync(2000);
+			expect(socket.sent.filter(op => op.op === 'session_usage')).toHaveLength(2);
+			expect(env.frames.filter(([, frame]) => frame.type === 'session_usage')).toHaveLength(0);
+			socket.reply({ type: 'session_usage', session: 'sess-1', totals: { gateway_cost: 0.05, pending_requests: 1 } });
+			await vi.advanceTimersByTimeAsync(30_000);
+			expect(socket.sent.filter(op => op.op === 'session_usage')).toHaveLength(3);
+			socket.reply({ type: 'session_usage', session: 'sess-1', totals: { gateway_cost: 0.08, pending_requests: 0 } });
+			await vi.advanceTimersByTimeAsync(60_000);
+			expect(socket.sent.filter(op => op.op === 'session_usage')).toHaveLength(3);
+			expect(env.frames.at(-1)?.[1].totals).toMatchObject({ gateway_cost: 0.08 });
+			socket.push({ type: 'status', session: 'sess-1', message: 'ready' });
+			await vi.advanceTimersByTimeAsync(2000);
+			const count = env.frames.length;
+			env.client.detach('desk-1');
+			socket.reply({ type: 'session_usage', session: 'sess-1', totals: { gateway_cost: 123 } });
+			await vi.advanceTimersByTimeAsync(60_000);
+			expect(env.frames).toHaveLength(count);
+		} finally { env.client.detachAll(); vi.useRealTimers(); }
+	});
+
+	it('reports ledger errors without exiting the session and cancels refresh on disconnect', async () => {
+		const env = setup();
+		const socket = await openCreated(env, 'desk-1', 'sess-1');
+		vi.useFakeTimers();
+		try {
+			socket.push({ type: 'transcript', session: 'sess-1', items: [] });
+			await vi.advanceTimersByTimeAsync(2000);
+			socket.reply({ type: 'error', message: 'ledger unavailable' });
+			await vi.advanceTimersByTimeAsync(60_000);
+			expect(env.frames.at(-1)?.[1].billing_error).toContain('ledger unavailable');
+			expect(env.exits).toEqual([]);
+			socket.push({ type: 'usage', session: 'sess-1' });
+			socket.close();
+			await vi.advanceTimersByTimeAsync(60_000);
+			expect(socket.sent.filter(op => op.op === 'session_usage')).toHaveLength(1);
+		} finally { vi.useRealTimers(); }
 	});
 });

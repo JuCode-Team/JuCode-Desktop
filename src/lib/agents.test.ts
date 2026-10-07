@@ -213,6 +213,30 @@ describe('arrivals', () => {
 		dir.handle({ type: 'report_posted', report: { id: 'r1', agent: 'ops', title: 'done' } });
 		expect(seen).toEqual(['question:q2', 'action:a2', 'report:done']);
 	});
+
+	it('tells the user when an agent closes an item, not when they did', () => {
+		const dir = new AgentDirectory();
+		const seen: string[] = [];
+		dir.onArrival = (kind, _agent, text) => seen.push(`${kind}:${text}`);
+		const closed = (id: string, by: string) => ({ id, agent: 'ops', title: id, closed_by: by, closed_reason: 'r', closed_at: 1 });
+		dir.handle({ type: 'questions', questions: [], closed: [closed('q0', 'agent:ops')] });
+		dir.handle({ type: 'questions', questions: [], closed: [closed('q2', 'user'), closed('q1', 'agent:ops'), closed('q0', 'agent:ops')] });
+		expect(seen).toEqual(['closed:q1']);
+		expect(dir.closedQuestions.map((q) => q.id)).toEqual(['q2', 'q1', 'q0']);
+		// An older daemon sends no closed list.
+		dir.handle({ type: 'questions', questions: [] });
+		expect(dir.closedQuestions).toEqual([]);
+	});
+});
+
+describe('reminder cancellation', () => {
+	it('uses the reminder id and surfaces a failed cancellation', async () => {
+		const dir = new AgentDirectory();
+		await dir.cancelTimer('t1');
+		expect(daemon.request).toHaveBeenCalledWith({ op: 'timer_cancel', timer: 't1' });
+		vi.mocked(daemon.request).mockRejectedValueOnce(new Error('already fired'));
+		await expect(dir.cancelTimer('t2')).rejects.toThrow('already fired');
+	});
 });
 
 describe('agent workspaces', () => {

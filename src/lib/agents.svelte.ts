@@ -3,7 +3,7 @@
 
 import { daemon as sharedDaemon } from './protocol';
 import type { DaemonClient } from './daemon';
-import { toWire, upsert, type Schedule, type ScheduleDraft } from './schedules';
+import { toWire, upsert, type Schedule, type ScheduleDraft, type ScheduleUsage } from './schedules';
 import type { TabIcon } from './workbench/tabChrome';
 
 export interface AgentView {
@@ -112,6 +112,13 @@ export interface ActionView {
 	created_at: number;
 }
 
+/** A question or action put away unanswered: by the user, by its agent
+ *  (`agent:<id>`) or by a newer run of its scheduled task (`superseded`).
+ *  It can be reopened for 7 days. */
+export type Closed<T> = T & { closed_by: string; closed_reason: string; closed_at: number };
+
+export type ItemKind = 'question' | 'action';
+
 export interface ReportView {
 	id: string;
 	agent: string;
@@ -182,6 +189,9 @@ export class AgentDirectory {
 	sessions = $state<DaemonSessionView[]>([]);
 	questions = $state<QuestionView[]>([]);
 	actions = $state<ActionView[]>([]);
+	/** Closed lately, newest first (older daemons send none). */
+	closedQuestions = $state<Closed<QuestionView>[]>([]);
+	closedActions = $state<Closed<ActionView>[]>([]);
 	reports = $state<ReportView[]>([]);
 	schedules = $state<Schedule[]>([]);
 	/** Bumped when an agent's message log changes (a delivery, a report). */
@@ -199,8 +209,9 @@ export class AgentDirectory {
 	#seen = new Set<string>();
 	/** Called for a new question, pending action or report (the desktop shows
 	 *  an OS notification while it is in the background). */
-	onArrival: ((kind: 'question' | 'action' | 'report', agent: string, text: string, agentId?: string) => void) | null =
-		null;
+	onArrival:
+		| ((kind: 'question' | 'action' | 'report' | 'closed', agent: string, text: string, agentId?: string) => void)
+		| null = null;
 	#daemon: DaemonClient;
 
 	/** `daemon`: the connection it lists; the app's shared one by default
@@ -248,6 +259,10 @@ export class AgentDirectory {
 			for (const q of this.#arrived('questions', this.questions, list))
 				this.onArrival?.('question', this.agentName(q.agent), q.title, q.agent);
 			this.questions = list;
+			const closed = (Array.isArray(frame.closed) ? frame.closed : []) as Closed<QuestionView>[];
+			for (const q of this.#closedByAgent('closedQuestions', this.closedQuestions, closed))
+				this.onArrival?.('closed', this.agentName(q.agent), q.title, q.agent);
+			this.closedQuestions = closed;
 		} else if (frame.type === 'actions' && Array.isArray(frame.actions)) {
 			const list = frame.actions as ActionView[];
 			for (const a of this.#arrived('actions', this.actions, list)) {
@@ -255,6 +270,12 @@ export class AgentDirectory {
 				this.onArrival?.('action', agent?.name ?? a.cwd, a.summary || a.name, agent?.id);
 			}
 			this.actions = list;
+			const closed = (Array.isArray(frame.closed) ? frame.closed : []) as Closed<ActionView>[];
+			for (const a of this.#closedByAgent('closedActions', this.closedActions, closed)) {
+				const agent = this.agentOfSession(a.session_id);
+				this.onArrival?.('closed', agent?.name ?? a.cwd, a.summary || a.name, agent?.id);
+			}
+			this.closedActions = closed;
 		} else if (frame.type === 'report_posted' && frame.report) {
 			const report = frame.report as ReportView;
 			this.reports = [report, ...this.reports];
@@ -273,6 +294,11 @@ export class AgentDirectory {
 			return [];
 		}
 		return next.filter((item) => !prev.some((p) => p.id === item.id));
+	}
+
+	/** Newly closed items an agent closed itself: the user is told. */
+	#closedByAgent<T extends { id: string; closed_by: string }>(kind: string, prev: T[], next: T[]): T[] {
+		return this.#arrived(kind, prev, next).filter((item) => item.closed_by.startsWith('agent:'));
 	}
 
 	/** Questions and pending actions of one agent. */
@@ -307,6 +333,17 @@ export class AgentDirectory {
 			decision: allow ? 'allow' : 'deny'
 		});
 		this.actions = this.actions.filter((a) => a.id !== action.id);
+	}
+
+	/** Puts an open item away unanswered; nothing is sent to its agent. The
+	 *  updated lists arrive as a broadcast. */
+	async close(kind: ItemKind, item: string) {
+		await this.#daemon.request({ op: 'item_close', kind, item });
+	}
+
+	/** Brings a closed item back, and its session out of the archive. */
+	async reopen(kind: ItemKind, item: string) {
+		await this.#daemon.request({ op: 'item_reopen', kind, item });
 	}
 
 	async loadReports() {
@@ -370,9 +407,17 @@ export class AgentDirectory {
 			.sort((a, b) => a.fire_at - b.fire_at);
 	}
 
+	async cancelTimer(timer: string) {
+		await this.#daemon.request({ op: 'timer_cancel', timer });
+	}
+
 	async loadSchedules() {
 		const reply = await this.#daemon.request({ op: 'schedule_list' });
 		if (Array.isArray(reply.schedules)) this.schedules = reply.schedules as Schedule[];
+	}
+
+	async scheduleUsage(schedule: string): Promise<ScheduleUsage> {
+		return await this.#daemon.request({ op: 'schedule_usage', schedule }) as unknown as ScheduleUsage;
 	}
 
 	async saveSchedule(draft: ScheduleDraft): Promise<Schedule> {

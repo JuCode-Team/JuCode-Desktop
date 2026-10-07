@@ -2,6 +2,30 @@
 // the human summary of when one repeats, and the checks the daemon applies.
 
 import { getLocale, t } from './i18n';
+import type { UsageTokens } from './protocol';
+
+export interface ScheduleUsageTotals extends UsageTokens {
+	/** Gateway-settled points, including group multipliers; null if unavailable. */
+	gateway_cost: number | null;
+	estimated_cost_usd: number | null;
+	pending_requests: number;
+	unpriced_requests: number;
+	running: boolean;
+}
+
+export interface ScheduleUsage {
+	totals: ScheduleUsageTotals;
+	sessions: (ScheduleUsageTotals & { session: string; started_at: number | null })[];
+	billing_error?: string;
+}
+
+/** Keep settled points and reference USD estimates separate. */
+export function usageCost(usage: ScheduleUsageTotals): string {
+	const costs: string[] = [];
+	if (usage.gateway_cost !== null) costs.push(t('shell.schedule.billedCost', { cost: usage.gateway_cost.toFixed(4) }));
+	if (usage.estimated_cost_usd !== null) costs.push(t('shell.schedule.estimatedCost', { cost: usage.estimated_cost_usd.toFixed(4) }));
+	return costs.join(' · ') || '—';
+}
 
 export type Repeat = 'once' | 'hourly' | 'daily' | 'weekdays' | 'weekly';
 

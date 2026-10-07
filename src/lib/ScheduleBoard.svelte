@@ -3,6 +3,10 @@
 	// agent, with the reminders each agent set itself.
 	import AgentAvatar from '$lib/AgentAvatar.svelte';
 	import AgentSchedules from '$lib/AgentSchedules.svelte';
+	import TrashIcon from 'phosphor-svelte/lib/TrashIcon';
+	import IconButton from '$lib/ui/IconButton.svelte';
+	import { confirm } from '$lib/ui/confirm.svelte';
+	import { toast } from '$lib/ui/toast.svelte';
 	import { agentDirectory, type AgentView, type TimerView } from '$lib/agents.svelte';
 	import { t } from '$lib/i18n';
 
@@ -18,6 +22,26 @@
 	} = $props();
 
 	let timers = $state<Record<string, TimerView[]>>({});
+	let cancelling = $state<Record<string, boolean>>({});
+
+	async function cancelTimer(timer: TimerView) {
+		if (cancelling[timer.timer]) return;
+		cancelling[timer.timer] = true;
+		try {
+			if (!await confirm({
+				title: t('shell.schedule.cancelTimerTitle'),
+				message: t('shell.schedule.cancelTimerMessage'),
+				confirmLabel: t('shell.schedule.cancelTimer'),
+				danger: true
+			})) return;
+			await agentDirectory.cancelTimer(timer.timer);
+			timers[timer.agent] = timers[timer.agent].filter((t) => t.timer !== timer.timer);
+		} catch (e) {
+			toast.error(e instanceof Error ? e.message : String(e));
+		} finally {
+			cancelling[timer.timer] = false;
+		}
+	}
 	$effect(() => {
 		for (const a of agents) {
 			if (a.id in timers) continue;
@@ -51,6 +75,7 @@
 					<div class="timer">
 						<span class="when">{when(timer.fire_at)}</span>
 						<span class="timer-body">{timer.body}</span>
+						<IconButton size="sm" title={t('shell.schedule.cancelTimer')} disabled={cancelling[timer.timer]} onclick={() => cancelTimer(timer)}><TrashIcon size={14} /></IconButton>
 					</div>
 				{/each}
 			</div>

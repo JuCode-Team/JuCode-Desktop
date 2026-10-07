@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { costText } from '$lib/sessionCost';
 	import PulseIcon from 'phosphor-svelte/lib/PulseIcon';
 	import CopyIcon from 'phosphor-svelte/lib/CopyIcon';
 	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
@@ -37,7 +38,7 @@
 					[t('dock.diag.tokensOut'), fmtNum(chat.totalOut)],
 					[t('dock.diag.tokensTotal'), fmtNum(totalTokens)],
 					[t('dock.diag.context'), chat.contextWindow ? `${fmtNum(chat.contextTokens)} / ${fmtNum(chat.contextWindow)} (${ctxPct}%)` : '—'],
-					[t('dock.diag.cost'), `$${chat.cost.toFixed(4)}`]
+					[t('dock.diag.cost'), costText(chat.cost, chat.billing) + (chat.billingError ? ` · ${t('chat.costError', { error: chat.billingError })}` : '')]
 				]
 			},
 			{

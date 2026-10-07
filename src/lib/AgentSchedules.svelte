@@ -12,6 +12,7 @@
 	import { confirm } from '$lib/ui/confirm.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
 	import ScheduleDialog from '$lib/ScheduleDialog.svelte';
+	import ScheduleUsage from '$lib/ScheduleUsage.svelte';
 	import { agentDirectory } from '$lib/agents.svelte';
 	import { summary, type Schedule } from '$lib/schedules';
 	import { t } from '$lib/i18n';
@@ -32,6 +33,7 @@
 	);
 	/** The task in the dialog: null for a new one; undefined while closed. */
 	let editing = $state<Schedule | null | undefined>(undefined);
+	let showUsage = $state<Record<string, boolean>>({});
 
 	function when(seconds: number): string {
 		return new Date(seconds * 1000).toLocaleString(undefined, {
@@ -117,6 +119,12 @@
 			<IconButton size="sm" title={t('shell.schedule.edit')} onclick={() => (editing = s)}><PencilSimpleIcon size={14} /></IconButton>
 			<IconButton size="sm" title={t('shell.schedule.delete')} onclick={() => remove(s)}><TrashIcon size={14} /></IconButton>
 		</div>
+		{#if s.last_run_at}
+			<details class="usage" ontoggle={(e) => (showUsage[s.id] = e.currentTarget.open)}>
+				<summary>{t('shell.schedule.usage')}</summary>
+				{#if showUsage[s.id]}<ScheduleUsage schedule={s.id} agent={agentId} {onOpenSession} />{/if}
+			</details>
+		{/if}
 	{/each}
 </section>
 
@@ -150,6 +158,15 @@
 		align-items: center;
 		gap: 10px;
 		padding: 7px 0;
+	}
+	.usage {
+		margin: 0 0 10px 0;
+		font-size: var(--fs-xs);
+		color: var(--dim);
+	}
+	.usage summary {
+		cursor: pointer;
+		padding: 4px 0;
 	}
 	.text {
 		flex: 1;

@@ -1,6 +1,7 @@
 import { t } from '$lib/i18n';
 import type { TurnStats } from '$lib/chat.svelte';
 import type { TurnStatKey } from '$lib/prefs.svelte';
+import { costText } from './sessionCost';
 import { fmtTokens } from '$lib/usageStats';
 
 export const fmtDur = (ms: number) =>
@@ -22,8 +23,8 @@ export function turnParts(s: TurnStats, keys: readonly TurnStatKey[]): { text: s
 		else if (k === 'files' && s.files)
 			out.push({ text: t('chat.stat.filesShort', { n: s.files, a: s.added, r: s.removed }), title: t('chat.stat.files') });
 		else if (k === 'tools' && s.tools) out.push({ text: t('chat.stat.toolsShort', { n: s.tools }), title: t('chat.stat.tools') });
-		else if (k === 'cost' && s.cost > 0)
-			out.push({ text: `$${s.cost < 0.01 ? s.cost.toFixed(4) : s.cost.toFixed(2)}`, title: t('chat.stat.cost'), mono: true });
+		else if (k === 'cost' && (s.cost > 0 || s.billing))
+			out.push({ text: costText(s.cost, s.billing), title: t(s.billing ? 'chat.costSettledHint' : 'chat.stat.cost'), mono: true });
 		else if (k === 'model' && s.model) out.push({ text: s.model, title: t('chat.stat.model') });
 	}
 	return out;

@@ -1,20 +1,27 @@
 <script lang="ts">
-	// The desk's content: questions and pending actions waiting for the user,
-	// which agents are working, the next scheduled runs, and their reports. Everything comes from the
+	// The desk's content: questions and pending actions waiting for the user
+	// (and the ones closed lately, to undo), which agents are working, the next scheduled runs, and their reports. Everything comes from the
 	// jucode daemon through agentDirectory. Shown on the desktop's workbench
 	// and on the remote page. With `agent`, only that agent's pending items
 	// (its page shows the rest as activity).
 	import FileTextIcon from 'phosphor-svelte/lib/FileTextIcon';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import ClockIcon from 'phosphor-svelte/lib/ClockIcon';
+	import PauseIcon from 'phosphor-svelte/lib/PauseIcon';
+	import TrashIcon from 'phosphor-svelte/lib/TrashIcon';
 	import Button from '$lib/ui/Button.svelte';
+	import IconButton from '$lib/ui/IconButton.svelte';
+	import { confirm } from '$lib/ui/confirm.svelte';
+	import { toast } from '$lib/ui/toast.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import AgentAvatar from '$lib/AgentAvatar.svelte';
 	import DeskCard from '$lib/DeskCard.svelte';
+	import DeskClosed from '$lib/DeskClosed.svelte';
 	import RequirementTag from '$lib/requirements/RequirementTag.svelte';
 	import { statusLabel } from '$lib/requirements/labels';
 	import type { Requirement } from '$lib/requirements.svelte';
 	import type { AgentView, ReportView } from '$lib/agents.svelte';
+	import type { Schedule } from '$lib/schedules';
 	import { useAgents } from '$lib/agentScope';
 	import { t } from '$lib/i18n';
 
@@ -45,8 +52,34 @@
 	const actions = $derived(agentDirectory.actions.filter((a) => inScope(agentDirectory.agentOfSession(a.session_id)?.id)));
 	const reports = $derived(agentDirectory.reports.filter((r) => inScope(r.agent)));
 	const pending = $derived(questions.length + actions.length + requirements.length);
+	const hasClosed = $derived(
+		agentDirectory.closedQuestions.some((q) => inScope(q.agent)) ||
+		agentDirectory.closedActions.some((a) => inScope(agentDirectory.agentOfSession(a.session_id)?.id))
+	);
 
 	let expanded = $state<Record<string, boolean>>({});
+	let changing = $state<Record<string, boolean>>({});
+
+	async function changeSchedule(s: Schedule, remove = false) {
+		if (changing[s.id]) return;
+		changing[s.id] = true;
+		try {
+			if (remove) {
+				if (await confirm({
+					title: t('shell.schedule.deleteTitle', { name: s.name }),
+					message: t('shell.schedule.deleteMessage'),
+					confirmLabel: t('shell.schedule.delete'),
+					danger: true
+				})) await agentDirectory.deleteSchedule(s.id);
+			} else {
+				await agentDirectory.setScheduleEnabled(s.id, false);
+			}
+		} catch (e) {
+			toast.error(e instanceof Error ? e.message : String(e));
+		} finally {
+			changing[s.id] = false;
+		}
+	}
 
 	const working = $derived(agentDirectory.agents.filter((a) => a.busy && inScope(a.id)));
 	const upcoming = $derived(
@@ -79,7 +112,7 @@
 	<div class="unreachable"><Notice tone="warn">{t('shell.desk.unreachable')}</Notice></div>
 {/if}
 
-{#if !agent || pending}
+{#if !agent || pending || hasClosed}
 <section>
 	<h3>{t('shell.desk.pending')} <span class="count">{pending}</span></h3>
 	{#if pending === 0}
@@ -103,6 +136,7 @@
 			<DeskCard action={a} {onOpenSession} {onOpenAgent} />
 		{/each}
 	</div>
+	<DeskClosed {inScope} />
 </section>
 {/if}
 
@@ -127,6 +161,8 @@
 					<span class="time">{when(s.next_run_at! * 1000)}</span>
 					<span class="what">{s.name}</span>
 					<span class="who">{agentDirectory.agentName(s.agent)}</span>
+					<IconButton size="sm" title={t('shell.schedule.pause')} disabled={changing[s.id]} onclick={() => changeSchedule(s)}><PauseIcon size={14} /></IconButton>
+					<IconButton size="sm" title={t('shell.schedule.delete')} disabled={changing[s.id]} onclick={() => changeSchedule(s, true)}><TrashIcon size={14} /></IconButton>
 				</li>
 			{/each}
 		</ul>

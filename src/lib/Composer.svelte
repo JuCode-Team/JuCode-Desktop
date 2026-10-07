@@ -967,7 +967,7 @@
 		<div class="fspace"></div>
 		{#if showCtx}
 			<div class="foot-ctx">
-				<ContextIndicator pct={ctxPct} atThreshold={ctxAtThreshold} contextTokens={chat.contextTokens} contextLimit={ctxLimit} totalIn={chat.totalIn} totalOut={chat.totalOut} cost={chat.cost} runMs={chat.runMs} />
+				<ContextIndicator pct={ctxPct} atThreshold={ctxAtThreshold} contextTokens={chat.contextTokens} contextLimit={ctxLimit} totalIn={chat.totalIn} totalOut={chat.totalOut} cost={chat.cost} billing={chat.billing} billingError={chat.billingError} runMs={chat.runMs} />
 			</div>
 		{/if}
 	</div>

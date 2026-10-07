@@ -23,6 +23,8 @@ export interface DaemonEndpoint {
 }
 
 type Frame = Record<string, unknown>;
+type UsageRefresh = { timer?: ReturnType<typeof setTimeout>; inFlight: boolean; dirty: boolean };
+
 type Pending = {
 	resolve: (frame: Frame) => void;
 	reject: (error: Error) => void;
@@ -75,6 +77,7 @@ export class DaemonClient {
 	#closing = new Map<string, () => void>();
 	#toDaemon = new Map<string, string>();
 	#toDesktop = new Map<string, string>();
+	#usage = new Map<string, UsageRefresh>();
 
 	constructor(
 		private endpoint: () => Promise<DaemonEndpoint>,
@@ -138,6 +141,7 @@ export class DaemonClient {
 	detach(desktopId: string) {
 		const session = this.#toDaemon.get(desktopId);
 		if (!session) return;
+		this.#forgetUsage(session);
 		this.#toDaemon.delete(desktopId);
 		this.#toDesktop.delete(session);
 		if (this.#socket?.readyState === OPEN) this.#write({ op: 'unwatch', session });
@@ -257,6 +261,7 @@ export class DaemonClient {
 		if (!session) return;
 		const desktopId = this.#toDesktop.get(session);
 		if (frame.type === 'session_closed') {
+			this.#forgetUsage(session);
 			this.#closing.get(session)?.();
 			if (desktopId) {
 				this.#toDaemon.delete(desktopId);
@@ -266,7 +271,47 @@ export class DaemonClient {
 			return;
 		}
 		// `watching` answers our own watch op; everything else is engine output.
-		if (desktopId && frame.type !== 'watching') this.onFrame(desktopId, raw);
+		if (desktopId && frame.type !== 'watching') {
+			this.onFrame(desktopId, raw);
+			if (frame.type === 'transcript' || frame.type === 'usage' || (frame.type === 'status' && frame.message === 'ready'))
+				this.#refreshUsage(session);
+		}
+	}
+
+	#forgetUsage(session: string) {
+		const refresh = this.#usage.get(session);
+		if (refresh?.timer) clearTimeout(refresh.timer);
+		this.#usage.delete(session);
+	}
+
+	/** Coalesce usage events; never put a ledger request on the token stream.
+	 *  Recheck pending settlement while watched, stop polling once settled. */
+	#refreshUsage(session: string, delay = 2000) {
+		let refresh = this.#usage.get(session);
+		if (!refresh) {
+			refresh = { inFlight: false, dirty: false };
+			this.#usage.set(session, refresh);
+		}
+		if (refresh.inFlight) { refresh.dirty = true; return; }
+		if (refresh.timer) return;
+		const state = refresh;
+		state.timer = setTimeout(async () => {
+			state.timer = undefined;
+			state.inFlight = true;
+			state.dirty = false;
+			let reply: Frame;
+			try { reply = await this.request({ op: 'session_usage', session }); }
+			catch (error) { reply = { type: 'session_usage', session, billing_error: String(error) }; }
+			if (this.#usage.get(session) !== state) return; // detached, reopened or disconnected
+			state.inFlight = false;
+			const desktopId = this.#toDesktop.get(session);
+			if (!desktopId) return;
+			// Usage arrived after the snapshot began: keep pending figures until the fresh lookup.
+			if (!state.dirty || reply.billing_error) this.onFrame(desktopId, JSON.stringify(reply));
+			const pending = Number((reply.totals as Frame | undefined)?.pending_requests ?? 0);
+			if (state.dirty) this.#refreshUsage(session);
+			else if (pending && !reply.billing_error) this.#refreshUsage(session, 30_000);
+		}, delay);
 	}
 
 	/** The connection dropped: every hosted session looks exited to the
@@ -274,6 +319,7 @@ export class DaemonClient {
 	 *  daemon killed this connection's terminals. */
 	#lost() {
 		this.#socket = null;
+		for (const session of this.#usage.keys()) this.#forgetUsage(session);
 		this.onDisconnect();
 		const terms = [...this.#terms];
 		this.#terms.clear();

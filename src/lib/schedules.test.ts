@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { setLocale } from './i18n';
-import { summary, toWire, upsert, validate, type Schedule, type ScheduleDraft } from './schedules';
+import { summary, toWire, upsert, validate, usageCost, type Schedule, type ScheduleDraft, type ScheduleUsageTotals } from './schedules';
 
 const draft = (over: Partial<ScheduleDraft> = {}): ScheduleDraft => ({
 	agent: 'ops',
@@ -80,5 +80,15 @@ describe('schedule wire shape', () => {
 		const b = { id: 'b', name: 'B' } as Schedule;
 		expect(upsert([a], b).map((s) => s.id)).toEqual(['a', 'b']);
 		expect(upsert([a, b], { ...a, name: 'A2' }).map((s) => s.name)).toEqual(['A2', 'B']);
+	});
+});
+
+
+describe('schedule usage amounts', () => {
+	it('keeps settled points and estimated USD distinct, including zero and unknown', () => {
+		const usage = { gateway_cost: 0.05, estimated_cost_usd: 0.12 } as ScheduleUsageTotals;
+		expect(usageCost(usage)).toBe('实际 0.0500 积分 · 估算 $0.1200');
+		expect(usageCost({ ...usage, gateway_cost: 0, estimated_cost_usd: null })).toBe('实际 0.0000 积分');
+		expect(usageCost({ ...usage, gateway_cost: null, estimated_cost_usd: null })).toBe('—');
 	});
 });

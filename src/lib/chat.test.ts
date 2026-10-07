@@ -684,3 +684,44 @@ describe('claude session extras', () => {
 	});
 });
 
+
+describe('gateway session costs', () => {
+	it('uses settled per-turn charges, including group changes, without repricing history', () => {
+		const c = new ChatState();
+		for (const id of ['t-first', 't-second']) {
+			c.handle({ type: 'user_message', content: id });
+			c.handle({ type: 'connecting' });
+			c.handle({ type: 'assistant_delta', delta: 'answer' });
+			c.handle({ type: 'usage', input_tokens: 1000, output_tokens: 500, billing_turn: id, billing_gateway: true });
+			c.handle({ type: 'context_usage', tokens: 1500, cost: 9 });
+			c.handle({ type: 'status', message: 'ready' });
+		}
+		const charge = (gateway_cost: number) => ({ gateway_cost, estimated_cost_usd: null, gateway_requests: 1, pending_requests: 0, unpriced_requests: 0 });
+		const snapshot = { type: 'session_usage', totals: { ...charge(0.08), gateway_requests: 2 }, turns: [
+			{ ...charge(0.05), turn_id: 't-first' }, { ...charge(0.03), turn_id: 't-second' }
+		] };
+		c.handle(snapshot);
+		c.handle(snapshot); // refresh replaces, never adds or multiplies again
+		expect(c.billing?.gateway_cost).toBe(0.08);
+		const costs = c.messages.flatMap(m => m.kind === 'assistant' && m.turn ? [m.turn.billing?.gateway_cost] : []);
+		expect(costs).toEqual([0.05, 0.03]);
+		c.handle({ type: 'session_usage', billing_error: 'offline' });
+		expect(c.billing?.gateway_cost).toBe(0.08);
+		expect(c.billingError).toBe('offline');
+	});
+
+	it('marks gateway usage pending before settlement and accepts a zero charge', () => {
+		const c = new ChatState();
+		c.handle({ type: 'connecting' });
+		c.handle({ type: 'assistant_delta', delta: 'answer' });
+		c.handle({ type: 'status', message: 'ready' });
+		// A late usage frame still belongs to the turn which just ended.
+		c.handle({ type: 'usage', input_tokens: 10, output_tokens: 2, billing_turn: 't-free', billing_gateway: true });
+		expect(c.billing?.pending_requests).toBeGreaterThan(0);
+		const free = { gateway_cost: 0, estimated_cost_usd: null, gateway_requests: 1, pending_requests: 0, unpriced_requests: 0 };
+		c.handle({ type: 'session_usage', totals: free, turns: [{ ...free, turn_id: 't-free' }] });
+		expect(c.billing?.gateway_cost).toBe(0);
+		const last = c.messages.at(-1);
+		expect(last?.kind === 'assistant' && last.turn?.billing?.gateway_cost).toBe(0);
+	});
+});

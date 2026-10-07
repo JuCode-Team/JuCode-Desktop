@@ -1,7 +1,9 @@
 <script lang="ts">
 	// One thing waiting for the user on the desk: an agent's question, with a
 	// box for the answer, or an action it may not take alone, with allow and
-	// deny. Shown in the desk's list (DeskContent) and on the remote page.
+	// deny. Either can be closed as no longer needed (nothing is sent to the
+	// agent; the desk offers to undo it). Shown in the desk's list
+	// (DeskContent) and on the remote page.
 	import QuestionIcon from 'phosphor-svelte/lib/QuestionIcon';
 	import ShieldCheckIcon from 'phosphor-svelte/lib/ShieldCheckIcon';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
@@ -93,6 +95,7 @@
 		></textarea>
 		{#if error}<Notice>{error}</Notice>{/if}
 		<div class="actions">
+			<Button size="sm" variant="ghost" disabled={busy} onclick={() => run(() => agentDirectory.close('question', question.id))}>{t('shell.desk.close')}</Button>
 			<Button size="sm" onclick={() => onOpenSession(question.session)}>{t('shell.desk.openSession')}</Button>
 			<Button size="sm" variant="primary" disabled={!answer.trim() || busy} onclick={reply}>
 				{#if busy}<CircleNotchIcon size={13} class="spin" />{/if}
@@ -114,6 +117,7 @@
 		</details>
 		{#if error}<Notice>{error}</Notice>{/if}
 		<div class="actions">
+			<Button size="sm" variant="ghost" disabled={busy} onclick={() => run(() => agentDirectory.close('action', action.id))}>{t('shell.desk.close')}</Button>
 			<Button size="sm" onclick={() => onOpenSession(action.session_id)}>{t('shell.desk.openSession')}</Button>
 			<Button size="sm" disabled={busy} onclick={() => run(() => agentDirectory.decide(action, false))}>{t('shell.desk.deny')}</Button>
 			<Button size="sm" variant="primary" disabled={busy} onclick={() => run(() => agentDirectory.decide(action, true))}>

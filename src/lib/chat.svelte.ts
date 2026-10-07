@@ -16,6 +16,7 @@ import {
 } from './approval';
 import { t } from './i18n';
 import { costUsd } from './pricing';
+import { pendingCost, sumCosts, type BillingCost } from './sessionCost';
 import { CacheWatch } from './cacheMiss';
 import { parseMcpServersEvent, type McpServerView } from './mcp';
 
@@ -36,6 +37,8 @@ export interface TurnStats {
 	removed: number;
 	tools: number;
 	cost: number;
+	billingTurns?: string[];
+	billing?: BillingCost;
 	model: string;
 	/** Reply segments (assistant messages split by tool calls) in the turn. */
 	segments: number;
@@ -318,6 +321,10 @@ export class ChatState {
 	contextWindow = $state(0);
 	contextLimit = $state(0);
 	cost = $state(0);
+	billing = $state<BillingCost | null>(null);
+	billingError = $state('');
+	#billingTurns: Record<string, BillingCost> = {};
+	#turnBillingIds: string[] = [];
 	pendingMessages = $state<string[]>([]);
 	picker = $state<Picker>(null);
 	/** The daemon names the conversation (and keeps a rename); until then
@@ -471,7 +478,7 @@ export class ChatState {
 	// When the request behind the current reply segment started.
 	#segStart: number | null = null;
 	#turnSegments = 0;
-	// Set once the engine reports an authoritative cost (jucode via context_usage).
+	// Set once the engine reports a USD estimate via context_usage.
 	// While false we estimate cost client-side from token usage × model pricing
 	// (claude/codex don't report cost).
 	#engineCost = false;
@@ -594,6 +601,8 @@ export class ChatState {
 			removed: edits.reduce((n, e) => n + e.removed, 0),
 			tools: this.#turnTools,
 			cost: this.cost - this.#turnCostStart,
+			billingTurns: [...this.#turnBillingIds],
+			billing: this.#turnBilling(this.#turnBillingIds),
 			model: this.model,
 			segments: this.#turnSegments
 		};
@@ -688,7 +697,13 @@ export class ChatState {
 		this.#firstOutput = null;
 		this.#turnIn = this.#turnOut = this.#turnTools = this.#turnSegments = 0;
 		this.#turnCostStart = this.cost;
+		this.#turnBillingIds = [];
 		this.#lastTurn = null;
+	}
+
+	#turnBilling(ids: string[]): BillingCost | undefined {
+		const rows = ids.map(id => this.#billingTurns[id]).filter(Boolean);
+		return rows.some(row => row.gateway_requests > 0) ? sumCosts(rows) : undefined;
 	}
 
 	get busy() {
@@ -1137,6 +1152,21 @@ export class ChatState {
 				}
 				break;
 			}
+			case 'session_usage': {
+				this.billingError = str(ev.billing_error);
+				if (ev.totals) {
+					const totals = ev.totals as unknown as BillingCost;
+					// Keep the last settled figures visible if the ledger is offline.
+					if (!this.billingError || !this.billing) {
+						this.billing = totals.gateway_requests > 0 ? totals : null;
+						for (const row of arr<BillingCost & { turn_id: string }>(ev.turns)) this.#billingTurns[row.turn_id] = row;
+						for (const m of this.messages) {
+							if (m.kind === 'assistant' && m.turn) m.turn.billing = this.#turnBilling(m.turn.billingTurns ?? []);
+						}
+					}
+				}
+				break;
+			}
 			case 'context_usage':
 				this.contextTokens = num(ev.tokens);
 				if (typeof ev.cost === 'number') {
@@ -1308,6 +1338,18 @@ export class ChatState {
 				this.#remember({ commands: this.commands });
 				break;
 			case 'usage': {
+				if (typeof ev.billing_turn === 'string') {
+					const id = ev.billing_turn;
+					if (ev.billing_gateway === true) {
+						const row = this.#billingTurns[id] ?? pendingCost();
+						// A further request on a known turn is not yet in its settled snapshot.
+						this.#billingTurns[id] = { ...row, pending_requests: Math.max(1, row.pending_requests) };
+						this.billing = { ...(this.billing ?? pendingCost()), pending_requests: Math.max(1, this.billing?.pending_requests ?? 0) };
+					}
+					const ids = this.#turnStart !== null ? this.#turnBillingIds : this.#lastTurn ? (this.#lastTurn.billingTurns ??= []) : [];
+					if (!ids.includes(id)) ids.push(id);
+					if (this.#turnStart === null && this.#lastTurn) this.#lastTurn.billing = this.#turnBilling(ids);
+				}
 				const out = num(ev.output_tokens);
 				const inn = num(ev.input_tokens);
 				// Engines without cache figures (acp) leave the field out.

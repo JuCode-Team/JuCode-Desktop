@@ -2,6 +2,7 @@
 	import ContextRing from '$lib/ContextRing.svelte';
 	import { t } from '$lib/i18n';
 	import { fmtDur } from '$lib/turnStats';
+	import { costText, type BillingCost } from '$lib/sessionCost';
 
 	let {
 		pct,
@@ -11,6 +12,8 @@
 		totalIn,
 		totalOut,
 		cost,
+		billing = null,
+		billingError = '',
 		runMs = 0
 	}: {
 		pct: number;
@@ -22,6 +25,8 @@
 		totalIn: number;
 		totalOut: number;
 		cost: number;
+		billing?: BillingCost | null;
+		billingError?: string;
 		/** The session's total running time (sum of its turns), ms. */
 		runMs?: number;
 	} = $props();
@@ -41,14 +46,15 @@
 		</div>
 		<div class="ctx-track"><span class="ctx-fill" class:warn={pct >= 75} class:full={pct >= 90} style:width="{Math.min(100, pct)}%"></span></div>
 		<div class="ctx-sub">{atThreshold ? t('chat.toCompaction', { pct }) : t('chat.contextUsed', { pct })}</div>
-		{#if totalIn || totalOut || cost > 0 || runMs > 0}
+		{#if totalIn || totalOut || cost > 0 || billing || billingError || runMs > 0}
 			<div class="ctx-stats">
 				{#if totalIn || totalOut}
 					<div class="ctx-cap">{t('chat.sessionUsage')}</div>
 					<div class="ctx-row"><span>{t('chat.sessionIn')}</span><span class="ctx-num">{fmtTokens(totalIn)}</span></div>
 					<div class="ctx-row"><span>{t('chat.sessionOut')}</span><span class="ctx-num">{fmtTokens(totalOut)}</span></div>
 				{/if}
-				{#if cost > 0}<div class="ctx-row"><span>{t('chat.cost')}</span><span class="ctx-num">${cost.toFixed(3)}</span></div>{/if}
+				{#if cost > 0 || billing}<div class="ctx-row" title={billing ? t('chat.costSettledHint') : undefined}><span>{t('chat.cost')}</span><span class="ctx-num">{costText(cost, billing)}</span></div>{/if}
+				{#if billingError}<div class="ctx-sub">{t('chat.costError', { error: billingError })}</div>{/if}
 				{#if runMs > 0}<div class="ctx-row"><span>{t('chat.sessionRun')}</span><span class="ctx-num">{fmtDur(runMs)}</span></div>{/if}
 			</div>
 		{/if}
@@ -78,7 +84,8 @@
 		z-index: 21;
 		display: flex;
 		flex-direction: column;
-		width: 220px;
+		width: 280px;
+		max-width: calc(100vw - 32px);
 		padding: 10px 12px 12px;
 		background: var(--panel);
 		border-radius: var(--r-lg);
@@ -146,6 +153,12 @@
 	.ctx-cap {
 		color: var(--dim2);
 		font-size: var(--fs-2xs);
+	}
+	.ctx-row > span:first-child {
+		flex-shrink: 0;
+	}
+	.ctx-row .ctx-num {
+		text-align: right;
 	}
 	.ctx-row {
 		display: flex;

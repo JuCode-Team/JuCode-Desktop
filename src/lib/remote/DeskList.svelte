@@ -10,6 +10,7 @@
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import ClockIcon from 'phosphor-svelte/lib/ClockIcon';
 	import Notice from '$lib/ui/Notice.svelte';
+	import DeskClosed from '$lib/DeskClosed.svelte';
 	import { useAgents } from '$lib/agentScope';
 	import { t } from '$lib/i18n';
 	import { deskKey, when } from './desk';
@@ -67,6 +68,7 @@
 			</button>
 		{/each}
 		{#if pending === 0}<p class="empty">{t('shell.desk.nothingPending')}</p>{/if}
+		<div class="closed"><DeskClosed /></div>
 	</section>
 
 	{#if status}
@@ -216,6 +218,9 @@
 		height: 7px;
 		border-radius: 50%;
 		background: var(--accent);
+	}
+	.closed {
+		padding: 0 12px;
 	}
 	.empty {
 		margin: 0;
