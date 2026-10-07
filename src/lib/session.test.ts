@@ -827,6 +827,29 @@ describe('SessionStore claude and codex in the daemon', () => {
 	});
 });
 
+describe('project order', () => {
+	it('moves whole projects before or after a target and keeps their order after restore', async () => {
+		const store = new SessionStore();
+		store.projects = [proj('a'), proj('b'), proj('c')];
+		const id = store.addSession(store.projects[2]);
+		store.renameSession(id, 'keep this session');
+		store.moveProject('c', 'a', false);
+		expect(store.shownProjects.map((p) => p.id)).toEqual(['c', 'a', 'b']);
+		expect(store.projects[0].sessions[0].id).toBe(id);
+		expect(store.activeId).toBe(id);
+		const again = new SessionStore();
+		await again.restore(store.serialize());
+		expect(again.shownProjects.map((p) => p.id)).toEqual(['c', 'a', 'b']);
+		expect(again.projects[0].sessions[0].chat.title).toBe('keep this session');
+		store.moveProject('c', 'b', true);
+		expect(store.shownProjects.map((p) => p.id)).toEqual(['a', 'b', 'c']);
+		store.moveProject('c', 'c', false);
+		store.moveProject('c', 'missing', false);
+		store.moveProject('missing', 'a', false);
+		expect(store.shownProjects.map((p) => p.id)).toEqual(['a', 'b', 'c']);
+	});
+});
+
 describe('session order and pins', () => {
 	const titles = (p: Project) => listedSessions(p).map((s) => s.chat.title);
 	function three() {

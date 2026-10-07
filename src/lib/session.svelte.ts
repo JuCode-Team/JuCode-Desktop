@@ -1101,6 +1101,17 @@ export class SessionStore {
 		this.#agentHost(cwd).sessions.push(s);
 	}
 
+	/** Move a whole project next to another, preserving its sessions. */
+	moveProject(id: string, targetId: string, after: boolean) {
+		const p = this.projects.find((x) => x.id === id);
+		if (!p || id === targetId) return;
+		const rest = this.projects.filter((x) => x !== p);
+		const i = rest.findIndex((x) => x.id === targetId);
+		if (i < 0) return;
+		rest.splice(after ? i + 1 : i, 0, p);
+		this.projects = rest;
+	}
+
 	/** Tear down a project and all its sessions (the page handles confirmation). */
 	removeProject(p: Project) {
 		for (const s of p.sessions) {

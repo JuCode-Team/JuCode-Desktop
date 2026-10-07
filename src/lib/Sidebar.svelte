@@ -52,6 +52,7 @@
 		onUnarchiveSession,
 		onPinSession,
 		onMoveSession,
+		onMoveProject,
 		onRenameSession,
 		onSessionMenu,
 		onProjectMenu,
@@ -86,6 +87,8 @@
 		onPinSession: (id: string, pinned: boolean) => void;
 		/** A dragged row dropped before or after `target` (same project and pinned group). */
 		onMoveSession: (id: string, target: string, after: boolean) => void;
+		/** A project and its sessions dropped before or after another project. */
+		onMoveProject: (id: string, target: string, after: boolean) => void;
 		/** Inline rename committed on a session row (dblclick the title). */
 		onRenameSession: (id: string, title: string) => void;
 		/** Right-click on a session row: the page opens the chrome popover. */
@@ -197,22 +200,23 @@
 		else onNewProject();
 	}
 
-	// Drag a session row to reorder it within its project and pinned group.
+	// Drag projects, or session rows within their project and pinned group.
 	// Pointer events, as the workbench tabs do (HTML drag and drop is not
 	// reliable in the macOS webview): a press stays a click until the
 	// pointer travels, then a line marks where the row lands.
 	let listEl = $state<HTMLElement | null>(null);
-	let drag = $state<{ id: string; live: boolean } | null>(null);
+	let drag = $state<{ id: string; group: string; live: boolean } | null>(null);
 	let drop = $state<{ id: string; after: boolean } | null>(null);
-	function rowDown(e: PointerEvent, p: Project, s: Session) {
-		if (e.button !== 0 || renaming === s.id || !listEl) return;
+	function rowDown(e: PointerEvent, p: Project, s?: Session) {
+		if (e.button !== 0 || (s && renaming === s.id) || !listEl) return;
 		const list = listEl;
-		const group = `${p.id}:${s.pinned ? 'pin' : ''}`;
+		const id = s?.id ?? p.id;
+		const group = s ? `${p.id}:${s.pinned ? 'pin' : ''}` : 'projects';
 		const startX = e.clientX;
 		const startY = e.clientY;
 		let y = startY;
 		let frame = 0;
-		drag = { id: s.id, live: false };
+		drag = { id, group, live: false };
 		/** Where the row would land among the rows of its group (null: where it is). */
 		const target = () => {
 			const rows = [...list.querySelectorAll<HTMLElement>('[data-group]')].filter((el) => el.dataset.group === group);
@@ -221,9 +225,9 @@
 				return y < r.top + r.height / 2;
 			});
 			if (at < 0) at = rows.length;
-			const from = rows.findIndex((el) => el.dataset.sid === s.id);
+			const from = rows.findIndex((el) => el.dataset.rowId === id);
 			if (at === from || at === from + 1) return null;
-			return at < rows.length ? { id: rows[at].dataset.sid!, after: false } : { id: rows[at - 1].dataset.sid!, after: true };
+			return at < rows.length ? { id: rows[at].dataset.rowId!, after: false } : { id: rows[at - 1].dataset.rowId!, after: true };
 		};
 		// Held near the top or bottom edge, the list scrolls.
 		const scroll = () => {
@@ -260,7 +264,7 @@
 			const swallow = (c: Event) => c.stopPropagation();
 			window.addEventListener('click', swallow, { capture: true, once: true });
 			setTimeout(() => window.removeEventListener('click', swallow, { capture: true }));
-			if (ev.type === 'pointerup' && to) onMoveSession(s.id, to.id, to.after);
+			if (ev.type === 'pointerup' && to) (s ? onMoveSession : onMoveProject)(id, to.id, to.after);
 		};
 		window.addEventListener('pointermove', move);
 		window.addEventListener('pointerup', end);
@@ -318,10 +322,11 @@
 			class:on={!selectable && s.id === activeId}
 			class:arch={s.archived}
 			class:selectable
-			class:lifted={drag?.live && drag.id === s.id}
-			class:drop-before={drop?.id === s.id && !drop.after}
-			class:drop-after={drop?.id === s.id && drop.after}
+			class:lifted={drag?.live && drag.group !== 'projects' && drag.id === s.id}
+			class:drop-before={drag?.group !== 'projects' && drop?.id === s.id && !drop.after}
+			class:drop-after={drag?.group !== 'projects' && drop?.id === s.id && drop.after}
 			data-sid={s.id}
+			data-row-id={s.id}
 			data-group={p ? `${p.id}:${s.pinned ? 'pin' : ''}` : undefined}
 			aria-pressed={selectable ? picked.includes(s.id) : undefined}
 			onpointerdown={(e) => p && rowDown(e, p, s)}
@@ -526,42 +531,51 @@
 				{@const open = !collapsed[p.id] || !!query}
 				{@const w = p.sessions.some((s) => s.id === activeId) ? 'fill' : 'regular'}
 				{#if !query || active.length || arch.length}
-					<div class="folder" class:stale={p.stale} class:on={openProject === p.id}>
-						<button
-							class="caret"
-							class:open
-							aria-expanded={open}
-							aria-label={t('shell.projectPage.toggle')}
-							title={t('shell.projectPage.toggle')}
-							onclick={() => (collapsed[p.id] = !collapsed[p.id])}><CaretRightIcon size={11} /></button
-						>
-						<button class="folder-row" onclick={() => onOpenProject(p)} oncontextmenu={(e) => onProjectMenu(p, e)} title={p.worktree ? t('shell.task.worktreeTip', { branch: p.worktree.branch, base: p.worktree.baseBranch || '?' }) : p.path}>
-							{#if p.icon}<TabGlyph icon={p.icon} color={p.color ?? 'var(--dim)'} active={w === 'fill'} size={16} />{:else if p.worktree}<GitBranchIcon size={18} weight={w} color={p.color} />{:else if open}<FolderOpenIcon size={18} weight={w} color={p.color} />{:else}<FolderIcon size={18} weight={w} color={p.color} />{/if}
-							<span class="folder-name">{p.name}</span>
-						</button>
-						{#if p.stale}
-							<span class="tag" title={p.path}>{t('shell.task.stale')}</span>
-						{:else}
-							<button class="act" onclick={() => onHistory(p)} aria-label="history" title={withShortcut(t('shell.history'), 'history')}><ClockCounterClockwiseIcon size={16} /></button>
-							{#if !p.worktree}
-								<button class="act" onclick={() => onNewTask(p)} aria-label="new parallel task" title={t('shell.newTask')}><GitForkIcon size={16} /></button>
+					<div
+						class="project"
+						class:lifted={drag?.live && drag.group === 'projects' && drag.id === p.id}
+						class:drop-before={drag?.group === 'projects' && drop?.id === p.id && !drop.after}
+						class:drop-after={drag?.group === 'projects' && drop?.id === p.id && drop.after}
+						data-group="projects"
+						data-row-id={p.id}
+					>
+						<div class="folder" class:stale={p.stale} class:on={openProject === p.id}>
+							<button
+								class="caret"
+								class:open
+								aria-expanded={open}
+								aria-label={t('shell.projectPage.toggle')}
+								title={t('shell.projectPage.toggle')}
+								onclick={() => (collapsed[p.id] = !collapsed[p.id])}><CaretRightIcon size={11} /></button
+							>
+							<button class="folder-row" onpointerdown={(e) => rowDown(e, p)} onclick={() => onOpenProject(p)} oncontextmenu={(e) => onProjectMenu(p, e)} title={p.worktree ? t('shell.task.worktreeTip', { branch: p.worktree.branch, base: p.worktree.baseBranch || '?' }) : p.path}>
+								{#if p.icon}<TabGlyph icon={p.icon} color={p.color ?? 'var(--dim)'} active={w === 'fill'} size={16} />{:else if p.worktree}<GitBranchIcon size={18} weight={w} color={p.color} />{:else if open}<FolderOpenIcon size={18} weight={w} color={p.color} />{:else}<FolderIcon size={18} weight={w} color={p.color} />{/if}
+								<span class="folder-name">{p.name}</span>
+							</button>
+							{#if p.stale}
+								<span class="tag" title={p.path}>{t('shell.task.stale')}</span>
+							{:else}
+								<button class="act" onclick={() => onHistory(p)} aria-label="history" title={withShortcut(t('shell.history'), 'history')}><ClockCounterClockwiseIcon size={16} /></button>
+								{#if !p.worktree}
+									<button class="act" onclick={() => onNewTask(p)} aria-label="new parallel task" title={t('shell.newTask')}><GitForkIcon size={16} /></button>
+								{/if}
+								<button class="act" onclick={() => onNewSession(p)} aria-label="new session" title={withShortcut(t('shell.newSessionInProject'), 'newSession')}><PlusIcon size={16} /></button>
 							{/if}
-							<button class="act" onclick={() => onNewSession(p)} aria-label="new session" title={withShortcut(t('shell.newSessionInProject'), 'newSession')}><PlusIcon size={16} /></button>
-						{/if}
-						{#if codeProjects.length > 1 || p.stale}
-							<button class="act" class:always={p.stale} onclick={() => onCloseProject(p)} aria-label="close project" title={p.stale ? t('shell.task.staleRemove') : t('shell.closeProject')}><XIcon size={16} /></button>
+							{#if codeProjects.length > 1 || p.stale}
+								<button class="act" class:always={p.stale} onclick={() => onCloseProject(p)} aria-label="close project" title={p.stale ? t('shell.task.staleRemove') : t('shell.closeProject')}><XIcon size={16} /></button>
+							{/if}
+						</div>
+						{#if open}
+							{#each showAll[p.id] || query ? active : firstSessions(active) as s (s.id)}{@render sessRow(s, true, false, p)}{/each}
+							{#if active.length > SHOW_LIMIT && !query}
+								<button class="more nested" onclick={() => (showAll[p.id] = !showAll[p.id])}>{showAll[p.id] ? t('shell.showLess') : t('shell.showMore')}</button>
+							{/if}
+							{#if active.length === 0 && arch.length === 0 && !p.stale && !query}
+								<button class="sess ghost nested" onclick={() => onNewSession(p)}><span class="sess-title">{t('shell.newChat')}</span></button>
+							{/if}
+							{@render archived(p, arch, true)}
 						{/if}
 					</div>
-					{#if open}
-						{#each showAll[p.id] || query ? active : firstSessions(active) as s (s.id)}{@render sessRow(s, true, false, p)}{/each}
-						{#if active.length > SHOW_LIMIT && !query}
-							<button class="more nested" onclick={() => (showAll[p.id] = !showAll[p.id])}>{showAll[p.id] ? t('shell.showLess') : t('shell.showMore')}</button>
-						{/if}
-						{#if active.length === 0 && arch.length === 0 && !p.stale && !query}
-							<button class="sess ghost nested" onclick={() => onNewSession(p)}><span class="sess-title">{t('shell.newChat')}</span></button>
-						{/if}
-						{@render archived(p, arch, true)}
-					{/if}
 				{/if}
 			{/each}
 		</section>
@@ -747,7 +761,8 @@
 	.sess.on {
 		background: var(--surface2);
 	}
-	.sess {
+	.sess,
+	.project {
 		position: relative;
 	}
 	/* Dragging a row: it fades where it was and a line marks where it lands. */
@@ -755,14 +770,18 @@
 		cursor: grabbing;
 		user-select: none;
 	}
-	.list.dragging .sess {
+	.list.dragging .sess,
+	.list.dragging .project {
 		pointer-events: none;
 	}
-	.sess.lifted {
+	.sess.lifted,
+	.project.lifted {
 		opacity: 0.45;
 	}
 	.sess.drop-before::before,
-	.sess.drop-after::after {
+	.sess.drop-after::after,
+	.project.drop-before::before,
+	.project.drop-after::after {
 		content: '';
 		position: absolute;
 		left: 12px;
@@ -776,10 +795,12 @@
 	.sess.nested.drop-after::after {
 		left: 42px;
 	}
-	.sess.drop-before::before {
+	.sess.drop-before::before,
+	.project.drop-before::before {
 		top: -1px;
 	}
-	.sess.drop-after::after {
+	.sess.drop-after::after,
+	.project.drop-after::after {
 		bottom: -1px;
 	}
 	.pin-mark {

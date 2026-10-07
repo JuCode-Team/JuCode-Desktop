@@ -1340,6 +1340,7 @@
 				onUnarchiveSession={(id) => store.unarchiveSession(id)}
 				onPinSession={(id, pinned) => store.setPinned(id, pinned)}
 				onMoveSession={(id, target, after) => store.moveSession(id, target, after)}
+				onMoveProject={(id, target, after) => store.moveProject(id, target, after)}
 				onRenameSession={(id, title) => store.renameSession(id, title)}
 				onSessionMenu={openSessionMenu}
 				onProjectMenu={openProjectMenu}
