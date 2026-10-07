@@ -343,6 +343,9 @@ const settings = {
 		footHint: '更改会自动保存，对新建的会话生效。',
 		update: {
 			groupLabel: '应用更新',
+			engineVersion: '引擎版本',
+			logs: '日志',
+			openLogs: '打开日志文件夹',
 			currentVersion: '当前版本',
 			check: '检查更新',
 			checking: '检查中…',
@@ -787,6 +790,9 @@ const settings = {
 		footHint: 'Changes save automatically and apply to new sessions.',
 		update: {
 			groupLabel: 'App updates',
+			engineVersion: 'Engine version',
+			logs: 'Logs',
+			openLogs: 'Open logs folder',
 			currentVersion: 'Current version',
 			check: 'Check for updates',
 			checking: 'Checking…',

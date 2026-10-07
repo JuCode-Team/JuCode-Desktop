@@ -9,7 +9,7 @@
 	import ImageIcon from 'phosphor-svelte/lib/ImageIcon';
 	import XIcon from 'phosphor-svelte/lib/XIcon';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import { getVersion } from '@tauri-apps/api/app';
+	import { appVersion } from '$lib/about';
 	import Modal from '$lib/ui/Modal.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
@@ -90,7 +90,7 @@
 		sending = true;
 		error = '';
 		try {
-			const version = await getVersion().catch(() => '');
+			const version = await appVersion();
 			const attachments: { name: string; type: string; data_url: string }[] = shots.map((s) => ({
 				name: s.name,
 				type: s.url.slice(5, s.url.indexOf(';')),

@@ -10,7 +10,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 	}
 }));
 vi.mock('@tauri-apps/plugin-process', () => ({ relaunch }));
-vi.mock('@tauri-apps/api/app', () => ({ getVersion: () => Promise.resolve('0.4.0') }));
+vi.mock('$lib/about', () => ({ appVersion: () => Promise.resolve('0.4.0') }));
 
 /** `update_check` finds 0.3.2 on `source`; `install` answers `update_install`. */
 function commands(install: () => Promise<void> = () => Promise.resolve(), source = 'github') {

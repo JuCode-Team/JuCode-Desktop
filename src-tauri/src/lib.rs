@@ -841,6 +841,33 @@ fn submit_feedback(ticket: serde_json::Value) -> Result<serde_json::Value, Strin
     jucode_send("POST", "/v1/oauth/tickets", Some(&ticket))
 }
 
+/// What the 更新 page shows and a bug report needs: this app's version, the
+/// engine it ships, the OS, and where the logs are. A command of the app
+/// (not the `app` plugin's getVersion, which a capability can leave out).
+#[tauri::command]
+fn about_app(app: AppHandle) -> serde_json::Value {
+    let jucode = jucode_dir();
+    serde_json::json!({
+        "version": app.package_info().version.to_string(),
+        "cli": app_cli::app_cli_version(),
+        "os": std::env::consts::OS,
+        "arch": std::env::consts::ARCH,
+        "logs": jucode.join("logs").display().to_string(),
+        "daemon_log": jucode.join("daemon").join("daemon.log").display().to_string(),
+    })
+}
+
+/// Opens the folder holding the engine and daemon logs (made when missing).
+#[tauri::command]
+fn open_logs_folder(app: AppHandle) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let dir = jucode_dir();
+    std::fs::create_dir_all(dir.join("logs")).map_err(|e| e.to_string())?;
+    app.opener()
+        .open_path(dir.display().to_string(), None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
 /// Anonymous usage counts (src/lib/telemetry.svelte.ts), with this app's
 /// version and platform; no login needed.
 #[tauri::command(async)]
@@ -3305,6 +3332,8 @@ pub fn run() {
             native_import::native_sessions,
             app_cli::install_cli_command,
             app_cli::app_cli_version,
+            about_app,
+            open_logs_folder,
             app_cli::replace_daemon,
             #[cfg(desktop)]
             app_update::update_check,
