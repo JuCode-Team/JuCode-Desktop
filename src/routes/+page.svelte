@@ -1010,7 +1010,12 @@
 		const abs = rel.startsWith('/') ? rel : `${cwd.replace(/\/+$/, '')}/${rel.replace(/^\.?\//, '')}`;
 		const ext = abs.split('/').pop()?.split('.').pop()?.toLowerCase() ?? '';
 		if ((ext === 'html' || ext === 'htm') && prefs.htmlOpenInBrowser) {
-			browser.open(`file://${abs}`);
+			// The embedded browser loads http(s) only (a file:// URL was refused
+			// and left it on its empty page): serve the file from the loopback
+			// preview server, as chat links do, so its relative assets load too.
+			invoke<string>('preview_url', { path: abs })
+				.then((url) => browser.open(url))
+				.catch((e) => toast.error(t('chat.fileOpenFailed', { path: rel, error: String(e) })));
 		} else {
 			editorStore.open(abs, cwd).catch((e) => console.error('open file', e));
 		}
