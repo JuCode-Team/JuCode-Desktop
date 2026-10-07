@@ -114,6 +114,7 @@ const SPECS: Spec[] = [
 	configField('reasoning_effort', isString),
 	configField('compact_model', isString),
 	configField('title_model', isString),
+	configField('image_model', isString),
 	configField('compaction_threshold_percent', isNumber),
 	configField('retry_attempts', isNumber),
 	configField('connect_timeout_seconds', isNumber),

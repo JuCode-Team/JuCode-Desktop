@@ -75,6 +75,7 @@ export const ROWS: SearchRow[] = [
 	{ section: 'models', id: 'project-instructions', titleKey: 'settings.behavior.includeProjectInstructions', descKey: 'settings.behavior.includeProjectInstructionsSub' },
 	{ section: 'models', id: 'compact-model', titleKey: 'settings.behavior.compactModel', descKey: 'settings.behavior.compactModelHint' },
 	{ section: 'models', id: 'compaction-threshold', titleKey: 'settings.behavior.compactionThreshold', descKey: 'settings.behavior.compactionThresholdSub' },
+	{ section: 'models', id: 'image-model', titleKey: 'settings.behavior.imageModel', descKey: 'settings.behavior.imageModelHint' },
 	{ section: 'network', id: 'retry-attempts', titleKey: 'settings.behavior.retryAttempts', descKey: 'settings.page.retryAttemptsDesc' },
 	{ section: 'network', id: 'connect-timeout', titleKey: 'settings.behavior.connectTimeout', descKey: 'settings.page.connectTimeoutDesc' },
 	{ section: 'network', id: 'read-timeout', titleKey: 'settings.behavior.readTimeout', descKey: 'settings.page.readTimeoutDesc' },
