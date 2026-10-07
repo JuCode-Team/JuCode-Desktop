@@ -4,7 +4,7 @@
 	import { Terminal } from '@xterm/xterm';
 	import { FitAddon } from '@xterm/addon-fit';
 	import '@xterm/xterm/css/xterm.css';
-	import { terminalLook, useWebgl } from './terminal';
+	import { terminalLook, useTerminalInput, useWebgl } from './terminal';
 	import { ptyOpen, ptyWrite, ptyResize, ptyClose } from '$lib/protocol';
 
 	let { cwd = '' }: { cwd?: string } = $props();
@@ -18,7 +18,6 @@
 	function refit() {
 		try {
 			fit?.fit();
-			if (term) ptyResize(id, term.cols, term.rows).catch(() => {});
 		} catch {
 			/* ignore */
 		}
@@ -31,6 +30,7 @@
 			fit = new FitAddon();
 			term.loadAddon(fit);
 			if (host) term.open(host);
+			cleanups.push(useTerminalInput(term));
 			useWebgl(term);
 			fit.fit();
 
@@ -43,6 +43,7 @@
 			cleanups.push(unOut, unExit);
 
 			term.onData((d) => ptyWrite(id, d));
+			term.onResize(({ cols, rows }) => ptyResize(id, cols, rows).catch(() => {}));
 			await ptyOpen(id, term.cols, term.rows, cwd || undefined);
 
 			const ro = new ResizeObserver(refit);
@@ -77,11 +78,11 @@
 	.term-host {
 		height: 100%;
 		width: 100%;
-		padding: 8px 6px 6px 10px;
 		background: var(--panel);
 	}
 	:global(.term-host .xterm) {
 		height: 100%;
+		padding: 8px 6px 6px 10px;
 	}
 	:global(.term-host .xterm-viewport) {
 		background: transparent !important;

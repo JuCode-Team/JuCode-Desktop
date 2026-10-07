@@ -11,7 +11,7 @@
 	import { Terminal } from '@xterm/xterm';
 	import { FitAddon } from '@xterm/addon-fit';
 	import '@xterm/xterm/css/xterm.css';
-	import { terminalLook, useWebgl } from './terminal';
+	import { terminalLook, useTerminalInput, useWebgl } from './terminal';
 	import { ptyOpen, ptyWrite, ptyResize, ptyClose, daemon } from '$lib/protocol';
 	import type { BackendId } from '$lib/backends/types';
 	import { loadBackendSettings } from '$lib/backends/settings';
@@ -59,7 +59,6 @@
 	function refit() {
 		try {
 			fit?.fit();
-			if (term) resize(term.cols, term.rows);
 		} catch {
 			/* ignore */
 		}
@@ -201,6 +200,7 @@
 			fit = new FitAddon();
 			term.loadAddon(fit);
 			if (host) term.open(host);
+			cleanups.push(useTerminalInput(term));
 			useWebgl(term);
 			fit.fit();
 			// Moved here from the chat: the keys go to the TUI at once.
@@ -215,6 +215,7 @@
 			cleanups.push(unOut, unExit);
 
 			term.onData(write);
+			term.onResize(({ cols, rows }) => resize(cols, rows));
 
 			if (disposed || closing) {
 				cleanups.forEach((f) => f());
@@ -296,11 +297,11 @@
 		flex: 1;
 		min-height: 0;
 		width: 100%;
-		padding: 8px 6px 6px 10px;
 		background: var(--panel);
 	}
 	:global(.tui-wrap .xterm) {
 		height: 100%;
+		padding: 8px 6px 6px 10px;
 	}
 	:global(.tui-wrap .xterm-viewport) {
 		background: transparent !important;
