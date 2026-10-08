@@ -54,6 +54,7 @@
 		agents,
 		onOpenAgent,
 		onPlan,
+		onOpenPlan,
 		planMode = 'edits',
 		loadImage,
 		mark = $bindable(-1)
@@ -99,6 +100,8 @@
 		/** Approves or revises a proposed plan (absent: plans have no actions). */
 		onPlan?: (id: string, action: PlanAction) => void;
 		/** The mode a plan's approval offers first. */
+		/** Shows a plan in its page beside the chat. */
+		onOpenPlan?: (id: string) => void;
 		planMode?: ApprovalMode;
 		/** Reads a sent image where the desktop can't open its path (the remote page). */
 		loadImage?: (path: string) => Promise<string>;
@@ -586,7 +589,7 @@
 				<ToolCard name={m.name} output={m.output} running={m.running} isError={m.isError} subagent={m.subagent} trace={traceOf?.(m) ?? undefined} />
 			{/if}
 		{:else if m.kind === 'plan'}
-			<PlanCard id={m.id} title={m.title} text={m.text} status={m.status} actionable={m === lastShown} defaultMode={planMode} onAction={onPlan} />
+			<PlanCard id={m.id} title={m.title} text={m.text} status={m.status} actionable={m === lastShown} defaultMode={planMode} onAction={onPlan} onOpen={onOpenPlan} />
 		{:else if m.kind === 'error'}
 			<ErrorNotice text={m.text} {backend} onAction={onErrorAction} onDismiss={onDismiss ? () => onDismiss(m) : undefined} />
 				{/if}

@@ -1,10 +1,13 @@
 <script lang="ts" module>
 	import type { WebRef } from '$lib/browser.svelte';
+	import type { PlanAction as PaneAction } from '$lib/PlanCard.svelte';
 
 	/** Configured provider (builtin or custom) with its model list — the page
 	 *  loads these once and every pane shares them for the model picker. */
 	export interface ProviderOption {
 		id: string;
+		/** Shown as the provider's heading in the model menu. */
+		name?: string;
 		base_url: string;
 		format: string;
 		models: { name: string; context_window?: number; reasoning_efforts?: string[] }[];
@@ -22,6 +25,8 @@
 		focusComposer: () => void;
 		stop: () => void;
 		openModelMenu: () => void;
+		/** Approve or revise a plan of this session (from its page). */
+		planAction: (id: string, action: PaneAction) => void;
 	}
 </script>
 
@@ -75,6 +80,7 @@
 	import type { SessionSwitch } from '$lib/composer/SessionSwitches.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
+	import { planPages } from '$lib/planPages.svelte';
 	import Picker from '$lib/shell/Picker.svelte';
 	import Segmented from '$lib/ui/Segmented.svelte';
 	import type { SectionKey } from '$lib/settings/nav';
@@ -1078,7 +1084,8 @@
 		stop: () => {
 			if (chat.busy) stop();
 		},
-		openModelMenu: () => composerRef?.openModelMenu()
+		openModelMenu: () => composerRef?.openModelMenu(),
+		planAction
 	};
 	$effect(() => {
 		onRegister?.(session.id, api);
@@ -1147,7 +1154,7 @@
 	<ProgressCard {chat} sessionId={session.id} rows={turnAgents} onOpen={traceable ? openAgent : undefined} />
 	<main bind:this={scroller} onscroll={onScroll} onwheel={onWheel}>
 		<div bind:this={contentEl}>
-			<MessageList bind:this={messageList} bind:mark messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onNote={noteRequirement} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} traceOf={traceable ? traceOf : undefined} agents={allAgents} onOpenAgent={traceable ? openAgent : undefined} onPlan={planAction} {planMode} />
+			<MessageList bind:this={messageList} bind:mark messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onNote={noteRequirement} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} traceOf={traceable ? traceOf : undefined} agents={allAgents} onOpenAgent={traceable ? openAgent : undefined} onPlan={planAction} {planMode} onOpenPlan={(id) => planPages.open(session.id, id)} />
 		</div>
 		{#if chat.booting && chat.engineState !== 'exited'}
 			<div class="welcome spawning">

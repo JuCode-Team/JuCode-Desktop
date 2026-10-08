@@ -285,6 +285,8 @@ const chat = {
 		planCard: {
 			label: '计划',
 			viewFull: '查看完整计划',
+			openPage: '在右侧查看计划',
+			gone: '这份计划已不在对话中',
 			fold: '收起',
 			approve: '批准并执行',
 			modeTitle: '执行时的审批模式',
@@ -586,6 +588,8 @@ const chat = {
 		planCard: {
 			label: 'Plan',
 			viewFull: 'View the full plan',
+			openPage: 'Open the plan beside the chat',
+			gone: 'This plan is no longer in the conversation',
 			fold: 'Fold',
 			approve: 'Approve and run',
 			modeTitle: 'Approval mode for the work',

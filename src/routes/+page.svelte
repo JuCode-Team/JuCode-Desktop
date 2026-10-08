@@ -67,6 +67,7 @@
 		leavesOf,
 		openTab,
 		serializeLayout,
+		splitLeaf,
 		type TileLayout,
 		type TileTab
 	} from '$lib/workbench/tiles';
@@ -110,6 +111,9 @@
 	import { agentDirectory, agentsOfWorkspace } from '$lib/agents.svelte';
 	import { CHATS_ENABLED, type Project, type WorktreeMeta } from '$lib/types';
 	import PlanPanel from '$lib/PlanPanel.svelte';
+	import ProposalPane from '$lib/ProposalPane.svelte';
+	import { planPages, proposalOf, proposalPanel } from '$lib/planPages.svelte';
+	import type { ApprovalMode } from '$lib/approval';
 	import GoalPanel from '$lib/GoalPanel.svelte';
 	import ChangesPanel from '$lib/ChangesPanel.svelte';
 	import TurnsPanel from '$lib/TurnsPanel.svelte';
@@ -424,6 +428,8 @@
 		const tui = tuiBackendOf(tab.panel);
 		if (tui) return tuiTabTitle(tui);
 		if (tab.panel === 'audit') return t('editor.title');
+		const proposal = proposalOf(tab.panel);
+		if (proposal) return planOf(proposal.sessionId, proposal.planId)?.title || t('chat.planCard.label');
 		return (ALL_PANELS as readonly string[]).includes(tab.panel) ? t(`dock.tabs.${tab.panel}`) : tab.panel;
 	}
 	function tuiReady(sid: string): boolean {
@@ -557,6 +563,35 @@
 		if (existing) applyTiles(activateTab(tiles, existing.id));
 		else applyTiles(openTab(tiles, focusedLeaf, { id: newTabId(), panel: kind }));
 	}
+
+	/** The approval mode a plan runs in once approved: the one before plan mode. */
+	function planModeOf(sessionId: string): ApprovalMode {
+		const before = sessionMap.get(sessionId)?.chat.modeBeforePlan;
+		return before && before !== 'plan' ? before : 'edits';
+	}
+		/** A plan message of a session, for its page. */
+	function planOf(sessionId: string, planId: string) {
+		const m = sessionMap.get(sessionId)?.chat.messages.find((x) => x.kind === 'plan' && x.id === planId);
+		return m?.kind === 'plan' ? m : undefined;
+	}
+	/** A plan's page beside its session's chat: shown again if open, else a
+	 *  new tab (one per plan, closed one by one). */
+	function openPlanPage(sessionId: string, planId: string) {
+		const panel = proposalPanel(sessionId, planId);
+		const existing = findPanelTab(panel);
+		if (existing) return applyTiles(activateTab(tiles, existing.id));
+		const tab = { id: newTabId(), panel };
+		// Plan pages share one column right of the chat, as tabs.
+		const plans = leavesOf(tiles.root).find((leaf) => leaf.tabs.some((x) => x.panel.startsWith('proposal:')));
+		if (plans) return applyTiles(openTab(tiles, plans.id, tab));
+		const chat = leafOfTab(tiles.root, chatPanel(sessionId));
+		applyTiles(chat ? splitLeaf(tiles, chat.id, 'right', tab).layout : openTab(tiles, focusedLeaf, tab));
+	}
+	$effect(() => {
+		const request = planPages.request;
+		if (!request || !tilesReady) return;
+		untrack(() => openPlanPage(request.sessionId, request.planId));
+	});
 
 	// The workbench-active session always has a chat tile: activating a session
 	// (sidebar click, ⌘N, resume, deep link…) opens or focuses it.
@@ -1106,6 +1141,7 @@
 				const wasBusy = s.chat.busy;
 				const hadApproval = s.chat.pendingApproval?.callId ?? null;
 				const hadPlan = s.chat.messages.findLast((m) => m.kind === 'plan' && m.status === 'pending');
+				const lastPlan = s.chat.messages.findLast((m) => m.kind === 'plan');
 				// Capture the raw frame for the diagnostics trace so a mis-parsed or
 				// dropped tool frame is inspectable after the fact.
 				s.chat.captureFrame(data);
@@ -1168,7 +1204,11 @@
 					if (plan && plan !== hadPlan && plan.kind === 'plan')
 						void notify(s.chat.title, t('shell.notifyPlan', { title: plan.title }));
 				}
-				// This session's tile (if any) sticks to the bottom while streaming.
+				// A plan just proposed opens in its page beside this session's chat.
+				const newPlan = s.chat.messages.findLast((m) => m.kind === 'plan');
+				if (newPlan && newPlan !== lastPlan && newPlan.kind === 'plan' && newPlan.status === 'pending' && tilesReady && chatSessionsIn(tiles).includes(s.id))
+					openPlanPage(s.id, newPlan.id);
+								// This session's tile (if any) sticks to the bottom while streaming.
 				panes.get(s.id)?.scrollToEnd();
 			};
 			daemon.onFrame = deliver;
@@ -1502,6 +1542,19 @@
 										<div class="gone">{t('shell.chatGone')}</div>
 									{/if}
 								{:else if tab.panel === 'plan'}<PlanPanel plan={chat?.plan ?? []} />
+								{:else if proposalOf(tab.panel)}
+									{@const p = proposalOf(tab.panel)!}
+									{@const plan = planOf(p.sessionId, p.planId)}
+									{@const lastPlan = sessionMap.get(p.sessionId)?.chat.messages.findLast((m) => m.kind === 'plan')}
+									<ProposalPane
+										{plan}
+										actionable={!!plan && plan === lastPlan}
+										defaultMode={planModeOf(p.sessionId)}
+										onAction={(id, action) => {
+											panes.get(p.sessionId)?.planAction(id, action);
+											if (action.decision === 'revise') panes.get(p.sessionId)?.focusComposer();
+										}}
+									/>
 								{:else if tab.panel === 'goal'}<GoalPanel goal={chat?.goal ?? null} />
 								{:else if tab.panel === 'agents'}{#if chat && activeId}{#key activeId}<AgentRunsPanel {chat} onOp={(op) => activeId && dispatch(activeId, op)} />{/key}{/if}
 								{:else if tab.panel === 'changes'}<ChangesPanel cwd={activeProject?.path ?? ''} files={chat?.changedFiles ?? []} agentDiffs={chat?.agentDiffs ?? {}} onRevert={(p) => chat && (chat.changedFiles = chat.changedFiles.filter((x) => x !== p))} />
