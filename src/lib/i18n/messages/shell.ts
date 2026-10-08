@@ -4,6 +4,8 @@ const shell = {
 	zh: {
 		// notifications / runtime
 		notifyDone: '对话完成：{title}',
+		notifyApproval: '等你批准：{what}',
+		notifyPlan: '计划待批准：{title}',
 		cacheMiss: {
 			message: '「{title}」缓存未命中：本次请求输入 {input} token，命中缓存 {cached}。5 秒内不操作将继续执行。',
 			stop: '停止任务'
@@ -906,6 +908,8 @@ const shell = {
 	en: {
 		// notifications / runtime
 		notifyDone: 'Conversation done: {title}',
+		notifyApproval: 'Waiting for your approval: {what}',
+		notifyPlan: 'Plan to approve: {title}',
 		cacheMiss: {
 			message: '{title}: prompt cache miss. {cached} of {input} input tokens were cached. Continuing in 5 seconds.',
 			stop: 'Stop task'
