@@ -802,3 +802,24 @@ describe('gateway session costs', () => {
 		expect(last?.kind === 'assistant' && last.turn?.billing?.gateway_cost).toBe(0);
 	});
 });
+
+import { boundedOutput } from './chat.svelte';
+describe('boundedOutput', () => {
+	it('keeps a short output, cuts a long one to its head and tail', () => {
+		expect(boundedOutput('ok')).toBe('ok');
+		const long = 'a'.repeat(50_000) + 'MIDDLE' + 'z'.repeat(50_000);
+		const out = boundedOutput(long);
+		expect(out.length).toBeLessThan(70_000);
+		expect(out.startsWith('aaa')).toBe(true);
+		expect(out.endsWith('zzz')).toBe(true);
+		expect(out).toContain('characters not shown');
+	});
+	it('keeps JSON parseable and an image whole', () => {
+		const json = JSON.stringify({ stdout: 'x'.repeat(200_000), exit_code: 0 });
+		const out = JSON.parse(boundedOutput(json));
+		expect(out.exit_code).toBe(0);
+		expect(out.stdout.length).toBeLessThan(40_000);
+		const image = JSON.stringify({ kind: 'image', base64: 'A'.repeat(300_000) });
+		expect(JSON.parse(boundedOutput(image)).base64.length).toBe(300_000);
+	});
+});

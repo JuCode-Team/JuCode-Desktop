@@ -275,6 +275,31 @@ export interface TurnDiff {
  *  `delayMs` from `at` (ms), because of `reason` (the provider's error). */
 /** What an automatic retry sends when the failed turn is kept (autoRetry.ts).
  *  Recognised again in a reloaded transcript, where it shows as a note. */
+/** What a tool card keeps of an output in memory: a long one (a build log,
+ *  a big file read) keeps its head and tail. Structured (JSON) outputs are
+ *  kept whole when they fit, else their string fields are cut the same way,
+ *  so a card still parses them. The engine's session keeps the full output. */
+const TOOL_OUTPUT_MAX = 64 * 1024;
+export function boundedOutput(output: string): string {
+	if (output.length <= TOOL_OUTPUT_MAX) return output;
+	const cut = (text: string, max: number) =>
+		text.length <= max ? text : `${text.slice(0, max / 2)}\n… (${text.length - max} characters not shown) …\n${text.slice(-max / 2)}`;
+	try {
+		const value = JSON.parse(output) as unknown;
+		if (value && typeof value === 'object' && !Array.isArray(value)) {
+			const out: Record<string, unknown> = {};
+			// An image's pixels are kept whole (cut, they would not decode).
+			for (const [k, v] of Object.entries(value as Record<string, unknown>))
+				out[k] = typeof v === 'string' && k !== 'base64' ? cut(v, TOOL_OUTPUT_MAX / 2) : v;
+			const text = JSON.stringify(out);
+			if (text.length <= TOOL_OUTPUT_MAX * 2 || typeof out.base64 === 'string') return text;
+		}
+	} catch {
+		/* plain text */
+	}
+	return cut(output, TOOL_OUTPUT_MAX);
+}
+
 export const AUTO_CONTINUE = '继续（连接中断后自动重试）';
 
 export interface RetryState {
@@ -1161,7 +1186,7 @@ export class ChatState {
 			case 'tool_update': {
 				const t = this.#tool(str(ev.call_id));
 				if (t) {
-					t.output = str(ev.output);
+					t.output = boundedOutput(str(ev.output));
 					if (SUBAGENT_CALLS.has(t.name)) t.args = t.output;
 				}
 				break;
@@ -1175,7 +1200,7 @@ export class ChatState {
 				this.#segStart = Date.now();
 				const t = this.#tool(str(ev.call_id));
 				if (t) {
-					t.output = str(ev.output);
+					t.output = boundedOutput(str(ev.output));
 					t.running = false;
 					t.isError = ev.is_error === true;
 				}
