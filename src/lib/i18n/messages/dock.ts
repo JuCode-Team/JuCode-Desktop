@@ -34,7 +34,8 @@ const dock = {
 			unit: { s: '秒', m: '分', h: '小时' },
 			open: '查看追踪',
 			result: '结果',
-			openAgent: '查看子智能体会话'
+			openAgent: '查看子智能体会话',
+			noTranscript: '这个引擎还不能读取子智能体的会话'
 		},
 		dock: {
 			empty: '没有打开的面板',
@@ -243,7 +244,8 @@ const dock = {
 			unit: { s: 's', m: 'm', h: 'h' },
 			open: 'View trace',
 			result: 'Result',
-			openAgent: 'View the subagent’s conversation'
+			openAgent: 'View the subagent’s conversation',
+			noTranscript: "This engine can't read a subagent's conversation yet"
 		},
 		dock: {
 			empty: 'No open panels',

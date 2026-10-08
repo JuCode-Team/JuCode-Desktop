@@ -20,11 +20,14 @@ export function runState(state: string): RunState {
 			return 'done';
 		case 'failed':
 		case 'error':
+		case 'errored':
 			return 'failed';
 		case 'stopped':
 		case 'killed':
 		case 'cancelled':
 		case 'skipped':
+		case 'interrupted':
+		case 'closed':
 			return 'stopped';
 		default:
 			return state ? 'queued' : 'done';

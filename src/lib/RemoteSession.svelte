@@ -399,7 +399,7 @@
 	let draftMode = $state<ApprovalMode | null>(null);
 	const shownMode = $derived(draftMode ?? chat.approvalMode);
 	const APPROVAL = $derived(
-		(isAgent ? ['ask', 'edits', 'auto', 'all'] : bcaps.extendedApprovalModes ? ['ask', 'plan', 'auto', 'edits', 'all'] : ['ask', 'edits', 'all']).map(
+		(isAgent ? ['ask', 'edits', 'auto', 'all'] : bcaps.extendedApprovalModes ? ['ask', 'plan', 'auto', 'edits', 'all'] : bcaps.planMode ? ['ask', 'plan', 'edits', 'all'] : ['ask', 'edits', 'all']).map(
 			(k) => ({ ...APPROVAL_MODES[k], checked: shownMode === k, disabled: isAgent })
 		)
 	);

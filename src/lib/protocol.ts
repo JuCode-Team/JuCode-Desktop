@@ -74,7 +74,15 @@ export type Op =
 	| { op: 'permission_rules' }
 	// claude: the agent trace (Workflows, Task subagents) and one subagent's conversation.
 	| { op: 'agent_runs' }
-	| { op: 'subagent_transcript'; agent_id: string };
+	| { op: 'subagent_transcript'; agent_id: string }
+	// jucode plan mode: run a proposed plan in `mode`, or revise it with `feedback`.
+	| {
+			op: 'approve_plan';
+			id: string;
+			decision: 'approve' | 'revise';
+			mode?: 'read-only' | 'auto' | 'auto-edit' | 'full-auto';
+			feedback?: string;
+	  };
 
 /** Saves an MCP server change (`mcp_set` / `mcp_remove` / `mcp_toggle`) for
  *  every session; open JuCode sessions apply it at once. */

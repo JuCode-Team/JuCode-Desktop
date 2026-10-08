@@ -43,6 +43,9 @@ export interface BackendCaps {
 	/** Backend exposes claude's extra approval modes ('plan' + 'auto') in the
 	 *  picker, on top of the shared ask/edits/all trio. */
 	extendedApprovalModes: boolean;
+	/** A plan approval mode: the agent researches and proposes a plan, and
+	 *  works once the user approves it (claude, codex and jucode). */
+	planMode: boolean;
 	/** Per-hunk partial approval of edit tools (approve op with `hunks`). */
 	hunkApproval: boolean;
 	/** Queue-jumping a busy turn (steer op + queued-messages strip). */

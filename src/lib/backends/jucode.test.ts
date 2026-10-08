@@ -21,6 +21,16 @@ describe('jucode adapter (passthrough)', () => {
 		expect(sent('full-auto')).toBe('full-access');
 		expect(adapter.translate({ type: 'approval_mode', mode: 'manual' })[0].mode).toBe('read-only');
 		expect(adapter.translate({ type: 'approval_mode', mode: 'full-access' })[0].mode).toBe('full-auto');
+		// Plan mode is the same word on both sides.
+		expect(sent('plan')).toBe('plan');
+		expect(adapter.translate({ type: 'approval_mode', mode: 'plan' })[0].mode).toBe('plan');
+	});
+
+	it('runs an approved plan in the engine’s mode', () => {
+		const line = (op: Op) => JSON.parse(adapter.encodeOp(op)![0]);
+		expect(line({ op: 'approve_plan', id: 'p1', decision: 'approve', mode: 'read-only' })).toEqual({ op: 'approve_plan', id: 'p1', decision: 'approve', mode: 'manual' });
+		expect(line({ op: 'approve_plan', id: 'p1', decision: 'approve', mode: 'full-auto' }).mode).toBe('full-access');
+		expect(line({ op: 'approve_plan', id: 'p1', decision: 'revise', feedback: 'smaller' })).toEqual({ op: 'approve_plan', id: 'p1', decision: 'revise', feedback: 'smaller' });
 	});
 
 	it('declares every capability', () => {

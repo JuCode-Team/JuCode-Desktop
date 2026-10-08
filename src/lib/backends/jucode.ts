@@ -1,7 +1,8 @@
 // Native-engine adapter: the desktop's Op / AgentEvent dialect is the jucode
 // wire protocol, so events pass through untouched except for two things: the
 // `hello` version frame, and approval-mode names (the engine says manual /
-// full-access where the desktop's shared trio says read-only / full-auto).
+// full-access where the desktop says read-only / full-auto; plan and auto are
+// the same on both sides).
 
 import type { Op } from '$lib/protocol';
 import type { BackendCaps, EngineAdapter, NormalizedEvent } from './types';
@@ -9,6 +10,8 @@ import type { BackendCaps, EngineAdapter, NormalizedEvent } from './types';
 export const JUCODE_CAPS: BackendCaps = {
 	approvalModes: true,
 	extendedApprovalModes: false,
+	// Plan mode: proposed_plan cards, approve_plan.
+	planMode: true,
 	hunkApproval: true,
 	steer: true,
 	interrupt: true,
@@ -27,7 +30,9 @@ export const JUCODE_CAPS: BackendCaps = {
 	mcpEngineOwned: false,
 	ruleScopes: false,
 	sideQuestions: false,
-	agentTrace: false
+	// agent_runs / subagent_transcript (an older engine refuses both: ChatState
+	// drops the refusal and the spawn calls report the agents).
+	agentTrace: true
 };
 
 /** Wire protocol version this desktop speaks (`hello.protocol`). */
@@ -37,6 +42,7 @@ const TO_ENGINE_MODE: Record<string, string> = {
 	'read-only': 'manual',
 	'auto-edit': 'auto-edit',
 	auto: 'auto',
+	plan: 'plan',
 	'full-auto': 'full-access'
 };
 const FROM_ENGINE_MODE: Record<string, string> = {
@@ -69,6 +75,9 @@ export function createJucodeAdapter(): EngineAdapter {
 		},
 		encodeOp(op: Op): string[] {
 			if (op.op === 'set_approval_mode') {
+				return [JSON.stringify({ ...op, mode: TO_ENGINE_MODE[op.mode] ?? op.mode })];
+			}
+			if (op.op === 'approve_plan' && op.mode) {
 				return [JSON.stringify({ ...op, mode: TO_ENGINE_MODE[op.mode] ?? op.mode })];
 			}
 			return [JSON.stringify(op)];

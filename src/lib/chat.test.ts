@@ -618,11 +618,16 @@ describe('claude session extras', () => {
 		c.handle({ type: 'model_fallback', from: 'Opus 5.5', to: 'Sonnet 5.5', reason: 'overloaded' });
 		expect(c.messages.at(-1)).toEqual({ kind: 'system', text: '模型已从 Opus 5.5 切换到 Sonnet 5.5（原模型过载）' });
 		c.handle({ type: 'subagent_lifecycle', path: 'a1', label: 'Scan auth', status: 'running', message: 'Reading' });
-		expect(c.subagents.a1).toEqual({ status: 'running', message: 'Reading', label: 'Scan auth' });
-		c.handle({ type: 'subagent_lifecycle', path: 'a1', label: 'Scan auth', status: 'completed', message: '' });
-		expect(c.subagents.a1).toBeUndefined();
+		expect(c.subagents.a1).toMatchObject({ status: 'running', message: 'Reading', label: 'Scan auth' });
 		c.handle({ type: 'tool_start', call_id: 't2', name: 'read', subagent: 'Scan auth' });
 		expect(c.messages.at(-1)).toMatchObject({ kind: 'tool', subagent: 'Scan auth' });
+		expect(c.subagentLastTool['Scan auth']).toMatchObject({ callId: 't2', name: 'read' });
+		// A finished subagent stays (the progress card shows it) until the next turn.
+		c.handle({ type: 'subagent_lifecycle', path: 'a1', label: 'Scan auth', status: 'completed', message: '' });
+		expect(c.subagents.a1).toMatchObject({ status: 'completed', label: 'Scan auth' });
+		expect(c.subagents.a1.endedAt).toBeGreaterThan(0);
+		c.handle({ type: 'connecting' });
+		expect(c.subagents.a1).toBeUndefined();
 		c.handle({ type: 'model_status', model: 'claude-opus-5-5', fast: true, fast_available: true, thinking_summaries: false, state: 'idle' });
 		expect([c.fast, c.fastAvailable, c.thinkingSummaries]).toEqual([true, true, false]);
 		c.handle({ type: 'model_status', model: 'gpt-5.5', state: 'idle' });
@@ -664,6 +669,70 @@ describe('claude session extras', () => {
 		expect(tr.messages.map((m) => m.kind)).toEqual(['reasoning', 'tool', 'assistant']);
 		// The session's own conversation is untouched.
 		expect(c.messages).toEqual([]);
+	});
+
+	it('reads a JuCode subagent from its spawn call and its lifecycle', () => {
+		const c = new ChatState();
+		c.handle({ type: 'connecting' });
+		c.handle({ type: 'tool_start', call_id: 'call_1', name: 'spawn_agent' });
+		c.handle({ type: 'subagent_lifecycle', path: '/root/scan', status: 'pending', message: 'reserved' });
+		c.handle({ type: 'tool_output', call_id: 'call_1', name: 'spawn_agent', output: '{"task_name":"scan","path":"/root/scan","status":"running"}', is_error: false });
+		expect(c.subagents['/root/scan']).toMatchObject({ status: 'pending', label: 'scan', toolUseId: 'call_1' });
+		c.handle({ type: 'subagent_lifecycle', path: '/root/scan', status: 'running', message: 'started', model: 'gpt-5.5' });
+		c.handle({ type: 'subagent_lifecycle', path: '/root/scan', status: 'message', message: 'queued message' });
+		expect(c.subagents['/root/scan']).toMatchObject({ status: 'running', model: 'gpt-5.5', toolUseId: 'call_1' });
+		c.handle({ type: 'subagent_lifecycle', path: '/root/scan', status: 'errored', message: 'timeout' });
+		expect(c.subagents['/root/scan'].endedAt).toBeGreaterThan(0);
+	});
+
+	it('reads the native agent trace’s activity and effort, and tool inputs in a transcript', () => {
+		const c = new ChatState();
+		c.handle({ type: 'agent_runs', workflows: [], agents: [{ id: '/root/x', label: 'x', state: 'running', activity: 'Ran cargo test', effort: 'low', tool_use_id: 'c9' }] });
+		expect(c.agentRunsSeen).toBe(true);
+		expect(c.agentRuns.agents[0]).toMatchObject({ state: 'running', activity: 'Ran cargo test', effort: 'low', toolUseId: 'c9' });
+		c.handle({ type: 'subagent_transcript', agent_id: '/root/x', items: [{ role: 'user', content: 'go' }, { role: 'tool', call_id: 't', name: 'bash', input: { command: 'ls' }, running: true }] });
+		expect(c.subagentTranscripts['/root/x'].messages[0]).toMatchObject({ kind: 'tool', output: '{"command":"ls"}', running: true });
+	});
+
+	it('takes an older engine’s refusal of the trace ops quietly', () => {
+		setLocale('zh');
+		const c = new ChatState();
+		c.agentFocus = '/root/x';
+		c.handle({ type: 'error', message: 'unknown op: agent_runs' });
+		c.handle({ type: 'error', message: 'unknown op: subagent_transcript' });
+		expect(c.messages).toEqual([]);
+		expect(c.lastError).toBeNull();
+		expect(c.subagentTranscripts['/root/x'].error).toBeTruthy();
+	});
+
+	it('shows a proposed plan and follows its status', () => {
+		const c = new ChatState();
+		c.handle({ type: 'proposed_plan', id: 'p1', title: 'Fix auth', markdown: '## Steps\n1. a', status: 'pending' });
+		expect(c.messages.at(-1)).toEqual({ kind: 'plan', id: 'p1', title: 'Fix auth', text: '## Steps\n1. a', status: 'pending' });
+		c.planRevising = 'p1';
+		c.handle({ type: 'proposed_plan', id: 'p1', title: 'Fix auth', markdown: '## Steps\n1. a', status: 'revising' });
+		expect(c.messages).toHaveLength(1);
+		expect(c.messages[0]).toMatchObject({ status: 'revising' });
+		expect(c.planRevising).toBeNull();
+		c.handle({ type: 'proposed_plan', id: 'p2', title: 'Fix auth v2', markdown: 'x', status: 'odd' });
+		expect(c.messages.at(-1)).toMatchObject({ id: 'p2', status: 'pending' });
+		c.handle({ type: 'transcript', items: [{ role: 'plan', id: 'p2', title: 'T', content: 'body', status: 'approved' }] });
+		expect(c.messages).toEqual([{ kind: 'plan', id: 'p2', title: 'T', text: 'body', status: 'approved' }]);
+	});
+
+	it('remembers the mode before plan mode and when the plan changed', () => {
+		const c = new ChatState();
+		c.setApprovalMode('edits');
+		c.setApprovalMode('plan');
+		c.setApprovalMode('plan');
+		expect(c.modeBeforePlan).toBe('edits');
+		c.handle({ type: 'plan', plan: [{ step: 'a', status: 'pending' }] });
+		const at = c.planAt;
+		expect(at).toBeGreaterThan(0);
+		c.handle({ type: 'connecting' });
+		expect(c.turnStartedAt).toBeGreaterThan(0);
+		c.handle({ type: 'status', message: 'ready' });
+		expect(c.turnEndedAt).toBeGreaterThanOrEqual(c.turnStartedAt);
 	});
 
 	it('shows the images a message was sent with, live and in a transcript', () => {

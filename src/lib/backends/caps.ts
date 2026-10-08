@@ -7,6 +7,7 @@ import type { BackendCaps } from './types';
 export const CLAUDE_CAPS: BackendCaps = {
 	approvalModes: true, // set_permission_mode control request (live, acked)
 	extendedApprovalModes: true, // native plan + auto permission modes
+	planMode: true,
 	hunkApproval: true, // MultiEdit splits into per-edit hunks (single Edit stays whole-call)
 	steer: false, // stdin is already a queue: mid-turn messages run as the next turn
 	interrupt: true, // control_request subtype interrupt
@@ -33,6 +34,7 @@ export const CLAUDE_CAPS: BackendCaps = {
 export const CODEX_CAPS: BackendCaps = {
 	approvalModes: true, // thread/start approvalPolicy+sandbox, per-turn overrides
 	extendedApprovalModes: true, // plan: collaborationMode plan; auto: the auto_review approvals reviewer
+	planMode: true,
 	hunkApproval: false, // codex approvals are whole-patch accept/decline
 	steer: true, // the daemon holds mid-turn messages; turn/steer joins them to the running turn
 	interrupt: true, // turn/interrupt
@@ -57,6 +59,7 @@ export const CODEX_CAPS: BackendCaps = {
 export const ACP_CAPS: BackendCaps = {
 	approvalModes: false, // ACP session modes are agent-defined ids — no safe mapping
 	extendedApprovalModes: false,
+	planMode: false,
 	hunkApproval: false, // permission responses are whole-call option picks
 	steer: false, // no mid-turn injection; queued messages run as the next turn
 	interrupt: true, // session/cancel (core protocol, all agents)
