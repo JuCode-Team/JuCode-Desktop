@@ -7,7 +7,7 @@ const shell = {
 		notifyApproval: '等你批准：{what}',
 		notifyPlan: '计划待批准：{title}',
 		cacheMiss: {
-			message: '「{title}」缓存未命中：本次请求输入 {input} token，命中缓存 {cached}。5 秒内不操作将继续执行。',
+			message: '「{title}」缓存未命中：本次输入 {input} token，只命中 {cached} token。不操作的话，5 秒后继续执行。',
 			stop: '停止任务'
 		},
 		untitled: '未命名',
