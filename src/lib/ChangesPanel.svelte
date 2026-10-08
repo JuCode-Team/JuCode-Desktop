@@ -7,12 +7,25 @@
 	import Modal from '$lib/ui/Modal.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import { confirm } from '$lib/ui/confirm.svelte';
-	import { git } from '$lib/protocol';
+	import { git, revertAgentEdits } from '$lib/protocol';
 	import { editorStore } from '$lib/editor/editorStore.svelte';
 	import { t } from '$lib/i18n';
 
 	// `files` is the session-tracked set of agent-edited paths; onRevert removes one.
-	let { cwd = '', files = [], onRevert }: { cwd?: string; files?: string[]; onRevert?: (p: string) => void } = $props();
+	// `agentDiffs`: the agent's own edits per project-relative path, so a
+	// revert undoes only them and keeps the user's changes.
+	let {
+		cwd = '',
+		files = [],
+		agentDiffs = {},
+		onRevert
+	}: { cwd?: string; files?: string[]; agentDiffs?: Record<string, string[]>; onRevert?: (p: string) => void } = $props();
+	/** The recorded diffs for a listed path (absolute or project-relative). */
+	function diffsOf(path: string): string[] {
+		const root = cwd.replace(/\/+$/, '');
+		const rel = root && path.startsWith(root + '/') ? path.slice(root.length + 1) : path;
+		return agentDiffs[rel] ?? [];
+	}
 	const dir = () => cwd || undefined;
 
 	let stats = $state<Record<string, { add: number; del: number }>>({});
@@ -76,6 +89,31 @@
 	}
 
 	async function revert(path: string) {
+		const diffs = diffsOf(path);
+		// The agent's own edits are known: undo exactly them, keep the user's.
+		if (diffs.length && cwd) {
+			const ok = await confirm({
+				title: t('dock.changes.revertTitle'),
+				message: t('dock.changes.revertAgentConfirm', { path }),
+				confirmLabel: t('dock.changes.revert'),
+				danger: true
+			});
+			if (!ok) return;
+			busy = true;
+			error = '';
+			try {
+				const root = cwd.replace(/\/+$/, '');
+				const rel = path.startsWith(root + '/') ? path.slice(root.length + 1) : path;
+				await revertAgentEdits(cwd, rel, diffs);
+				onRevert?.(path);
+				return;
+			} catch (e) {
+				// The file changed too much since: fall through to the full revert.
+				error = t('dock.changes.revertAgentFailed', { error: String(e) });
+			} finally {
+				busy = false;
+			}
+		}
 		const ok = await confirm({
 			title: t('dock.changes.revertTitle'),
 			message: t('dock.changes.revertConfirm', { path }),

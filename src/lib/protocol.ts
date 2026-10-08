@@ -540,6 +540,10 @@ export function listProviders(): Promise<ProviderInfo[]> {
 export function git(args: string[], cwd?: string): Promise<string> {
 	return invoke('git', { args, cwd });
 }
+/** Undoes only the agent's edits to `path` (its recorded diffs), keeping the user's. */
+export function revertAgentEdits(cwd: string, path: string, diffs: string[]): Promise<void> {
+	return invoke('revert_agent_edits', { cwd, path, diffs });
+}
 // 并行任务 worktree 的容器目录（<repo-parent>/.jucode-worktrees/<repo-name>）。
 export function worktreeBase(cwd: string): Promise<string> {
 	return invoke('worktree_base', { cwd });

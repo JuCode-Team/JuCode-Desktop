@@ -461,6 +461,9 @@ export class ChatState {
 	// Per user-turn file edits (path → added/removed line counts), keyed by the
 	// 0-based user-turn index — drives the turn-level diff timeline.
 	turnEdits = $state<Record<number, Record<string, { added: number; removed: number }>>>({});
+	/** The agent's own edits per file (the edit tools' unified diffs, oldest
+	 *  first), so 还原 can undo exactly them and keep the user's changes. */
+	agentDiffs: Record<string, string[]> = {};
 	// Approval policy, enforced engine-side ('ask' ↔ read-only, 'edits' ↔
 	// auto-edit, 'all' ↔ full-auto). The engine is the source of truth: this
 	// mirrors its `approval_mode` events, except right after engine startup where
@@ -1193,6 +1196,13 @@ export class ChatState {
 						const out = JSON.parse(str(ev.output)) as Record<string, unknown>;
 						const paths = [out.path, ...(Array.isArray(out.paths) ? out.paths : [])];
 						const edited: string[] = [];
+						// One file's edit: keep its diff (bounded) for an exact undo,
+						// by the project-relative name its diff header carries.
+						const label = /^\+\+\+ b\/(.+)$/m.exec(str(out.diff))?.[1];
+						if (label && typeof out.path === 'string' && !Array.isArray(out.paths)) {
+							const list = (this.agentDiffs[label] ??= []);
+							if (list.length < 200) list.push(str(out.diff));
+						}
 						for (const p of paths) {
 							if (typeof p === 'string' && p) {
 								edited.push(p);

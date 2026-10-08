@@ -2769,6 +2769,71 @@ fn git(args: Vec<String>, cwd: Option<String>) -> Result<String, String> {
     }
 }
 
+/// Undoes the agent's own edits to one file: `diffs` are the edit tools'
+/// unified diffs for it, oldest first; they are reverse-applied newest first
+/// against the working tree by their context, so the user's own changes
+/// elsewhere in the file stay (a hunk whose context changed refuses). Every diff
+/// must touch only `path` (inside `cwd`). Nothing is written unless all of
+/// them apply (`git apply --check` first).
+#[tauri::command(async)]
+fn revert_agent_edits(cwd: String, path: String, diffs: Vec<String>) -> Result<(), String> {
+    use std::io::Write;
+    let dir = PathBuf::from(&cwd);
+    if path.is_empty() || Path::new(&path).is_absolute() || path.split(['/', '\\']).any(|part| part == "..") {
+        return Err(format!("not a project path: {path}"));
+    }
+    if diffs.is_empty() || diffs.len() > 200 {
+        return Err("no agent edits to undo".to_string());
+    }
+    // Each diff names its file in `diff --git a/<p> b/<p>` / `+++ b/<p>`
+    // headers; any other file name is refused.
+    for diff in &diffs {
+        for line in diff.lines() {
+            let named = line
+                .strip_prefix("+++ b/")
+                .or_else(|| line.strip_prefix("--- a/"))
+                .map(str::trim);
+            if let Some(named) = named {
+                if named != path && named != "/dev/null" {
+                    return Err(format!("edit touches another file: {named}"));
+                }
+            }
+        }
+    }
+    let patch: String = diffs
+        .iter()
+        .rev()
+        .map(|diff| if diff.ends_with('\n') { diff.clone() } else { format!("{diff}\n") })
+        .collect();
+    let run = |check: bool| -> Result<(), String> {
+        let mut cmd = Command::new("git");
+        no_window(&mut cmd);
+        cmd.current_dir(&dir).env("GIT_TERMINAL_PROMPT", "0").args(["apply", "-R", "--whitespace=nowarn"]);
+        if check {
+            cmd.arg("--check");
+        }
+        cmd.args(["--include", &path, "-"]);
+        cmd.stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        let mut child = cmd.spawn().map_err(|e| format!("failed to run git: {e}"))?;
+        child
+            .stdin
+            .take()
+            .ok_or("git stdin unavailable")?
+            .write_all(patch.as_bytes())
+            .map_err(|e| e.to_string())?;
+        let output = child.wait_with_output().map_err(|e| e.to_string())?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+        }
+    };
+    run(true)?;
+    run(false)
+}
+
 /// Runs a fixed git plumbing command in `dir` (optionally with an isolated index
 /// file). A stable checkpoint identity is set so `commit-tree` works even in a
 /// repo without a configured user. Returns trimmed stdout on success.
@@ -3303,6 +3368,7 @@ pub fn run() {
             put_cloud_settings,
             diagnostic_logs,
             submit_feedback,
+            revert_agent_edits,
             send_telemetry,
             fetch_jucode_models,
             fetch_jucode_groups,
