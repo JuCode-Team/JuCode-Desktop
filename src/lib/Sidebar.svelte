@@ -19,6 +19,7 @@
 	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
 	import PushPinIcon from 'phosphor-svelte/lib/PushPinIcon';
 	import PushPinSlashIcon from 'phosphor-svelte/lib/PushPinSlashIcon';
+	import { rowIn } from '$lib/ui/motion';
 	import Button from '$lib/ui/Button.svelte';
 	import { t } from '$lib/i18n';
 	import { withShortcut } from '$lib/shortcuts';
@@ -317,6 +318,7 @@
 		{@const req = s.chat.sessionId ? reqs.bySession.get(s.chat.sessionId) : undefined}
 		<!-- Listed rows (`p` given) drag within their project and pinned group. -->
 		<button
+			in:rowIn
 			class="sess"
 			class:nested
 			class:on={!selectable && s.id === activeId}

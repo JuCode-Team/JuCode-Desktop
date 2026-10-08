@@ -37,7 +37,8 @@ export function paneIn(_node: Element, { y = 4, duration = T_MED } = {}): Transi
 	};
 }
 
-/** A page leaving (settings, home, project page): fade and sink a little. */
+/** A page leaving (settings, home, project page), or a settings section
+ *  giving way to the next: fade and sink a little. */
 export function paneOut(_node: Element, { y = 4, duration = T_FAST } = {}): TransitionConfig {
 	return {
 		duration: motionMs(duration),
@@ -46,24 +47,19 @@ export function paneOut(_node: Element, { y = 4, duration = T_FAST } = {}): Tran
 	};
 }
 
-/** Menus and popovers closing: a quick fade. */
-export function popOut(_node: Element, { duration = 110 } = {}): TransitionConfig {
-	return { duration: motionMs(duration), easing: cubicOut, css: (t) => `opacity: ${t}` };
-}
-
 // Rows that arrive in the same update: a list loading or filling in, which
 // appears at once instead of sliding row by row.
 let arriving = 0;
 
 /** A list row arriving (a new session in the sidebar): slide in from the left. */
-export function rowIn(_node: Element, { x = -6, duration = 180, skip = false } = {}): () => TransitionConfig {
+export function rowIn(_node: Element, { x = -6, duration = 180 } = {}): () => TransitionConfig {
 	arriving++;
 	// Svelte calls a returned function in the next microtask, after every
 	// row of this update has counted itself.
 	return () => {
 		const together = arriving;
 		queueMicrotask(() => (arriving = 0));
-		if (skip || together > 2) return { duration: 0 };
+		if (together > 2) return { duration: 0 };
 		return {
 			duration: motionMs(duration),
 			easing: cubicOut,
