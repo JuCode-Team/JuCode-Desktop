@@ -59,11 +59,11 @@ pub struct ImportedSession {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-struct ImportRecord {
-    source: String,
-    from: String,
-    to: String,
-    at_ms: u64,
+pub(crate) struct ImportRecord {
+    pub source: String,
+    pub from: String,
+    pub to: String,
+    pub at_ms: u64,
 }
 
 /// Where each engine keeps its sessions and where imports are recorded
@@ -74,7 +74,7 @@ pub struct Homes {
     pub registry: PathBuf,
 }
 
-fn homes() -> Homes {
+pub(crate) fn homes() -> Homes {
     let home = std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(PathBuf::from)
@@ -89,21 +89,21 @@ fn homes() -> Homes {
 }
 
 const MAX_LISTED: usize = 50;
-const MAX_TITLE_CHARS: usize = 80;
+pub(crate) const MAX_TITLE_CHARS: usize = 80;
 /// Bytes scanned for a Codex title when the thread has no name.
 const MAX_TITLE_SCAN: u64 = 1024 * 1024;
 /// Files in a `history_base` chain before giving up (a cycle guard; real
 /// threads reach a handful).
 const MAX_CHAIN: usize = 256;
 
-fn now_ms() -> u64 {
+pub(crate) fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
 }
 
-fn mtime_ms(path: &Path) -> u64 {
+pub(crate) fn mtime_ms(path: &Path) -> u64 {
     fs::metadata(path)
         .and_then(|m| m.modified())
         .ok()
@@ -161,14 +161,14 @@ fn utc_parts(ms: u64) -> (i64, u32, u32, u32, u32, u32) {
 
 // --- the import registry -----------------------------------------------------
 
-fn load_registry(path: &Path) -> Vec<ImportRecord> {
+pub(crate) fn load_registry(path: &Path) -> Vec<ImportRecord> {
     fs::read_to_string(path)
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_default()
 }
 
-fn save_registry(path: &Path, records: &[ImportRecord]) -> Result<(), String> {
+pub(crate) fn save_registry(path: &Path, records: &[ImportRecord]) -> Result<(), String> {
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     }
@@ -184,7 +184,7 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
 
 // --- Claude Code -------------------------------------------------------------
 
-fn claude_copy_path(h: &Homes, cwd: &str, id: &str) -> PathBuf {
+pub(crate) fn claude_copy_path(h: &Homes, cwd: &str, id: &str) -> PathBuf {
     project_dir(&h.claude, cwd).join(format!("{id}.jsonl"))
 }
 
@@ -208,7 +208,7 @@ fn list_claude(h: &Homes, cwd: &str) -> Result<Vec<NativeSession>, String> {
         .collect())
 }
 
-fn existing_copy(
+pub(crate) fn existing_copy(
     registry: &[ImportRecord],
     source: &str,
     from: &str,
@@ -288,7 +288,7 @@ fn json_lines(path: &Path) -> Result<impl Iterator<Item = Result<Value, String>>
     }))
 }
 
-fn import_claude(h: &Homes, cwd: &str, id: &str) -> Result<ImportedSession, String> {
+pub(crate) fn import_claude(h: &Homes, cwd: &str, id: &str) -> Result<ImportedSession, String> {
     if !is_session_id(id) {
         return Err(format!("invalid session id: {id}"));
     }
@@ -316,14 +316,14 @@ fn import_claude(h: &Homes, cwd: &str, id: &str) -> Result<ImportedSession, Stri
 // --- Codex -------------------------------------------------------------------
 
 /// One rollout file of a thread, with its `session_meta` payload.
-struct Segment {
-    path: PathBuf,
-    meta: Value,
+pub(crate) struct Segment {
+    pub path: PathBuf,
+    pub meta: Value,
     /// What a `history_base` calls this file: the thread id for a thread's
     /// first file, the `_<segment>` suffix for the others.
     file_id: String,
     /// Under `archived_sessions`: read as a fork's base, never listed.
-    archived: bool,
+    pub archived: bool,
 }
 
 fn first_line(path: &Path) -> Option<Value> {
@@ -352,7 +352,7 @@ fn rollout_files(codex: &Path) -> Vec<PathBuf> {
 }
 
 /// Every thread's segments, oldest first, keyed by thread id.
-fn codex_threads(codex: &Path) -> HashMap<String, Vec<Segment>> {
+pub(crate) fn codex_threads(codex: &Path) -> HashMap<String, Vec<Segment>> {
     let mut threads: HashMap<String, Vec<Segment>> = HashMap::new();
     let archive = codex.join("archived_sessions");
     for path in rollout_files(codex) {
@@ -385,7 +385,7 @@ fn same_dir(a: &str, b: &str) -> bool {
 }
 
 /// `session_index.jsonl`: the names Codex gave its threads (last one wins).
-fn codex_names(codex: &Path) -> HashMap<String, String> {
+pub(crate) fn codex_names(codex: &Path) -> HashMap<String, String> {
     let mut names = HashMap::new();
     let Ok(text) = fs::read_to_string(codex.join("session_index.jsonl")) else { return names };
     for v in text.lines().filter_map(|l| serde_json::from_str::<Value>(l).ok()) {
@@ -400,7 +400,7 @@ fn codex_names(codex: &Path) -> HashMap<String, String> {
 
 /// The first thing the user typed (Codex injects AGENTS.md and environment
 /// blocks as user messages too; those start with `<` or a heading).
-fn codex_first_prompt(path: &Path) -> String {
+pub(crate) fn codex_first_prompt(path: &Path) -> String {
     let Ok(file) = fs::File::open(path) else { return String::new() };
     for line in BufReader::new(file).take(MAX_TITLE_SCAN).lines().map_while(Result::ok) {
         let Ok(v) = serde_json::from_str::<Value>(&line) else { continue };
@@ -449,7 +449,7 @@ fn codex_default_provider(codex: &Path) -> String {
 
 /// A conversation someone had, not a sub-agent a conversation spawned (those
 /// resume only through their parent).
-fn is_conversation(segments: &[Segment]) -> bool {
+pub(crate) fn is_conversation(segments: &[Segment]) -> bool {
     let meta = &segments[0].meta;
     !segments.iter().all(|s| s.archived)
         && meta["thread_source"].as_str() != Some("subagent")
@@ -457,7 +457,7 @@ fn is_conversation(segments: &[Segment]) -> bool {
 }
 
 /// Threads JuCode's own Codex sessions wrote: already JuCode sessions.
-const JUCODE_ORIGINATOR: &str = "jucode-daemon";
+pub(crate) const JUCODE_ORIGINATOR: &str = "jucode-daemon";
 
 fn codex_origin(meta: &Value) -> String {
     match meta["originator"].as_str().unwrap_or("") {
@@ -598,7 +598,7 @@ fn clean_codex(
     out.flush().map_err(|e| e.to_string())
 }
 
-fn import_codex(h: &Homes, cwd: &str, id: &str) -> Result<ImportedSession, String> {
+pub(crate) fn import_codex(h: &Homes, cwd: &str, id: &str) -> Result<ImportedSession, String> {
     if !is_session_id(id) {
         return Err(format!("invalid thread id: {id}"));
     }
@@ -651,7 +651,7 @@ pub fn native_sessions(source: String, cwd: String) -> Result<Vec<NativeSession>
 /// Copies one of them for JuCode (see module docs); returns the copy's id,
 /// which the engine resumes. An earlier copy is reused.
 /// Imports run one at a time: each reads, extends and rewrites the registry.
-static IMPORTING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+pub(crate) static IMPORTING: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[tauri::command(async)]
 pub fn import_native_session(source: String, cwd: String, id: String) -> Result<ImportedSession, String> {

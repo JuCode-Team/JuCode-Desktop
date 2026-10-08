@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager};
 
 mod acp_registry;
+mod agent_import;
 mod app_cli;
 #[cfg(desktop)]
 mod app_update;
@@ -3444,6 +3445,8 @@ pub fn run() {
             #[cfg(desktop)]
             app_update::update_policy,
             native_import::import_native_session,
+            agent_import::import_scan,
+            agent_import::import_apply,
             pty_open,
             pty_write,
             pty_resize,
