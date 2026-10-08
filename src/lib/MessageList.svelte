@@ -8,6 +8,8 @@
 	import Collapse from '$lib/ui/Collapse.svelte';
 	import ToolCard from '$lib/ToolCard.svelte';
 	import SubagentCard from '$lib/agents/SubagentCard.svelte';
+	import PlanCard, { type PlanAction } from '$lib/PlanCard.svelte';
+	import type { ApprovalMode } from '$lib/approval';
 	import { SPAWN_TOOLS, WAIT_TOOLS, type AgentRow } from '$lib/agentProgress';
 	import DeliveryNotice from '$lib/DeliveryNotice.svelte';
 	import { parseDelivery } from '$lib/delivery';
@@ -51,6 +53,8 @@
 		traceOf,
 		agents,
 		onOpenAgent,
+		onPlan,
+		planMode = 'edits',
 		loadImage,
 		mark = $bindable(-1)
 	}: {
@@ -92,6 +96,10 @@
 		agents?: AgentRow[];
 		/** Shows a subagent's own conversation. */
 		onOpenAgent?: (row: AgentRow) => void;
+		/** Approves or revises a proposed plan (absent: plans have no actions). */
+		onPlan?: (id: string, action: PlanAction) => void;
+		/** The mode a plan's approval offers first. */
+		planMode?: ApprovalMode;
 		/** Reads a sent image where the desktop can't open its path (the remote page). */
 		loadImage?: (path: string) => Promise<string>;
 		/** Ordinal of the user message in view: at or above the upper third. */
@@ -387,6 +395,7 @@
 		// Meta/status notices render in the collapsible status strip, not inline.
 		if (m.kind === 'system') return false;
 		if (m.kind === 'tool') return !!(m.name || m.output);
+		if (m.kind === 'plan') return !!(m.title || m.text);
 		return !!m.text && m.text.trim().length > 0;
 	}
 
@@ -415,6 +424,8 @@
 		return { members, headOf };
 	});
 	const openGroups = new SvelteSet<Msg>();
+	// The last message with something to show (a plan's actions show there only).
+	const lastShown = $derived(messages.findLast((m) => hasContent(m)));
 	/** A spawn or wait call that renders as a subagent card. */
 	function isAgentCall(m: Msg): boolean {
 		return !!agents && m.kind === 'tool' && (SPAWN_TOOLS.has(m.name) || WAIT_TOOLS.has(m.name));
@@ -548,6 +559,8 @@
 			{:else}
 				<ToolCard name={m.name} output={m.output} running={m.running} isError={m.isError} subagent={m.subagent} trace={traceOf?.(m) ?? undefined} />
 			{/if}
+		{:else if m.kind === 'plan'}
+			<PlanCard id={m.id} title={m.title} text={m.text} status={m.status} actionable={m === lastShown} defaultMode={planMode} onAction={onPlan} />
 		{:else if m.kind === 'error'}
 			<ErrorNotice text={m.text} {backend} onAction={onErrorAction} onDismiss={onDismiss ? () => onDismiss(m) : undefined} />
 				{/if}

@@ -28,3 +28,13 @@ describe('renderMarkdown file references', () => {
 		expect(html).not.toContain('<b>');
 	});
 });
+
+describe('renderMarkdown tables', () => {
+	it('wraps a table so a wide one scrolls in its own box', () => {
+		const html = renderMarkdown('| 项 | 状态 |\n| --- | :-: |\n| 解析 | ✅ |\n| 渲染 | ⏳ |');
+		expect(html.startsWith('<div class="table-wrap"><table>')).toBe(true);
+		expect(html.trim().endsWith('</table></div>')).toBe(true);
+		expect(html).toContain('<th align="center">状态</th>');
+		expect(html.match(/<tr>/g)).toHaveLength(3);
+	});
+});
