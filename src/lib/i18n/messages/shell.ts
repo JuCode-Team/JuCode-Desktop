@@ -98,6 +98,8 @@ const shell = {
 		// header / navigator
 		toggleSidebar: '会话列表 · ⌘B',
 		chatGone: '该对话已关闭',
+		paneError: '这个对话显示出错了，已记录到日志。',
+		paneErrorRetry: '重新显示',
 
 		// workspaces
 		workspace: {
@@ -998,6 +1000,8 @@ const shell = {
 		// header / navigator
 		toggleSidebar: 'Session list · ⌘B',
 		chatGone: 'This conversation is closed',
+		paneError: 'This conversation failed to display; it was logged.',
+		paneErrorRetry: 'Show again',
 
 		// workspaces
 		workspace: {

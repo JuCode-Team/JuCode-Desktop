@@ -857,6 +857,28 @@ fn about_app(app: AppHandle) -> serde_json::Value {
     })
 }
 
+/// A UI error, appended to ~/.jucode/logs/desktop-ui.log (bounded), so a
+/// blank pane on a machine nobody here can see still says what broke.
+#[tauri::command]
+fn log_ui_error(message: String) {
+    use std::io::Write;
+    let dir = jucode_dir().join("logs");
+    let _ = std::fs::create_dir_all(&dir);
+    let path = dir.join("desktop-ui.log");
+    // Keep it small: start over past 512 KB.
+    if std::fs::metadata(&path).map(|m| m.len() > 512 * 1024).unwrap_or(false) {
+        let _ = std::fs::remove_file(&path);
+    }
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or_default();
+    let line: String = message.chars().take(4000).collect();
+    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+        let _ = writeln!(file, "{stamp} {} {}", std::env::consts::OS, line.replace('\n', " | "));
+    }
+}
+
 /// Opens the folder holding the engine and daemon logs (made when missing).
 #[tauri::command]
 fn open_logs_folder(app: AppHandle) -> Result<(), String> {
@@ -3369,6 +3391,7 @@ pub fn run() {
             diagnostic_logs,
             submit_feedback,
             revert_agent_edits,
+            log_ui_error,
             send_telemetry,
             fetch_jucode_models,
             fetch_jucode_groups,
