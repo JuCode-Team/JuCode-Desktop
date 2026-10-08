@@ -3502,8 +3502,9 @@ mod tests {
         }
         let r = root.display().to_string();
         let canon = root.canonicalize().unwrap();
-        assert_eq!(resolve_file_ref(r.clone(), "top.ts".into()), Some(canon.join("top.ts").display().to_string()));
-        assert_eq!(resolve_file_ref(r.clone(), "src/x.ts".into()), Some(canon.join("a/repo/src/x.ts").display().to_string()));
+        // As the UI gets it: without the `\\?\` prefix canonicalize adds on Windows.
+        assert_eq!(resolve_file_ref(r.clone(), "top.ts".into()), Some(ui_path(&canon.join("top.ts"))));
+        assert_eq!(resolve_file_ref(r.clone(), "src/x.ts".into()), Some(ui_path(&canon.join("a/repo/src/x.ts"))));
         assert_eq!(resolve_file_ref(r.clone(), "src/y.ts".into()), None);
         assert_eq!(resolve_file_ref(r.clone(), "src/z.ts".into()), None);
         std::fs::remove_dir_all(&root).unwrap();
