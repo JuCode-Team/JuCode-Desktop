@@ -635,7 +635,7 @@
 		color: #000;
 		font-size: var(--fs-2xs);
 		line-height: 16px;
-		animation: pop-in var(--t-med) var(--ease-spring);
+		animation: pop-in var(--t-med) var(--ease-out);
 	}
 	/* Connecting and pair-again: one centered column across the page, with
 	   the switcher in the corner. */

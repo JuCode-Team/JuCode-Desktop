@@ -1389,7 +1389,7 @@
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
 		cursor: pointer;
 		z-index: 10;
-		animation: jump-in var(--t-med) var(--ease-spring);
+		animation: jump-in var(--t-med) var(--ease-out);
 		transition:
 			background var(--t-fast) var(--ease-out),
 			transform var(--t-fast) var(--ease-spring),
@@ -1399,7 +1399,7 @@
 	@keyframes jump-in {
 		from {
 			opacity: 0;
-			transform: translateX(-50%) translateY(6px) scale(0.9);
+			transform: translateX(-50%) translateY(4px);
 		}
 		to {
 			opacity: 1;

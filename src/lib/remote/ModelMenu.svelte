@@ -267,7 +267,7 @@
 		gap: 0;
 		padding: 6px;
 		transform-origin: bottom right;
-		animation: pop-in var(--t-med) var(--ease-spring);
+		animation: pop-in var(--t-med) var(--ease-out);
 	}
 	.mm > section + section {
 		margin-top: 6px;
@@ -357,7 +357,7 @@
 		visibility: hidden;
 	}
 	.pop-check:not(.off) :global(svg:not(.spin)) {
-		animation: pop-in var(--t-med) var(--ease-spring);
+		animation: pop-in var(--t-med) var(--ease-out);
 	}
 	.empty {
 		display: flex;

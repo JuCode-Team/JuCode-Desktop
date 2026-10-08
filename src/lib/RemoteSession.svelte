@@ -931,13 +931,13 @@
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
 		transform: translateX(-50%);
 		cursor: pointer;
-		animation: jump-in var(--t-med) var(--ease-spring);
+		animation: jump-in var(--t-med) var(--ease-out);
 		transition: transform var(--t-fast) var(--ease-spring);
 	}
 	@keyframes jump-in {
 		from {
 			opacity: 0;
-			transform: translateX(-50%) translateY(6px) scale(0.9);
+			transform: translateX(-50%) translateY(4px);
 		}
 	}
 	.jump:active {
@@ -1071,13 +1071,12 @@
 		align-items: center;
 		gap: 6px;
 		min-width: 0;
-		animation: model-in var(--t-med) var(--ease-spring);
+		animation: model-in var(--t-med) var(--ease-out);
 	}
 	@keyframes model-in {
 		from {
 			opacity: 0;
-			transform: translateY(8px);
-			filter: blur(3px);
+			transform: translateY(4px);
 		}
 	}
 	.flatbtn.model .e {
@@ -1100,7 +1099,7 @@
 			background var(--t-fast) var(--ease-out),
 			color var(--t-fast) var(--ease-out),
 			opacity var(--t-med) var(--ease-out);
-		animation: pop-in var(--t-med) var(--ease-spring);
+		animation: pop-in var(--t-med) var(--ease-out);
 	}
 	.cact:active:not(:disabled) {
 		transform: scale(0.9);

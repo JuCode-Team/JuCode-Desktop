@@ -1120,13 +1120,12 @@
 		align-items: center;
 		gap: 6px;
 		min-width: 0;
-		animation: model-in var(--t-med) var(--ease-spring);
+		animation: model-in var(--t-med) var(--ease-out);
 	}
 	@keyframes model-in {
 		from {
 			opacity: 0;
-			transform: translateY(8px);
-			filter: blur(3px);
+			transform: translateY(4px);
 		}
 	}
 	.flatbtn.model .e {

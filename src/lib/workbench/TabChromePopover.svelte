@@ -242,7 +242,7 @@
 		background: var(--panel);
 		border-radius: var(--r-lg);
 		box-shadow: var(--shadow-pop);
-		animation: pop-in var(--t-med) var(--ease-spring);
+		animation: pop-in var(--t-med) var(--ease-out);
 	}
 	.field {
 		display: flex;
