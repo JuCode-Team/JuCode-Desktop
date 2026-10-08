@@ -36,8 +36,31 @@
 	const units = $derived({ s: t('dock.agents.unit.s'), m: t('dock.agents.unit.m'), h: t('dock.agents.unit.h') });
 	const dur = (ms: number) => formatDuration(ms, units);
 
+	// An engine without the trace (JuCode before agent_runs) reports its
+	// subagents by their lifecycle only: listed as runs of their own.
+	const agents = $derived.by((): AgentRun[] => {
+		if (chat.agentRuns.agents.length || chat.agentRunsSeen) return chat.agentRuns.agents;
+		return Object.entries(chat.subagents).map(([id, a]) => ({
+			id,
+			label: shortPath(a.label || id),
+			phase: 0,
+			model: a.model ?? '',
+			state: a.status,
+			startedAt: a.startedAt ?? 0,
+			durationMs: a.endedAt && a.startedAt ? a.endedAt - a.startedAt : 0,
+			tokens: 0,
+			toolCalls: 0,
+			prompt: '',
+			result: '',
+			error: '',
+			type: '',
+			toolUseId: a.toolUseId ?? '',
+			activity: a.message,
+			effort: ''
+		}));
+	});
 	let now = $state(Date.now());
-	const running = $derived(anyRunning(chat.agentRuns.workflows, chat.agentRuns.agents));
+	const running = $derived(anyRunning(chat.agentRuns.workflows, agents));
 	$effect(() => {
 		if (!running) return;
 		const id = setInterval(() => (now = Date.now()), 1000);
@@ -52,7 +75,7 @@
 		open[w.id] ?? (runState(w.status) === 'running' || i === chat.agentRuns.workflows.length - 1);
 
 	const totals = $derived.by(() => {
-		const all = [...chat.agentRuns.workflows, ...chat.agentRuns.agents];
+		const all = [...chat.agentRuns.workflows, ...agents];
 		return { tokens: all.reduce((s, r) => s + r.tokens, 0) };
 	});
 
@@ -156,13 +179,13 @@
 		{#key chat.agentFocus}
 			<AgentTranscript {chat} agentId={chat.agentFocus} live={focusRunning} {scroller} {onOp} />
 		{/key}
-	{:else if chat.agentRuns.workflows.length || chat.agentRuns.agents.length}
+	{:else if chat.agentRuns.workflows.length || agents.length}
 		<div class="head">
 			<span class="title">{t('dock.agents.title')}</span>
 			<span class="sum">
 				{t('dock.agents.summary', {
 					w: chat.agentRuns.workflows.length,
-					a: chat.agentRuns.agents.length,
+					a: agents.length,
 					tokens: formatCount(totals.tokens)
 				})}
 			</span>
@@ -211,8 +234,8 @@
 			</section>
 		{/each}
 
-		{#if chat.agentRuns.agents.length}
-			{@const line = timeline(chat.agentRuns.agents, now)}
+		{#if agents.length}
+			{@const line = timeline(agents, now)}
 			<section class="run">
 				<div class="run-head static">
 					<span class="rname"><span class="rtitle">{t('dock.agents.subagents')}</span></span>
@@ -225,7 +248,7 @@
 					<span class="num">{t('dock.agents.col.tokens')}</span>
 					<span class="num narrow">{t('dock.agents.col.tools')}</span>
 				</div>
-				{#each [...chat.agentRuns.agents].reverse() as a, ai (a.id || ai)}
+				{#each [...agents].reverse() as a, ai (a.id || ai)}
 					{@render agentRow(a, line.bars.get(a.id))}
 				{/each}
 			</section>
