@@ -3,8 +3,9 @@
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
 	import ArrowCounterClockwiseIcon from 'phosphor-svelte/lib/ArrowCounterClockwiseIcon';
 	import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon';
-	import { fade, slide } from 'svelte/transition';
+	import { fade } from 'svelte/transition';
 	import Markdown from '$lib/Markdown.svelte';
+	import Collapse from '$lib/ui/Collapse.svelte';
 	import ToolCard from '$lib/ToolCard.svelte';
 	import DeliveryNotice from '$lib/DeliveryNotice.svelte';
 	import { parseDelivery } from '$lib/delivery';
@@ -488,8 +489,8 @@
 					<span>{t('chat.reasoning')}</span>
 					<span class="rchev"><CaretRightIcon size={13} /></span>
 				</button>
-				{#if !m.collapsed}
-					<div class="reason-body" transition:slide={{ duration: 180 }}>
+				<Collapse open={!m.collapsed}>
+					<div class="reason-body">
 						{#if m === streamingReasoning}
 							<!-- Reasoning summaries are markdown (OpenAI's open with a
 							     **bold** title): completed blocks parse once, the short
@@ -502,7 +503,7 @@
 							<Markdown text={m.text} {onFile} />
 						{/if}
 					</div>
-				{/if}
+				</Collapse>
 			</div>
 		{:else if m.kind === 'tool'}
 			{@const run = toolGroups.members.get(m)}
@@ -615,9 +616,10 @@
 		border-radius: var(--r-md);
 		transition: background var(--t-slow) var(--ease-out), box-shadow var(--t-slow) var(--ease-out);
 	}
-	/* New rows rise in; suppressed under windowing so re-entering rows don't replay. */
+	/* New rows come in once: unblur and rise over --t-enter. Suppressed under
+	   windowing so rows scrolling back into the window don't replay. */
 	.mwrap.animate {
-		animation: rise var(--t-slow) var(--ease-out) both;
+		animation: msg-in var(--t-enter) var(--ease-enter) both;
 	}
 	.mwrap.hit {
 		background: var(--accent-soft);
@@ -840,7 +842,7 @@
 	.rchev {
 		display: inline-flex;
 		color: var(--dim2);
-		transition: transform var(--t-med) var(--ease-spring);
+		transition: transform var(--t-base) var(--ease-base);
 	}
 	.reason.open .rchev,
 	.tgroup.open .rchev {
