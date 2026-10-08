@@ -89,6 +89,7 @@
 	import ChatPane, { type ChatPaneApi, type ProviderOption } from '$lib/ChatPane.svelte';
 	import SettingsPage from '$lib/settings/SettingsPage.svelte';
 	import type { SectionKey } from '$lib/settings/nav';
+	import { folderName } from '$lib/agentImport';
 	import Welcome from '$lib/welcome/Welcome.svelte';
 	import Marketplace from '$lib/Marketplace.svelte';
 	import Sidebar from '$lib/Sidebar.svelte';
@@ -904,6 +905,17 @@
 		projectChromeFor = { id: p.id, x: ev.clientX, y: ev.clientY };
 	}
 
+	/** Settings → 导入: the folders of imported conversations become projects
+	 *  (without a chat; their conversations are in the project's 历史). */
+	function addImportedFolders(paths: string[]): number {
+		let added = 0;
+		for (const path of paths) {
+			if (store.userProjects.some((p) => normPath(p.path) === normPath(path))) continue;
+			store.addProjectShell({ id: store.uid(), name: folderName(path), path });
+			added++;
+		}
+		return added;
+	}
 	async function addProject() {
 		const path = await open({ directory: true, title: t('shell.pickDirTitle') });
 		if (!path || Array.isArray(path)) return;
@@ -1585,6 +1597,7 @@
 						showMarket = true;
 					}}
 					onFeedback={() => (showFeedback = true)}
+					onAddFolders={addImportedFolders}
 					onClose={closeSettings}
 				/>
 			{/if}

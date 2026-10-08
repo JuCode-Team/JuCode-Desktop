@@ -14,6 +14,7 @@ export type SectionKey =
 	| 'market'
 	| 'agents'
 	| 'acp'
+	| 'import'
 	| 'daemon'
 	| 'updates';
 
@@ -21,7 +22,7 @@ export type SectionKey =
 // or only sessions run by the JuCode CLI engine (its ~/.jucode/config.json).
 export const GROUPS: { key: string; sections: SectionKey[] }[] = [
 	{ key: 'app', sections: ['general', 'account', 'usage', 'voice'] },
-	{ key: 'agents', sections: ['agents', 'acp', 'daemon', 'market'] },
+	{ key: 'agents', sections: ['agents', 'acp', 'daemon', 'market', 'import'] },
 	{ key: 'jucode', sections: ['providers', 'models', 'mcp', 'network'] },
 	{ key: 'about', sections: ['updates'] }
 ];
@@ -88,6 +89,7 @@ export const ROWS: SearchRow[] = [
 	{ section: 'agents', id: 'dependencies', titleKey: 'setup.deps.title', descKey: 'setup.deps.sub' },
 	{ section: 'acp', id: 'acp-agents', titleKey: 'settings.acp.groupLabel', descKey: 'settings.acp.hint' },
 	{ section: 'daemon', id: 'title-model', titleKey: 'settings.behavior.titleModel', descKey: 'settings.behavior.titleModelHint' },
+	{ section: 'import', id: 'import-scan', titleKey: 'settings.import.title', descKey: 'settings.import.intro' },
 	{ section: 'daemon', id: 'relay', titleKey: 'settings.backend.relayToggle', descKey: 'settings.backend.relayHint' },
 	{ section: 'daemon', id: 'devices', titleKey: 'settings.backend.devices', descKey: 'settings.backend.devicesHint' },
 	{ section: 'updates', id: 'app-version', titleKey: 'settings.update.currentVersion', descKey: 'settings.update.groupLabel' }

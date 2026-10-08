@@ -177,6 +177,73 @@ export function importNativeSession(source: NativeSource, cwd: string, id: strin
 	return invoke('import_native_session', { source, cwd, id });
 }
 
+// 一键导入: what the other coding agents on this machine have — conversations
+// in every folder, skills and MCP servers (src-tauri/src/agent_import).
+export type ImportSource = 'claude' | 'codex' | 'opencode' | 'zcode' | 'omp';
+export interface ImportSession {
+	source: ImportSource;
+	id: string;
+	title: string;
+	cwd: string;
+	updated_at_ms: number;
+	/** Prompts the user sent. */
+	messages: number;
+	/** Imported before: importing again opens that copy. */
+	imported: boolean;
+}
+export interface ImportSkill {
+	source: ImportSource;
+	name: string;
+	description: string;
+	path: string;
+	/** The plugin it comes with. */
+	plugin: string | null;
+	/** JuCode already has a skill of this name. */
+	present: boolean;
+}
+export interface ImportMcp {
+	source: ImportSource;
+	/** The plugin or project folder it is set for; empty for the tool's own settings. */
+	from: string;
+	name: string;
+	transport: 'stdio' | 'http';
+	command: string | null;
+	args: string[] | null;
+	url: string | null;
+	present: boolean;
+	/** The `mcp_servers` entry to add. */
+	entry: McpServerEntry;
+}
+export interface ImportScan {
+	sessions: ImportSession[];
+	skills: ImportSkill[];
+	mcp: ImportMcp[];
+}
+export interface ImportOutcome {
+	kind: 'session' | 'skill';
+	source: ImportSource;
+	/** Session id or skill folder, as the scan named it. */
+	key: string;
+	status: 'imported' | 'existing' | 'failed';
+	/** Session: the copy to open. Skill: where it was copied. */
+	target: string | null;
+	title: string | null;
+	cwd: string | null;
+	/** The backend the copy continues on. */
+	engine: 'jucode' | 'claude' | 'codex' | null;
+	cwd_exists: boolean;
+	error: string | null;
+}
+export function importScan(): Promise<ImportScan> {
+	return invoke('import_scan');
+}
+export function importApply(selection: {
+	sessions: { source: ImportSource; id: string; cwd: string }[];
+	skills: { source: ImportSource; path: string }[];
+}): Promise<ImportOutcome[]> {
+	return invoke('import_apply', { selection });
+}
+
 /** One conversation saved in a directory, by any engine, as the daemon
  *  lists it (`session_history`). `updated_at` is in milliseconds. */
 export interface HistoryItem {
