@@ -32,6 +32,10 @@ const VERBS: Record<string, string> = {
 	web_fetch: 'Fetched',
 	generate_image: 'Generated image',
 	spawn_agent: 'Started subagent',
+	wait_agent: 'Waited for subagents',
+	list_agents: 'Listed subagents',
+	send_message: 'Messaged subagent',
+	close_agent: 'Closed subagent',
 	agent_wait: 'Waited for subagents',
 	agent_sendInput: 'Messaged subagent',
 	agent_sendMessage: 'Messaged subagent',
@@ -59,6 +63,12 @@ const ICONS: Record<string, typeof WrenchIcon> = {
 	generate_image: ImageIcon,
 	Task: RobotIcon,
 	Agent: RobotIcon,
+	spawn_agent: RobotIcon,
+	wait_agent: RobotIcon,
+	list_agents: RobotIcon,
+	send_message: RobotIcon,
+	close_agent: RobotIcon,
+	agent_wait: RobotIcon,
 	TodoWrite: ListChecksIcon,
 	update_plan: ListChecksIcon
 };

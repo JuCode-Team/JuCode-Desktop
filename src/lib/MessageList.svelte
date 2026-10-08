@@ -7,6 +7,8 @@
 	import Markdown from '$lib/Markdown.svelte';
 	import Collapse from '$lib/ui/Collapse.svelte';
 	import ToolCard from '$lib/ToolCard.svelte';
+	import SubagentCard from '$lib/agents/SubagentCard.svelte';
+	import { SPAWN_TOOLS, WAIT_TOOLS, type AgentRow } from '$lib/agentProgress';
 	import DeliveryNotice from '$lib/DeliveryNotice.svelte';
 	import { parseDelivery } from '$lib/delivery';
 	import { parseToolOutput, toolIcon, toolTarget, toolVerb } from '$lib/toolSummary';
@@ -47,6 +49,8 @@
 		backend = '',
 		onErrorAction,
 		traceOf,
+		agents,
+		onOpenAgent,
 		loadImage,
 		mark = $bindable(-1)
 	}: {
@@ -83,6 +87,11 @@
 		onErrorAction?: (action: ErrorAction) => void;
 		/** A tool call whose run the agent trace shows (claude's Agent / Workflow). */
 		traceOf?: (m: Msg) => { label: string; run: () => void } | null;
+		/** The conversation's subagents: spawn and wait calls render as their
+		 *  cards (absent: plain tool rows). */
+		agents?: AgentRow[];
+		/** Shows a subagent's own conversation. */
+		onOpenAgent?: (row: AgentRow) => void;
 		/** Reads a sent image where the desktop can't open its path (the remote page). */
 		loadImage?: (path: string) => Promise<string>;
 		/** Ordinal of the user message in view: at or above the upper third. */
@@ -399,13 +408,17 @@
 		};
 		for (const m of messages) {
 			if (!hasContent(m)) continue;
-			if (m.kind === 'tool') run.push(m);
+			if (m.kind === 'tool' && !isAgentCall(m)) run.push(m);
 			else flush();
 		}
 		flush();
 		return { members, headOf };
 	});
 	const openGroups = new SvelteSet<Msg>();
+	/** A spawn or wait call that renders as a subagent card. */
+	function isAgentCall(m: Msg): boolean {
+		return !!agents && m.kind === 'tool' && (SPAWN_TOOLS.has(m.name) || WAIT_TOOLS.has(m.name));
+	}
 	function shown(m: Msg): boolean {
 		return hasContent(m) && (!toolGroups.headOf.has(m) || toolGroups.members.has(m));
 	}
@@ -530,6 +543,8 @@
 						{/each}
 					</div>
 				{/if}
+			{:else if agents && isAgentCall(m)}
+				<SubagentCard name={m.name} callId={m.callId} output={m.output} args={m.args} running={m.running} isError={m.isError} rows={agents} onOpen={onOpenAgent} />
 			{:else}
 				<ToolCard name={m.name} output={m.output} running={m.running} isError={m.isError} subagent={m.subagent} trace={traceOf?.(m) ?? undefined} />
 			{/if}

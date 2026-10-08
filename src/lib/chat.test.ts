@@ -671,6 +671,14 @@ describe('claude session extras', () => {
 		expect(c.messages).toEqual([]);
 	});
 
+	it('keeps a subagent call’s arguments once its result replaces them', () => {
+		const c = new ChatState();
+		c.handle({ type: 'tool_start', call_id: 't1', name: 'Task' });
+		c.handle({ type: 'tool_update', call_id: 't1', output: '{"description":"Scan auth","prompt":"Find it"}' });
+		c.handle({ type: 'tool_output', call_id: 't1', name: 'Task', output: 'Found it in auth.ts', is_error: false });
+		expect(c.messages.at(-1)).toMatchObject({ output: 'Found it in auth.ts', args: '{"description":"Scan auth","prompt":"Find it"}' });
+	});
+
 	it('reads a JuCode subagent from its spawn call and its lifecycle', () => {
 		const c = new ChatState();
 		c.handle({ type: 'connecting' });
