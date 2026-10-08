@@ -362,6 +362,33 @@
 		return i < 0 ? 0 : i + 2;
 	}
 
+	// The finished part of a streaming reply as stable chunks: each paragraph
+	// (or fenced block) is one chunk whose text never changes once complete, so
+	// a keyed {#each} renders it once. Rendering the whole finished prefix as one
+	// Markdown re-parsed, re-highlighted and re-sanitized everything before it
+	// whenever a paragraph completed: quadratic in the reply's length.
+	function stableBlocks(done: string): { key: string; text: string }[] {
+		const out: { key: string; text: string }[] = [];
+		let start = 0;
+		let open = false;
+		const lines = done.split('\n');
+		let pos = 0;
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i]!;
+			if (/^ {0,3}(`{3,}|~{3,})/.test(line)) open = !open;
+			pos += line.length + 1;
+			// A blank line outside a fence ends a chunk.
+			if (!open && line.trim() === '' && pos - start > 1) {
+				const text = done.slice(start, pos);
+				if (text.trim()) out.push({ key: `${start}:${text.length}`, text });
+				start = pos;
+			}
+		}
+		const rest = done.slice(start);
+		if (rest.trim()) out.push({ key: `${start}:${rest.length}`, text: rest });
+		return out;
+	}
+
 	// A user message's text split into runs of "> " quote lines (quoted
 	// passages, shown as quotes) and the text between.
 	function userBlocks(text: string): { text: string; quote: boolean }[] {
@@ -488,7 +515,7 @@
 				{#if m === streamingMsg}
 					{@const rt = revealed(m)}
 					{@const si = splitIdx(rt)}
-					{#if si > 0}<Markdown text={rt.slice(0, si)} />{/if}
+					{#each stableBlocks(rt.slice(0, si)) as block (block.key)}<Markdown text={block.text} />{/each}
 					<div class="stream">{rt.slice(si)}</div>
 				{:else}
 					<Markdown text={m.text} {onFile} />
@@ -519,10 +546,9 @@
 							<!-- Reasoning summaries are markdown (OpenAI's open with a
 							     **bold** title): completed blocks parse once, the short
 							     tail block re-parses as it grows. -->
-							{@const rt = revealed(m)}
-							{@const si = splitIdx(rt)}
-							{#if si > 0}<Markdown text={rt.slice(0, si)} />{/if}
-							<Markdown text={rt.slice(si)} />
+							<!-- While it streams: plain text (no per-frame Markdown);
+							     it renders as Markdown once finished. -->
+							<div class="stream">{revealed(m)}</div>
 						{:else}
 							<Markdown text={m.text} {onFile} />
 						{/if}
