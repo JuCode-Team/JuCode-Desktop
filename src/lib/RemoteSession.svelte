@@ -27,7 +27,7 @@
 	import { loadSession, saveSession } from '$lib/remote/cache';
 	import ModelMenu from '$lib/remote/ModelMenu.svelte';
 	import TaskStrip from '$lib/TaskStrip.svelte';
-	import { parseFileHref } from '$lib/fileRefs';
+	import { joinPath, parseFileHref } from '$lib/fileRefs';
 	import AgentRunsPanel from '$lib/AgentRunsPanel.svelte';
 	import TreeStructureIcon from 'phosphor-svelte/lib/TreeStructureIcon';
 	import type { Msg } from '$lib/chat.svelte';
@@ -508,8 +508,7 @@
 	function openReplyFile(href: string) {
 		const ref = parseFileHref(href);
 		if (!ref.path) return;
-		const base = (cwd ?? '').replace(/\/+$/, '');
-		onFile?.(ref.path.startsWith('/') || !base ? ref.path : `${base}/${ref.path.replace(/^\.?\//, '')}`, ref.line);
+		onFile?.(joinPath(cwd ?? '', ref.path), ref.line);
 	}
 	// The agent trace sheet (AgentRunsPanel).
 	let traceOpen = $state(false);

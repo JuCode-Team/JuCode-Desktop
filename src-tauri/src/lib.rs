@@ -818,6 +818,7 @@ fn diagnostic_logs() -> Vec<serde_json::Value> {
     [
         ("jucode.log", dir.join("logs").join("jucode.log")),
         ("daemon.log", dir.join("daemon").join("daemon.log")),
+        ("desktop-ui.log", dir.join("logs").join("desktop-ui.log")),
     ]
     .into_iter()
     .filter_map(|(name, path)| {
@@ -2092,13 +2093,25 @@ fn resolve_file_ref(root: String, rel: String) -> Option<String> {
     let rel = Path::new(&rel);
     let direct = root.join(rel);
     if direct.is_file() {
-        return Some(direct.display().to_string());
+        return Some(ui_path(&direct));
     }
     let mut found = Vec::new();
     find_ref(&root, rel, 0, &mut found);
     match found.as_slice() {
-        [one] => one.canonicalize().ok().filter(|p| p.starts_with(&root)).map(|p| p.display().to_string()),
+        [one] => one.canonicalize().ok().filter(|p| p.starts_with(&root)).map(|p| ui_path(&p)),
         _ => None,
+    }
+}
+
+/// A canonical path as the UI opens it: on Windows `canonicalize` adds a
+/// `\\?\` prefix the UI does not read as absolute, so it joined the path to
+/// the project root again and the file did not open.
+fn ui_path(path: &Path) -> String {
+    let text = path.display().to_string();
+    match text.strip_prefix(r"\\?\") {
+        Some(unc) if unc.starts_with(r"UNC\") => format!(r"\\{}", &unc[4..]),
+        Some(local) => local.to_string(),
+        None => text,
     }
 }
 
@@ -3468,7 +3481,15 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{read_json_strict, resolve_file_ref, valid_app_data_name};
+    use super::{read_json_strict, resolve_file_ref, ui_path, valid_app_data_name};
+    use std::path::Path;
+
+    #[test]
+    fn ui_path_drops_the_windows_verbatim_prefix() {
+        assert_eq!(ui_path(Path::new(r"\\?\C:\p\a.html")), r"C:\p\a.html");
+        assert_eq!(ui_path(Path::new(r"\\?\UNC\srv\share\a.ts")), r"\\srv\share\a.ts");
+        assert_eq!(ui_path(Path::new("/Users/me/a.ts")), "/Users/me/a.ts");
+    }
 
     #[test]
     fn resolve_file_ref_finds_a_unique_nested_match() {

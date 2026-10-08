@@ -69,10 +69,39 @@ export function fileHref(ref: FileRef): string {
 export function parseFileHref(href: string): FileRef {
 	const clean = href.replace(/^file:\/\//, '');
 	const [main, hash = ''] = clean.split('#');
-	const path = main.split('?')[0].trim();
+	// marked percent-encodes a link: 鹈鹕 and a Windows `\` arrive as %XX.
+	let path = decodePath(main.split('?')[0].trim());
+	// `file:///C:/x` leaves `/C:/x`; on Windows the drive starts the path.
+	if (/^\/[A-Za-z]:[\\/]/.test(path)) path = path.slice(1);
 	const m = /^L(\d+)(?::(\d+)|C(\d+))?$/.exec(hash);
 	if (!m) return { path };
 	const line = Number(m[1]);
 	const col = Number(m[2] ?? m[3]);
 	return { path, ...(line > 0 ? { line } : {}), ...(col > 0 ? { col } : {}) };
+}
+
+function decodePath(path: string): string {
+	try {
+		return decodeURIComponent(path);
+	} catch {
+		return path; // a literal `%` that is no escape
+	}
+}
+
+/** An absolute path on any OS: `/x`, `C:\x`, `C:/x` or `\\server\share`. */
+export function isAbsolutePath(path: string): boolean {
+	return /^(?:\/|[A-Za-z]:[\\/]|\\\\)/.test(path);
+}
+
+/** `path` under `root`, unless it is absolute already. */
+export function joinPath(root: string, path: string): string {
+	if (isAbsolutePath(path) || !root) return path;
+	return `${root.replace(/[\\/]+$/, '')}/${path.replace(/^\.?[\\/]/, '')}`;
+}
+
+/** A path's extension, lowercased; '' when it has none. Either separator. */
+export function pathExt(path: string): string {
+	const name = path.split(/[\\/]/).pop() ?? '';
+	const dot = name.lastIndexOf('.');
+	return dot > 0 ? name.slice(dot + 1).toLowerCase() : '';
 }

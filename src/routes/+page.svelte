@@ -8,6 +8,7 @@
 	import ChatCircleTextIcon from 'phosphor-svelte/lib/ChatCircleTextIcon';
 	import SessionMark from '$lib/SessionMark.svelte';
 	import { sessionStatus } from '$lib/sessionStatus';
+	import { joinPath, parseFileHref, pathExt } from '$lib/fileRefs';
 	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
 	import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon';
 	import TargetIcon from 'phosphor-svelte/lib/TargetIcon';
@@ -1012,10 +1013,10 @@
 	function openActiveFile(href: string) {
 		const cwd = activeProject?.path;
 		if (!cwd) return;
-		const rel = href.replace(/^file:\/\//, '').split(/[?#]/)[0].trim();
+		const rel = parseFileHref(href).path;
 		if (!rel) return;
-		const abs = rel.startsWith('/') ? rel : `${cwd.replace(/\/+$/, '')}/${rel.replace(/^\.?\//, '')}`;
-		const ext = abs.split('/').pop()?.split('.').pop()?.toLowerCase() ?? '';
+		const abs = joinPath(cwd, rel);
+		const ext = pathExt(abs);
 		if ((ext === 'html' || ext === 'htm') && prefs.htmlOpenInBrowser) {
 			// The embedded browser loads http(s) only (a file:// URL was refused
 			// and left it on its empty page): serve the file from the loopback

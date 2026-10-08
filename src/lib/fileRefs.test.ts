@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { codeFileRef, fileHref, parseFileHref, splitFileRefs } from './fileRefs';
+import { codeFileRef, fileHref, isAbsolutePath, joinPath, parseFileHref, pathExt, splitFileRefs } from './fileRefs';
 
 const refs = (text: string) => splitFileRefs(text).filter((p) => typeof p !== 'string');
 
@@ -37,5 +37,26 @@ describe('file references', () => {
 		expect(parseFileHref(fileHref(ref))).toEqual(ref);
 		expect(parseFileHref('file:///abs/b.rs?x=1#L3C2')).toEqual({ path: '/abs/b.rs', line: 3, col: 2 });
 		expect(parseFileHref('docs/c.md')).toEqual({ path: 'docs/c.md' });
+	});
+
+	it('reads the links marked percent-encodes, Windows paths included', () => {
+		expect(parseFileHref('/Users/me/%E9%B9%88%E9%B9%95.html')).toEqual({ path: '/Users/me/鹈鹕.html' });
+		expect(parseFileHref('C:%5CUsers%5Cme%5Ca.html#L3')).toEqual({ path: 'C:\\Users\\me\\a.html', line: 3 });
+		expect(parseFileHref('file:///C:/Users/me/a.html')).toEqual({ path: 'C:/Users/me/a.html' });
+		expect(parseFileHref('docs/100%.md')).toEqual({ path: 'docs/100%.md' });
+	});
+
+	it('joins and reads paths with either separator', () => {
+		for (const p of ['/abs/a.ts', 'C:\\p\\a.ts', 'c:/p/a.ts', '\\\\server\\share\\a.ts']) {
+			expect(isAbsolutePath(p)).toBe(true);
+			expect(joinPath('C:\\proj', p)).toBe(p);
+		}
+		expect(isAbsolutePath('src/a.ts')).toBe(false);
+		expect(joinPath('C:\\proj\\', './src/a.ts')).toBe('C:\\proj/src/a.ts');
+		expect(joinPath('/proj/', 'src/a.ts')).toBe('/proj/src/a.ts');
+		expect(joinPath('', 'src/a.ts')).toBe('src/a.ts');
+		expect(pathExt('C:\\p\\site.v2\\Index.HTML')).toBe('html');
+		expect(pathExt('C:\\p.d\\README')).toBe('');
+		expect(pathExt('/p/.env')).toBe('');
 	});
 });
