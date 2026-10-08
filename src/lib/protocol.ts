@@ -222,15 +222,19 @@ export function removeAuthKey(provider: string): Promise<void> {
 	return invoke('remove_auth_key', { provider });
 }
 
-// Skills marketplace: the daemon combines JuCode with github.com/anthropics/skills
-// and installs into the backend's personal skills directory.
-export type SkillSource = 'jucode' | 'anthropic';
+// Skills marketplace: the daemon combines github.com/anthropics/skills with
+// community skill repositories and installs into the backend's personal skills
+// directory.
+/** `anthropic`, or a community repository's `owner/repo`. */
+export type SkillSource = string;
 export interface MarketSkill {
 	id: string;
 	name: string;
 	description: string;
 	tags: string[];
 	source: SkillSource;
+	/** The source as shown: Anthropic, Ikaleio, Superpowers… */
+	sourceName?: string;
 	isDefault: boolean;
 	installed: boolean;
 	license: string;

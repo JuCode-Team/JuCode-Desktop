@@ -24,7 +24,11 @@
 	let installDir = $state('');
 	let query = $state('');
 	let tag = $state('');
-	let source = $state<'all' | 'jucode' | 'anthropic' | 'installed'>('all');
+	/** 'all', 'installed' or a source key (`anthropic`, `owner/repo`). */
+	let source = $state('all');
+	const sourceName = (s: MarketSkill) => s.sourceName || s.source;
+	/** The sources the catalog has, in its order (Anthropic first). */
+	const sources = $derived([...new Map(skills.map((s) => [s.source, sourceName(s)])).entries()]);
 	let installing = $state<Record<string, boolean>>({});
 
 	const tags = $derived([...new Set(skills.flatMap((s) => s.tags))].sort());
@@ -92,8 +96,9 @@
 
 		<div class="chips sources" aria-label={t('settings.marketplace.sourceFilter')}>
 			<Chip selected={source === 'all'} onclick={() => (source = 'all')}>{t('settings.marketplace.all')}</Chip>
-			<Chip selected={source === 'jucode'} onclick={() => (source = 'jucode')}>JuCode</Chip>
-			<Chip selected={source === 'anthropic'} onclick={() => (source = 'anthropic')}>Anthropic</Chip>
+			{#each sources as [key, name] (key)}
+				<Chip selected={source === key} onclick={() => (source = key)}>{name}</Chip>
+			{/each}
 			<Chip selected={source === 'installed'} onclick={() => (source = 'installed')}>{t('settings.marketplace.installed')}</Chip>
 		</div>
 
@@ -123,7 +128,7 @@
 							<div class="card">
 								<div class="card-top">
 									<span class="name">{s.name}</span>
-									<span class="source">{s.source === 'anthropic' ? 'Anthropic' : 'JuCode'}</span>
+									<span class="source">{sourceName(s)}</span>
 									{#if s.isDefault}<span class="badge">{t('settings.account.default')}</span>{/if}
 								</div>
 								<p class="desc">{s.description}</p>
