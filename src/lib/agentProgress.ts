@@ -298,3 +298,12 @@ export function pillParts(plan: PlanSummary, rows: AgentRow[], showPlan: boolean
 		running: rows.filter((r) => r.state === 'running' || r.state === 'queued').length
 	};
 }
+
+/** A running time as the cards show it: 8s, 1m05s, 1h02m. */
+export function shortElapsed(ms: number): string {
+	const s = Math.max(0, Math.floor(ms / 1000));
+	if (s < 60) return `${s}s`;
+	const m = Math.floor(s / 60);
+	if (m < 60) return `${m}m${String(s % 60).padStart(2, '0')}s`;
+	return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}m`;
+}

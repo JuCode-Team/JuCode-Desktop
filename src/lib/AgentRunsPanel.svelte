@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy, onMount, untrack } from 'svelte';
+	import { onMount } from 'svelte';
 	import TreeStructureIcon from 'phosphor-svelte/lib/TreeStructureIcon';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
@@ -9,8 +9,7 @@
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
 	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
 	import { t } from '$lib/i18n';
-	import Markdown from '$lib/Markdown.svelte';
-	import MessageList from '$lib/MessageList.svelte';
+	import AgentTranscript from '$lib/agents/AgentTranscript.svelte';
 	import type { AgentRun, ChatState, WorkflowRun } from '$lib/chat.svelte';
 	import type { Op } from '$lib/protocol';
 	import {
@@ -25,6 +24,7 @@
 		timeline,
 		type RunState
 	} from '$lib/agentTrace';
+	import { shortPath } from '$lib/agentProgress';
 
 	// The agent trace of a Claude Code session: each Workflow as a timeline of
 	// its agents by phase (when each ran, for how long, at what cost), the
@@ -37,7 +37,6 @@
 	const dur = (ms: number) => formatDuration(ms, units);
 
 	let now = $state(Date.now());
-	let poll: ReturnType<typeof setInterval> | undefined;
 	const running = $derived(anyRunning(chat.agentRuns.workflows, chat.agentRuns.agents));
 	$effect(() => {
 		if (!running) return;
@@ -46,7 +45,6 @@
 	});
 
 	onMount(() => onOp({ op: 'agent_runs' }));
-	onDestroy(() => clearInterval(poll));
 
 	// Runs open by default: the running ones and the latest.
 	let open = $state<Record<string, boolean>>({});
@@ -69,25 +67,14 @@
 		const a = chat.agentRuns.agents.find((x) => x.id === id);
 		return a ? { agent: a, run: null } : null;
 	});
-	const transcript = $derived(chat.agentFocus ? chat.subagentTranscripts[chat.agentFocus] : undefined);
-	const focusRunning = $derived(!!focused && runState(focused.agent.state) === 'running');
-	// Read the conversation when one is picked, and again every few seconds
-	// while that subagent still works.
-	$effect(() => {
-		const id = chat.agentFocus;
-		const live = focusRunning;
-		untrack(() => {
-			clearInterval(poll);
-			if (!id) return;
-			onOp({ op: 'subagent_transcript', agent_id: id });
-			if (live) poll = setInterval(() => onOp({ op: 'subagent_transcript', agent_id: id }), 2500);
-		});
-	});
+	// A subagent only its lifecycle reports (an engine without the trace) runs
+	// while that says so.
+	const focusRunning = $derived(
+		focused ? runState(focused.agent.state) === 'running' : !!chat.agentFocus && runState(chat.subagents[chat.agentFocus]?.status ?? '') === 'running'
+	);
 
 	let scroller = $state<HTMLElement | null>(null);
-	let taskOpen = $state(false);
 	function pick(id: string) {
-		taskOpen = false;
 		chat.agentFocus = id;
 		scroller?.scrollTo({ top: 0 });
 	}
@@ -152,37 +139,23 @@
 				{#if a.error}<p class="ferr">{a.error}</p>{/if}
 				{#if a.result && s !== 'running'}<p class="fres"><span>{t('dock.agents.result')}</span>{a.result}</p>{/if}
 			</div>
-		{/if}
-		{#if transcript?.error}
-			<p class="empty-line">{transcript.error}</p>
-		{:else if !transcript}
-			<p class="empty-line"><CircleNotchIcon size={13} class="spin" /> {t('dock.agents.loading')}</p>
-		{:else}
-			{#if transcript.task}
-				<section class="task" class:open={taskOpen}>
-					<button class="task-head" onclick={() => (taskOpen = !taskOpen)}>
-						<span class="caret" class:open={taskOpen}><CaretRightIcon size={12} /></span>
-						{t('dock.agents.task')}
-					</button>
-					<div class="task-body"><Markdown text={transcript.task} /></div>
-				</section>
-			{/if}
-			{#if transcript.messages.length}
-				<div class="convo">
-					<MessageList
-						messages={transcript.messages}
-						streamingMsg={null}
-						streamingReasoning={null}
-						phase={null}
-						{scroller}
-						onEdit={() => {}}
-						onRewind={() => {}}
-					/>
+		{:else if chat.subagents[chat.agentFocus]}
+			<!-- Known from its lifecycle only (an engine without the trace). -->
+			{@const life = chat.subagents[chat.agentFocus]}
+			<div class="focus-head">
+				<div class="ftitle">
+					{@render stateIcon(life.status)}
+					<span>{shortPath(life.label || chat.agentFocus)}</span>
 				</div>
-			{:else}
-				<p class="empty-line">{t('dock.agents.noMessages')}</p>
-			{/if}
+				<div class="fmeta">
+					{#if life.model}<span>{shortModel(life.model)}</span>{/if}
+					<span>{t(`dock.agents.state.${runState(life.status)}`)}</span>
+				</div>
+			</div>
 		{/if}
+		{#key chat.agentFocus}
+			<AgentTranscript {chat} agentId={chat.agentFocus} live={focusRunning} {scroller} {onOp} />
+		{/key}
 	{:else if chat.agentRuns.workflows.length || chat.agentRuns.agents.length}
 		<div class="head">
 			<span class="title">{t('dock.agents.title')}</span>
@@ -526,37 +499,6 @@
 		margin: 6px 0 0;
 		font-size: var(--fs-xs);
 		color: var(--err);
-	}
-	.task {
-		margin: 4px 18px 6px;
-		border-top: 1px solid var(--hairline);
-		border-bottom: 1px solid var(--hairline);
-	}
-	.task-head {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		width: 100%;
-		padding: 8px 0;
-		border: none;
-		background: none;
-		color: var(--dim);
-		font-size: var(--fs-xs);
-		cursor: pointer;
-	}
-	.task-body {
-		max-height: 4.5em;
-		overflow: hidden;
-		padding-bottom: 8px;
-		font-size: var(--fs-sm);
-		mask-image: linear-gradient(to bottom, black 55%, transparent);
-	}
-	.task.open .task-body {
-		max-height: none;
-		mask-image: none;
-	}
-	.convo {
-		padding: 6px 18px 0;
 	}
 	.empty-line {
 		display: flex;

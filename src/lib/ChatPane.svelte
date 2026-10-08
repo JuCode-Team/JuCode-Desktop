@@ -64,6 +64,9 @@
 	import RateLimitBanner from '$lib/RateLimitBanner.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import TaskStrip from '$lib/TaskStrip.svelte';
+	import ProgressCard from '$lib/agents/ProgressCard.svelte';
+	import { agentRows, type AgentRow } from '$lib/agentProgress';
+	import { parseToolOutput, toolTarget, toolVerb } from '$lib/toolSummary';
 	import { parseFileHref } from '$lib/fileRefs';
 	import type { Msg } from '$lib/chat.svelte';
 	import type { SessionSwitch } from '$lib/composer/SessionSwitches.svelte';
@@ -455,18 +458,6 @@
 
 	const isImage = (p: string) => /\.(png|jpe?g|gif|webp|bmp)$/i.test(p);
 	const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
-	// Engine subagent lifecycle status → localized label (falls back to the raw value).
-	// 'done' is an alias of 'completed'.
-	const AGENT_STATUS_KEY: Record<string, string> = {
-		started: 'started',
-		running: 'running',
-		completed: 'completed',
-		done: 'completed',
-		interrupted: 'interrupted',
-		stopped: 'interrupted',
-		failed: 'failed',
-		closed: 'closed'
-	};
 	// The agent trace (AgentRunsPanel, a workbench panel) of this session.
 	const traceable = $derived(caps(chat).agentTrace && !!onOpenTrace);
 	function openTrace(agentId: string | null) {
@@ -481,7 +472,20 @@
 		if (chat.agentRuns.workflows.some((w) => w.toolUseId === m.callId)) return { label: t('dock.agents.open'), run: () => openTrace(null) };
 		return null;
 	}
-	const agentStatus = (s: string) => (AGENT_STATUS_KEY[s] ? t(`shell.agentStatus.${AGENT_STATUS_KEY[s]}`) : s);
+	// The subagents of this conversation: every run (the message list's cards
+	// find theirs), and the current turn's (the progress card). Derived from
+	// the trace and lifecycle state, never from the streaming text.
+	const lastTool = (label: string) => {
+		const m = chat.subagentLastTool[label];
+		return m ? `${toolVerb(m.name)} ${toolTarget(m.name, parseToolOutput(m.output))}`.trim() : '';
+	};
+	const allAgents = $derived(agentRows({ runs: chat.agentRuns, subagents: chat.subagents, lastTool }));
+	const turnAgents = $derived(
+		agentRows({ runs: chat.agentRuns, subagents: chat.subagents, lastTool, since: chat.turnStartedAt || Number.MAX_SAFE_INTEGER })
+	);
+	function openAgent(row: AgentRow) {
+		openTrace(row.workflow ? null : row.id);
+	}
 
 	// pickers (tree / model / resume) — this pane's session
 	const pickerTitle = $derived(
@@ -1110,17 +1114,6 @@
 			<button class="owner-link" onclick={() => ((session.requirement = undefined), (session.requirementStart = undefined))}>{t('shell.requirement.unlink')}</button>
 		</div>
 	{/if}
-	{#if Object.keys(chat.subagents).length}
-		<div class="agents">
-			{#each Object.entries(chat.subagents) as [path, info] (path)}
-				{#if info.label && traceable}
-					<button class="agent link" onclick={() => openTrace(path)} title={t('dock.agents.openAgent')}>{info.label} · {agentStatus(info.status)}{#if info.message}<span class="agent-msg">{info.message}</span>{/if}</button>
-				{:else}
-					<span class="agent">{info.label || path} · {agentStatus(info.status)}{#if info.message}<span class="agent-msg">{info.message}</span>{/if}</span>
-				{/if}
-			{/each}
-		</div>
-	{/if}
 	<TaskStrip
 		{chat}
 		onStop={(id) => send({ op: 'stop_task', task_id: id })}
@@ -1143,6 +1136,7 @@
 	{/if}
 
 	<div class="mainwrap" class:resizing={dragW !== null} bind:clientWidth={wrapW}>
+	<ProgressCard {chat} sessionId={session.id} rows={turnAgents} onOpen={traceable ? openAgent : undefined} />
 	<main bind:this={scroller} onscroll={onScroll} onwheel={onWheel}>
 		<div bind:this={contentEl}>
 			<MessageList bind:this={messageList} bind:mark messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onNote={noteRequirement} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} traceOf={traceable ? traceOf : undefined} />
@@ -1448,43 +1442,11 @@
 		font-weight: 500;
 	}
 
-	.agents {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 8px;
-		padding: 8px 18px;
-		border-bottom: 1px solid var(--hairline);
-	}
-	.agent {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		font-family: var(--font-mono);
-		font-size: var(--fs-2xs);
-		color: var(--dim);
-		min-width: 0;
-	}
 	.interm {
 		margin: 0 0 8px;
 		font-size: var(--fs-xs);
 		color: var(--dim);
 		text-align: center;
-	}
-	button.agent {
-		border: none;
-		background: none;
-		padding: 0;
-		cursor: pointer;
-	}
-	button.agent:hover {
-		color: var(--text);
-	}
-	.agent-msg {
-		color: var(--dim2);
-		max-width: 360px;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
 	}
 
 	.mainwrap {

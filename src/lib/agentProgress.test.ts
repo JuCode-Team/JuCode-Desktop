@@ -7,6 +7,7 @@ import {
 	planShown,
 	planSummary,
 	rowElapsed,
+	shortElapsed,
 	shortPath,
 	spawnPayload,
 	stepState,
@@ -140,6 +141,10 @@ describe('subagent rows', () => {
 		expect(rowElapsed(row, 4000)).toBe(3000);
 		expect(rowElapsed({ ...row, state: 'done', durationMs: 1200 }, 9000)).toBe(1200);
 		expect(rowElapsed({ ...row, state: 'done', endedAt: 1500 }, 9000)).toBe(500);
+	});
+
+	it('writes running times short', () => {
+		expect([800, 8_400, 65_000, 3_720_000].map(shortElapsed)).toEqual(['0s', '8s', '1m05s', '1h02m']);
 	});
 
 	it('finds the agent a spawn call started', () => {
