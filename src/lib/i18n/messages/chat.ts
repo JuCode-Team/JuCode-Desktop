@@ -294,7 +294,7 @@ const chat = {
 			revising: '正在修改计划',
 			revisingHint: '说说要怎么改，发送后计划会按你的意见重写',
 			cancelRevise: '取消修改',
-			status: { approved: '已批准', revising: '修改中' }
+			status: { approved: '已批准', revising: '修改中', drafting: '撰写中' }
 		},
 		// Indicator
 		phaseConnecting: '连接中',
@@ -597,7 +597,7 @@ const chat = {
 			revising: 'Revising the plan',
 			revisingHint: 'Say what to change; the plan is rewritten when you send',
 			cancelRevise: 'Cancel revising',
-			status: { approved: 'Approved', revising: 'Revising' }
+			status: { approved: 'Approved', revising: 'Revising', drafting: 'Writing' }
 		},
 		// Indicator
 		phaseConnecting: 'Connecting',

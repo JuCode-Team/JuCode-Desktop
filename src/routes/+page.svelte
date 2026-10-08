@@ -1204,9 +1204,10 @@
 					if (plan && plan !== hadPlan && plan.kind === 'plan')
 						void notify(s.chat.title, t('shell.notifyPlan', { title: plan.title }));
 				}
-				// A plan just proposed opens in its page beside this session's chat.
+				// A plan the model starts writing (or proposes whole) opens in its
+				// page beside this session's chat.
 				const newPlan = s.chat.messages.findLast((m) => m.kind === 'plan');
-				if (newPlan && newPlan !== lastPlan && newPlan.kind === 'plan' && newPlan.status === 'pending' && tilesReady && chatSessionsIn(tiles).includes(s.id))
+				if (newPlan && newPlan !== lastPlan && newPlan.kind === 'plan' && (newPlan.status === 'drafting' || newPlan.status === 'pending') && tilesReady && chatSessionsIn(tiles).includes(s.id))
 					openPlanPage(s.id, newPlan.id);
 								// This session's tile (if any) sticks to the bottom while streaming.
 				panes.get(s.id)?.scrollToEnd();

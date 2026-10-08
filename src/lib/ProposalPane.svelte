@@ -30,8 +30,8 @@
 	/** ms between blocks while a pending plan comes in. */
 	const STEP = 70;
 	const blocks = $derived(planBlocks(plan?.text ?? ''));
-	// A plan that is not waiting when its page opens is read, not watched: it
-	// shows whole.
+	// A plan already written when its page opens comes in block by block; one
+	// being written grows as it streams; an approved one shows whole.
 	let shown = $state(untrack(() => (plan?.status === 'pending' ? 0 : Number.MAX_SAFE_INTEGER)));
 	$effect(() => {
 		if (shown >= blocks.length) return;
@@ -53,7 +53,7 @@
 		<header>
 			<span class="ico"><ClipboardTextIcon size={15} /></span>
 			<span class="label">{t('chat.planCard.label')}</span>
-			{#if plan.status === 'approved' || plan.status === 'revising'}
+			{#if plan.status === 'approved' || plan.status === 'revising' || plan.status === 'drafting'}
 				<span class="tag {plan.status}">{t(`chat.planCard.status.${plan.status}`)}</span>
 			{/if}
 			<span class="grow"></span>
@@ -67,6 +67,7 @@
 				{#each blocks.slice(0, shown) as block, i (i)}
 					<div class="block"><Markdown text={block} /></div>
 				{/each}
+				{#if plan.status === 'drafting'}<span class="caret" aria-hidden="true"></span>{/if}
 			</div>
 		</div>
 		{#if actionable && plan.status === 'pending' && onAction}
@@ -155,8 +156,24 @@
 			transform: translateY(4px);
 		}
 	}
+	/* While the model writes the plan. */
+	.caret {
+		display: inline-block;
+		width: 7px;
+		height: 1.1em;
+		margin-top: 6px;
+		border-radius: 1px;
+		background: var(--accent);
+		animation: blink 1s steps(2, start) infinite;
+	}
+	@keyframes blink {
+		to {
+			visibility: hidden;
+		}
+	}
 	@media (prefers-reduced-motion: reduce) {
-		.block {
+		.block,
+		.caret {
 			animation: none;
 		}
 	}

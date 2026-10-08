@@ -52,7 +52,7 @@
 		<span class="txt">
 			<span class="head">
 				<span class="ptitle">{title || t('chat.planCard.label')}</span>
-				{#if status === 'approved' || status === 'revising'}
+				{#if status === 'approved' || status === 'revising' || status === 'drafting'}
 					<span class="tag {status}">{t(`chat.planCard.status.${status}`)}</span>
 				{/if}
 			</span>

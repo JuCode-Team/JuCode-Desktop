@@ -728,6 +728,19 @@ describe('claude session extras', () => {
 		expect(c.messages).toEqual([{ kind: 'plan', id: 'p2', title: 'T', text: 'body', status: 'approved' }]);
 	});
 
+	it('grows one plan while the model writes it, and completes it in place', () => {
+		const c = new ChatState();
+		c.handle({ type: 'plan_draft', id: 'p1', title: 'Sna', append: '' });
+		c.handle({ type: 'plan_draft', id: 'p1', title: 'Snake', append: '## Go' });
+		c.handle({ type: 'plan_draft', id: 'p1', title: 'Snake', append: 'al' });
+		expect(c.messages).toEqual([{ kind: 'plan', id: 'p1', title: 'Snake', text: '## Goal', status: 'drafting' }]);
+		const draft = c.messages[0];
+		c.handle({ type: 'proposed_plan', id: 'p1', title: 'Snake', markdown: '## Goal\n1. a', status: 'pending' });
+		expect(c.messages).toHaveLength(1);
+		expect(c.messages[0]).toBe(draft);
+		expect(c.messages[0]).toMatchObject({ text: '## Goal\n1. a', status: 'pending' });
+	});
+
 	it('remembers the mode before plan mode and when the plan changed', () => {
 		const c = new ChatState();
 		c.setApprovalMode('edits');

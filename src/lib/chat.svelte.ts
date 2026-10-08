@@ -1533,6 +1533,21 @@ export class ChatState {
 				};
 				break;
 			}
+			// The plan as the model writes it: one message grows, and the
+			// proposed_plan with the same id completes it.
+			case 'plan_draft': {
+				const id = str(ev.id);
+				const known = this.messages.find((m) => m.kind === 'plan' && m.id === id);
+				if (known?.kind === 'plan') {
+					if (str(ev.title)) known.title = str(ev.title);
+					known.text += str(ev.append);
+				} else {
+					this.#collapseReasoning();
+					this.#closeSegment(Date.now());
+					this.messages.push({ kind: 'plan', id, title: str(ev.title), text: str(ev.append), status: 'drafting' });
+				}
+				break;
+			}
 			case 'proposed_plan': {
 				const id = str(ev.id);
 				const plan = { kind: 'plan' as const, id, title: str(ev.title), text: str(ev.markdown), status: planStatus(ev.status) };
