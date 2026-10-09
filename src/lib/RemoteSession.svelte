@@ -568,7 +568,7 @@
 		{chat}
 		onStop={(id) => send({ op: 'stop_task', task_id: id })}
 		onOutput={(id) => send({ op: 'task_output', task_id: id })}
-		onTrace={bcaps.agentTrace ? () => openTrace(null) : undefined}
+		onTrace={bcaps.agentTrace ? openTrace : undefined}
 	/>
 	{#if traceOpen}
 		<!-- The agent trace, full screen over the session. -->

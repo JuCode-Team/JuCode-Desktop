@@ -1143,7 +1143,8 @@
 		{chat}
 		onStop={(id) => send({ op: 'stop_task', task_id: id })}
 		onOutput={(id) => send({ op: 'task_output', task_id: id })}
-		onTrace={traceable ? () => openTrace(null) : undefined}
+		onTrace={traceable ? openTrace : undefined}
+		agents={false}
 	/>
 
 	{#if showFind}
