@@ -184,7 +184,7 @@ const dock = {
 			revertFile: '还原此文件',
 			revertConfirm: '把「{path}」还原到上次提交的版本？你自己在这个文件里没提交的改动也会一起丢掉，此操作不可撤销。',
 			revertAgentConfirm: '撤销智能体对「{path}」的修改？你自己的改动会保留。',
-			revertAgentFailed: '无法只撤销智能体的修改（文件之后又改动过）：{error}',
+			revertAgentFailed: '无法只撤销智能体的修改（文件之后又改动过），文件未改动：{error}',
 			revertTitle: '还原文件',
 			newFileDiff: '（新文件或无可显示的 diff）'
 		},
@@ -396,7 +396,7 @@ const dock = {
 			revertFile: 'Revert this file',
 			revertConfirm: 'Restore "{path}" to its last commit? Your own uncommitted changes to it are lost too. This cannot be undone.',
 			revertAgentConfirm: 'Undo the agent\'s edits to "{path}"? Your own changes stay.',
-			revertAgentFailed: 'Could not undo only the agent\'s edits (the file changed since): {error}',
+			revertAgentFailed: 'Could not undo only the agent\'s edits (the file changed since); the file is unchanged: {error}',
 			revertTitle: 'Revert file',
 			newFileDiff: '(New file or no diff to display)'
 		},

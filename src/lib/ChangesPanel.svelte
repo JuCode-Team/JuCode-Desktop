@@ -19,12 +19,19 @@
 		files = [],
 		agentDiffs = {},
 		onRevert
-	}: { cwd?: string; files?: string[]; agentDiffs?: Record<string, string[]>; onRevert?: (p: string) => void } = $props();
-	/** The recorded diffs for a listed path (absolute or project-relative). */
-	function diffsOf(path: string): string[] {
-		const root = cwd.replace(/\/+$/, '');
-		const rel = root && path.startsWith(root + '/') ? path.slice(root.length + 1) : path;
-		return agentDiffs[rel] ?? [];
+	}: {
+		cwd?: string;
+		files?: string[];
+		agentDiffs?: Record<string, string[]>;
+		/** A file was reverted: `rel` is its `agentDiffs` key. */
+		onRevert?: (p: string, rel: string) => void;
+	} = $props();
+	/** A listed path (absolute or project-relative, either separator) as the
+	 *  diffs' headers name it: project-relative, `/`-separated. */
+	function relOf(path: string): string {
+		const p = path.replace(/\\/g, '/');
+		const root = cwd.replace(/\\/g, '/').replace(/\/+$/, '');
+		return root && p.startsWith(root + '/') ? p.slice(root.length + 1) : p;
 	}
 	const dir = () => cwd || undefined;
 
@@ -89,8 +96,11 @@
 	}
 
 	async function revert(path: string) {
-		const diffs = diffsOf(path);
+		const rel = relOf(path);
+		const diffs = agentDiffs[rel] ?? [];
 		// The agent's own edits are known: undo exactly them, keep the user's.
+		// When they no longer apply the file stays as it is: a whole-file
+		// revert would drop the user's changes.
 		if (diffs.length && cwd) {
 			const ok = await confirm({
 				title: t('dock.changes.revertTitle'),
@@ -102,17 +112,14 @@
 			busy = true;
 			error = '';
 			try {
-				const root = cwd.replace(/\/+$/, '');
-				const rel = path.startsWith(root + '/') ? path.slice(root.length + 1) : path;
 				await revertAgentEdits(cwd, rel, diffs);
-				onRevert?.(path);
-				return;
+				onRevert?.(path, rel);
 			} catch (e) {
-				// The file changed too much since: fall through to the full revert.
 				error = t('dock.changes.revertAgentFailed', { error: String(e) });
 			} finally {
 				busy = false;
 			}
+			return;
 		}
 		const ok = await confirm({
 			title: t('dock.changes.revertTitle'),
@@ -128,7 +135,7 @@
 			const untracked = st.trimStart().startsWith('??');
 			if (untracked) await git(['clean', '-fd', '--', path], dir());
 			else await git(['restore', '--worktree', '--', path], dir());
-			onRevert?.(path);
+			onRevert?.(path, rel);
 		} catch (e) {
 			error = String(e);
 		} finally {
