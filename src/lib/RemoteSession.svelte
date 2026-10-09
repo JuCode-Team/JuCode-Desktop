@@ -49,6 +49,7 @@
 	import { buildSetApprovalModeOp, type ApprovalMode, type ApproveOp } from '$lib/approval';
 	import { loadComposerText, saveComposerText } from '$lib/composerText';
 	import { t } from '$lib/i18n';
+	import { followTop, shortOfEnd } from '$lib/chatFollow';
 
 	let {
 		session,
@@ -152,8 +153,9 @@
 		if (!chat.busy && connected) untrack(keep);
 	});
 
-	// Stick to the bottom while the content grows (the snapshot, streaming
-	// text, new cards) unless the reader scrolled up, as the desktop does.
+	// Follow the end while the content grows unless the reader scrolled up;
+	// a streaming reply holds still once it fills the view (see chatFollow),
+	// as the desktop does.
 	let atBottom = $state(true);
 	// The position last pinned to the end, and the last one seen.
 	let pinnedTop = -1;
@@ -182,10 +184,11 @@
 	$effect(() => {
 		if (!contentEl || !scroller) return;
 		const ro = new ResizeObserver(() => {
-			if (atBottom && scroller) {
-				scroller.scrollTop = scroller.scrollHeight;
-				pinnedTop = scroller.scrollTop;
-			}
+			if (!atBottom || !scroller || !contentEl) return;
+			const top = followTop(scroller, contentEl, chat.busy);
+			scroller.scrollTop = top;
+			pinnedTop = scroller.scrollTop;
+			if (shortOfEnd(scroller, top)) atBottom = false;
 		});
 		ro.observe(contentEl);
 		return () => ro.disconnect();

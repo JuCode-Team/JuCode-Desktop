@@ -54,6 +54,7 @@ export const ROWS: SearchRow[] = [
 	{ section: 'general', id: 'terminal-font', titleKey: 'settings.behavior.terminalFont', descKey: 'settings.behavior.terminalFontHint' },
 	{ section: 'general', id: 'terminal-font-size', titleKey: 'settings.behavior.terminalFontSize' },
 	{ section: 'general', id: 'turn-stats', titleKey: 'settings.behavior.turnStats', descKey: 'settings.behavior.turnStatsHint' },
+	{ section: 'general', id: 'scroll-on-send', titleKey: 'settings.behavior.scrollOnSend', descKey: 'settings.behavior.scrollOnSendHint' },
 	{ section: 'general', id: 'cache-miss', titleKey: 'settings.behavior.cacheMissAlert', descKey: 'settings.behavior.cacheMissAlertHint' },
 	{ section: 'general', id: 'html-open', titleKey: 'settings.behavior.htmlOpen', descKey: 'settings.behavior.htmlOpenHint' },
 	{ section: 'general', id: 'feedback', titleKey: 'settings.help.feedback', descKey: 'settings.help.feedbackHint' },

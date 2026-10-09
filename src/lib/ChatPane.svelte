@@ -60,6 +60,7 @@
 	import { dispatch } from '$lib/backends/router';
 	import { browser } from '$lib/browser.svelte';
 	import { prefs } from '$lib/prefs.svelte';
+	import { followTop, shortOfEnd } from '$lib/chatFollow';
 	import { t } from '$lib/i18n';
 	import type { SessionStore } from '$lib/session.svelte';
 	import type { Session } from '$lib/types';
@@ -765,6 +766,7 @@
 		quotes = [];
 		images = [];
 		imageSeq = 0;
+		if (prefs.scrollOnSend) jumpToBottom();
 	}
 	function stop() {
 		autoRetry.cancel(chat);
@@ -937,14 +939,20 @@
 		scroller.scrollTop = scroller.scrollHeight;
 		pinnedTop = scroller.scrollTop;
 	}
-	// Stick to the bottom as content grows (streaming text, tool output, new cards).
-	// The smoothed reveal changes height every frame, which a scroll-event listener
-	// can't see, so observe the content's size directly.
+	// Follow the content as it grows. The smoothed reveal changes height every
+	// frame, which a scroll-event listener can't see, so observe the content's
+	// size directly. Idle (a conversation loading): stick to the bottom.
+	// While a reply streams: reveal it only until the latest message reaches
+	// the top, then hold still, so the text being read never moves.
 	let contentEl = $state<HTMLElement | null>(null);
 	$effect(() => {
 		if (!contentEl || !scroller) return;
 		const ro = new ResizeObserver(() => {
-			if (atBottom) pin();
+			if (!scroller || !contentEl || !atBottom) return;
+			const top = followTop(scroller, contentEl, chat.busy);
+			scroller.scrollTop = top;
+			pinnedTop = scroller.scrollTop;
+			if (shortOfEnd(scroller, top)) atBottom = false;
 		});
 		ro.observe(contentEl);
 		return () => ro.disconnect();

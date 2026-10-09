@@ -31,6 +31,8 @@ type PrefsShape = {
 	/** The view an existing conversation opens in: the chat, or its
 	 *  engine's own TUI. */
 	defaultSurface: 'gui' | 'tui';
+	/** Sending a message scrolls the conversation to its end. */
+	scrollOnSend: boolean;
 };
 
 export const TURN_STAT_KEYS = ['elapsed', 'ttft', 'tokens', 'files', 'tools', 'cost', 'model'] as const;
@@ -45,7 +47,8 @@ const DEFAULTS: PrefsShape = {
 	telemetry: true,
 	terminalFont: '',
 	terminalFontSize: 12.5,
-	defaultSurface: 'gui'
+	defaultSurface: 'gui',
+	scrollOnSend: true
 };
 
 /** A terminal font size within 8–32 px; anything else is the default. */
@@ -98,6 +101,7 @@ class PrefsStore {
 	terminalFont = $state(DEFAULTS.terminalFont);
 	terminalFontSize = $state(DEFAULTS.terminalFontSize);
 	defaultSurface = $state(DEFAULTS.defaultSurface);
+	scrollOnSend = $state(DEFAULTS.scrollOnSend);
 
 	init() {
 		const p = load();
@@ -112,6 +116,7 @@ class PrefsStore {
 		this.terminalFont = typeof p.terminalFont === 'string' ? p.terminalFont : DEFAULTS.terminalFont;
 		this.terminalFontSize = fontSize(p.terminalFontSize);
 		this.defaultSurface = p.defaultSurface === 'tui' ? 'tui' : 'gui';
+		this.scrollOnSend = p.scrollOnSend !== false;
 		this.#applyVibrancy();
 		if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
 			invoke<string | null>('window_effect')
@@ -136,7 +141,8 @@ class PrefsStore {
 					telemetry: this.telemetry,
 					terminalFont: this.terminalFont,
 					terminalFontSize: this.terminalFontSize,
-					defaultSurface: this.defaultSurface
+					defaultSurface: this.defaultSurface,
+					scrollOnSend: this.scrollOnSend
 				})
 			);
 		} catch {
@@ -173,6 +179,11 @@ class PrefsStore {
 
 	setCacheMissAlert(v: boolean) {
 		this.cacheMissAlert = v;
+		this.#save();
+	}
+
+	setScrollOnSend(v: boolean) {
+		this.scrollOnSend = v;
 		this.#save();
 	}
 

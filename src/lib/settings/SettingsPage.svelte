@@ -665,6 +665,9 @@
 								{/each}
 							</div>
 						</SettingsRow>
+						<SettingsRow id="scroll-on-send" title={t('settings.behavior.scrollOnSend')} description={t('settings.behavior.scrollOnSendHint')}>
+							<Switch checked={prefs.scrollOnSend} label={t('settings.behavior.scrollOnSend')} onChange={(on) => prefs.setScrollOnSend(on)} />
+						</SettingsRow>
 						<SettingsRow id="cache-miss" title={t('settings.behavior.cacheMissAlert')} description={t('settings.behavior.cacheMissAlertHint')}>
 							<Switch checked={prefs.cacheMissAlert} label={t('settings.behavior.cacheMissAlert')} onChange={(on) => prefs.setCacheMissAlert(on)} />
 						</SettingsRow>
