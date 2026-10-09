@@ -46,8 +46,15 @@ describe('file references', () => {
 		expect(parseFileHref('docs/100%.md')).toEqual({ path: 'docs/100%.md' });
 	});
 
+	it('never opens a network share a reply links to', () => {
+		expect(parseFileHref('%5C%5Cserver%5Cshare%5Ca.ts')).toEqual({ path: '' });
+		expect(parseFileHref('file:////server/share/a.ts#L3')).toEqual({ path: '' });
+		expect(parseFileHref('//server/share/a.ts')).toEqual({ path: '' });
+		expect(isAbsolutePath('\\\\server\\share\\a.ts')).toBe(false);
+	});
+
 	it('joins and reads paths with either separator', () => {
-		for (const p of ['/abs/a.ts', 'C:\\p\\a.ts', 'c:/p/a.ts', '\\\\server\\share\\a.ts']) {
+		for (const p of ['/abs/a.ts', 'C:\\p\\a.ts', 'c:/p/a.ts']) {
 			expect(isAbsolutePath(p)).toBe(true);
 			expect(joinPath('C:\\proj', p)).toBe(p);
 		}

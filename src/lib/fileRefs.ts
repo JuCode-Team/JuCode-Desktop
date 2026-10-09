@@ -73,6 +73,10 @@ export function parseFileHref(href: string): FileRef {
 	let path = decodePath(main.split('?')[0].trim());
 	// `file:///C:/x` leaves `/C:/x`; on Windows the drive starts the path.
 	if (/^\/[A-Za-z]:[\\/]/.test(path)) path = path.slice(1);
+	// A network share (`\\server\share`, `//server/share`) is never opened
+	// from a reply: Windows would connect to the server and send the user's
+	// credentials to it.
+	if (/^[\\/]{2}/.test(path)) return { path: '' };
 	const m = /^L(\d+)(?::(\d+)|C(\d+))?$/.exec(hash);
 	if (!m) return { path };
 	const line = Number(m[1]);
@@ -88,9 +92,9 @@ function decodePath(path: string): string {
 	}
 }
 
-/** An absolute path on any OS: `/x`, `C:\x`, `C:/x` or `\\server\share`. */
+/** An absolute path on any OS: `/x`, `C:\x` or `C:/x`. */
 export function isAbsolutePath(path: string): boolean {
-	return /^(?:\/|[A-Za-z]:[\\/]|\\\\)/.test(path);
+	return /^(?:\/|[A-Za-z]:[\\/])/.test(path);
 }
 
 /** `path` under `root`, unless it is absolute already. */
