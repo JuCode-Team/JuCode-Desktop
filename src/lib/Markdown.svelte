@@ -189,20 +189,52 @@
 		background: var(--panel);
 		color: var(--text);
 	}
-	.md :global(table) {
-		border-collapse: collapse;
+	/* Tables: compact cells on hairlines, a tinted header, zebra rows; a wide
+	   one scrolls sideways in its own box (markdown.ts wraps it). */
+	.md :global(.table-wrap) {
+		max-width: 100%;
 		margin: 0 0 12px;
-		font-size: 0.95em;
+		overflow-x: auto;
+		border-radius: var(--r-md);
+		box-shadow: inset 0 0 0 1px var(--hairline);
+	}
+	.md :global(table) {
+		width: max-content;
+		min-width: 100%;
+		border-collapse: collapse;
+		font-size: 0.92em;
+		line-height: 1.45;
+		font-variant-numeric: tabular-nums;
 	}
 	.md :global(th),
 	.md :global(td) {
+		padding: 6px 12px;
 		border: none;
 		border-bottom: 1px solid var(--hairline);
-		padding: 5px 10px;
 		text-align: left;
+		vertical-align: top;
+	}
+	.md :global(th[align='center']),
+	.md :global(td[align='center']) {
+		text-align: center;
+	}
+	.md :global(th[align='right']),
+	.md :global(td[align='right']) {
+		text-align: right;
 	}
 	.md :global(th) {
 		background: var(--surface2);
+		font-weight: 600;
+		white-space: nowrap;
+	}
+	.md :global(tbody tr:nth-child(even)) {
+		background: var(--surface);
+	}
+	.md :global(tbody tr:last-child td) {
+		border-bottom: none;
+	}
+	.md :global(td code) {
+		white-space: nowrap;
 	}
 
 	/* highlight.js tokens mapped to design tokens (adapt to light/dark) */

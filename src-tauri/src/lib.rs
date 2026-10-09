@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager};
 
 mod acp_registry;
+mod agent_import;
 mod app_cli;
 #[cfg(desktop)]
 mod app_update;
@@ -818,6 +819,7 @@ fn diagnostic_logs() -> Vec<serde_json::Value> {
     [
         ("jucode.log", dir.join("logs").join("jucode.log")),
         ("daemon.log", dir.join("daemon").join("daemon.log")),
+        ("desktop-ui.log", dir.join("logs").join("desktop-ui.log")),
     ]
     .into_iter()
     .filter_map(|(name, path)| {
@@ -839,6 +841,55 @@ fn diagnostic_logs() -> Vec<serde_json::Value> {
 #[tauri::command(async)]
 fn submit_feedback(ticket: serde_json::Value) -> Result<serde_json::Value, String> {
     jucode_send("POST", "/v1/oauth/tickets", Some(&ticket))
+}
+
+/// What the 更新 page shows and a bug report needs: this app's version, the
+/// engine it ships, the OS, and where the logs are. A command of the app
+/// (not the `app` plugin's getVersion, which a capability can leave out).
+#[tauri::command]
+fn about_app(app: AppHandle) -> serde_json::Value {
+    let jucode = jucode_dir();
+    serde_json::json!({
+        "version": app.package_info().version.to_string(),
+        "cli": app_cli::app_cli_version(),
+        "os": std::env::consts::OS,
+        "arch": std::env::consts::ARCH,
+        "logs": jucode.join("logs").display().to_string(),
+        "daemon_log": jucode.join("daemon").join("daemon.log").display().to_string(),
+    })
+}
+
+/// A UI error, appended to ~/.jucode/logs/desktop-ui.log (bounded), so a
+/// blank pane on a machine nobody here can see still says what broke.
+#[tauri::command]
+fn log_ui_error(message: String) {
+    use std::io::Write;
+    let dir = jucode_dir().join("logs");
+    let _ = std::fs::create_dir_all(&dir);
+    let path = dir.join("desktop-ui.log");
+    // Keep it small: start over past 512 KB.
+    if std::fs::metadata(&path).map(|m| m.len() > 512 * 1024).unwrap_or(false) {
+        let _ = std::fs::remove_file(&path);
+    }
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or_default();
+    let line: String = message.chars().take(4000).collect();
+    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+        let _ = writeln!(file, "{stamp} {} {}", std::env::consts::OS, line.replace('\n', " | "));
+    }
+}
+
+/// Opens the folder holding the engine and daemon logs (made when missing).
+#[tauri::command]
+fn open_logs_folder(app: AppHandle) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let dir = jucode_dir();
+    std::fs::create_dir_all(dir.join("logs")).map_err(|e| e.to_string())?;
+    app.opener()
+        .open_path(dir.display().to_string(), None::<&str>)
+        .map_err(|e| e.to_string())
 }
 
 /// Anonymous usage counts (src/lib/telemetry.svelte.ts), with this app's
@@ -2043,13 +2094,25 @@ fn resolve_file_ref(root: String, rel: String) -> Option<String> {
     let rel = Path::new(&rel);
     let direct = root.join(rel);
     if direct.is_file() {
-        return Some(direct.display().to_string());
+        return Some(ui_path(&direct));
     }
     let mut found = Vec::new();
     find_ref(&root, rel, 0, &mut found);
     match found.as_slice() {
-        [one] => one.canonicalize().ok().filter(|p| p.starts_with(&root)).map(|p| p.display().to_string()),
+        [one] => one.canonicalize().ok().filter(|p| p.starts_with(&root)).map(|p| ui_path(&p)),
         _ => None,
+    }
+}
+
+/// A canonical path as the UI opens it: on Windows `canonicalize` adds a
+/// `\\?\` prefix the UI does not read as absolute, so it joined the path to
+/// the project root again and the file did not open.
+fn ui_path(path: &Path) -> String {
+    let text = path.display().to_string();
+    match text.strip_prefix(r"\\?\") {
+        Some(unc) if unc.starts_with(r"UNC\") => format!(r"\\{}", &unc[4..]),
+        Some(local) => local.to_string(),
+        None => text,
     }
 }
 
@@ -2742,6 +2805,71 @@ fn git(args: Vec<String>, cwd: Option<String>) -> Result<String, String> {
     }
 }
 
+/// Undoes the agent's own edits to one file: `diffs` are the edit tools'
+/// unified diffs for it, oldest first; they are reverse-applied newest first
+/// against the working tree by their context, so the user's own changes
+/// elsewhere in the file stay (a hunk whose context changed refuses). Every diff
+/// must touch only `path` (inside `cwd`). Nothing is written unless all of
+/// them apply (`git apply --check` first).
+#[tauri::command(async)]
+fn revert_agent_edits(cwd: String, path: String, diffs: Vec<String>) -> Result<(), String> {
+    use std::io::Write;
+    let dir = PathBuf::from(&cwd);
+    if path.is_empty() || Path::new(&path).is_absolute() || path.split(['/', '\\']).any(|part| part == "..") {
+        return Err(format!("not a project path: {path}"));
+    }
+    if diffs.is_empty() || diffs.len() > 200 {
+        return Err("no agent edits to undo".to_string());
+    }
+    // Each diff names its file in `diff --git a/<p> b/<p>` / `+++ b/<p>`
+    // headers; any other file name is refused.
+    for diff in &diffs {
+        for line in diff.lines() {
+            let named = line
+                .strip_prefix("+++ b/")
+                .or_else(|| line.strip_prefix("--- a/"))
+                .map(str::trim);
+            if let Some(named) = named {
+                if named != path && named != "/dev/null" {
+                    return Err(format!("edit touches another file: {named}"));
+                }
+            }
+        }
+    }
+    let patch: String = diffs
+        .iter()
+        .rev()
+        .map(|diff| if diff.ends_with('\n') { diff.clone() } else { format!("{diff}\n") })
+        .collect();
+    let run = |check: bool| -> Result<(), String> {
+        let mut cmd = Command::new("git");
+        no_window(&mut cmd);
+        cmd.current_dir(&dir).env("GIT_TERMINAL_PROMPT", "0").args(["apply", "-R", "--whitespace=nowarn"]);
+        if check {
+            cmd.arg("--check");
+        }
+        cmd.args(["--include", &path, "-"]);
+        cmd.stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        let mut child = cmd.spawn().map_err(|e| format!("failed to run git: {e}"))?;
+        child
+            .stdin
+            .take()
+            .ok_or("git stdin unavailable")?
+            .write_all(patch.as_bytes())
+            .map_err(|e| e.to_string())?;
+        let output = child.wait_with_output().map_err(|e| e.to_string())?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+        }
+    };
+    run(true)?;
+    run(false)
+}
+
 /// Runs a fixed git plumbing command in `dir` (optionally with an isolated index
 /// file). A stable checkpoint identity is set so `commit-tree` works even in a
 /// repo without a configured user. Returns trimmed stdout on success.
@@ -3276,6 +3404,8 @@ pub fn run() {
             put_cloud_settings,
             diagnostic_logs,
             submit_feedback,
+            revert_agent_edits,
+            log_ui_error,
             send_telemetry,
             fetch_jucode_models,
             fetch_jucode_groups,
@@ -3305,6 +3435,8 @@ pub fn run() {
             native_import::native_sessions,
             app_cli::install_cli_command,
             app_cli::app_cli_version,
+            about_app,
+            open_logs_folder,
             app_cli::replace_daemon,
             #[cfg(desktop)]
             app_update::update_check,
@@ -3313,6 +3445,8 @@ pub fn run() {
             #[cfg(desktop)]
             app_update::update_policy,
             native_import::import_native_session,
+            agent_import::import_scan,
+            agent_import::import_apply,
             pty_open,
             pty_write,
             pty_resize,
@@ -3350,7 +3484,15 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{read_json_strict, resolve_file_ref, valid_app_data_name};
+    use super::{read_json_strict, resolve_file_ref, ui_path, valid_app_data_name};
+    use std::path::Path;
+
+    #[test]
+    fn ui_path_drops_the_windows_verbatim_prefix() {
+        assert_eq!(ui_path(Path::new(r"\\?\C:\p\a.html")), r"C:\p\a.html");
+        assert_eq!(ui_path(Path::new(r"\\?\UNC\srv\share\a.ts")), r"\\srv\share\a.ts");
+        assert_eq!(ui_path(Path::new("/Users/me/a.ts")), "/Users/me/a.ts");
+    }
 
     #[test]
     fn resolve_file_ref_finds_a_unique_nested_match() {
@@ -3363,8 +3505,9 @@ mod tests {
         }
         let r = root.display().to_string();
         let canon = root.canonicalize().unwrap();
-        assert_eq!(resolve_file_ref(r.clone(), "top.ts".into()), Some(canon.join("top.ts").display().to_string()));
-        assert_eq!(resolve_file_ref(r.clone(), "src/x.ts".into()), Some(canon.join("a/repo/src/x.ts").display().to_string()));
+        // As the UI gets it: without the `\\?\` prefix canonicalize adds on Windows.
+        assert_eq!(resolve_file_ref(r.clone(), "top.ts".into()), Some(ui_path(&canon.join("top.ts"))));
+        assert_eq!(resolve_file_ref(r.clone(), "src/x.ts".into()), Some(ui_path(&canon.join("a/repo/src/x.ts"))));
         assert_eq!(resolve_file_ref(r.clone(), "src/y.ts".into()), None);
         assert_eq!(resolve_file_ref(r.clone(), "src/z.ts".into()), None);
         std::fs::remove_dir_all(&root).unwrap();

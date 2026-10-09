@@ -8,6 +8,7 @@
 	import ChatCircleTextIcon from 'phosphor-svelte/lib/ChatCircleTextIcon';
 	import SessionMark from '$lib/SessionMark.svelte';
 	import { sessionStatus } from '$lib/sessionStatus';
+	import { joinPath, parseFileHref, pathExt } from '$lib/fileRefs';
 	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
 	import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon';
 	import TargetIcon from 'phosphor-svelte/lib/TargetIcon';
@@ -66,6 +67,7 @@
 		leavesOf,
 		openTab,
 		serializeLayout,
+		splitLeaf,
 		type TileLayout,
 		type TileTab
 	} from '$lib/workbench/tiles';
@@ -87,6 +89,7 @@
 	import ChatPane, { type ChatPaneApi, type ProviderOption } from '$lib/ChatPane.svelte';
 	import SettingsPage from '$lib/settings/SettingsPage.svelte';
 	import type { SectionKey } from '$lib/settings/nav';
+	import { folderName } from '$lib/agentImport';
 	import Welcome from '$lib/welcome/Welcome.svelte';
 	import Marketplace from '$lib/Marketplace.svelte';
 	import Sidebar from '$lib/Sidebar.svelte';
@@ -109,6 +112,9 @@
 	import { agentDirectory, agentsOfWorkspace } from '$lib/agents.svelte';
 	import { CHATS_ENABLED, type Project, type WorktreeMeta } from '$lib/types';
 	import PlanPanel from '$lib/PlanPanel.svelte';
+	import ProposalPane from '$lib/ProposalPane.svelte';
+	import { planPages, proposalOf, proposalPanel } from '$lib/planPages.svelte';
+	import type { ApprovalMode } from '$lib/approval';
 	import GoalPanel from '$lib/GoalPanel.svelte';
 	import ChangesPanel from '$lib/ChangesPanel.svelte';
 	import TurnsPanel from '$lib/TurnsPanel.svelte';
@@ -423,6 +429,8 @@
 		const tui = tuiBackendOf(tab.panel);
 		if (tui) return tuiTabTitle(tui);
 		if (tab.panel === 'audit') return t('editor.title');
+		const proposal = proposalOf(tab.panel);
+		if (proposal) return planOf(proposal.sessionId, proposal.planId)?.title || t('chat.planCard.label');
 		return (ALL_PANELS as readonly string[]).includes(tab.panel) ? t(`dock.tabs.${tab.panel}`) : tab.panel;
 	}
 	function tuiReady(sid: string): boolean {
@@ -556,6 +564,35 @@
 		if (existing) applyTiles(activateTab(tiles, existing.id));
 		else applyTiles(openTab(tiles, focusedLeaf, { id: newTabId(), panel: kind }));
 	}
+
+	/** The approval mode a plan runs in once approved: the one before plan mode. */
+	function planModeOf(sessionId: string): ApprovalMode {
+		const before = sessionMap.get(sessionId)?.chat.modeBeforePlan;
+		return before && before !== 'plan' ? before : 'edits';
+	}
+		/** A plan message of a session, for its page. */
+	function planOf(sessionId: string, planId: string) {
+		const m = sessionMap.get(sessionId)?.chat.messages.find((x) => x.kind === 'plan' && x.id === planId);
+		return m?.kind === 'plan' ? m : undefined;
+	}
+	/** A plan's page beside its session's chat: shown again if open, else a
+	 *  new tab (one per plan, closed one by one). */
+	function openPlanPage(sessionId: string, planId: string) {
+		const panel = proposalPanel(sessionId, planId);
+		const existing = findPanelTab(panel);
+		if (existing) return applyTiles(activateTab(tiles, existing.id));
+		const tab = { id: newTabId(), panel };
+		// Plan pages share one column right of the chat, as tabs.
+		const plans = leavesOf(tiles.root).find((leaf) => leaf.tabs.some((x) => x.panel.startsWith('proposal:')));
+		if (plans) return applyTiles(openTab(tiles, plans.id, tab));
+		const chat = leafOfTab(tiles.root, chatPanel(sessionId));
+		applyTiles(chat ? splitLeaf(tiles, chat.id, 'right', tab).layout : openTab(tiles, focusedLeaf, tab));
+	}
+	$effect(() => {
+		const request = planPages.request;
+		if (!request || !tilesReady) return;
+		untrack(() => openPlanPage(request.sessionId, request.planId));
+	});
 
 	// The workbench-active session always has a chat tile: activating a session
 	// (sidebar click, ⌘N, resume, deep link…) opens or focuses it.
@@ -868,6 +905,17 @@
 		projectChromeFor = { id: p.id, x: ev.clientX, y: ev.clientY };
 	}
 
+	/** Settings → 导入: the folders of imported conversations become projects
+	 *  (without a chat; their conversations are in the project's 历史). */
+	function addImportedFolders(paths: string[]): number {
+		let added = 0;
+		for (const path of paths) {
+			if (store.userProjects.some((p) => normPath(p.path) === normPath(path))) continue;
+			store.addProjectShell({ id: store.uid(), name: folderName(path), path });
+			added++;
+		}
+		return added;
+	}
 	async function addProject() {
 		const path = await open({ directory: true, title: t('shell.pickDirTitle') });
 		if (!path || Array.isArray(path)) return;
@@ -898,6 +946,13 @@
 			for (const tb of dirtyTabs) editorStore.close(tb.path, true);
 		}
 		store.removeProject(p);
+	}
+
+	/** A pane's render error: logged with the session for the logs folder. */
+	function reportUiError(error: unknown, sid: string) {
+		telemetry.track('error:pane');
+		const text = error instanceof Error ? `${error.message}\n${error.stack ?? ''}` : String(error);
+		invoke('log_ui_error', { message: `pane ${sid}: ${text}` }).catch(() => {});
 	}
 
 	async function removeSession(id: string) {
@@ -1005,12 +1060,17 @@
 	function openActiveFile(href: string) {
 		const cwd = activeProject?.path;
 		if (!cwd) return;
-		const rel = href.replace(/^file:\/\//, '').split(/[?#]/)[0].trim();
+		const rel = parseFileHref(href).path;
 		if (!rel) return;
-		const abs = rel.startsWith('/') ? rel : `${cwd.replace(/\/+$/, '')}/${rel.replace(/^\.?\//, '')}`;
-		const ext = abs.split('/').pop()?.split('.').pop()?.toLowerCase() ?? '';
+		const abs = joinPath(cwd, rel);
+		const ext = pathExt(abs);
 		if ((ext === 'html' || ext === 'htm') && prefs.htmlOpenInBrowser) {
-			browser.open(`file://${abs}`);
+			// The embedded browser loads http(s) only (a file:// URL was refused
+			// and left it on its empty page): serve the file from the loopback
+			// preview server, as chat links do, so its relative assets load too.
+			invoke<string>('preview_url', { path: abs })
+				.then((url) => browser.open(url))
+				.catch((e) => toast.error(t('chat.fileOpenFailed', { path: rel, error: String(e) })));
 		} else {
 			editorStore.open(abs, cwd).catch((e) => console.error('open file', e));
 		}
@@ -1066,7 +1126,13 @@
 				duration: 15000,
 				action: { label: t('settings.help.noticeAction'), run: () => openSettings('general') }
 			});
-		const onUiError = () => telemetry.track('error:ui');
+		const onUiError = (e: Event) => {
+			// (window-level errors; a pane's own are caught by its boundary)
+			telemetry.track('error:ui');
+			const err = e instanceof ErrorEvent ? e.error ?? e.message : (e as PromiseRejectionEvent).reason;
+			const text = err instanceof Error ? `${err.message}\n${err.stack ?? ''}` : String(err);
+			invoke('log_ui_error', { message: text }).catch(() => {});
+		};
 		window.addEventListener('error', onUiError);
 		window.addEventListener('unhandledrejection', onUiError);
 		const savedSb = Number(localStorage.getItem('jucode-sidebar-width'));
@@ -1085,6 +1151,9 @@
 				const s = sessionMap.get(sessionId);
 				if (!s) return;
 				const wasBusy = s.chat.busy;
+				const hadApproval = s.chat.pendingApproval?.callId ?? null;
+				const hadPlan = s.chat.messages.findLast((m) => m.kind === 'plan' && m.status === 'pending');
+				const lastPlan = s.chat.messages.findLast((m) => m.kind === 'plan');
 				// Capture the raw frame for the diagnostics trace so a mis-parsed or
 				// dropped tool frame is inspectable after the fact.
 				s.chat.captureFrame(data);
@@ -1137,7 +1206,22 @@
 					s.chat.unseen = true;
 					notifyDone(s.chat.title);
 				}
-				// This session's tile (if any) sticks to the bottom while streaming.
+				// Something waits on the user while the window is in the
+				// background: an action to allow, or a plan to approve.
+				if (!document.hasFocus()) {
+					const ask = s.chat.pendingApproval;
+					if (ask && ask.callId !== hadApproval && !ask.questions?.length)
+						void notify(s.chat.title, t('shell.notifyApproval', { what: ask.summary.slice(0, 120) }));
+					const plan = s.chat.messages.findLast((m) => m.kind === 'plan' && m.status === 'pending');
+					if (plan && plan !== hadPlan && plan.kind === 'plan')
+						void notify(s.chat.title, t('shell.notifyPlan', { title: plan.title }));
+				}
+				// A plan the model starts writing (or proposes whole) opens in its
+				// page beside this session's chat.
+				const newPlan = s.chat.messages.findLast((m) => m.kind === 'plan');
+				if (newPlan && newPlan !== lastPlan && newPlan.kind === 'plan' && (newPlan.status === 'drafting' || newPlan.status === 'pending') && tilesReady && chatSessionsIn(tiles).includes(s.id))
+					openPlanPage(s.id, newPlan.id);
+								// This session's tile (if any) sticks to the bottom while streaming.
 				panes.get(s.id)?.scrollToEnd();
 			};
 			daemon.onFrame = deliver;
@@ -1442,27 +1526,55 @@
 											/>
 											{/if}
 										{:else}
-											<ChatPane
-												session={sess}
-												{store}
-												{providers}
-												{providersList}
-												isActive={sid === activeId}
-												onRegister={registerPane}
-												onUnregister={unregisterPane}
-												onOpenSettings={openSettings}
-												onOpenAgent={openDesk}
-												onOpenRequirement={openRequirements}
-												onOpenTrace={() => openPanelTile('agents')}
-											/>
+											<!-- A render error in one conversation must not blank the
+											     pane silently: it shows, is logged, and can be retried. -->
+											<svelte:boundary onerror={(e) => reportUiError(e, sid)}>
+												<ChatPane
+													session={sess}
+													{store}
+													{providers}
+													{providersList}
+													isActive={sid === activeId && !showSettings && !showDesk}
+													onRegister={registerPane}
+													onUnregister={unregisterPane}
+													onOpenSettings={openSettings}
+													onOpenAgent={openDesk}
+													onOpenRequirement={openRequirements}
+													onOpenTrace={() => openPanelTile('agents')}
+												/>
+												{#snippet failed(error, reset)}
+													<div class="pane-error">
+														<p>{t('shell.paneError')}</p>
+														<code>{String((error as Error)?.message ?? error).slice(0, 300)}</code>
+														<button onclick={reset}>{t('shell.paneErrorRetry')}</button>
+													</div>
+												{/snippet}
+											</svelte:boundary>
 										{/if}
 									{:else}
 										<div class="gone">{t('shell.chatGone')}</div>
 									{/if}
 								{:else if tab.panel === 'plan'}<PlanPanel plan={chat?.plan ?? []} />
+								{:else if proposalOf(tab.panel)}
+									{@const p = proposalOf(tab.panel)!}
+									{@const plan = planOf(p.sessionId, p.planId)}
+									{@const lastPlan = sessionMap.get(p.sessionId)?.chat.messages.findLast((m) => m.kind === 'plan')}
+									<ProposalPane
+										{plan}
+										actionable={!!plan && plan === lastPlan}
+										defaultMode={planModeOf(p.sessionId)}
+										onAction={(id, action) => {
+											panes.get(p.sessionId)?.planAction(id, action);
+											if (action.decision === 'revise') panes.get(p.sessionId)?.focusComposer();
+										}}
+									/>
 								{:else if tab.panel === 'goal'}<GoalPanel goal={chat?.goal ?? null} />
 								{:else if tab.panel === 'agents'}{#if chat && activeId}{#key activeId}<AgentRunsPanel {chat} onOp={(op) => activeId && dispatch(activeId, op)} />{/key}{/if}
-								{:else if tab.panel === 'changes'}<ChangesPanel cwd={activeProject?.path ?? ''} files={chat?.changedFiles ?? []} onRevert={(p) => chat && (chat.changedFiles = chat.changedFiles.filter((x) => x !== p))} />
+								{:else if tab.panel === 'changes'}<ChangesPanel cwd={activeProject?.path ?? ''} files={chat?.changedFiles ?? []} agentDiffs={chat?.agentDiffs ?? {}} onRevert={(p, rel) => {
+									if (!chat) return;
+									chat.changedFiles = chat.changedFiles.filter((x) => x !== p);
+									delete chat.agentDiffs[rel];
+								}} />
 								{:else if tab.panel === 'turns'}<TurnsPanel turns={chat?.turnTimeline ?? []} onOpenFile={openActiveFile} />
 								{:else if tab.panel === 'files'}<FilesPanel rootDir={activeProject?.path ?? ''} />
 								{:else if tab.panel === 'git'}<GitPanel cwd={activeProject?.path ?? ''} worktree={activeProject?.worktree ?? null} llm={llmTarget} onOpenTask={(path, meta) => openTaskProject(path, meta)} onTaskRemoved={closeTaskProject} />
@@ -1489,6 +1601,7 @@
 						showMarket = true;
 					}}
 					onFeedback={() => (showFeedback = true)}
+					onAddFolders={addImportedFolders}
 					onClose={closeSettings}
 				/>
 			{/if}
@@ -1862,5 +1975,31 @@
 	.tui-pick-item:hover {
 		border-color: var(--accent);
 		background: var(--surface2);
+	}
+	.pane-error {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 10px;
+		height: 100%;
+		padding: 24px;
+		color: var(--dim);
+		text-align: center;
+	}
+	.pane-error code {
+		max-width: 560px;
+		color: var(--dim2);
+		font-size: var(--fs-xs);
+		word-break: break-word;
+	}
+	.pane-error button {
+		padding: 6px 14px;
+		border: 1px solid var(--border);
+		border-radius: var(--r-md);
+		background: var(--panel);
+		color: var(--text);
+		font: inherit;
+		cursor: pointer;
 	}
 </style>

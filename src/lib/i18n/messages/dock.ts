@@ -28,13 +28,14 @@ const dock = {
 			toolCalls: '{n} 次工具调用',
 			progress: '{done}/{total} 个智能体',
 			empty: '还没有子智能体运行',
-			emptyHint: '开启 Ultracode，或让 Claude 调用 Agent 工具后，这里会显示每个智能体的运行轨迹、耗时和 token 消耗。',
+			emptyHint: '智能体派出子智能体（或开启 Claude 的 Ultracode）后，这里会显示每个子智能体的运行轨迹、耗时和 token 消耗。',
 			col: { agent: '智能体', timeline: '时间线', time: '耗时', tokens: 'Tokens', tools: '工具' },
 			state: { running: '运行中', done: '已完成', failed: '失败', stopped: '已停止', queued: '排队中' },
 			unit: { s: '秒', m: '分', h: '小时' },
 			open: '查看追踪',
 			result: '结果',
-			openAgent: '查看子智能体会话'
+			openAgent: '查看子智能体会话',
+			noTranscript: '这个引擎还不能读取子智能体的会话'
 		},
 		dock: {
 			empty: '没有打开的面板',
@@ -181,7 +182,9 @@ const dock = {
 			emptyHint: 'AI 编辑文件后会在此列出',
 			revert: '还原',
 			revertFile: '还原此文件',
-			revertConfirm: '还原「{path}」到改动前？此操作不可撤销。',
+			revertConfirm: '把「{path}」还原到上次提交的版本？你自己在这个文件里没提交的改动也会一起丢掉，此操作不可撤销。',
+			revertAgentConfirm: '撤销智能体对「{path}」的修改？你自己的改动会保留。',
+			revertAgentFailed: '无法只撤销智能体的修改（文件之后又改动过），文件未改动：{error}',
 			revertTitle: '还原文件',
 			newFileDiff: '（新文件或无可显示的 diff）'
 		},
@@ -237,13 +240,14 @@ const dock = {
 			toolCalls: '{n} tool calls',
 			progress: '{done}/{total} agents',
 			empty: 'No subagents have run',
-			emptyHint: 'Turn on Ultracode, or have Claude use the Agent tool, to see each agent’s path, time and tokens here.',
+			emptyHint: 'Once the agent starts subagents (or Claude runs Ultracode), each one’s path, time and tokens show here.',
 			col: { agent: 'Agent', timeline: 'Timeline', time: 'Time', tokens: 'Tokens', tools: 'Tools' },
 			state: { running: 'Running', done: 'Done', failed: 'Failed', stopped: 'Stopped', queued: 'Queued' },
 			unit: { s: 's', m: 'm', h: 'h' },
 			open: 'View trace',
 			result: 'Result',
-			openAgent: 'View the subagent’s conversation'
+			openAgent: 'View the subagent’s conversation',
+			noTranscript: "This engine can't read a subagent's conversation yet"
 		},
 		dock: {
 			empty: 'No open panels',
@@ -390,7 +394,9 @@ const dock = {
 			emptyHint: 'Files the AI edits will appear here',
 			revert: 'Revert',
 			revertFile: 'Revert this file',
-			revertConfirm: 'Revert "{path}" to before the changes? This cannot be undone.',
+			revertConfirm: 'Restore "{path}" to its last commit? Your own uncommitted changes to it are lost too. This cannot be undone.',
+			revertAgentConfirm: 'Undo the agent\'s edits to "{path}"? Your own changes stay.',
+			revertAgentFailed: 'Could not undo only the agent\'s edits (the file changed since); the file is unchanged: {error}',
 			revertTitle: 'Revert file',
 			newFileDiff: '(New file or no diff to display)'
 		},

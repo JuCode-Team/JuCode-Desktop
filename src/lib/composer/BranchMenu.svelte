@@ -149,7 +149,7 @@
 		z-index: 81;
 		width: min(340px, calc(100vw - 32px));
 		transform-origin: bottom left;
-		animation: pop-in var(--t-med) var(--ease-spring);
+		animation: pop-in var(--t-med) var(--ease-out);
 	}
 	.field {
 		display: flex;

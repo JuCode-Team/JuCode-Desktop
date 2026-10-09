@@ -358,6 +358,7 @@
 								onFiles={root ? () => push({ kind: 'files', root, title: baseName(root) }) : undefined}
 								onFile={root ? (file: string, line?: number) => push({ kind: 'files', root, title: baseName(root), file, line }) : undefined}
 								onChanges={root ? () => push({ kind: 'changes', root, title: baseName(root) }) : undefined}
+								active={!hidden && name === tab && i === stacks[name].length - 1}
 							/>
 						{:else}
 							{@render loadingPage(screen.title)}
@@ -635,7 +636,7 @@
 		color: #000;
 		font-size: var(--fs-2xs);
 		line-height: 16px;
-		animation: pop-in var(--t-med) var(--ease-spring);
+		animation: pop-in var(--t-med) var(--ease-out);
 	}
 	/* Connecting and pair-again: one centered column across the page, with
 	   the switcher in the corner. */

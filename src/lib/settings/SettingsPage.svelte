@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { paneOut } from '$lib/ui/motion';
 	// The settings page: covers the content panel (session list + canvas stay
 	// mounted underneath) with a nav column on the left — grouped sections and
 	// a search over every row — and the selected section's page on the right.
@@ -18,6 +19,7 @@
 	import StorefrontIcon from 'phosphor-svelte/lib/StorefrontIcon';
 	import RobotIcon from 'phosphor-svelte/lib/RobotIcon';
 	import PlugsConnectedIcon from 'phosphor-svelte/lib/PlugsConnectedIcon';
+	import TrayArrowDownIcon from 'phosphor-svelte/lib/TrayArrowDownIcon';
 	import InfoIcon from 'phosphor-svelte/lib/InfoIcon';
 	import DesktopTowerIcon from 'phosphor-svelte/lib/DesktopTowerIcon';
 	import SignInIcon from 'phosphor-svelte/lib/SignInIcon';
@@ -68,6 +70,7 @@
 	import AcpSection from './AcpSection.svelte';
 	import DaemonSection from './DaemonSection.svelte';
 	import McpSection from './McpSection.svelte';
+	import ImportSection from './ImportSection.svelte';
 	import PermissionRulesSection from './PermissionRulesSection.svelte';
 	import UpdateCard from './UpdateCard.svelte';
 	import ThirdPartyNotices from './ThirdPartyNotices.svelte';
@@ -85,7 +88,8 @@
 		onClose,
 		onAuthChange,
 		onMarket,
-		onFeedback
+		onFeedback,
+		onAddFolders
 	}: {
 		sessionId: string;
 		/** The active session's ChatState — source of the live `mcp_servers` view.
@@ -101,6 +105,8 @@
 		onMarket?: () => void;
 		/** Open 反馈问题. */
 		onFeedback?: () => void;
+		/** Show these folders as projects in the sidebar (导入); how many were new. */
+		onAddFolders?: (paths: string[]) => number;
 	} = $props();
 
 	const ICONS: Record<SectionKey, typeof GearSixIcon> = {
@@ -115,6 +121,7 @@
 		market: StorefrontIcon,
 		agents: RobotIcon,
 		acp: PlugsConnectedIcon,
+		import: TrayArrowDownIcon,
 		daemon: DesktopTowerIcon,
 		updates: InfoIcon
 	};
@@ -243,6 +250,12 @@
 	const modelOpts = $derived(models.map((m) => ({ value: m.name, label: m.name, ...m })));
 	// Empty = the main model (the engine's `Config::title`).
 	const titleModelOpts = $derived([{ value: '', label: t('settings.behavior.followMainModel') }, ...modelOpts]);
+	// Empty = the engine picks the first model named like an image model.
+	const imageModelOpts = $derived([
+		{ value: '', label: t('settings.behavior.imageModelAuto') },
+		...modelOpts.filter((m) => /image/i.test(m.value)),
+		...modelOpts.filter((m) => !/image/i.test(m.value))
+	]);
 	const effortOpts = $derived(efforts.map((e) => ({ value: e, label: cap(e) })));
 	// All providers' models in one list (provider-qualified), so the default-model
 	// picker isn't limited to whichever provider is currently the default.
@@ -293,6 +306,7 @@
 			reasoning_effort: cfg.reasoning_effort,
 			compact_model: cfg.compact_model,
 			title_model: cfg.title_model ?? '',
+			image_model: cfg.image_model ?? '',
 			compaction_threshold_percent: Number(cfg.compaction_threshold_percent) || 75,
 			retry_attempts: Number(cfg.retry_attempts) || 0,
 			connect_timeout_seconds: Number(cfg.connect_timeout_seconds) || 0,
@@ -536,7 +550,7 @@
 	{#if loginError}<div class="notice"><Notice onDismiss={() => (loginError = '')}>{loginError}</Notice></div>{/if}
 {/snippet}
 
-<div class="settings">
+<div class="settings" out:paneOut|global>
 	<nav class="nav" style:width="{navWidth}px" aria-label={t('settings.title')}>
 		<div class="nav-head">
 			<button class="back" title={t('settings.page.back')} aria-label={t('settings.page.back')} onclick={onClose}>
@@ -577,8 +591,11 @@
 		</div>
 	</nav>
 
+	<!-- Sections cross-fade: the leaving one fades out in the same grid cell
+	     while the next rises in. -->
+	<div class="stage">
 	{#key current}
-		<div class="main">
+		<div class="main" out:paneOut>
 			<div class="col">
 				<h1>{t(`settings.section.${current}`)}</h1>
 				{#if JUCODE_ONLY.has(current)}<p class="scope">{t('settings.page.jucodeOnly')}</p>{/if}
@@ -854,6 +871,18 @@
 							<span class="unit">%</span>
 						</SettingsRow>
 					</SettingsSection>
+					<SettingsSection title={t('settings.behavior.images')}>
+						<SettingsRow id="image-model" title={t('settings.behavior.imageModel')} description={t('settings.behavior.imageModelHint')}>
+							<div class="w-lg">
+								<Select value={cfg.image_model ?? ''} options={imageModelOpts} onChange={(v) => (cfg.image_model = v)}>
+									{#snippet item(o)}
+										{#if o.value}<span class="tile sm"><Vendor model={o.label ?? ''} size={15} /></span>{/if}
+										<span class="ell" class:mono={!!o.value}>{o.label}</span>
+									{/snippet}
+								</Select>
+							</div>
+						</SettingsRow>
+					</SettingsSection>
 				{:else if current === 'network'}
 					<SettingsSection title={t('settings.page.requests')}>
 						<SettingsRow id="retry-attempts" title={t('settings.behavior.retryAttempts')} description={t('settings.page.retryAttemptsDesc')}>
@@ -883,6 +912,8 @@
 					<div class="deps" id="set-dependencies"><Dependencies ids={['node', 'ffmpeg', 'git', 'gh']} /></div>
 				{:else if current === 'acp'}
 					<AcpSection />
+				{:else if current === 'import'}
+					<ImportSection {onAddFolders} />
 				{:else if current === 'daemon'}
 					<DaemonSection>
 						<SettingsSection title={t('settings.behavior.titles')}>
@@ -905,6 +936,7 @@
 			</div>
 		</div>
 	{/key}
+	</div>
 </div>
 
 <style>
@@ -1121,11 +1153,17 @@
 	}
 
 	/* ---------- page ---------- */
-	.main {
+	.stage {
 		flex: 1;
 		min-width: 0;
-		overflow-y: auto;
+		display: grid;
+		grid-template: minmax(0, 1fr) / minmax(0, 1fr);
 		background: var(--bg);
+	}
+	.main {
+		grid-area: 1 / 1;
+		min-width: 0;
+		overflow-y: auto;
 	}
 	.col {
 		max-width: 720px;

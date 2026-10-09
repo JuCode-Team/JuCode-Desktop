@@ -27,7 +27,7 @@
 	import { loadSession, saveSession } from '$lib/remote/cache';
 	import ModelMenu from '$lib/remote/ModelMenu.svelte';
 	import TaskStrip from '$lib/TaskStrip.svelte';
-	import { parseFileHref } from '$lib/fileRefs';
+	import { joinPath, parseFileHref } from '$lib/fileRefs';
 	import AgentRunsPanel from '$lib/AgentRunsPanel.svelte';
 	import TreeStructureIcon from 'phosphor-svelte/lib/TreeStructureIcon';
 	import type { Msg } from '$lib/chat.svelte';
@@ -62,7 +62,8 @@
 		onBack,
 		onFiles,
 		onFile,
-		onChanges
+		onChanges,
+		active = false
 	}: {
 		/** An existing session; omit to start a new one as `agent`, in `cwd`,
 		 *  or as a chat. */
@@ -85,6 +86,8 @@
 		/** Routes daemon frames and exits for `id` here; returns an unregister. */
 		register: (id: string, onFrame: (raw: string) => void, onExit: () => void) => () => void;
 		onBack: () => void;
+		/** The page on top of the shown tab: its approval card answers keys. */
+		active?: boolean;
 	} = $props();
 	const host = useHost();
 	const { daemon, agents: agentDirectory } = host;
@@ -399,7 +402,7 @@
 	let draftMode = $state<ApprovalMode | null>(null);
 	const shownMode = $derived(draftMode ?? chat.approvalMode);
 	const APPROVAL = $derived(
-		(isAgent ? ['ask', 'edits', 'auto', 'all'] : bcaps.extendedApprovalModes ? ['ask', 'plan', 'auto', 'edits', 'all'] : ['ask', 'edits', 'all']).map(
+		(isAgent ? ['ask', 'edits', 'auto', 'all'] : bcaps.extendedApprovalModes ? ['ask', 'plan', 'auto', 'edits', 'all'] : bcaps.planMode ? ['ask', 'plan', 'edits', 'all'] : ['ask', 'edits', 'all']).map(
 			(k) => ({ ...APPROVAL_MODES[k], checked: shownMode === k, disabled: isAgent })
 		)
 	);
@@ -508,8 +511,7 @@
 	function openReplyFile(href: string) {
 		const ref = parseFileHref(href);
 		if (!ref.path) return;
-		const base = (cwd ?? '').replace(/\/+$/, '');
-		onFile?.(ref.path.startsWith('/') || !base ? ref.path : `${base}/${ref.path.replace(/^\.?\//, '')}`, ref.line);
+		onFile?.(joinPath(cwd ?? '', ref.path), ref.line);
 	}
 	// The agent trace sheet (AgentRunsPanel).
 	let traceOpen = $state(false);
@@ -622,7 +624,7 @@
 		{#if chat.pendingApproval}
 			<div class="approval">
 				{#key chat.pendingApproval.callId}
-					<ApprovalCard approval={chat.pendingApproval} onRespond={respond} ruleScopes={caps(chat).ruleScopes} />
+					<ApprovalCard approval={chat.pendingApproval} onRespond={respond} ruleScopes={caps(chat).ruleScopes} keys={active} />
 				{/key}
 			</div>
 		{/if}
@@ -931,13 +933,13 @@
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
 		transform: translateX(-50%);
 		cursor: pointer;
-		animation: jump-in var(--t-med) var(--ease-spring);
+		animation: jump-in var(--t-med) var(--ease-out);
 		transition: transform var(--t-fast) var(--ease-spring);
 	}
 	@keyframes jump-in {
 		from {
 			opacity: 0;
-			transform: translateX(-50%) translateY(6px) scale(0.9);
+			transform: translateX(-50%) translateY(4px);
 		}
 	}
 	.jump:active {
@@ -1071,13 +1073,12 @@
 		align-items: center;
 		gap: 6px;
 		min-width: 0;
-		animation: model-in var(--t-med) var(--ease-spring);
+		animation: model-in var(--t-med) var(--ease-out);
 	}
 	@keyframes model-in {
 		from {
 			opacity: 0;
-			transform: translateY(8px);
-			filter: blur(3px);
+			transform: translateY(4px);
 		}
 	}
 	.flatbtn.model .e {
@@ -1100,7 +1101,7 @@
 			background var(--t-fast) var(--ease-out),
 			color var(--t-fast) var(--ease-out),
 			opacity var(--t-med) var(--ease-out);
-		animation: pop-in var(--t-med) var(--ease-spring);
+		animation: pop-in var(--t-med) var(--ease-out);
 	}
 	.cact:active:not(:disabled) {
 		transform: scale(0.9);

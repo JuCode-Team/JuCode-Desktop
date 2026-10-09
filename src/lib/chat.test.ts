@@ -618,11 +618,16 @@ describe('claude session extras', () => {
 		c.handle({ type: 'model_fallback', from: 'Opus 5.5', to: 'Sonnet 5.5', reason: 'overloaded' });
 		expect(c.messages.at(-1)).toEqual({ kind: 'system', text: '模型已从 Opus 5.5 切换到 Sonnet 5.5（原模型过载）' });
 		c.handle({ type: 'subagent_lifecycle', path: 'a1', label: 'Scan auth', status: 'running', message: 'Reading' });
-		expect(c.subagents.a1).toEqual({ status: 'running', message: 'Reading', label: 'Scan auth' });
-		c.handle({ type: 'subagent_lifecycle', path: 'a1', label: 'Scan auth', status: 'completed', message: '' });
-		expect(c.subagents.a1).toBeUndefined();
+		expect(c.subagents.a1).toMatchObject({ status: 'running', message: 'Reading', label: 'Scan auth' });
 		c.handle({ type: 'tool_start', call_id: 't2', name: 'read', subagent: 'Scan auth' });
 		expect(c.messages.at(-1)).toMatchObject({ kind: 'tool', subagent: 'Scan auth' });
+		expect(c.subagentLastTool['Scan auth']).toMatchObject({ callId: 't2', name: 'read' });
+		// A finished subagent stays (the progress card shows it) until the next turn.
+		c.handle({ type: 'subagent_lifecycle', path: 'a1', label: 'Scan auth', status: 'completed', message: '' });
+		expect(c.subagents.a1).toMatchObject({ status: 'completed', label: 'Scan auth' });
+		expect(c.subagents.a1.endedAt).toBeGreaterThan(0);
+		c.handle({ type: 'connecting' });
+		expect(c.subagents.a1).toBeUndefined();
 		c.handle({ type: 'model_status', model: 'claude-opus-5-5', fast: true, fast_available: true, thinking_summaries: false, state: 'idle' });
 		expect([c.fast, c.fastAvailable, c.thinkingSummaries]).toEqual([true, true, false]);
 		c.handle({ type: 'model_status', model: 'gpt-5.5', state: 'idle' });
@@ -664,6 +669,91 @@ describe('claude session extras', () => {
 		expect(tr.messages.map((m) => m.kind)).toEqual(['reasoning', 'tool', 'assistant']);
 		// The session's own conversation is untouched.
 		expect(c.messages).toEqual([]);
+	});
+
+	it('keeps a subagent call’s arguments once its result replaces them', () => {
+		const c = new ChatState();
+		c.handle({ type: 'tool_start', call_id: 't1', name: 'Task' });
+		c.handle({ type: 'tool_update', call_id: 't1', output: '{"description":"Scan auth","prompt":"Find it"}' });
+		c.handle({ type: 'tool_output', call_id: 't1', name: 'Task', output: 'Found it in auth.ts', is_error: false });
+		expect(c.messages.at(-1)).toMatchObject({ output: 'Found it in auth.ts', args: '{"description":"Scan auth","prompt":"Find it"}' });
+	});
+
+	it('reads a JuCode subagent from its spawn call and its lifecycle', () => {
+		const c = new ChatState();
+		c.handle({ type: 'connecting' });
+		c.handle({ type: 'tool_start', call_id: 'call_1', name: 'spawn_agent' });
+		c.handle({ type: 'subagent_lifecycle', path: '/root/scan', status: 'pending', message: 'reserved' });
+		c.handle({ type: 'tool_output', call_id: 'call_1', name: 'spawn_agent', output: '{"task_name":"scan","path":"/root/scan","status":"running"}', is_error: false });
+		expect(c.subagents['/root/scan']).toMatchObject({ status: 'pending', label: 'scan', toolUseId: 'call_1' });
+		c.handle({ type: 'subagent_lifecycle', path: '/root/scan', status: 'running', message: 'started', model: 'gpt-5.5' });
+		c.handle({ type: 'subagent_lifecycle', path: '/root/scan', status: 'message', message: 'queued message' });
+		expect(c.subagents['/root/scan']).toMatchObject({ status: 'running', model: 'gpt-5.5', toolUseId: 'call_1' });
+		c.handle({ type: 'subagent_lifecycle', path: '/root/scan', status: 'errored', message: 'timeout' });
+		expect(c.subagents['/root/scan'].endedAt).toBeGreaterThan(0);
+	});
+
+	it('reads the native agent trace’s activity and effort, and tool inputs in a transcript', () => {
+		const c = new ChatState();
+		c.handle({ type: 'agent_runs', workflows: [], agents: [{ id: '/root/x', label: 'x', state: 'running', activity: 'Ran cargo test', effort: 'low', tool_use_id: 'c9' }] });
+		expect(c.agentRunsSeen).toBe(true);
+		expect(c.agentRuns.agents[0]).toMatchObject({ state: 'running', activity: 'Ran cargo test', effort: 'low', toolUseId: 'c9' });
+		c.handle({ type: 'subagent_transcript', agent_id: '/root/x', items: [{ role: 'user', content: 'go' }, { role: 'tool', call_id: 't', name: 'bash', input: { command: 'ls' }, running: true }] });
+		expect(c.subagentTranscripts['/root/x'].messages[0]).toMatchObject({ kind: 'tool', output: '{"command":"ls"}', running: true });
+	});
+
+	it('takes an older engine’s refusal of the trace ops quietly', () => {
+		setLocale('zh');
+		const c = new ChatState();
+		c.agentFocus = '/root/x';
+		c.handle({ type: 'error', message: 'unknown op: agent_runs' });
+		c.handle({ type: 'error', message: 'unknown op: subagent_transcript' });
+		expect(c.messages).toEqual([]);
+		expect(c.lastError).toBeNull();
+		expect(c.subagentTranscripts['/root/x'].error).toBeTruthy();
+	});
+
+	it('shows a proposed plan and follows its status', () => {
+		const c = new ChatState();
+		c.handle({ type: 'proposed_plan', id: 'p1', title: 'Fix auth', markdown: '## Steps\n1. a', status: 'pending' });
+		expect(c.messages.at(-1)).toEqual({ kind: 'plan', id: 'p1', title: 'Fix auth', text: '## Steps\n1. a', status: 'pending' });
+		c.planRevising = 'p1';
+		c.handle({ type: 'proposed_plan', id: 'p1', title: 'Fix auth', markdown: '## Steps\n1. a', status: 'revising' });
+		expect(c.messages).toHaveLength(1);
+		expect(c.messages[0]).toMatchObject({ status: 'revising' });
+		expect(c.planRevising).toBeNull();
+		c.handle({ type: 'proposed_plan', id: 'p2', title: 'Fix auth v2', markdown: 'x', status: 'odd' });
+		expect(c.messages.at(-1)).toMatchObject({ id: 'p2', status: 'pending' });
+		c.handle({ type: 'transcript', items: [{ role: 'plan', id: 'p2', title: 'T', content: 'body', status: 'approved' }] });
+		expect(c.messages).toEqual([{ kind: 'plan', id: 'p2', title: 'T', text: 'body', status: 'approved' }]);
+	});
+
+	it('grows one plan while the model writes it, and completes it in place', () => {
+		const c = new ChatState();
+		c.handle({ type: 'plan_draft', id: 'p1', title: 'Sna', append: '' });
+		c.handle({ type: 'plan_draft', id: 'p1', title: 'Snake', append: '## Go' });
+		c.handle({ type: 'plan_draft', id: 'p1', title: 'Snake', append: 'al' });
+		expect(c.messages).toEqual([{ kind: 'plan', id: 'p1', title: 'Snake', text: '## Goal', status: 'drafting' }]);
+		const draft = c.messages[0];
+		c.handle({ type: 'proposed_plan', id: 'p1', title: 'Snake', markdown: '## Goal\n1. a', status: 'pending' });
+		expect(c.messages).toHaveLength(1);
+		expect(c.messages[0]).toBe(draft);
+		expect(c.messages[0]).toMatchObject({ text: '## Goal\n1. a', status: 'pending' });
+	});
+
+	it('remembers the mode before plan mode and when the plan changed', () => {
+		const c = new ChatState();
+		c.setApprovalMode('edits');
+		c.setApprovalMode('plan');
+		c.setApprovalMode('plan');
+		expect(c.modeBeforePlan).toBe('edits');
+		c.handle({ type: 'plan', plan: [{ step: 'a', status: 'pending' }] });
+		const at = c.planAt;
+		expect(at).toBeGreaterThan(0);
+		c.handle({ type: 'connecting' });
+		expect(c.turnStartedAt).toBeGreaterThan(0);
+		c.handle({ type: 'status', message: 'ready' });
+		expect(c.turnEndedAt).toBeGreaterThanOrEqual(c.turnStartedAt);
 	});
 
 	it('shows the images a message was sent with, live and in a transcript', () => {
@@ -723,5 +813,26 @@ describe('gateway session costs', () => {
 		expect(c.billing?.gateway_cost).toBe(0);
 		const last = c.messages.at(-1);
 		expect(last?.kind === 'assistant' && last.turn?.billing?.gateway_cost).toBe(0);
+	});
+});
+
+import { boundedOutput } from './chat.svelte';
+describe('boundedOutput', () => {
+	it('keeps a short output, cuts a long one to its head and tail', () => {
+		expect(boundedOutput('ok')).toBe('ok');
+		const long = 'a'.repeat(50_000) + 'MIDDLE' + 'z'.repeat(50_000);
+		const out = boundedOutput(long);
+		expect(out.length).toBeLessThan(70_000);
+		expect(out.startsWith('aaa')).toBe(true);
+		expect(out.endsWith('zzz')).toBe(true);
+		expect(out).toContain('characters not shown');
+	});
+	it('keeps JSON parseable and an image whole', () => {
+		const json = JSON.stringify({ stdout: 'x'.repeat(200_000), exit_code: 0 });
+		const out = JSON.parse(boundedOutput(json));
+		expect(out.exit_code).toBe(0);
+		expect(out.stdout.length).toBeLessThan(40_000);
+		const image = JSON.stringify({ kind: 'image', base64: 'A'.repeat(300_000) });
+		expect(JSON.parse(boundedOutput(image)).base64.length).toBe(300_000);
 	});
 });

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { paneOut } from '$lib/ui/motion';
 	// One project's page, over the canvas (the sidebar stays): its
 	// directories (the main one and extra ones the user adds), its
 	// requirements (the workbench's list, this project's only; one opens in
@@ -58,7 +59,7 @@
 	}
 </script>
 
-<div class="project-page">
+<div class="project-page" out:paneOut|global>
 	{#if shownReq}
 		<div class="col wide">
 			{#key shownReq.id}

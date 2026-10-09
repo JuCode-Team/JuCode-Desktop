@@ -78,8 +78,10 @@ fn place(app: &AppHandle, child: &WebviewWindow, x: f64, y: f64, width: f64, hei
 }
 
 /// Creates the child browser window at the given panel bounds (or navigates the
-/// existing one) and loads `url`.
-#[tauri::command]
+/// existing one) and loads `url`. Async: building a webview window inside a
+/// synchronous command deadlocks on Windows (WebView2), leaving the panel blank
+/// and every later browser command waiting behind it.
+#[tauri::command(async)]
 pub fn browser_open(
     app: AppHandle,
     url: String,

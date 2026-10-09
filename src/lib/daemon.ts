@@ -301,7 +301,11 @@ export class DaemonClient {
 			state.dirty = false;
 			let reply: Frame;
 			try { reply = await this.request({ op: 'session_usage', session }); }
-			catch (error) { reply = { type: 'session_usage', session, billing_error: String(error) }; }
+			catch (error) {
+				// A daemon from before settled usage: nothing to show, nothing to retry.
+				if (/unknown op/i.test(String(error))) { this.#forgetUsage(session); return; }
+				reply = { type: 'session_usage', session, billing_error: String(error) };
+			}
 			if (this.#usage.get(session) !== state) return; // detached, reopened or disconnected
 			state.inFlight = false;
 			const desktopId = this.#toDesktop.get(session);

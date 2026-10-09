@@ -3,7 +3,7 @@
 // 检查和下载在 Rust 侧（src-tauri/src/app_update.rs）：先走 GitHub，
 // 不通或太慢时换 JuCode 服务器上的同一份签名安装包。
 import { Channel, invoke } from '@tauri-apps/api/core';
-import { getVersion } from '@tauri-apps/api/app';
+import { appVersion } from '$lib/about';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { workspaces } from '$lib/workbench/workspaceStore.svelte';
 
@@ -113,7 +113,7 @@ export class UpdaterState {
 	async #checkRequired() {
 		const [min, current] = await Promise.all([
 			invoke<string>('update_policy').catch(() => ''),
-			getVersion().catch(() => '')
+			appVersion()
 		]);
 		this.required = min && current && olderThan(current, min) ? min : '';
 	}

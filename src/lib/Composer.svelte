@@ -322,8 +322,8 @@
 		if (document.activeElement === el) caretToEnd();
 	});
 
-	// Claude exposes two extra native modes (plan / auto) between ask and edits;
-	// other backends keep the shared three (gated by extendedApprovalModes).
+	// Claude exposes two extra native modes (plan / auto) between ask and edits
+	// (extendedApprovalModes); JuCode adds plan to the shared three.
 	const APPROVAL_MODES: Record<string, PopMenuItem> = {
 		ask: { key: 'ask', label: t('chat.approvalAsk'), desc: t('chat.approvalAskDesc'), icon: HandIcon },
 		plan: { key: 'plan', label: t('chat.approvalPlan'), desc: t('chat.approvalPlanDesc'), icon: ClipboardTextIcon },
@@ -338,7 +338,9 @@
 			? ['ask', 'edits', 'auto', 'all']
 			: bcaps.extendedApprovalModes
 				? ['ask', 'plan', 'auto', 'edits', 'all']
-				: ['ask', 'edits', 'all']
+				: bcaps.planMode
+					? ['ask', 'plan', 'edits', 'all']
+					: ['ask', 'edits', 'all']
 		).map((k) => ({
 			...APPROVAL_MODES[k],
 			checked: chat.approvalMode === k,
@@ -368,7 +370,7 @@
 			});
 		}
 		const sections = [add];
-		if (bcaps.approvalModes && bcaps.extendedApprovalModes) {
+		if (bcaps.approvalModes && bcaps.planMode && !chat.agent) {
 			sections.push({
 				label: t('chat.modeSection'),
 				items: [
@@ -1120,13 +1122,12 @@
 		align-items: center;
 		gap: 6px;
 		min-width: 0;
-		animation: model-in var(--t-med) var(--ease-spring);
+		animation: model-in var(--t-med) var(--ease-out);
 	}
 	@keyframes model-in {
 		from {
 			opacity: 0;
-			transform: translateY(8px);
-			filter: blur(3px);
+			transform: translateY(4px);
 		}
 	}
 	.flatbtn.model .e {

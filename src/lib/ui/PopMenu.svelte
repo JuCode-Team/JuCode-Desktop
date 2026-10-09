@@ -77,24 +77,24 @@
 		left: 0;
 		bottom: calc(100% + 8px);
 		transform-origin: bottom left;
-		animation: pop-in var(--t-med) var(--ease-spring);
+		animation: pop-in var(--t-med) var(--ease-out);
 	}
 	.up-right {
 		right: 0;
 		bottom: calc(100% + 8px);
 		transform-origin: bottom right;
-		animation: pop-in var(--t-med) var(--ease-spring);
+		animation: pop-in var(--t-med) var(--ease-out);
 	}
 	.down-left {
 		left: 0;
 		top: calc(100% + 6px);
 		transform-origin: top left;
-		animation: drop-in var(--t-med) var(--ease-spring);
+		animation: drop-in var(--t-med) var(--ease-out);
 	}
 	.down-right {
 		right: 0;
 		top: calc(100% + 6px);
 		transform-origin: top right;
-		animation: drop-in var(--t-med) var(--ease-spring);
+		animation: drop-in var(--t-med) var(--ease-out);
 	}
 </style>

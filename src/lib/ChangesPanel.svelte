@@ -7,12 +7,32 @@
 	import Modal from '$lib/ui/Modal.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import { confirm } from '$lib/ui/confirm.svelte';
-	import { git } from '$lib/protocol';
+	import { git, revertAgentEdits } from '$lib/protocol';
 	import { editorStore } from '$lib/editor/editorStore.svelte';
 	import { t } from '$lib/i18n';
 
 	// `files` is the session-tracked set of agent-edited paths; onRevert removes one.
-	let { cwd = '', files = [], onRevert }: { cwd?: string; files?: string[]; onRevert?: (p: string) => void } = $props();
+	// `agentDiffs`: the agent's own edits per project-relative path, so a
+	// revert undoes only them and keeps the user's changes.
+	let {
+		cwd = '',
+		files = [],
+		agentDiffs = {},
+		onRevert
+	}: {
+		cwd?: string;
+		files?: string[];
+		agentDiffs?: Record<string, string[]>;
+		/** A file was reverted: `rel` is its `agentDiffs` key. */
+		onRevert?: (p: string, rel: string) => void;
+	} = $props();
+	/** A listed path (absolute or project-relative, either separator) as the
+	 *  diffs' headers name it: project-relative, `/`-separated. */
+	function relOf(path: string): string {
+		const p = path.replace(/\\/g, '/');
+		const root = cwd.replace(/\\/g, '/').replace(/\/+$/, '');
+		return root && p.startsWith(root + '/') ? p.slice(root.length + 1) : p;
+	}
 	const dir = () => cwd || undefined;
 
 	let stats = $state<Record<string, { add: number; del: number }>>({});
@@ -76,6 +96,31 @@
 	}
 
 	async function revert(path: string) {
+		const rel = relOf(path);
+		const diffs = agentDiffs[rel] ?? [];
+		// The agent's own edits are known: undo exactly them, keep the user's.
+		// When they no longer apply the file stays as it is: a whole-file
+		// revert would drop the user's changes.
+		if (diffs.length && cwd) {
+			const ok = await confirm({
+				title: t('dock.changes.revertTitle'),
+				message: t('dock.changes.revertAgentConfirm', { path }),
+				confirmLabel: t('dock.changes.revert'),
+				danger: true
+			});
+			if (!ok) return;
+			busy = true;
+			error = '';
+			try {
+				await revertAgentEdits(cwd, rel, diffs);
+				onRevert?.(path, rel);
+			} catch (e) {
+				error = t('dock.changes.revertAgentFailed', { error: String(e) });
+			} finally {
+				busy = false;
+			}
+			return;
+		}
 		const ok = await confirm({
 			title: t('dock.changes.revertTitle'),
 			message: t('dock.changes.revertConfirm', { path }),
@@ -90,7 +135,7 @@
 			const untracked = st.trimStart().startsWith('??');
 			if (untracked) await git(['clean', '-fd', '--', path], dir());
 			else await git(['restore', '--worktree', '--', path], dir());
-			onRevert?.(path);
+			onRevert?.(path, rel);
 		} catch (e) {
 			error = String(e);
 		} finally {

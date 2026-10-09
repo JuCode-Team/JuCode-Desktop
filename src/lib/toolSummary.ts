@@ -14,6 +14,7 @@ import RobotIcon from 'phosphor-svelte/lib/RobotIcon';
 import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon';
 import PlugIcon from 'phosphor-svelte/lib/PlugIcon';
 import WrenchIcon from 'phosphor-svelte/lib/WrenchIcon';
+import ImageIcon from 'phosphor-svelte/lib/ImageIcon';
 
 const VERBS: Record<string, string> = {
 	read: 'Read',
@@ -29,7 +30,12 @@ const VERBS: Record<string, string> = {
 	outline: 'Outlined',
 	web_search: 'Searched web',
 	web_fetch: 'Fetched',
+	generate_image: 'Generated image',
 	spawn_agent: 'Started subagent',
+	wait_agent: 'Waited for subagents',
+	list_agents: 'Listed subagents',
+	send_message: 'Messaged subagent',
+	close_agent: 'Closed subagent',
 	agent_wait: 'Waited for subagents',
 	agent_sendInput: 'Messaged subagent',
 	agent_sendMessage: 'Messaged subagent',
@@ -54,8 +60,15 @@ const ICONS: Record<string, typeof WrenchIcon> = {
 	outline: ListBulletsIcon,
 	web_search: GlobeIcon,
 	web_fetch: LinkIcon,
+	generate_image: ImageIcon,
 	Task: RobotIcon,
 	Agent: RobotIcon,
+	spawn_agent: RobotIcon,
+	wait_agent: RobotIcon,
+	list_agents: RobotIcon,
+	send_message: RobotIcon,
+	close_agent: RobotIcon,
+	agent_wait: RobotIcon,
 	TodoWrite: ListChecksIcon,
 	update_plan: ListChecksIcon
 };
@@ -96,5 +109,6 @@ export function toolTarget(name: string, parsed: Record<string, unknown> | null)
 	}
 	if (typeof parsed.path === 'string') return parsed.path.split('/').pop() || parsed.path;
 	if (name === 'web_search') return str(parsed.query);
+	if (name === 'generate_image' && Array.isArray(parsed.paths)) return parsed.paths.map(String).join(', ');
 	return '';
 }

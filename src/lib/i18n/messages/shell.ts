@@ -4,8 +4,10 @@ const shell = {
 	zh: {
 		// notifications / runtime
 		notifyDone: '对话完成：{title}',
+		notifyApproval: '等你批准：{what}',
+		notifyPlan: '计划待批准：{title}',
 		cacheMiss: {
-			message: '「{title}」缓存未命中：本次请求输入 {input} token，命中缓存 {cached}。5 秒内不操作将继续执行。',
+			message: '「{title}」缓存未命中：本次输入 {input} token，只命中 {cached} token。不操作的话，5 秒后继续执行。',
 			stop: '停止任务'
 		},
 		untitled: '未命名',
@@ -98,6 +100,8 @@ const shell = {
 		// header / navigator
 		toggleSidebar: '会话列表 · ⌘B',
 		chatGone: '该对话已关闭',
+		paneError: '这个对话显示出错了，已记录到日志。',
+		paneErrorRetry: '重新显示',
 
 		// workspaces
 		workspace: {
@@ -904,6 +908,8 @@ const shell = {
 	en: {
 		// notifications / runtime
 		notifyDone: 'Conversation done: {title}',
+		notifyApproval: 'Waiting for your approval: {what}',
+		notifyPlan: 'Plan to approve: {title}',
 		cacheMiss: {
 			message: '{title}: prompt cache miss. {cached} of {input} input tokens were cached. Continuing in 5 seconds.',
 			stop: 'Stop task'
@@ -998,6 +1004,8 @@ const shell = {
 		// header / navigator
 		toggleSidebar: 'Session list · ⌘B',
 		chatGone: 'This conversation is closed',
+		paneError: 'This conversation failed to display; it was logged.',
+		paneErrorRetry: 'Show again',
 
 		// workspaces
 		workspace: {

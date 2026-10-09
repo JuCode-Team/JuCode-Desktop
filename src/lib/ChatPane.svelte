@@ -1,10 +1,13 @@
 <script lang="ts" module>
 	import type { WebRef } from '$lib/browser.svelte';
+	import type { PlanAction as PaneAction } from '$lib/PlanCard.svelte';
 
 	/** Configured provider (builtin or custom) with its model list — the page
 	 *  loads these once and every pane shares them for the model picker. */
 	export interface ProviderOption {
 		id: string;
+		/** Shown as the provider's heading in the model menu. */
+		name?: string;
 		base_url: string;
 		format: string;
 		models: { name: string; context_window?: number; reasoning_efforts?: string[] }[];
@@ -22,6 +25,8 @@
 		focusComposer: () => void;
 		stop: () => void;
 		openModelMenu: () => void;
+		/** Approve or revise a plan of this session (from its page). */
+		planAction: (id: string, action: PaneAction) => void;
 	}
 </script>
 
@@ -33,7 +38,10 @@
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import { open } from '@tauri-apps/plugin-dialog';
 	import { treeRows } from '$lib/tree';
-	import { buildSetApprovalModeOp, needsClaudeYoloRespawn, type ApprovalMode, type ApproveOp } from '$lib/approval';
+	import { buildSetApprovalModeOp, needsClaudeYoloRespawn, toEngineMode, type ApprovalMode, type ApproveOp } from '$lib/approval';
+	import type { PlanAction } from '$lib/PlanCard.svelte';
+	import XIcon from 'phosphor-svelte/lib/XIcon';
+	import ClipboardTextIcon from 'phosphor-svelte/lib/ClipboardTextIcon';
 	import {
 		processVideo,
 		sessionHistory,
@@ -64,11 +72,15 @@
 	import RateLimitBanner from '$lib/RateLimitBanner.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import TaskStrip from '$lib/TaskStrip.svelte';
-	import { parseFileHref } from '$lib/fileRefs';
+	import ProgressCard from '$lib/agents/ProgressCard.svelte';
+	import { agentRows, type AgentRow } from '$lib/agentProgress';
+	import { parseToolOutput, toolTarget, toolVerb } from '$lib/toolSummary';
+	import { isAbsolutePath, joinPath, parseFileHref, pathExt } from '$lib/fileRefs';
 	import type { Msg } from '$lib/chat.svelte';
 	import type { SessionSwitch } from '$lib/composer/SessionSwitches.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
+	import { planPages } from '$lib/planPages.svelte';
 	import Picker from '$lib/shell/Picker.svelte';
 	import Segmented from '$lib/ui/Segmented.svelte';
 	import type { SectionKey } from '$lib/settings/nav';
@@ -105,8 +117,10 @@
 		/** Providers with configured auth (for "not configured" hints). */
 		providers?: string[];
 		providersList?: ProviderOption[];
-		/** This pane's session is `store.activeId` — overlays and window keys
-		 *  only run on the active pane, so two panes never fight over them. */
+		/** This pane's session is `store.activeId` and no page (settings, the
+		 *  desk) covers it — overlays and window keys only run on the active
+		 *  pane, so two panes never fight over them and a hidden one never
+		 *  answers. */
 		isActive?: boolean;
 		onRegister?: (id: string, api: ChatPaneApi) => void;
 		/** Passes the api back so a remount (tile drag) can't drop the fresh one. */
@@ -193,41 +207,15 @@
 	let mark = $state(-1);
 	const marks = $derived(chat.messages.flatMap((m) => (m.kind === 'user' && !parseDelivery(m.text) ? [m.text] : [])));
 
-	// The conversation column's width: dragging either edge resizes it about
-	// the centre; the width is kept once the drag ends.
-	// Narrow enough to read, wide enough for the composer's bar on one line.
-	const CHAT_MIN = 640;
-	const EDGE = 10; // px from the text to the drag strip's centre
+	// The conversation column has one fixed width (as in ChatGPT and Claude):
+	// narrow enough to read, wide enough for the composer's bar on one line.
+	const CHAT_W = 768;
 	let wrapW = $state(0);
-	let dragW = $state<number | null>(null);
-	let hot = $state<{ edge: string; y: number } | null>(null);
-	const chatW = $derived(Math.max(CHAT_MIN, dragW ?? prefs.chatWidth));
+	const chatW = CHAT_W;
 	// The least room beside the column (more with the rail at the left edge),
 	// and the room it has: main's padding-inline.
 	const chatPad = $derived(marks.length > 1 ? 56 : 32);
 	const pad = $derived(Math.max(chatPad, (wrapW - chatW) / 2));
-	function startResize(e: PointerEvent) {
-		e.preventDefault();
-		const el = e.currentTarget as HTMLElement;
-		const box = el.parentElement!.getBoundingClientRect();
-		const centre = box.left + box.width / 2;
-		el.setPointerCapture(e.pointerId);
-		const move = (ev: PointerEvent) => {
-			dragW = Math.max(CHAT_MIN, Math.min(box.width - 2 * chatPad, 2 * (Math.abs(ev.clientX - centre) - EDGE)));
-		};
-		const end = () => {
-			if (dragW !== null) prefs.setChatWidth(dragW);
-			dragW = null;
-			el.removeEventListener('pointermove', move);
-		};
-		el.addEventListener('pointermove', move);
-		el.addEventListener('pointerup', end, { once: true });
-		el.addEventListener('pointercancel', end, { once: true });
-	}
-	function trackEdge(edge: string, e: PointerEvent) {
-		const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
-		hot = { edge, y: e.clientY - box.top };
-	}
 
 	// In-conversation find (⌘F). The raw input updates per keystroke; the actual
 	// scan (findHits) keys off the debounced `findQuery` so the O(n) message scan
@@ -455,18 +443,6 @@
 
 	const isImage = (p: string) => /\.(png|jpe?g|gif|webp|bmp)$/i.test(p);
 	const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
-	// Engine subagent lifecycle status → localized label (falls back to the raw value).
-	// 'done' is an alias of 'completed'.
-	const AGENT_STATUS_KEY: Record<string, string> = {
-		started: 'started',
-		running: 'running',
-		completed: 'completed',
-		done: 'completed',
-		interrupted: 'interrupted',
-		stopped: 'interrupted',
-		failed: 'failed',
-		closed: 'closed'
-	};
 	// The agent trace (AgentRunsPanel, a workbench panel) of this session.
 	const traceable = $derived(caps(chat).agentTrace && !!onOpenTrace);
 	function openTrace(agentId: string | null) {
@@ -481,7 +457,39 @@
 		if (chat.agentRuns.workflows.some((w) => w.toolUseId === m.callId)) return { label: t('dock.agents.open'), run: () => openTrace(null) };
 		return null;
 	}
-	const agentStatus = (s: string) => (AGENT_STATUS_KEY[s] ? t(`shell.agentStatus.${AGENT_STATUS_KEY[s]}`) : s);
+	// The subagents of this conversation: every run (the message list's cards
+	// find theirs), and the current turn's (the progress card). Derived from
+	// the trace and lifecycle state, never from the streaming text.
+	const lastTool = (label: string) => {
+		const m = chat.subagentLastTool[label];
+		return m ? `${toolVerb(m.name)} ${toolTarget(m.name, parseToolOutput(m.output))}`.trim() : '';
+	};
+	const allAgents = $derived(agentRows({ runs: chat.agentRuns, subagents: chat.subagents, lastTool }));
+	const turnAgents = $derived(
+		agentRows({ runs: chat.agentRuns, subagents: chat.subagents, lastTool, since: chat.turnStartedAt || Number.MAX_SAFE_INTEGER })
+	);
+	function openAgent(row: AgentRow) {
+		openTrace(row.workflow ? null : row.id);
+	}
+
+	// Plan mode: a proposed plan runs once approved, in the mode picked on its
+	// card; revising it sends the next message as the user's feedback.
+	const planMode = $derived<ApprovalMode>(
+		chat.modeBeforePlan && chat.modeBeforePlan !== 'plan' ? chat.modeBeforePlan : 'edits'
+	);
+	function planAction(id: string, action: PlanAction) {
+		const plan = chat.messages.find((m) => m.kind === 'plan' && m.id === id);
+		if (action.decision === 'approve') {
+			const mode = toEngineMode(action.mode) as Exclude<ReturnType<typeof toEngineMode>, 'plan'>;
+			send({ op: 'approve_plan', id, decision: 'approve', mode });
+			chat.setApprovalMode(action.mode);
+			if (plan?.kind === 'plan') plan.status = 'approved';
+			chat.planRevising = null;
+			return;
+		}
+		chat.planRevising = id;
+		composerEl?.focus();
+	}
 
 	// pickers (tree / model / resume) — this pane's session
 	const pickerTitle = $derived(
@@ -722,6 +730,19 @@
 				content = content.replace(re, () => `\n\n${block}\n\n`);
 			}
 			content = content.replace(/\n{3,}/g, '\n\n').trim();
+			// Revising a proposed plan: the message is the user's feedback on it.
+			const revising = chat.planRevising;
+			if (revising && !files.length && !videos.length && !imagePaths.length) {
+				const plan = chat.messages.find((m) => m.kind === 'plan' && m.id === revising);
+				if (plan?.kind === 'plan') plan.status = 'revising';
+				chat.planRevising = null;
+				if (!chat.busy || chat.restarting) chat.optimisticUser(content);
+				send({ op: 'approve_plan', id: revising, decision: 'revise', feedback: content });
+				input = '';
+				webRefs = [];
+				quotes = [];
+				return;
+			}
 			if (files.length)
 				content += `${content ? '\n\n' : ''}Attached files (read these):\n${files.join('\n')}`;
 			for (const v of videos) {
@@ -1010,9 +1031,8 @@
 		const ref = parseFileHref(href);
 		const rel = ref.path;
 		if (!rel) return;
-		const joined = `${cwd.replace(/\/+$/, '')}/${rel.replace(/^\.?\//, '')}`;
-		const abs = rel.startsWith('/') ? rel : ((await resolveFileRef(cwd, rel).catch(() => null)) ?? joined);
-		const ext = abs.split('/').pop()?.split('.').pop()?.toLowerCase() ?? '';
+		const abs = isAbsolutePath(rel) ? rel : ((await resolveFileRef(cwd, rel).catch(() => null)) ?? joinPath(cwd, rel));
+		const ext = pathExt(abs);
 		if ((ext === 'html' || ext === 'htm') && prefs.htmlOpenInBrowser) {
 			browser.open(`file://${abs}`);
 		} else {
@@ -1066,7 +1086,8 @@
 		stop: () => {
 			if (chat.busy) stop();
 		},
-		openModelMenu: () => composerRef?.openModelMenu()
+		openModelMenu: () => composerRef?.openModelMenu(),
+		planAction
 	};
 	$effect(() => {
 		onRegister?.(session.id, api);
@@ -1110,17 +1131,6 @@
 			<button class="owner-link" onclick={() => ((session.requirement = undefined), (session.requirementStart = undefined))}>{t('shell.requirement.unlink')}</button>
 		</div>
 	{/if}
-	{#if Object.keys(chat.subagents).length}
-		<div class="agents">
-			{#each Object.entries(chat.subagents) as [path, info] (path)}
-				{#if info.label && traceable}
-					<button class="agent link" onclick={() => openTrace(path)} title={t('dock.agents.openAgent')}>{info.label} · {agentStatus(info.status)}{#if info.message}<span class="agent-msg">{info.message}</span>{/if}</button>
-				{:else}
-					<span class="agent">{info.label || path} · {agentStatus(info.status)}{#if info.message}<span class="agent-msg">{info.message}</span>{/if}</span>
-				{/if}
-			{/each}
-		</div>
-	{/if}
 	<TaskStrip
 		{chat}
 		onStop={(id) => send({ op: 'stop_task', task_id: id })}
@@ -1142,10 +1152,11 @@
 		/>
 	{/if}
 
-	<div class="mainwrap" class:resizing={dragW !== null} bind:clientWidth={wrapW}>
+	<div class="mainwrap" bind:clientWidth={wrapW}>
+	<ProgressCard {chat} sessionId={session.id} rows={turnAgents} onOpen={traceable ? openAgent : undefined} />
 	<main bind:this={scroller} onscroll={onScroll} onwheel={onWheel}>
 		<div bind:this={contentEl}>
-			<MessageList bind:this={messageList} bind:mark messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onNote={noteRequirement} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} traceOf={traceable ? traceOf : undefined} />
+			<MessageList bind:this={messageList} bind:mark messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onNote={noteRequirement} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} traceOf={traceable ? traceOf : undefined} agents={allAgents} onOpenAgent={traceable ? openAgent : undefined} onPlan={planAction} {planMode} onOpenPlan={(id) => planPages.open(session.id, id)} />
 		</div>
 		{#if chat.booting && chat.engineState !== 'exited'}
 			<div class="welcome spawning">
@@ -1171,21 +1182,6 @@
 	{#if marks.length > 1}
 		<TurnRail {marks} current={mark} onJump={(n) => messageList?.jumpToMark(n)} />
 	{/if}
-	{#each ['left', 'right'] as edge (edge)}
-		<div
-				class="edge"
-				class:active={dragW !== null}
-				style:left={edge === 'left' ? `${pad - EDGE}px` : `${wrapW - pad + EDGE}px`}
-				role="separator"
-				aria-orientation="vertical"
-				aria-label={t('chat.resizeColumn')}
-				onpointerdown={startResize}
-				onpointermove={(e) => trackEdge(edge, e)}
-				onpointerleave={() => dragW === null && (hot = null)}
-			>
-				{#if hot?.edge === edge}<span style:top="{hot.y}px"></span>{/if}
-			</div>
-	{/each}
 	</div>
 	{#if !atBottom}
 		<button class="jump" style:bottom="{bottomH + 14}px" onclick={jumpToBottom} aria-label="scroll to bottom"><CaretDownIcon size={18} /></button>
@@ -1205,7 +1201,7 @@
 		{#if chat.pendingApproval && !chat.pendingApproval.questions?.length}
 			<div class="approval-wrap">
 				{#key chat.pendingApproval.callId}
-					<ApprovalCard approval={chat.pendingApproval} onRespond={respondApproval} ruleScopes={caps(chat).ruleScopes} />
+					<ApprovalCard approval={chat.pendingApproval} onRespond={respondApproval} ruleScopes={caps(chat).ruleScopes} keys={isActive} />
 				{/key}
 			</div>
 		{/if}
@@ -1218,6 +1214,17 @@
 		{/if}
 
 		<StatusStrip items={chat.statusLog} />
+
+		{#if chat.planRevising}
+			<div class="approval-wrap">
+				<div class="revising">
+					<ClipboardTextIcon size={14} />
+					<span class="rv-label">{t('chat.planCard.revising')}</span>
+					<span class="rv-hint">{t('chat.planCard.revisingHint')}</span>
+					<button class="rv-x" onclick={() => (chat.planRevising = null)} aria-label={t('chat.planCard.cancelRevise')} title={t('chat.planCard.cancelRevise')}><XIcon size={13} /></button>
+				</div>
+			</div>
+		{/if}
 
 		{#if gate && !chat.pendingApproval}
 			<div class="approval-wrap">
@@ -1389,7 +1396,7 @@
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
 		cursor: pointer;
 		z-index: 10;
-		animation: jump-in var(--t-med) var(--ease-spring);
+		animation: jump-in var(--t-med) var(--ease-out);
 		transition:
 			background var(--t-fast) var(--ease-out),
 			transform var(--t-fast) var(--ease-spring),
@@ -1399,7 +1406,7 @@
 	@keyframes jump-in {
 		from {
 			opacity: 0;
-			transform: translateX(-50%) translateY(6px) scale(0.9);
+			transform: translateX(-50%) translateY(4px);
 		}
 		to {
 			opacity: 1;
@@ -1448,43 +1455,48 @@
 		font-weight: 500;
 	}
 
-	.agents {
+	.revising {
 		display: flex;
-		flex-wrap: wrap;
-		gap: 8px;
-		padding: 8px 18px;
-		border-bottom: 1px solid var(--hairline);
-	}
-	.agent {
-		display: inline-flex;
 		align-items: center;
-		gap: 6px;
-		font-family: var(--font-mono);
-		font-size: var(--fs-2xs);
-		color: var(--dim);
+		gap: 8px;
+		width: fit-content;
+		max-width: 100%;
+		padding: 5px 6px 5px 12px;
+		border-radius: var(--r-full);
+		background: var(--surface2);
+		color: var(--text);
+		font-size: var(--fs-xs);
+	}
+	.rv-label {
+		flex: none;
+		font-weight: 500;
+	}
+	.rv-hint {
 		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: var(--dim);
+	}
+	.rv-x {
+		display: inline-flex;
+		flex: none;
+		padding: 3px;
+		border: none;
+		border-radius: var(--r-full);
+		background: none;
+		color: var(--dim);
+		cursor: pointer;
+	}
+	.rv-x:hover {
+		background: var(--surface2);
+		color: var(--text);
 	}
 	.interm {
 		margin: 0 0 8px;
 		font-size: var(--fs-xs);
 		color: var(--dim);
 		text-align: center;
-	}
-	button.agent {
-		border: none;
-		background: none;
-		padding: 0;
-		cursor: pointer;
-	}
-	button.agent:hover {
-		color: var(--text);
-	}
-	.agent-msg {
-		color: var(--dim2);
-		max-width: 360px;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
 	}
 
 	.mainwrap {
@@ -1505,34 +1517,6 @@
 		/* Full width, so the scrollbar sits at the pane's edge; the padding
 		   centres the column. */
 		padding-inline: max(var(--chat-pad), calc((100% - var(--chat-w)) / 2));
-	}
-	/* The column's edge: hovering shows a short bar at the pointer, dragging
-	   resizes the column. */
-	.edge {
-		position: absolute;
-		top: 0;
-		bottom: 0;
-		width: 12px;
-		transform: translateX(-50%);
-		cursor: col-resize;
-		z-index: 4;
-	}
-	.edge span {
-		position: absolute;
-		left: 5px;
-		width: 2px;
-		height: 120px;
-		border-radius: 1px;
-		transform: translateY(-50%);
-		background: linear-gradient(transparent, var(--dim), transparent);
-		pointer-events: none;
-	}
-	.edge.active span {
-		background: linear-gradient(transparent, var(--text), transparent);
-	}
-	.resizing {
-		cursor: col-resize;
-		user-select: none;
 	}
 	.welcome {
 		margin: auto;

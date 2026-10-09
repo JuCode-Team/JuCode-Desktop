@@ -308,7 +308,7 @@
 		gap: 0;
 		padding: 6px;
 		transform-origin: bottom right;
-		animation: pop-in var(--t-med) var(--ease-spring);
+		animation: pop-in var(--t-med) var(--ease-out);
 	}
 	/* GroupPicker renders its own section, hence :global. */
 	.mm > :global(section + section) {
@@ -481,7 +481,7 @@
 	}
 	/* The check lands on a newly picked model. */
 	.pop-check:not(.off) :global(svg) {
-		animation: pop-in var(--t-med) var(--ease-spring);
+		animation: pop-in var(--t-med) var(--ease-out);
 	}
 	.empty {
 		padding: 14px 12px;

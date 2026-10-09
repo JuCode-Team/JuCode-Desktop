@@ -21,6 +21,20 @@
 		prefs.init();
 		// Persist detection + reflect the active locale on <html lang> for a11y.
 		setLocale(getLocale());
+		// Resizing or zooming the window: layout jumps, nothing animates along
+		// (app.css .win-resizing), until 150 ms after the last resize event.
+		const root = document.documentElement;
+		let settle: ReturnType<typeof setTimeout> | undefined;
+		const onResize = () => {
+			root.classList.add('win-resizing');
+			clearTimeout(settle);
+			settle = setTimeout(() => root.classList.remove('win-resizing'), 150);
+		};
+		window.addEventListener('resize', onResize);
+		return () => {
+			window.removeEventListener('resize', onResize);
+			clearTimeout(settle);
+		};
 	});
 </script>
 

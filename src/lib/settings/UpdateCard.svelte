@@ -3,7 +3,9 @@
 	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
 	import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon';
 	import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon';
-	import { getVersion } from '@tauri-apps/api/app';
+	import FolderOpenIcon from 'phosphor-svelte/lib/FolderOpenIcon';
+	import { aboutApp, openLogsFolder, type AboutApp } from '$lib/about';
+	import { toast } from '$lib/ui/toast.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import { updater } from '$lib/updater.svelte';
@@ -11,10 +13,14 @@
 	import SettingsSection from './SettingsSection.svelte';
 	import SettingsRow from './SettingsRow.svelte';
 
-	let current = $state('');
+	let about = $state<AboutApp | null>(null);
+	const current = $derived(about?.version ?? '');
 	onMount(async () => {
-		current = await getVersion().catch(() => '');
+		about = await aboutApp();
 	});
+	function showLogs() {
+		openLogsFolder().catch((e) => toast.error(String(e)));
+	}
 </script>
 
 <SettingsSection title={t('settings.update.groupLabel')}>
@@ -45,6 +51,12 @@
 		{:else}
 			<Button variant="secondary" size="sm" onclick={() => updater.check()}>{t('settings.update.check')}</Button>
 		{/if}
+	</SettingsRow>
+	{#if about?.cli}
+		<SettingsRow id="engine-version" title={t('settings.update.engineVersion')} description={`v${about.cli}`} />
+	{/if}
+	<SettingsRow id="logs" title={t('settings.update.logs')} description={about ? `${about.os} · ${about.arch}` : undefined}>
+		<Button variant="secondary" size="sm" onclick={showLogs}><FolderOpenIcon size={14} /> {t('settings.update.openLogs')}</Button>
 	</SettingsRow>
 </SettingsSection>
 

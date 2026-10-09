@@ -84,7 +84,7 @@ pub(crate) fn truncate_chars(s: &str, max: usize) -> String {
 
 /// Rows Claude injects that are not conversation content: subagent streams,
 /// meta caveats and the post-compaction continuation summary.
-fn is_synthetic(v: &serde_json::Value) -> bool {
+pub(crate) fn is_synthetic(v: &serde_json::Value) -> bool {
     v["isSidechain"].as_bool() == Some(true)
         || v["isMeta"].as_bool() == Some(true)
         || v["isCompactSummary"].as_bool() == Some(true)
@@ -94,7 +94,7 @@ fn is_synthetic(v: &serde_json::Value) -> bool {
 /// Extracts the user/assistant text of a session-file row, or None.
 /// String contents starting with `<` are slash-command echoes
 /// (`<command-name>…`, `<local-command-stdout>…`) — never conversation text.
-fn row_text(v: &serde_json::Value) -> Option<String> {
+pub(crate) fn row_text(v: &serde_json::Value) -> Option<String> {
     let content = &v["message"]["content"];
     if let Some(s) = content.as_str() {
         let t = s.trim();

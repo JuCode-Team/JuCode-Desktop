@@ -75,9 +75,15 @@ export type Msg =
 			isError: boolean;
 			/** The Task subagent that made this call (claude). */
 			subagent?: string;
+			/** A subagent call's arguments as the engine showed them before its
+			 *  output replaced them (the agent's name and task). */
+			args?: string;
 	  }
 	| { kind: 'system'; text: string }
-	| { kind: 'error'; text: string };
+	| { kind: 'error'; text: string }
+	/** A plan the engine proposes in plan mode (`proposed_plan`): `text` is
+	 *  its Markdown; status pending / approved / revising. */
+	| { kind: 'plan'; id: string; title: string; text: string; status: string };
 
 export interface TreeNode {
 	id: string;
@@ -162,6 +168,30 @@ function fallbackReason(reason: string): string {
 	return t(`chat.fallbackReason.${known.includes(reason) ? reason : 'other'}`);
 }
 
+/** A subagent as its lifecycle events (and, on an older JuCode engine, its
+ *  spawn_agent call) report it: by path / task id. */
+export interface SubagentInfo {
+	status: string;
+	message: string;
+	label?: string;
+	model?: string;
+	/** The call that started it (spawn_agent / Agent). */
+	toolUseId?: string;
+	/** When this client first saw it, and saw it end (ms). */
+	startedAt?: number;
+	endedAt?: number;
+}
+
+/** The lifecycle words of an agent that has stopped for good. */
+const FINAL_AGENT = ['completed', 'done', 'failed', 'errored', 'stopped', 'interrupted', 'closed', 'killed', 'cancelled'];
+
+/** Calls that start a subagent: their arguments name it. */
+const SUBAGENT_CALLS = new Set(['spawn_agent', 'Task', 'Agent']);
+
+/** A proposed plan's status as the engine words it. */
+const PLAN_STATUS = ['pending', 'approved', 'revising'];
+const planStatus = (v: unknown) => (typeof v === 'string' && PLAN_STATUS.includes(v) ? v : 'pending');
+
 /** One agent of a Workflow, or a Task subagent (claude's agent trace). */
 export interface AgentRun {
 	id: string;
@@ -181,6 +211,9 @@ export interface AgentRun {
 	/** Task subagents: the subagent type and the Agent call that started it. */
 	type: string;
 	toolUseId: string;
+	/** Its latest action in one line (jucode), and its reasoning effort. */
+	activity: string;
+	effort: string;
 }
 export interface WorkflowRun {
 	id: string;
@@ -212,7 +245,9 @@ function agentRun(raw: Record<string, unknown>): AgentRun {
 		result: str(raw.result) || str(raw.summary),
 		error: str(raw.error),
 		type: str(raw.type),
-		toolUseId: str(raw.tool_use_id)
+		toolUseId: str(raw.tool_use_id),
+		activity: str(raw.activity),
+		effort: str(raw.effort)
 	};
 }
 
@@ -240,6 +275,31 @@ export interface TurnDiff {
  *  `delayMs` from `at` (ms), because of `reason` (the provider's error). */
 /** What an automatic retry sends when the failed turn is kept (autoRetry.ts).
  *  Recognised again in a reloaded transcript, where it shows as a note. */
+/** What a tool card keeps of an output in memory: a long one (a build log,
+ *  a big file read) keeps its head and tail. Structured (JSON) outputs are
+ *  kept whole when they fit, else their string fields are cut the same way,
+ *  so a card still parses them. The engine's session keeps the full output. */
+const TOOL_OUTPUT_MAX = 64 * 1024;
+export function boundedOutput(output: string): string {
+	if (output.length <= TOOL_OUTPUT_MAX) return output;
+	const cut = (text: string, max: number) =>
+		text.length <= max ? text : `${text.slice(0, max / 2)}\n… (${text.length - max} characters not shown) …\n${text.slice(-max / 2)}`;
+	try {
+		const value = JSON.parse(output) as unknown;
+		if (value && typeof value === 'object' && !Array.isArray(value)) {
+			const out: Record<string, unknown> = {};
+			// An image's pixels are kept whole (cut, they would not decode).
+			for (const [k, v] of Object.entries(value as Record<string, unknown>))
+				out[k] = typeof v === 'string' && k !== 'base64' ? cut(v, TOOL_OUTPUT_MAX / 2) : v;
+			const text = JSON.stringify(out);
+			if (text.length <= TOOL_OUTPUT_MAX * 2 || typeof out.base64 === 'string') return text;
+		}
+	} catch {
+		/* plain text */
+	}
+	return cut(output, TOOL_OUTPUT_MAX);
+}
+
 export const AUTO_CONTINUE = '继续（连接中断后自动重试）';
 
 export interface RetryState {
@@ -355,8 +415,24 @@ export class ChatState {
 	inTerminal = $state(false);
 	/** An MCP server's sign-in page, to open once (codex mcp_login). */
 	mcpLoginUrl = $state('');
-	/** Subagents by id; `label` names them when the id doesn't (claude's task ids). */
-	subagents = $state<Record<string, { status: string; message: string; label?: string }>>({});
+	/** Subagents by id; `label` names them when the id doesn't (claude's task ids).
+	 *  Finished ones stay until the next turn starts. */
+	subagents = $state<Record<string, SubagentInfo>>({});
+	/** The latest tool call each Task subagent made, by its label (claude
+	 *  attributes the calls of a subagent to it, `tool_start.subagent`). */
+	subagentLastTool = $state<Record<string, Extract<Msg, { kind: 'tool' }>>>({});
+	/** The engine has sent an agent trace (`agent_runs`): it answers the trace ops
+	 *  (an older JuCode engine refuses them). */
+	agentRunsSeen = $state(false);
+	/** When the current (or last) turn started and ended, ms (0: not this run). */
+	turnStartedAt = $state(0);
+	turnEndedAt = $state(0);
+	/** When the plan last changed, ms. */
+	planAt = $state(0);
+	/** The proposed plan the next message revises (its id); null otherwise. */
+	planRevising = $state<string | null>(null);
+	/** The mode before plan mode, which approving a plan offers first. */
+	modeBeforePlan = $state<ApprovalMode | null>(null);
 	/** Background work of a claude session (Workflow, background shell or
 	 *  agent, Monitor), as the engine last listed it; `message` is the latest
 	 *  progress line. Per engine process: a restart clears it. */
@@ -410,6 +486,9 @@ export class ChatState {
 	// Per user-turn file edits (path → added/removed line counts), keyed by the
 	// 0-based user-turn index — drives the turn-level diff timeline.
 	turnEdits = $state<Record<number, Record<string, { added: number; removed: number }>>>({});
+	/** The agent's own edits per file (the edit tools' unified diffs, oldest
+	 *  first), so 还原 can undo exactly them and keep the user's changes. */
+	agentDiffs: Record<string, string[]> = {};
 	// Approval policy, enforced engine-side ('ask' ↔ read-only, 'edits' ↔
 	// auto-edit, 'all' ↔ full-auto). The engine is the source of truth: this
 	// mirrors its `approval_mode` events, except right after engine startup where
@@ -512,6 +591,7 @@ export class ChatState {
 	 *  for pushing it to the engine via `set_approval_mode`). Also invoked by the
 	 *  approval_mode event handler so engine-driven changes persist too. */
 	setApprovalMode(mode: ApprovalMode) {
+		if (mode === 'plan' && this.approvalMode !== 'plan') this.modeBeforePlan = this.approvalMode;
 		this.approvalMode = mode;
 		try {
 			localStorage.setItem('jucode-approval-mode', mode);
@@ -582,6 +662,7 @@ export class ChatState {
 
 	/** Stamp the turn's total elapsed onto its last assistant message. */
 	#endTurn() {
+		if (this.#turnStart !== null) this.turnEndedAt = Date.now();
 		this.#collapseReasoning();
 		if (this.#sending?.state !== 'failed') this.#setSend(null);
 		this.call = null;
@@ -693,6 +774,10 @@ export class ChatState {
 	#startTurn() {
 		if (this.#turnStart !== null) return;
 		this.#turnStart = Date.now();
+		this.turnStartedAt = this.#turnStart;
+		this.turnEndedAt = 0;
+		// The agents a finished turn ran leave with it.
+		for (const [id, a] of Object.entries(this.subagents)) if (a.endedAt) delete this.subagents[id];
 		this.#segStart = this.#turnStart;
 		this.#firstOutput = null;
 		this.#turnIn = this.#turnOut = this.#turnTools = this.#turnSegments = 0;
@@ -916,6 +1001,30 @@ export class ChatState {
 		this.commands = p.commands ?? [];
 	}
 
+	/** A spawn_agent call finished: an engine that reports its subagents
+	 *  only there (JuCode before the agent trace) names the agent in the
+	 *  output (`path`, `task_name`, `status`). */
+	#spawned(callId: string, output: string) {
+		let out: Record<string, unknown>;
+		try {
+			out = JSON.parse(output) as Record<string, unknown>;
+		} catch {
+			return;
+		}
+		const path = str(out.path);
+		if (!path) return;
+		const prev = this.subagents[path];
+		this.subagents[path] = {
+			status: prev?.status ?? (str(out.status) || 'running'),
+			message: prev?.message ?? '',
+			label: prev?.label ?? (str(out.task_name) || undefined),
+			...(prev?.model ? { model: prev.model } : {}),
+			toolUseId: prev?.toolUseId ?? callId,
+			startedAt: prev?.startedAt ?? Date.now(),
+			...(prev?.endedAt ? { endedAt: prev.endedAt } : {})
+		};
+	}
+
 	handle(ev: AgentEvent) {
 		// The engine has spoken — the child is up, so the boot animation ends.
 		this.booting = false;
@@ -1071,11 +1180,15 @@ export class ChatState {
 					// once the card has read it (tool_update / tool_output never showed).
 					const pushed = this.messages[this.messages.length - 1];
 					if (callId && pushed?.kind === 'tool') this.#toolsByCallId.set(callId, pushed);
+					if (pushed?.kind === 'tool' && pushed.subagent) this.subagentLastTool[pushed.subagent] = pushed;
 				}
 				break;
 			case 'tool_update': {
 				const t = this.#tool(str(ev.call_id));
-				if (t) t.output = str(ev.output);
+				if (t) {
+					t.output = boundedOutput(str(ev.output));
+					if (SUBAGENT_CALLS.has(t.name)) t.args = t.output;
+				}
 				break;
 			}
 			case 'tool_output': {
@@ -1087,10 +1200,11 @@ export class ChatState {
 				this.#segStart = Date.now();
 				const t = this.#tool(str(ev.call_id));
 				if (t) {
-					t.output = str(ev.output);
+					t.output = boundedOutput(str(ev.output));
 					t.running = false;
 					t.isError = ev.is_error === true;
 				}
+				if (str(ev.name) === 'spawn_agent' && ev.is_error !== true) this.#spawned(str(ev.call_id), str(ev.output));
 				// A successful browser_open acknowledgement carries the URL the agent
 				// wants shown — drive the embedded browser panel.
 				if (ev.is_error !== true && str(ev.name) === 'browser_open') {
@@ -1107,6 +1221,13 @@ export class ChatState {
 						const out = JSON.parse(str(ev.output)) as Record<string, unknown>;
 						const paths = [out.path, ...(Array.isArray(out.paths) ? out.paths : [])];
 						const edited: string[] = [];
+						// One file's edit: keep its diff (bounded) for an exact undo,
+						// by the project-relative name its diff header carries.
+						const label = /^\+\+\+ b\/(.+)$/m.exec(str(out.diff))?.[1];
+						if (label && typeof out.path === 'string' && !Array.isArray(out.paths)) {
+							const list = (this.agentDiffs[label] ??= []);
+							if (list.length < 200) list.push(str(out.diff));
+						}
 						for (const p of paths) {
 							if (typeof p === 'string' && p) {
 								edited.push(p);
@@ -1253,6 +1374,8 @@ export class ChatState {
 								isError: false
 							};
 						if (role === 'branch') return { kind: 'system', text: `branch: ${str(it.label)}` };
+						if (role === 'plan')
+							return { kind: 'plan', id: str(it.id), title: str(it.title), text: str(it.content), status: planStatus(it.status) };
 						return null;
 					})
 					.filter((m): m is Msg => m !== null);
@@ -1308,9 +1431,12 @@ export class ChatState {
 			case 'goal':
 				this.goal = ev.goal ? (ev.goal as unknown as Goal) : null;
 				break;
-			case 'plan':
-				this.plan = arr<PlanStep>(ev.plan);
+			case 'plan': {
+				const next = arr<PlanStep>(ev.plan);
+				if (JSON.stringify(next) !== JSON.stringify(this.plan)) this.planAt = Date.now();
+				this.plan = next;
 				break;
+			}
 			case 'approval_request':
 				this.pendingApproval = {
 					callId: str(ev.call_id),
@@ -1390,15 +1516,49 @@ export class ChatState {
 			}
 			case 'subagent_lifecycle': {
 				const path = str(ev.path);
-				// A labelled (claude) subagent that ended leaves the strip: its
-				// card holds the result.
-				if (path && str(ev.label) && ['completed', 'failed', 'stopped'].includes(str(ev.status))) delete this.subagents[path];
-				else if (path)
-					this.subagents[path] = {
-						status: str(ev.status),
-						message: str(ev.message),
-						...(str(ev.label) ? { label: str(ev.label) } : {})
-					};
+				if (!path) break;
+				const prev = this.subagents[path];
+				// `message`: a message was queued for it, its state is unchanged.
+				const status = str(ev.status) === 'message' ? (prev?.status ?? 'running') : str(ev.status);
+				const now = Date.now();
+				const ended = FINAL_AGENT.includes(status);
+				this.subagents[path] = {
+					status,
+					message: str(ev.message) || (str(ev.status) === 'message' ? (prev?.message ?? '') : ''),
+					...((str(ev.label) || prev?.label) ? { label: str(ev.label) || prev?.label } : {}),
+					...((str(ev.model) || prev?.model) ? { model: str(ev.model) || prev?.model } : {}),
+					...((str(ev.tool_use_id) || prev?.toolUseId) ? { toolUseId: str(ev.tool_use_id) || prev?.toolUseId } : {}),
+					startedAt: prev?.startedAt ?? now,
+					...(ended ? { endedAt: prev?.endedAt ?? now } : {})
+				};
+				break;
+			}
+			// The plan as the model writes it: one message grows, and the
+			// proposed_plan with the same id completes it.
+			case 'plan_draft': {
+				const id = str(ev.id);
+				const known = this.messages.find((m) => m.kind === 'plan' && m.id === id);
+				if (known?.kind === 'plan') {
+					if (str(ev.title)) known.title = str(ev.title);
+					known.text += str(ev.append);
+				} else {
+					this.#collapseReasoning();
+					this.#closeSegment(Date.now());
+					this.messages.push({ kind: 'plan', id, title: str(ev.title), text: str(ev.append), status: 'drafting' });
+				}
+				break;
+			}
+			case 'proposed_plan': {
+				const id = str(ev.id);
+				const plan = { kind: 'plan' as const, id, title: str(ev.title), text: str(ev.markdown), status: planStatus(ev.status) };
+				const known = this.messages.find((m) => m.kind === 'plan' && m.id === id);
+				if (known?.kind === 'plan') Object.assign(known, plan);
+				else {
+					this.#collapseReasoning();
+					this.#closeSegment(Date.now());
+					this.messages.push(plan);
+				}
+				if (plan.status !== 'pending' && this.planRevising === id) this.planRevising = null;
 				break;
 			}
 			case 'background_tasks': {
@@ -1451,6 +1611,7 @@ export class ChatState {
 				});
 				break;
 			case 'agent_runs': {
+				this.agentRunsSeen = true;
 				const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 				this.agentRuns = {
 					workflows: arr<Record<string, unknown>>(ev.workflows).map((w) => ({
@@ -1486,7 +1647,8 @@ export class ChatState {
 								kind: 'tool',
 								callId: str(it.call_id),
 								name: str(it.name),
-								output: str(it.output),
+								// The call's arguments name what it acted on until its output does.
+								output: str(it.output) || (it.input && typeof it.input === 'object' ? JSON.stringify(it.input) : str(it.input)),
 								running: it.running === true,
 								isError: it.is_error === true
 							};
@@ -1592,6 +1754,13 @@ export class ChatState {
 				});
 				break;
 			case 'error': {
+				// An engine without the agent trace refuses its ops: nothing failed.
+				const refused = /^unknown op: (agent_runs|subagent_transcript)$/.exec(str(ev.message));
+				if (refused) {
+					if (refused[1] === 'subagent_transcript' && this.agentFocus && !this.subagentTranscripts[this.agentFocus])
+						this.subagentTranscripts[this.agentFocus] = { task: '', messages: [], error: t('dock.agents.noTranscript') };
+					break;
+				}
 				this.retry = null;
 				// A turn was being sent or run (not, say, a refused command).
 				const started = this.#turnStart !== null;

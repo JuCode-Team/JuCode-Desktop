@@ -114,5 +114,8 @@ marked.use({
 });
 
 export function renderMarkdown(text: string): string {
-	return marked.parse(text, { async: false }) as string;
+	// A table scrolls sideways in its own box when it is wider than the column.
+	return (marked.parse(text, { async: false }) as string)
+		.replace(/<table>/g, '<div class="table-wrap"><table>')
+		.replace(/<\/table>/g, '</table></div>');
 }

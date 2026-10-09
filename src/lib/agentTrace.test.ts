@@ -16,7 +16,9 @@ const agent = (id: string, startedAt: number, durationMs: number, state = 'done'
 	result: '',
 	error: '',
 	type: '',
-	toolUseId: ''
+	toolUseId: '',
+	activity: '',
+	effort: ''
 });
 
 describe('agent trace', () => {

@@ -3,9 +3,14 @@
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
 	import ArrowCounterClockwiseIcon from 'phosphor-svelte/lib/ArrowCounterClockwiseIcon';
 	import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon';
-	import { fade, slide } from 'svelte/transition';
+	import { fade } from 'svelte/transition';
 	import Markdown from '$lib/Markdown.svelte';
+	import Collapse from '$lib/ui/Collapse.svelte';
 	import ToolCard from '$lib/ToolCard.svelte';
+	import SubagentCard from '$lib/agents/SubagentCard.svelte';
+	import PlanCard, { type PlanAction } from '$lib/PlanCard.svelte';
+	import type { ApprovalMode } from '$lib/approval';
+	import { SPAWN_TOOLS, WAIT_TOOLS, type AgentRow } from '$lib/agentProgress';
 	import DeliveryNotice from '$lib/DeliveryNotice.svelte';
 	import { parseDelivery } from '$lib/delivery';
 	import { parseToolOutput, toolIcon, toolTarget, toolVerb } from '$lib/toolSummary';
@@ -46,6 +51,11 @@
 		backend = '',
 		onErrorAction,
 		traceOf,
+		agents,
+		onOpenAgent,
+		onPlan,
+		onOpenPlan,
+		planMode = 'edits',
 		loadImage,
 		mark = $bindable(-1)
 	}: {
@@ -82,6 +92,17 @@
 		onErrorAction?: (action: ErrorAction) => void;
 		/** A tool call whose run the agent trace shows (claude's Agent / Workflow). */
 		traceOf?: (m: Msg) => { label: string; run: () => void } | null;
+		/** The conversation's subagents: spawn and wait calls render as their
+		 *  cards (absent: plain tool rows). */
+		agents?: AgentRow[];
+		/** Shows a subagent's own conversation. */
+		onOpenAgent?: (row: AgentRow) => void;
+		/** Approves or revises a proposed plan (absent: plans have no actions). */
+		onPlan?: (id: string, action: PlanAction) => void;
+		/** The mode a plan's approval offers first. */
+		/** Shows a plan in its page beside the chat. */
+		onOpenPlan?: (id: string) => void;
+		planMode?: ApprovalMode;
 		/** Reads a sent image where the desktop can't open its path (the remote page). */
 		loadImage?: (path: string) => Promise<string>;
 		/** Ordinal of the user message in view: at or above the upper third. */
@@ -344,6 +365,33 @@
 		return i < 0 ? 0 : i + 2;
 	}
 
+	// The finished part of a streaming reply as stable chunks: each paragraph
+	// (or fenced block) is one chunk whose text never changes once complete, so
+	// a keyed {#each} renders it once. Rendering the whole finished prefix as one
+	// Markdown re-parsed, re-highlighted and re-sanitized everything before it
+	// whenever a paragraph completed: quadratic in the reply's length.
+	function stableBlocks(done: string): { key: string; text: string }[] {
+		const out: { key: string; text: string }[] = [];
+		let start = 0;
+		let open = false;
+		const lines = done.split('\n');
+		let pos = 0;
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i]!;
+			if (/^ {0,3}(`{3,}|~{3,})/.test(line)) open = !open;
+			pos += line.length + 1;
+			// A blank line outside a fence ends a chunk.
+			if (!open && line.trim() === '' && pos - start > 1) {
+				const text = done.slice(start, pos);
+				if (text.trim()) out.push({ key: `${start}:${text.length}`, text });
+				start = pos;
+			}
+		}
+		const rest = done.slice(start);
+		if (rest.trim()) out.push({ key: `${start}:${rest.length}`, text: rest });
+		return out;
+	}
+
 	// A user message's text split into runs of "> " quote lines (quoted
 	// passages, shown as quotes) and the text between.
 	function userBlocks(text: string): { text: string; quote: boolean }[] {
@@ -377,6 +425,7 @@
 		// Meta/status notices render in the collapsible status strip, not inline.
 		if (m.kind === 'system') return false;
 		if (m.kind === 'tool') return !!(m.name || m.output);
+		if (m.kind === 'plan') return !!(m.title || m.text);
 		return !!m.text && m.text.trim().length > 0;
 	}
 
@@ -398,13 +447,19 @@
 		};
 		for (const m of messages) {
 			if (!hasContent(m)) continue;
-			if (m.kind === 'tool') run.push(m);
+			if (m.kind === 'tool' && !isAgentCall(m)) run.push(m);
 			else flush();
 		}
 		flush();
 		return { members, headOf };
 	});
 	const openGroups = new SvelteSet<Msg>();
+	// The last message with something to show (a plan's actions show there only).
+	const lastShown = $derived(messages.findLast((m) => hasContent(m)));
+	/** A spawn or wait call that renders as a subagent card. */
+	function isAgentCall(m: Msg): boolean {
+		return !!agents && m.kind === 'tool' && (SPAWN_TOOLS.has(m.name) || WAIT_TOOLS.has(m.name));
+	}
 	function shown(m: Msg): boolean {
 		return hasContent(m) && (!toolGroups.headOf.has(m) || toolGroups.members.has(m));
 	}
@@ -463,7 +518,7 @@
 				{#if m === streamingMsg}
 					{@const rt = revealed(m)}
 					{@const si = splitIdx(rt)}
-					{#if si > 0}<Markdown text={rt.slice(0, si)} />{/if}
+					{#each stableBlocks(rt.slice(0, si)) as block (block.key)}<Markdown text={block.text} />{/each}
 					<div class="stream">{rt.slice(si)}</div>
 				{:else}
 					<Markdown text={m.text} {onFile} />
@@ -488,21 +543,20 @@
 					<span>{t('chat.reasoning')}</span>
 					<span class="rchev"><CaretRightIcon size={13} /></span>
 				</button>
-				{#if !m.collapsed}
-					<div class="reason-body" transition:slide={{ duration: 180 }}>
+				<Collapse open={!m.collapsed}>
+					<div class="reason-body">
 						{#if m === streamingReasoning}
 							<!-- Reasoning summaries are markdown (OpenAI's open with a
 							     **bold** title): completed blocks parse once, the short
 							     tail block re-parses as it grows. -->
-							{@const rt = revealed(m)}
-							{@const si = splitIdx(rt)}
-							{#if si > 0}<Markdown text={rt.slice(0, si)} />{/if}
-							<Markdown text={rt.slice(si)} />
+							<!-- While it streams: plain text (no per-frame Markdown);
+							     it renders as Markdown once finished. -->
+							<div class="stream">{revealed(m)}</div>
 						{:else}
 							<Markdown text={m.text} {onFile} />
 						{/if}
 					</div>
-				{/if}
+				</Collapse>
 			</div>
 		{:else if m.kind === 'tool'}
 			{@const run = toolGroups.members.get(m)}
@@ -529,9 +583,13 @@
 						{/each}
 					</div>
 				{/if}
+			{:else if agents && isAgentCall(m)}
+				<SubagentCard name={m.name} callId={m.callId} output={m.output} args={m.args} running={m.running} isError={m.isError} rows={agents} onOpen={onOpenAgent} />
 			{:else}
 				<ToolCard name={m.name} output={m.output} running={m.running} isError={m.isError} subagent={m.subagent} trace={traceOf?.(m) ?? undefined} />
 			{/if}
+		{:else if m.kind === 'plan'}
+			<PlanCard id={m.id} title={m.title} text={m.text} status={m.status} actionable={m === lastShown} defaultMode={planMode} onAction={onPlan} onOpen={onOpenPlan} />
 		{:else if m.kind === 'error'}
 			<ErrorNotice text={m.text} {backend} onAction={onErrorAction} onDismiss={onDismiss ? () => onDismiss(m) : undefined} />
 				{/if}
@@ -615,9 +673,10 @@
 		border-radius: var(--r-md);
 		transition: background var(--t-slow) var(--ease-out), box-shadow var(--t-slow) var(--ease-out);
 	}
-	/* New rows rise in; suppressed under windowing so re-entering rows don't replay. */
+	/* New rows come in once: unblur and rise over --t-enter. Suppressed under
+	   windowing so rows scrolling back into the window don't replay. */
 	.mwrap.animate {
-		animation: rise var(--t-slow) var(--ease-out) both;
+		animation: msg-in var(--t-enter) var(--ease-enter) both;
 	}
 	.mwrap.hit {
 		background: var(--accent-soft);
@@ -840,7 +899,7 @@
 	.rchev {
 		display: inline-flex;
 		color: var(--dim2);
-		transition: transform var(--t-med) var(--ease-spring);
+		transition: transform var(--t-base) var(--ease-base);
 	}
 	.reason.open .rchev,
 	.tgroup.open .rchev {

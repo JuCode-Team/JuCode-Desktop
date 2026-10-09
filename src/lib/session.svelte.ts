@@ -334,7 +334,9 @@ export class SessionStore {
 		// At the start: the sidebar lists a project's first sessions only.
 		project.sessions.unshift(s);
 		this.activeId = s.id;
-		if (firstMessage) {
+		// Only text starts the chat: a click handler wired straight through passes
+		// its event here, which showed as a broken first message.
+		if (typeof firstMessage === 'string' && firstMessage) {
 			s.chat.optimisticUser(firstMessage);
 			dispatch(s.id, { op: 'user_message', content: firstMessage });
 		}

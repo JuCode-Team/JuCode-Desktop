@@ -74,7 +74,15 @@ export type Op =
 	| { op: 'permission_rules' }
 	// claude: the agent trace (Workflows, Task subagents) and one subagent's conversation.
 	| { op: 'agent_runs' }
-	| { op: 'subagent_transcript'; agent_id: string };
+	| { op: 'subagent_transcript'; agent_id: string }
+	// jucode plan mode: run a proposed plan in `mode`, or revise it with `feedback`.
+	| {
+			op: 'approve_plan';
+			id: string;
+			decision: 'approve' | 'revise';
+			mode?: 'read-only' | 'auto' | 'auto-edit' | 'full-auto';
+			feedback?: string;
+	  };
 
 /** Saves an MCP server change (`mcp_set` / `mcp_remove` / `mcp_toggle`) for
  *  every session; open JuCode sessions apply it at once. */
@@ -169,6 +177,73 @@ export function importNativeSession(source: NativeSource, cwd: string, id: strin
 	return invoke('import_native_session', { source, cwd, id });
 }
 
+// 一键导入: what the other coding agents on this machine have — conversations
+// in every folder, skills and MCP servers (src-tauri/src/agent_import).
+export type ImportSource = 'claude' | 'codex' | 'opencode' | 'zcode' | 'omp';
+export interface ImportSession {
+	source: ImportSource;
+	id: string;
+	title: string;
+	cwd: string;
+	updated_at_ms: number;
+	/** Prompts the user sent. */
+	messages: number;
+	/** Imported before: importing again opens that copy. */
+	imported: boolean;
+}
+export interface ImportSkill {
+	source: ImportSource;
+	name: string;
+	description: string;
+	path: string;
+	/** The plugin it comes with. */
+	plugin: string | null;
+	/** JuCode already has a skill of this name. */
+	present: boolean;
+}
+export interface ImportMcp {
+	source: ImportSource;
+	/** The plugin or project folder it is set for; empty for the tool's own settings. */
+	from: string;
+	name: string;
+	transport: 'stdio' | 'http';
+	command: string | null;
+	args: string[] | null;
+	url: string | null;
+	present: boolean;
+	/** The `mcp_servers` entry to add. */
+	entry: McpServerEntry;
+}
+export interface ImportScan {
+	sessions: ImportSession[];
+	skills: ImportSkill[];
+	mcp: ImportMcp[];
+}
+export interface ImportOutcome {
+	kind: 'session' | 'skill';
+	source: ImportSource;
+	/** Session id or skill folder, as the scan named it. */
+	key: string;
+	status: 'imported' | 'existing' | 'failed';
+	/** Session: the copy to open. Skill: where it was copied. */
+	target: string | null;
+	title: string | null;
+	cwd: string | null;
+	/** The backend the copy continues on. */
+	engine: 'jucode' | 'claude' | 'codex' | null;
+	cwd_exists: boolean;
+	error: string | null;
+}
+export function importScan(): Promise<ImportScan> {
+	return invoke('import_scan');
+}
+export function importApply(selection: {
+	sessions: { source: ImportSource; id: string; cwd: string }[];
+	skills: { source: ImportSource; path: string }[];
+}): Promise<ImportOutcome[]> {
+	return invoke('import_apply', { selection });
+}
+
 /** One conversation saved in a directory, by any engine, as the daemon
  *  lists it (`session_history`). `updated_at` is in milliseconds. */
 export interface HistoryItem {
@@ -214,15 +289,19 @@ export function removeAuthKey(provider: string): Promise<void> {
 	return invoke('remove_auth_key', { provider });
 }
 
-// Skills marketplace: the daemon combines JuCode with github.com/anthropics/skills
-// and installs into the backend's personal skills directory.
-export type SkillSource = 'jucode' | 'anthropic';
+// Skills marketplace: the daemon combines github.com/anthropics/skills with
+// community skill repositories and installs into the backend's personal skills
+// directory.
+/** `anthropic`, or a community repository's `owner/repo`. */
+export type SkillSource = string;
 export interface MarketSkill {
 	id: string;
 	name: string;
 	description: string;
 	tags: string[];
 	source: SkillSource;
+	/** The source as shown: Anthropic, Ikaleio, Superpowers… */
+	sourceName?: string;
 	isDefault: boolean;
 	installed: boolean;
 	license: string;
@@ -531,6 +610,10 @@ export function listProviders(): Promise<ProviderInfo[]> {
 }
 export function git(args: string[], cwd?: string): Promise<string> {
 	return invoke('git', { args, cwd });
+}
+/** Undoes only the agent's edits to `path` (its recorded diffs), keeping the user's. */
+export function revertAgentEdits(cwd: string, path: string, diffs: string[]): Promise<void> {
+	return invoke('revert_agent_edits', { cwd, path, diffs });
 }
 // 并行任务 worktree 的容器目录（<repo-parent>/.jucode-worktrees/<repo-name>）。
 export function worktreeBase(cwd: string): Promise<string> {

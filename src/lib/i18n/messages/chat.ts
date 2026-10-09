@@ -18,7 +18,7 @@ const chat = {
 		approvalQuestion: '工具调用如何审批？',
 		approvalAgent: '跟随 Agent 的设置，在 Agent 页面修改',
 		approvalAskDesc: '修改文件和执行命令前都先询问',
-		approvalPlanDesc: '只读分析并给出方案，不改动文件',
+		approvalPlanDesc: '先调研并给出计划，确认后再动手',
 		approvalAutoDesc: '由模型判断，仅对有风险的操作询问',
 		approvalEditsDesc: '自动修改文件，执行命令前询问',
 		approvalAllDesc: '不再询问，可改动任何文件并执行任何命令',
@@ -255,6 +255,47 @@ const chat = {
 		questionSubmitHint: '至少选择一项',
 		questionCancel: '取消',
 		questionCancelDesc: '不回答，拒绝这次提问',
+		// Progress card (top right of the conversation) and subagent cards
+		progress: {
+			label: '进度',
+			todo: '待办',
+			agents: '子智能体',
+			count: '{done}/{total}',
+			agentsN: '{n} 个子智能体',
+			runningN: '{n} 个运行中',
+			fold: '收起进度',
+			unfold: '展开进度',
+			step: { pending: '待开始', active: '进行中', done: '已完成', skipped: '已跳过' },
+			open: '查看 {name} 在做什么',
+			noActivity: '还没有动作'
+		},
+		subagentCard: {
+			spawn: '子智能体',
+			wait: '等待子智能体',
+			waitN: '等待 {n} 个子智能体',
+			timedOut: '等待超时',
+			open: '查看',
+			starting: '正在派出'
+		},
+		agentDetail: {
+			title: '子智能体',
+			close: '关闭',
+			task: '任务'
+		},
+		planCard: {
+			label: '计划',
+			viewFull: '查看完整计划',
+			openPage: '在右侧查看计划',
+			gone: '这份计划已不在对话中',
+			fold: '收起',
+			approve: '批准并执行',
+			modeTitle: '执行时的审批模式',
+			revise: '修改计划',
+			revising: '正在修改计划',
+			revisingHint: '说说要怎么改，发送后计划会按你的意见重写',
+			cancelRevise: '取消修改',
+			status: { approved: '已批准', revising: '修改中', drafting: '撰写中' }
+		},
 		// Indicator
 		phaseConnecting: '连接中',
 		phaseWaiting: '等待响应',
@@ -280,7 +321,7 @@ const chat = {
 		approvalQuestion: 'How should tool calls be approved?',
 		approvalAgent: "Follows the agent's setting; change it on the agent's page",
 		approvalAskDesc: 'Ask before editing files or running commands',
-		approvalPlanDesc: 'Read-only analysis and a plan; no file changes',
+		approvalPlanDesc: 'Research and propose a plan; work once you approve',
 		approvalAutoDesc: 'The model decides; ask only for risky actions',
 		approvalEditsDesc: 'Edit files automatically; ask before commands',
 		approvalAllDesc: 'Never ask; may change any file and run any command',
@@ -517,6 +558,47 @@ const chat = {
 		questionSubmitHint: 'Select at least one',
 		questionCancel: 'Cancel',
 		questionCancelDesc: 'Skip the question and deny it',
+		// Progress card (top right of the conversation) and subagent cards
+		progress: {
+			label: 'Progress',
+			todo: 'To-dos',
+			agents: 'Subagents',
+			count: '{done}/{total}',
+			agentsN: '{n} subagents',
+			runningN: '{n} running',
+			fold: 'Fold progress',
+			unfold: 'Show progress',
+			step: { pending: 'To do', active: 'In progress', done: 'Done', skipped: 'Skipped' },
+			open: 'See what {name} is doing',
+			noActivity: 'No actions yet'
+		},
+		subagentCard: {
+			spawn: 'Subagent',
+			wait: 'Waiting for subagents',
+			waitN: 'Waiting for {n} subagents',
+			timedOut: 'Wait timed out',
+			open: 'Open',
+			starting: 'Starting'
+		},
+		agentDetail: {
+			title: 'Subagent',
+			close: 'Close',
+			task: 'Task'
+		},
+		planCard: {
+			label: 'Plan',
+			viewFull: 'View the full plan',
+			openPage: 'Open the plan beside the chat',
+			gone: 'This plan is no longer in the conversation',
+			fold: 'Fold',
+			approve: 'Approve and run',
+			modeTitle: 'Approval mode for the work',
+			revise: 'Revise the plan',
+			revising: 'Revising the plan',
+			revisingHint: 'Say what to change; the plan is rewritten when you send',
+			cancelRevise: 'Cancel revising',
+			status: { approved: 'Approved', revising: 'Revising', drafting: 'Writing' }
+		},
 		// Indicator
 		phaseConnecting: 'Connecting',
 		phaseWaiting: 'Awaiting response',

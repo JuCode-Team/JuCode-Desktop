@@ -310,17 +310,21 @@ body {
 }
 /* ---------- Motion system ----------
    One set of entrances for the whole app, all on the --t-* durations and the
-   --ease-* curves above:
+   --ease-* curves above. Things fade and move a few pixels; nothing scales,
+   bounces or runs longer than --t-med (layout: --t-sidebar):
      scrim-in   backdrops behind modals                 --t-fast  --ease-out
-     sheet-in   modals and sheets (settings, desk, …)   --t-med   --ease-spring
-     pop-in     popovers that open upward from an anchor (composer)  --t-med --ease-spring
-     drop-in    menus that open downward from an anchor (title bar)  --t-med --ease-spring
-     pane-in    a session or panel coming into view      --t-med   --ease-out
+     sheet-in   modals and sheets                       --t-med   --ease-out
+     pop-in     popovers that open upward from an anchor (composer)  --t-med --ease-out
+     drop-in    menus that open downward from an anchor (title bar)  --t-med --ease-out
+     pane-in    a session, panel or page coming into view --t-med  --ease-out
      rise/fade  small in-flow reveals (tray, labels)     --t-fast/med --ease-out
      spin       loading icons (class .spin)              0.8s linear, infinite
      pulse      live / recording indicators (class .pulse) 1.2s, infinite
-   Exit animations (modals, toasts) use the Svelte transitions in ui/motion.ts.
-   Reduced motion collapses all of them (see the media query at the end). */
+   The sidebar's width moves on --t-sidebar / --ease-standard (Sidebar.svelte).
+   Exits (pages, settings sections, modals, toasts) and sidebar rows arriving
+   use the Svelte transitions in ui/motion.ts. Reduced motion collapses all of
+   them (see the media query at the end); a window being resized runs no
+   transitions (.win-resizing, +layout.svelte). */
 .pulse {
 	animation: pulse 1.2s var(--ease-in-out) infinite;
 }
@@ -332,13 +336,13 @@ body {
 @keyframes sheet-in {
 	from {
 		opacity: 0;
-		transform: translateY(10px) scale(0.985);
+		transform: translateY(6px);
 	}
 }
 @keyframes drop-in {
 	from {
 		opacity: 0;
-		transform: translateY(-6px) scale(0.97);
+		transform: translateY(-4px);
 	}
 }
 @keyframes pane-in {
@@ -432,7 +436,7 @@ body {
 @keyframes pop-in {
 	from {
 		opacity: 0;
-		transform: translateY(6px) scale(0.97);
+		transform: translateY(4px);
 	}
 	to {
 		opacity: 1;
@@ -441,6 +445,14 @@ body {
 }
 .spin {
 	animation: spin 0.8s linear infinite;
+}
+
+/* While the window is resized (or zoomed), layout jumps to its new size:
+   nothing transitions along with it. */
+:root.win-resizing *,
+:root.win-resizing *::before,
+:root.win-resizing *::after {
+	transition: none !important;
 }
 
 /* Respect users who prefer reduced motion: drop animations/transitions and

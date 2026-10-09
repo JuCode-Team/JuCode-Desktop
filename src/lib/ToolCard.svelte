@@ -2,7 +2,7 @@
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
 	import { untrack } from 'svelte';
-	import { slide } from 'svelte/transition';
+	import Collapse from '$lib/ui/Collapse.svelte';
 	import { t } from '$lib/i18n';
 	import Notice from '$lib/ui/Notice.svelte';
 	import { parseToolOutput, toolIcon, toolTarget, toolVerb, unwrapShell } from '$lib/toolSummary';
@@ -155,38 +155,40 @@
 	{#if trace}
 		<button class="trace" onclick={trace.run}>{trace.label}</button>
 	{/if}
-	{#if !collapsed && !isRead}
-		<div class="body" transition:slide={{ duration: 180 }}>
-			{#if errorText}
-				<div class="err-text"><Notice mono>{errorText}</Notice></div>
-			{:else if !parsed}
-				{#if output}<pre>{output}</pre>{/if}
-			{:else if imageSrc}
-				<img class="img" src={imageSrc} alt={target} />
-			{:else if unsupportedImage}
-				<div class="meta">{t('chat.unsupportedImage')}</div>
-			{:else if kind === 'binary'}
-				<div class="meta">{t('chat.binaryFile')}{#if bytes !== null} · {fmtBytes(bytes)}{/if}</div>
-			{:else if diffLines.length}
-				<pre class="diff">{#each diffLines as d (d)}<span class={d.cls}>{d.line}
-</span>{/each}</pre>
-			{:else if command || stdout || stderr || exitCode !== null}
-				{#if command}<div class="cmd">$ {command}</div>{/if}
-				{#if stdout}<pre>{stdout}</pre>{/if}
-				{#if stderr}<pre class="stderr">{stderr}</pre>{/if}
-			{:else if hasEntries}
-				{#if entries.length}<pre class="entries">{entries.join('\n')}</pre>{:else}<div class="meta">{t('chat.emptyDir')}</div>{/if}
-			{:else if symbols.length}
-				<pre class="entries">{#each symbols as sym (sym.line)}{sym.line}  {sym.symbol}
-{/each}</pre>
-			{:else if kind === 'text'}
-				{#if content}<pre>{content}</pre>{:else}<div class="meta">{t('chat.emptyFile')}</div>{/if}
-			{:else if bytes !== null || truncated}
-				<div class="meta">{[bytes !== null ? fmtBytes(bytes) : '', truncated ? t('chat.truncated') : ''].filter(Boolean).join(' · ')}</div>
-			{:else if fallbackText}
-				<pre>{fallbackText}</pre>
-			{/if}
-		</div>
+	{#if !isRead}
+		<Collapse open={!collapsed}>
+			<div class="body">
+				{#if errorText}
+					<div class="err-text"><Notice mono>{errorText}</Notice></div>
+				{:else if !parsed}
+					{#if output}<pre>{output}</pre>{/if}
+				{:else if imageSrc}
+					<img class="img" src={imageSrc} alt={target} />
+				{:else if unsupportedImage}
+					<div class="meta">{t('chat.unsupportedImage')}</div>
+				{:else if kind === 'binary'}
+					<div class="meta">{t('chat.binaryFile')}{#if bytes !== null} · {fmtBytes(bytes)}{/if}</div>
+				{:else if diffLines.length}
+					<pre class="diff">{#each diffLines as d (d)}<span class={d.cls}>{d.line}
+	</span>{/each}</pre>
+				{:else if command || stdout || stderr || exitCode !== null}
+					{#if command}<div class="cmd">$ {command}</div>{/if}
+					{#if stdout}<pre>{stdout}</pre>{/if}
+					{#if stderr}<pre class="stderr">{stderr}</pre>{/if}
+				{:else if hasEntries}
+					{#if entries.length}<pre class="entries">{entries.join('\n')}</pre>{:else}<div class="meta">{t('chat.emptyDir')}</div>{/if}
+				{:else if symbols.length}
+					<pre class="entries">{#each symbols as sym (sym.line)}{sym.line}  {sym.symbol}
+	{/each}</pre>
+				{:else if kind === 'text'}
+					{#if content}<pre>{content}</pre>{:else}<div class="meta">{t('chat.emptyFile')}</div>{/if}
+				{:else if bytes !== null || truncated}
+					<div class="meta">{[bytes !== null ? fmtBytes(bytes) : '', truncated ? t('chat.truncated') : ''].filter(Boolean).join(' · ')}</div>
+				{:else if fallbackText}
+					<pre>{fallbackText}</pre>
+				{/if}
+			</div>
+		</Collapse>
 	{/if}
 </div>
 
@@ -218,7 +220,7 @@
 	.chev {
 		display: inline-flex;
 		color: var(--dim2);
-		transition: transform var(--t-med) var(--ease-spring);
+		transition: transform var(--t-base) var(--ease-base);
 		flex-shrink: 0;
 	}
 	.chev.open {

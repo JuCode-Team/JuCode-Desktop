@@ -27,7 +27,8 @@
 	let {
 		approval,
 		onRespond,
-		ruleScopes = false
+		ruleScopes = false,
+		keys = true
 	}: {
 		approval: {
 			callId: string;
@@ -45,6 +46,8 @@
 		onRespond: (op: ApproveOp) => void;
 		/** 始终允许 asks where to keep the rule (caps.ruleScopes). */
 		ruleScopes?: boolean;
+		/** Answers the 1/2/3 keys: only while the card is in view. */
+		keys?: boolean;
 	} = $props();
 
 	// An MCP server asking the user (claude elicitation): accept / decline,
@@ -61,6 +64,40 @@
 			desc: t(`shell.alwaysScope.${key}Desc`)
 		}))
 	);
+	// Keys for the plain allow / deny card (not questions, hunks or plans):
+	// 1 / y allow once, 2 / a always, 3 / n deny. Esc never answers (it closes
+	// pages and dialogs). Only while the card is in view (`keys`) with no
+	// dialog or menu over it, never while the user types somewhere, not on key
+	// repeat, and not within a second of the card coming into view or of the
+	// last keystroke (a sentence in the composer, or a held key that answered
+	// the previous card, must not answer this one).
+	let lastTyped = 0;
+	let shownAt = 0;
+	$effect(() => {
+		if (keys) shownAt = Date.now();
+	});
+	function onKey(e: KeyboardEvent) {
+		if (!keys || e.repeat || e.isComposing || e.metaKey || e.ctrlKey || e.altKey) return;
+		const el = document.activeElement as HTMLElement | null;
+		if (el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName))) {
+			lastTyped = Date.now();
+			return;
+		}
+		if (Date.now() - Math.max(lastTyped, shownAt) < 1000 || questions || approval.hunks?.length || isPlan) return;
+		if (document.querySelector('[aria-modal="true"], [role="menu"]')) return;
+		const key = e.key.toLowerCase();
+		let op: ApproveOp | null = null;
+		if (key === '1' || key === 'y') op = buildApproveOp(approval.callId, 'allow');
+		else if ((key === '2' || key === 'a') && !isElicitation) {
+			e.preventDefault();
+			if (scopeKeys) scopeOpen = true;
+			else allowAlways();
+			return;
+		} else if (key === '3' || key === 'n') op = buildApproveOp(approval.callId, 'deny');
+		if (!op) return;
+		e.preventDefault();
+		onRespond(op);
+	}
 	function allowAlways(scope?: AlwaysScope) {
 		scopeOpen = false;
 		onRespond(buildApproveOp(approval.callId, 'allow', { always: true, scope }));
@@ -148,6 +185,7 @@
 	import Checkbox from '$lib/ui/Checkbox.svelte';
 </script>
 
+<svelte:window onkeydowncapture={onKey} />
 <div class="approval" class:ask={!!questions} class:plan={isPlan}>
 	<div class="approval-head">
 		{#if questions}
@@ -283,7 +321,7 @@
 				variant="primary"
 				size="sm"
 				onclick={() => onRespond(buildApproveOp(approval.callId, 'allow'))}
-				>{isElicitation ? t('shell.elicitAccept') : t('shell.allowOnce')}</Button
+				>{isElicitation ? t('shell.elicitAccept') : t('shell.allowOnce')}<kbd>1</kbd></Button
 			>
 			{#if !isElicitation}
 				<span class="scope-anchor">
@@ -291,7 +329,7 @@
 						variant="secondary"
 						size="sm"
 						onclick={() => (scopeKeys ? (scopeOpen = !scopeOpen) : allowAlways())}
-						>{scopeKeys ? t('shell.allowAlwaysScoped') : t('shell.allowAlways')}</Button
+						>{scopeKeys ? t('shell.allowAlwaysScoped') : t('shell.allowAlways')}<kbd>2</kbd></Button
 					>
 					{#if scopeOpen}
 						<PopMenu
@@ -308,7 +346,7 @@
 				variant="danger"
 				size="sm"
 				onclick={() => onRespond(buildApproveOp(approval.callId, 'deny'))}
-				>{isElicitation ? t('shell.elicitDecline') : t('shell.deny')}</Button
+				>{isElicitation ? t('shell.elicitDecline') : t('shell.deny')}<kbd>3</kbd></Button
 			>
 		</div>
 	{/if}
@@ -570,5 +608,14 @@
 	}
 	.diff .ctx {
 		display: block;
+	}
+	.approval-actions :global(kbd) {
+		margin-left: 6px;
+		padding: 0 4px;
+		border-radius: 3px;
+		background: color-mix(in oklab, currentColor 14%, transparent);
+		font: inherit;
+		font-size: 10px;
+		opacity: 0.75;
 	}
 </style>

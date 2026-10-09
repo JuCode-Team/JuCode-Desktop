@@ -850,7 +850,7 @@
 		max-width: min(340px, calc(100vw - 32px));
 		text-align: left;
 		transform-origin: top right;
-		animation: drop-in var(--t-med) var(--ease-spring);
+		animation: drop-in var(--t-med) var(--ease-out);
 	}
 	.switch-menu.left {
 		right: auto;
