@@ -1399,9 +1399,12 @@ export class ChatState {
 			case 'retrying':
 				// The request is sent again from the start: what it streamed so far
 				// is replaced. A request's tool calls arrive only once it completed,
-				// so the text and reasoning at the end are this request's.
-				while (this.messages.at(-1)?.kind === 'assistant' || this.messages.at(-1)?.kind === 'reasoning')
+				// so the text, reasoning and plan still being drafted at the end are
+				// this request's.
+				for (let last = this.messages.at(-1); last; last = this.messages.at(-1)) {
+					if (last.kind !== 'assistant' && last.kind !== 'reasoning' && !(last.kind === 'plan' && last.status === 'drafting')) break;
 					this.messages.pop();
+				}
 				this.#resetCurrent();
 				// Shown live at the end of the transcript (RetryNotice), not as a log line.
 				this.retry = {

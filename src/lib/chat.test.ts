@@ -741,6 +741,18 @@ describe('claude session extras', () => {
 		expect(c.messages[0]).toMatchObject({ text: '## Goal\n1. a', status: 'pending' });
 	});
 
+	it('drops a plan still being drafted when the request is retried', () => {
+		const c = new ChatState();
+		c.handle({ type: 'proposed_plan', id: 'p0', title: 'Old', markdown: 'x', status: 'pending' });
+		c.handle({ type: 'plan_draft', id: 'p1', title: 'Snake', append: '## Go' });
+		c.handle({ type: 'assistant_delta', delta: 'and' });
+		c.handle({ type: 'retrying', attempt: 1, max_attempts: 3, reason: 'timeout', delay_ms: 500 });
+		expect(c.messages).toEqual([{ kind: 'plan', id: 'p0', title: 'Old', text: 'x', status: 'pending' }]);
+		c.handle({ type: 'plan_draft', id: 'p1', title: 'Snake', append: '## Goal' });
+		expect(c.messages.at(-1)).toMatchObject({ id: 'p1', text: '## Goal', status: 'drafting' });
+		expect(c.messages).toHaveLength(2);
+	});
+
 	it('remembers the mode before plan mode and when the plan changed', () => {
 		const c = new ChatState();
 		c.setApprovalMode('edits');
