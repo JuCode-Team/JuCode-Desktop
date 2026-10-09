@@ -1,6 +1,9 @@
 //! 一键导入: the conversations, skills and MCP servers of the other coding
 //! agents on this machine (Claude Code, Codex, opencode, zcode, omp), listed
-//! in one scan and imported in one go. Their own folders are only read.
+//! in one scan and imported in one go. Their files are never changed; the
+//! only writes outside `~/.jucode` are the Claude Code and Codex conversation
+//! copies, added next to that engine's own sessions (`~/.claude/projects`,
+//! `~/.codex/sessions`).
 //!
 //! - Conversations: Claude Code and Codex ones become a cleaned copy in the
 //!   engine's own format (native_import) and continue on that engine.

@@ -52,14 +52,15 @@ export function byProject(sessions: ImportSession[]): ProjectGroup[] {
 	return [...groups].map(([cwd, list]) => ({ cwd, sessions: list }));
 }
 
-/** What a scan picks by default: conversations not imported yet, skills and
- *  servers JuCode does not have. Ones that come with a plugin are left for
- *  the user to choose: they often rely on the tool they came with. */
+/** What a scan picks by default: conversations not imported yet and skills
+ *  JuCode does not have. Skills that come with a plugin are left for the
+ *  user to choose: they often rely on the tool they came with. MCP servers
+ *  are never picked by default: one runs a command, so only the user turns
+ *  it on. */
 export function defaultPicks(scan: ImportScan): Record<string, boolean> {
 	const picks: Record<string, boolean> = {};
 	for (const s of scan.sessions) if (!s.imported) picks[sessionKey(s)] = true;
 	for (const s of scan.skills) if (!s.present && !s.plugin) picks[skillKey(s)] = true;
-	for (const m of scan.mcp) if (!m.present && !m.from) picks[mcpKey(m)] = true;
 	return picks;
 }
 

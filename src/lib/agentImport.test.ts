@@ -5,7 +5,6 @@ import {
 	defaultPicks,
 	folderName,
 	importedFolders,
-	mcpKey,
 	planMcp,
 	sessionKey,
 	skillKey,
@@ -86,14 +85,14 @@ describe('grouping', () => {
 });
 
 describe('defaultPicks', () => {
-	it('skips what was imported, what JuCode has, and what comes with a plugin', () => {
+	it('skips what was imported, what JuCode has, what comes with a plugin, and every MCP server', () => {
 		const picks = defaultPicks({
 			sessions: [session(), session({ id: 'done', imported: true })],
 			skills: [skill(), skill({ name: 'had', path: '/x', present: true }), skill({ name: 'pdf', path: '/y', plugin: 'pdf' })],
 			mcp: [server(), server({ name: 'had', present: true }), server({ name: 'notion', from: 'notion' })]
 		});
 		expect(Object.keys(picks).sort()).toEqual(
-			[sessionKey(session()), skillKey(skill()), mcpKey(server())].sort()
+			[sessionKey(session()), skillKey(skill())].sort()
 		);
 	});
 });

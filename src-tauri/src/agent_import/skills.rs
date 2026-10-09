@@ -26,8 +26,6 @@ pub struct Found {
 /// How deep skills may sit under a skills folder (JuCode descends into
 /// folders without a SKILL.md, as a skill pack lays them out).
 const MAX_DEPTH: usize = 3;
-/// Folder depth a copy follows (symlinks can loop).
-const MAX_COPY_DEPTH: usize = 16;
 
 struct Skill {
     name: String,
@@ -131,11 +129,8 @@ fn dest(roots: &Roots, dir: &Path) -> Option<PathBuf> {
     (!folder.starts_with('.')).then(|| roots.jucode.join("skills").join(folder))
 }
 
-fn copy_dir(src: &Path, dst: &Path, depth: usize) -> Result<(), String> {
+fn copy_dir(src: &Path, dst: &Path) -> Result<(), String> {
     fs::create_dir_all(dst).map_err(|e| format!("cannot create {}: {e}", dst.display()))?;
-    if depth >= MAX_COPY_DEPTH {
-        return Ok(());
-    }
     let read = fs::read_dir(src).map_err(|e| format!("cannot read {}: {e}", src.display()))?;
     for entry in read.flatten() {
         let name = entry.file_name();
@@ -144,11 +139,13 @@ fn copy_dir(src: &Path, dst: &Path, depth: usize) -> Result<(), String> {
         }
         let from = entry.path();
         let to = dst.join(&name);
-        // Follows symlinks (zcode links skills in from Codex); a broken one is skipped.
-        let Ok(meta) = fs::metadata(&from) else { continue };
-        if meta.is_dir() {
-            copy_dir(&from, &to, depth + 1)?;
-        } else if meta.is_file() {
+        // Symlinks inside a skill are skipped: one may point anywhere on the
+        // machine (a skill folder that is itself a link, as zcode links
+        // skills in from Codex, is still read through).
+        let Ok(kind) = entry.file_type() else { continue };
+        if kind.is_dir() {
+            copy_dir(&from, &to)?;
+        } else if kind.is_file() {
             fs::copy(&from, &to).map_err(|e| format!("cannot copy {}: {e}", from.display()))?;
         }
     }
@@ -170,7 +167,7 @@ pub fn import(roots: &Roots, found: &[Found], source: &str, path: &str) -> Resul
     let parent = dest.parent().unwrap_or(&roots.jucode);
     let tmp = parent.join(format!(".import-{}.tmp", dest.file_name().and_then(|n| n.to_str()).unwrap_or("skill")));
     let _ = fs::remove_dir_all(&tmp);
-    copy_dir(src, &tmp, 0).inspect_err(|_| {
+    copy_dir(src, &tmp).inspect_err(|_| {
         let _ = fs::remove_dir_all(&tmp);
     })?;
     fs::rename(&tmp, &dest).map_err(|e| format!("cannot write {}: {e}", dest.display()))?;
@@ -192,6 +189,8 @@ mod tests {
         skill(&roots.claude.join("skills/review"), "review", "Review code");
         testutil::write(&roots.claude.join("skills/review/scripts/run.sh"), "echo hi");
         testutil::write(&roots.claude.join("skills/review/node_modules/x/index.js"), "x");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&roots.home, roots.claude.join("skills/review/home")).unwrap();
         skill(&roots.codex.join("skills/.system/imagegen"), "imagegen", "Codex's own");
         skill(&roots.codex.join("skills/pack/inner"), "inner-skill", "Nested in a pack");
         // A zcode plugin, two versions: the newer one counts.
@@ -216,6 +215,7 @@ mod tests {
         assert_eq!(dest, roots.jucode.join("skills/review"));
         assert_eq!(fs::read_to_string(dest.join("scripts/run.sh")).unwrap(), "echo hi");
         assert!(!dest.join("node_modules").exists());
+        assert!(fs::symlink_metadata(dest.join("home")).is_err(), "a symlink is not followed");
         assert!(!import(&roots, &found, "claude", &review.path).unwrap().0, "a second import leaves it");
         assert!(!import(&roots, &found, "codex", &found[1].path).unwrap().0, "a name JuCode has is skipped");
         assert!(import(&roots, &found, "claude", "/etc").is_err(), "only scanned skills are copied");
