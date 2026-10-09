@@ -10,8 +10,9 @@ import type { BackendCaps, EngineAdapter, NormalizedEvent } from './types';
 export const JUCODE_CAPS: BackendCaps = {
 	approvalModes: true,
 	extendedApprovalModes: false,
-	// Plan mode: proposed_plan cards, approve_plan.
-	planMode: true,
+	// Plan mode (proposed_plan cards, approve_plan): off until the bundled CLI
+	// is the release that adds it; 0.4.11 rejects approval mode `plan`.
+	planMode: false,
 	hunkApproval: true,
 	steer: true,
 	interrupt: true,

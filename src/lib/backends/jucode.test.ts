@@ -39,12 +39,13 @@ describe('jucode adapter (passthrough)', () => {
 		// permission modes), not a superset capability — the native engine uses the
 		// shared read-only/auto-edit/full-auto trio, so it is legitimately false.
 		// mcpEngineOwned / ruleScopes describe claude's own config, not features
-		// the native engine lacks.
+		// the native engine lacks. planMode waits for the CLI release that adds it.
 		for (const [key, value] of Object.entries(JUCODE_CAPS)) {
-			if (key === 'extendedApprovalModes' || key === 'mcpEngineOwned' || key === 'ruleScopes' || key === 'sideQuestions' || key === 'agentTrace') continue;
+			if (key === 'extendedApprovalModes' || key === 'mcpEngineOwned' || key === 'ruleScopes' || key === 'sideQuestions' || key === 'agentTrace' || key === 'planMode') continue;
 			expect(value, `cap ${key} must be true for the native engine`).toBe(true);
 		}
 		expect(JUCODE_CAPS.extendedApprovalModes).toBe(false);
+		expect(JUCODE_CAPS.planMode).toBe(false);
 		expect(adapter.caps).toEqual(JUCODE_CAPS);
 	});
 
