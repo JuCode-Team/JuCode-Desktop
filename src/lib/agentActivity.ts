@@ -58,6 +58,8 @@ export interface Thread {
 	status: 'running' | 'queued' | 'undeliverable' | 'idle';
 	/** What the session concluded (its handoff note). */
 	handoff: string;
+	/** Its session is archived (an earlier scheduled run, or by hand). */
+	archived: boolean;
 }
 
 export interface ThreadSession {
@@ -66,6 +68,7 @@ export interface ThreadSession {
 	title?: string | null;
 	created_at: number;
 	updated_at?: number;
+	archived?: boolean;
 }
 
 export function threads(
@@ -78,6 +81,7 @@ export function threads(
 	handoffs: Record<string, string>
 ): Thread[] {
 	const byId = new Map<string, Thread>();
+	const archived = new Set(sessions.filter((s) => s.archived).map((s) => s.session));
 	const open = (id: string, session: string | null, title = '', latest = 0): Thread => {
 		let thread = byId.get(id);
 		if (!thread) {
@@ -91,7 +95,8 @@ export function threads(
 				reports: [],
 				latest,
 				status: session && running.includes(session) ? 'running' : 'idle',
-				handoff: (session && handoffs[session]) || ''
+				handoff: (session && handoffs[session]) || '',
+				archived: !!session && archived.has(session)
 			};
 			byId.set(id, thread);
 		}

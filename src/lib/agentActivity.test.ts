@@ -68,6 +68,25 @@ describe('threads', () => {
 		expect(s2).toMatchObject({ task: null, status: 'idle', latest: 5 });
 	});
 
+	it('marks the tasks whose session is archived', () => {
+		const list = threads(
+			'ops',
+			[
+				{ session: 's1', agent: 'ops', created_at: 1, archived: true },
+				{ session: 's2', agent: 'ops', created_at: 2 }
+			],
+			[],
+			[],
+			schedules,
+			[],
+			{}
+		);
+		expect(list.map((t) => [t.id, t.archived])).toEqual([
+			['s2', false],
+			['s1', true]
+		]);
+	});
+
 	it('marks a task that cannot be delivered', () => {
 		const [only] = threads('ops', [], [msg('m1', 1, null, { status: 'undeliverable' })], [], schedules, [], {});
 		expect(only.status).toBe('undeliverable');

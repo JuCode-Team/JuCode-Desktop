@@ -663,7 +663,9 @@ const shell = {
 			running: '进行中',
 			undeliverable: '未送达：{reason}',
 			more: '展开',
-			less: '收起'
+			less: '收起',
+			showArchived: '另有 {n} 个已归档的任务',
+			hideArchived: '隐藏已归档的任务'
 		},
 		schedule: {
 			title: '定时任务',
@@ -1567,7 +1569,9 @@ const shell = {
 			running: 'In progress',
 			undeliverable: 'Not delivered: {reason}',
 			more: 'More',
-			less: 'Less'
+			less: 'Less',
+			showArchived: '{n} more archived tasks',
+			hideArchived: 'Hide archived tasks'
 		},
 		schedule: {
 			title: 'Scheduled tasks',

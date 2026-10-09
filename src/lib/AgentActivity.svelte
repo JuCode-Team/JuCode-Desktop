@@ -2,7 +2,8 @@
 	// An agent's tasks on its page: what is waiting for the user, then one
 	// entry per task (a session): what started it and where from, its state,
 	// what it concluded, the reports it posted; reply to continue it, or open
-	// the session. Most recently active first.
+	// the session. Most recently active first; archived tasks (earlier runs
+	// of a scheduled task) only on request.
 	import UserIcon from 'phosphor-svelte/lib/UserIcon';
 	import ClockIcon from 'phosphor-svelte/lib/ClockIcon';
 	import AlarmIcon from 'phosphor-svelte/lib/AlarmIcon';
@@ -65,6 +66,10 @@
 			handoffs
 		)
 	);
+
+	let showArchived = $state(false);
+	const archivedCount = $derived(list.filter((thread) => thread.archived).length);
+	const shown = $derived(showArchived ? list : list.filter((thread) => !thread.archived));
 
 	function sourceLabel(source: Source | null): string {
 		switch (source?.kind) {
@@ -146,7 +151,7 @@
 {#if error}<div class="err"><Notice>{t('shell.activity.loadFailed', { error })}</Notice></div>{/if}
 
 <div class="head">
-	<span class="count">{list.length ? t('shell.activity.count', { n: list.length }) : ''}</span>
+	<span class="count">{shown.length ? t('shell.activity.count', { n: shown.length }) : ''}</span>
 	<Button size="sm" variant="ghost" disabled={!agent.enabled} onclick={onNewSession}><PlusIcon size={13} /> {t('shell.agentPage.newSession')}</Button>
 </div>
 
@@ -156,7 +161,7 @@
 	<p class="empty">{t('shell.activity.empty')}</p>
 {:else}
 	<ol class="feed">
-		{#each list as thread (thread.id)}
+		{#each shown as thread (thread.id)}
 			{@const session = thread.session}
 			{@const body = taskText(thread)}
 			{@const long = isLong(body)}
@@ -264,6 +269,11 @@
 			</li>
 		{/each}
 	</ol>
+	{#if archivedCount}
+		<button class="more archived" onclick={() => (showArchived = !showArchived)}>
+			{showArchived ? t('shell.activity.hideArchived') : t('shell.activity.showArchived', { n: archivedCount })}
+		</button>
+	{/if}
 {/if}
 
 <style>
@@ -470,6 +480,9 @@
 	}
 	.more:hover {
 		color: var(--text);
+	}
+	.more.archived {
+		margin: 4px 0 0 41px;
 	}
 	.reply {
 		display: flex;
