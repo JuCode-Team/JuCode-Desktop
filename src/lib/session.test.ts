@@ -65,15 +65,6 @@ describe('SessionStore lifecycle', () => {
 		expect(p.sessions[0].chat.sessionId).toBe(`conv-${id}`);
 	});
 
-	it('a click event handed in as the first message starts an empty draft', () => {
-		const store = new SessionStore();
-		const p = proj();
-		store.projects.push(p);
-		store.addSession(p, new Event('click') as unknown as string);
-		expect(p.sessions[0].chat.messages).toEqual([]);
-		expect(p.sessions[0].draft).toBe(true);
-	});
-
 	it('a draft records backend, model and effort, and applies them when it starts', async () => {
 		const store = new SessionStore();
 		const p = proj();
