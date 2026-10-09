@@ -389,7 +389,8 @@ mod tests {
             &roots.config_home.join("opencode/opencode.jsonc"),
             "{\n  // mine\n  \"mcp\": {\n    \"jira\": {\"type\": \"local\", \"command\": [\"bun\", \"x\", \"jira-mcp\"], \"environment\": {\"K\": \"v\"}, \"timeout\": 5000,},\n    \"web\": {\"type\": \"remote\", \"url\": \"https://w.example.com/mcp\", \"enabled\": false},\n  },\n}\n",
         );
-        let plugin = roots.zcode_plugins().join("official/android/0.1.0");
+        // Joined one part at a time: the scan reads it back with native separators.
+        let plugin = roots.zcode_plugins().join("official").join("android").join("0.1.0");
         testutil::write(
             &plugin.join(".mcp.json"),
             &json!({"mcpServers": {
