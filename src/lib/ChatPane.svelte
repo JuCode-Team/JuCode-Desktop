@@ -117,8 +117,10 @@
 		/** Providers with configured auth (for "not configured" hints). */
 		providers?: string[];
 		providersList?: ProviderOption[];
-		/** This pane's session is `store.activeId` — overlays and window keys
-		 *  only run on the active pane, so two panes never fight over them. */
+		/** This pane's session is `store.activeId` and no page (settings, the
+		 *  desk) covers it — overlays and window keys only run on the active
+		 *  pane, so two panes never fight over them and a hidden one never
+		 *  answers. */
 		isActive?: boolean;
 		onRegister?: (id: string, api: ChatPaneApi) => void;
 		/** Passes the api back so a remount (tile drag) can't drop the fresh one. */

@@ -358,6 +358,7 @@
 								onFiles={root ? () => push({ kind: 'files', root, title: baseName(root) }) : undefined}
 								onFile={root ? (file: string, line?: number) => push({ kind: 'files', root, title: baseName(root), file, line }) : undefined}
 								onChanges={root ? () => push({ kind: 'changes', root, title: baseName(root) }) : undefined}
+								active={!hidden && name === tab && i === stacks[name].length - 1}
 							/>
 						{:else}
 							{@render loadingPage(screen.title)}

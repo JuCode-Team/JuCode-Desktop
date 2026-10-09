@@ -46,7 +46,7 @@
 		onRespond: (op: ApproveOp) => void;
 		/** 始终允许 asks where to keep the rule (caps.ruleScopes). */
 		ruleScopes?: boolean;
-		/** Answers the 1/2/3 keys (only the active pane's card). */
+		/** Answers the 1/2/3 keys: only while the card is in view. */
 		keys?: boolean;
 	} = $props();
 
@@ -65,19 +65,26 @@
 		}))
 	);
 	// Keys for the plain allow / deny card (not questions, hunks or plans):
-	// 1 / y allow once, 2 / a always, 3 / n / Esc deny. Never while the user
-	// types somewhere, nor within a second of the last keystroke (a sentence
-	// in the composer must not answer a card that just appeared).
+	// 1 / y allow once, 2 / a always, 3 / n deny. Esc never answers (it closes
+	// pages and dialogs). Only while the card is in view (`keys`) with no
+	// dialog or menu over it, never while the user types somewhere, not on key
+	// repeat, and not within a second of the card coming into view or of the
+	// last keystroke (a sentence in the composer, or a held key that answered
+	// the previous card, must not answer this one).
 	let lastTyped = 0;
+	let shownAt = 0;
+	$effect(() => {
+		if (keys) shownAt = Date.now();
+	});
 	function onKey(e: KeyboardEvent) {
-		if (!keys || e.isComposing || e.metaKey || e.ctrlKey || e.altKey) return;
+		if (!keys || e.repeat || e.isComposing || e.metaKey || e.ctrlKey || e.altKey) return;
 		const el = document.activeElement as HTMLElement | null;
-		const typing = !!el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName));
-		if (typing) {
+		if (el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName))) {
 			lastTyped = Date.now();
-			if (e.key !== 'Escape') return;
+			return;
 		}
-		if (Date.now() - lastTyped < 1000 || questions || approval.hunks?.length || isPlan) return;
+		if (Date.now() - Math.max(lastTyped, shownAt) < 1000 || questions || approval.hunks?.length || isPlan) return;
+		if (document.querySelector('[aria-modal="true"], [role="menu"]')) return;
 		const key = e.key.toLowerCase();
 		let op: ApproveOp | null = null;
 		if (key === '1' || key === 'y') op = buildApproveOp(approval.callId, 'allow');
@@ -86,8 +93,7 @@
 			if (scopeKeys) scopeOpen = true;
 			else allowAlways();
 			return;
-		} else if (key === '3' || key === 'n' || (key === 'escape' && !typing && !scopeOpen))
-			op = buildApproveOp(approval.callId, 'deny');
+		} else if (key === '3' || key === 'n') op = buildApproveOp(approval.callId, 'deny');
 		if (!op) return;
 		e.preventDefault();
 		onRespond(op);
@@ -340,7 +346,7 @@
 				variant="danger"
 				size="sm"
 				onclick={() => onRespond(buildApproveOp(approval.callId, 'deny'))}
-				>{isElicitation ? t('shell.elicitDecline') : t('shell.deny')}<kbd>{isElicitation ? '2' : '3'}</kbd></Button
+				>{isElicitation ? t('shell.elicitDecline') : t('shell.deny')}<kbd>3</kbd></Button
 			>
 		</div>
 	{/if}

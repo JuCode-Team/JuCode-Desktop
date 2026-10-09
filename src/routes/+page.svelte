@@ -1534,7 +1534,7 @@
 													{store}
 													{providers}
 													{providersList}
-													isActive={sid === activeId}
+													isActive={sid === activeId && !showSettings && !showDesk}
 													onRegister={registerPane}
 													onUnregister={unregisterPane}
 													onOpenSettings={openSettings}

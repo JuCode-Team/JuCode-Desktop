@@ -62,7 +62,8 @@
 		onBack,
 		onFiles,
 		onFile,
-		onChanges
+		onChanges,
+		active = false
 	}: {
 		/** An existing session; omit to start a new one as `agent`, in `cwd`,
 		 *  or as a chat. */
@@ -85,6 +86,8 @@
 		/** Routes daemon frames and exits for `id` here; returns an unregister. */
 		register: (id: string, onFrame: (raw: string) => void, onExit: () => void) => () => void;
 		onBack: () => void;
+		/** The page on top of the shown tab: its approval card answers keys. */
+		active?: boolean;
 	} = $props();
 	const host = useHost();
 	const { daemon, agents: agentDirectory } = host;
@@ -621,7 +624,7 @@
 		{#if chat.pendingApproval}
 			<div class="approval">
 				{#key chat.pendingApproval.callId}
-					<ApprovalCard approval={chat.pendingApproval} onRespond={respond} ruleScopes={caps(chat).ruleScopes} />
+					<ApprovalCard approval={chat.pendingApproval} onRespond={respond} ruleScopes={caps(chat).ruleScopes} keys={active} />
 				{/key}
 			</div>
 		{/if}
