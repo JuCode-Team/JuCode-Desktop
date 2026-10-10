@@ -1194,8 +1194,7 @@
 			</div>
 		{:else if chat.messages.length === 0 && !chat.busy}
 			<div class="welcome">
-				{#if session.draft && !project?.chats}<NewSessionPicker {store} {session} />{/if}
-				<p class="welcome-tip">{t('shell.welcomeTip')}</p>
+				{#if session.draft && !project?.chats}<NewSessionPicker {store} {session} />{:else}<p class="welcome-tip">{t('shell.welcomeTip')}</p>{/if}
 				<div class="welcome-hints">
 					<span><kbd>/</kbd> {t('shell.hintCommand')}</span>
 					<span><kbd>@</kbd> {t('shell.hintRef')}</span>

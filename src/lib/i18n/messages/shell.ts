@@ -146,6 +146,7 @@ const shell = {
 
 		// welcome / empty states
 		startPicker: {
+			lead: '在 {project} 用 {backend} 开始新对话',
 			project: '项目',
 			backend: '后端',
 			openFolder: '打开文件夹…'
@@ -1057,6 +1058,7 @@ const shell = {
 
 		// welcome / empty states
 		startPicker: {
+			lead: 'Start a conversation in {project} with {backend}',
 			project: 'Project',
 			backend: 'Agent',
 			openFolder: 'Open a folder…'
