@@ -76,7 +76,7 @@
 	import ProgressCard from '$lib/agents/ProgressCard.svelte';
 	import { agentRows, type AgentRow } from '$lib/agentProgress';
 	import { parseToolOutput, toolTarget, toolVerb } from '$lib/toolSummary';
-	import { isAbsolutePath, joinPath, parseFileHref, pathExt } from '$lib/fileRefs';
+	import { joinPath, parseFileHref, pathExt } from '$lib/fileRefs';
 	import type { Msg } from '$lib/chat.svelte';
 	import type { SessionSwitch } from '$lib/composer/SessionSwitches.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
@@ -1039,7 +1039,8 @@
 		const ref = parseFileHref(href);
 		const rel = ref.path;
 		if (!rel) return;
-		const abs = isAbsolutePath(rel) ? rel : ((await resolveFileRef(cwd, rel).catch(() => null)) ?? joinPath(cwd, rel));
+		// Absolute, from the home directory (`~/`) or relative to the project (or a repo inside it).
+		const abs = (await resolveFileRef(cwd, rel).catch(() => null)) ?? joinPath(cwd, rel);
 		const ext = pathExt(abs);
 		if ((ext === 'html' || ext === 'htm') && prefs.htmlOpenInBrowser) {
 			browser.open(`file://${abs}`);

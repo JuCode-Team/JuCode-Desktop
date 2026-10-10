@@ -189,7 +189,10 @@ const dock = {
 			newFileDiff: '（新文件或无可显示的 diff）'
 		},
 		files: {
-			empty: '空目录'
+			empty: '空目录',
+			refresh: '刷新',
+			collapseAll: '全部收起',
+			loading: '读取中…'
 		},
 		plan: {
 			title: '任务计划',
@@ -401,7 +404,10 @@ const dock = {
 			newFileDiff: '(New file or no diff to display)'
 		},
 		files: {
-			empty: 'Empty directory'
+			empty: 'Empty directory',
+			refresh: 'Refresh',
+			collapseAll: 'Collapse all',
+			loading: 'Loading…'
 		},
 		plan: {
 			title: 'Task plan',

@@ -16,6 +16,16 @@ describe('file references', () => {
 		]);
 	});
 
+	it('finds absolute, home and Windows paths, directories in any script', () => {
+		expect(refs('见 /Users/me/我的项目/src/a.ts:3 和 ~/dev/x/b.md')).toEqual([
+			{ path: '/Users/me/我的项目/src/a.ts', line: 3, text: '/Users/me/我的项目/src/a.ts:3' },
+			{ path: '~/dev/x/b.md', text: '~/dev/x/b.md' }
+		]);
+		expect(refs('see C:\\proj\\src\\main.rs:9')).toEqual([{ path: 'C:\\proj\\src\\main.rs', line: 9, text: 'C:\\proj\\src\\main.rs:9' }]);
+		expect(codeFileRef('/Users/me/文档/笔记.md')).toEqual({ path: '/Users/me/文档/笔记.md' });
+		expect(joinPath('/proj', '~/x/a.ts')).toBe('~/x/a.ts');
+	});
+
 	it('leaves prose that only looks like a path alone', () => {
 		for (const text of ['Node.js and Vue.js', 'and/or TCP/IP', 'v0.4.7 shipped', 'see example.com/docs/index.html', 'e.g. this', 'src/lib is a folder']) {
 			expect(refs(text)).toEqual([]);

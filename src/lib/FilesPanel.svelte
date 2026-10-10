@@ -1,87 +1,158 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	// The project's files as a tree: a folder opens and closes in place (its
+	// entries read when first opened), a file opens in the editor. ← → close
+	// and open the focused folder, ↑ ↓ move between rows. Refresh reads every
+	// open folder again.
+	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
 	import FolderIcon from 'phosphor-svelte/lib/FolderIcon';
+	import FolderOpenIcon from 'phosphor-svelte/lib/FolderOpenIcon';
 	import FileTextIcon from 'phosphor-svelte/lib/FileTextIcon';
-	import ArrowUpIcon from 'phosphor-svelte/lib/ArrowUpIcon';
 	import ArrowsClockwiseIcon from 'phosphor-svelte/lib/ArrowsClockwiseIcon';
+	import ArrowsInLineVerticalIcon from 'phosphor-svelte/lib/ArrowsInLineVerticalIcon';
 	import { projectRoot, listDir, type FsEntry } from '$lib/protocol';
 	import { editorStore } from '$lib/editor/editorStore.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
-	import Modal from '$lib/ui/Modal.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
+	import { toast } from '$lib/ui/toast.svelte';
+	import { imageViewer } from '$lib/ui/imageViewer.svelte';
+	import { pathExt } from '$lib/fileRefs';
 	import { t } from '$lib/i18n';
 
 	let { rootDir = '' }: { rootDir?: string } = $props();
 	let root = $state('');
-	let cwd = $state('');
-	let entries = $state<FsEntry[]>([]);
 	let error = $state('');
-	let viewer = $state<{ name: string; content: string } | null>(null);
 
-	const rel = $derived(root && cwd.startsWith(root) ? cwd.slice(root.length).replace(/^\//, '') || '/' : cwd);
+	/** Each folder read so far, by path: its entries, or why it could not be read. */
+	const dirs = new SvelteMap<string, FsEntry[] | { error: string }>();
+	const open = new SvelteSet<string>();
 
-	async function load(path: string) {
-		error = '';
+	async function read(path: string) {
 		try {
-			entries = await listDir(path, root || rootDir || path);
-			cwd = path;
+			dirs.set(path, await listDir(path, root));
 		} catch (e) {
-			error = String(e);
+			if (path === root) error = String(e);
+			else dirs.set(path, { error: String(e) });
 		}
 	}
-	onMount(async () => {
-		root = rootDir || (await projectRoot());
-		await load(root);
+
+	$effect(() => {
+		const want = rootDir;
+		let cancelled = false;
+		(async () => {
+			const r = want || (await projectRoot());
+			if (cancelled) return;
+			root = r;
+			error = '';
+			dirs.clear();
+			open.clear();
+			await read(r);
+		})();
+		return () => {
+			cancelled = true;
+		};
 	});
 
-	function up() {
-		const parent = cwd.replace(/\/+$/, '').split('/').slice(0, -1).join('/');
-		if (parent && parent.length >= root.length) load(parent);
+	async function refresh() {
+		error = '';
+		await Promise.all([root, ...open].map(read));
 	}
-	async function open(e: FsEntry) {
-		if (e.is_dir) {
-			load(e.path);
-		} else {
-			// Text files open in the built-in editor pane; binary/oversized files
-			// keep the lightweight preview overlay (which reports why, as before).
-			try {
-				await editorStore.open(e.path, root);
-			} catch (err) {
-				viewer = { name: e.name, content: `Error: ${err}` };
-			}
+
+	function toggle(e: FsEntry, to = !open.has(e.path)) {
+		if (!to) return void open.delete(e.path);
+		open.add(e.path);
+		if (!dirs.has(e.path)) read(e.path);
+	}
+
+	const IMAGES = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg']);
+	/** Text files open in the editor (beside the tree), images full size;
+	 *  anything else says why it can't be shown. */
+	async function openFile(e: FsEntry) {
+		if (IMAGES.has(pathExt(e.path))) return imageViewer.open([{ path: e.path }]);
+		try {
+			await editorStore.open(e.path, root);
+		} catch (err) {
+			toast.error(`${e.name}: ${String(err)}`);
 		}
+	}
+
+	/** The rows shown: every entry of an open folder, depth first. */
+	type Row = { entry: FsEntry; depth: number } | { note: string; depth: number; err?: boolean };
+	const rows = $derived.by(() => {
+		const out: Row[] = [];
+		const walk = (path: string, depth: number) => {
+			const listed = dirs.get(path);
+			if (!listed) return void out.push({ note: t('dock.files.loading'), depth });
+			if (!Array.isArray(listed)) return void out.push({ note: listed.error, depth, err: true });
+			if (!listed.length && depth > 0) return void out.push({ note: t('dock.files.empty'), depth });
+			for (const entry of listed) {
+				out.push({ entry, depth });
+				if (entry.is_dir && open.has(entry.path)) walk(entry.path, depth + 1);
+			}
+		};
+		if (root) walk(root, 0);
+		return out;
+	});
+	const name = $derived(root.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || root);
+
+	let list = $state<HTMLElement | null>(null);
+	function onKey(ev: KeyboardEvent, e: FsEntry) {
+		const buttons = [...(list?.querySelectorAll<HTMLButtonElement>('button.ent') ?? [])];
+		const i = buttons.indexOf(ev.currentTarget as HTMLButtonElement);
+		if (ev.key === 'ArrowDown') buttons[i + 1]?.focus();
+		else if (ev.key === 'ArrowUp') buttons[i - 1]?.focus();
+		else if (ev.key === 'ArrowRight' && e.is_dir) toggle(e, true);
+		else if (ev.key === 'ArrowLeft' && e.is_dir && open.has(e.path)) toggle(e, false);
+		else return;
+		ev.preventDefault();
 	}
 </script>
 
 <div class="files">
 	<div class="bar">
-		<IconButton size="sm" onclick={up} disabled={cwd === root} label="up"><ArrowUpIcon size={14} /></IconButton>
-		<span class="crumb" title={cwd}>{rel}</span>
-		<IconButton size="sm" onclick={() => load(cwd)} label="refresh"><ArrowsClockwiseIcon size={13} /></IconButton>
+		<span class="crumb" title={root}>{name}</span>
+		<IconButton size="sm" onclick={() => open.clear()} disabled={!open.size} label={t('dock.files.collapseAll')}><ArrowsInLineVerticalIcon size={13} /></IconButton>
+		<IconButton size="sm" onclick={refresh} label={t('dock.files.refresh')}><ArrowsClockwiseIcon size={13} /></IconButton>
 	</div>
 	{#if error}
 		<div class="err"><Notice mono>{error}</Notice></div>
 	{:else}
-		<div class="list">
-			{#each entries as e (e.path)}
-				<button class="ent" onclick={() => open(e)}>
-					{#if e.is_dir}<FolderIcon size={15} class="fcol" />{:else}<FileTextIcon size={15} />{/if}
-					<span class="ename">{e.name}</span>
-				</button>
+		<div class="list" role="tree" bind:this={list}>
+			{#each rows as r, i ('entry' in r ? r.entry.path : `note:${i}`)}
+				{#if 'entry' in r}
+					{@const e = r.entry}
+					{@const isOpen = e.is_dir && open.has(e.path)}
+					<button
+						class="ent"
+						class:active={!e.is_dir && editorStore.visible && editorStore.activePath === e.path}
+						style:--depth={r.depth}
+						role="treeitem"
+						aria-expanded={e.is_dir ? isOpen : undefined}
+						aria-selected={!e.is_dir && editorStore.activePath === e.path}
+						title={e.path}
+						onclick={() => (e.is_dir ? toggle(e) : openFile(e))}
+						onkeydown={(ev) => onKey(ev, e)}
+					>
+						{#each { length: r.depth } as _, g (g)}<span class="guide" style:--g={g}></span>{/each}
+						<span class="caret" class:open={isOpen} class:none={!e.is_dir}><CaretRightIcon size={11} /></span>
+						{#if e.is_dir}
+							{#if isOpen}<FolderOpenIcon size={15} class="fcol" />{:else}<FolderIcon size={15} class="fcol" />{/if}
+						{:else}<FileTextIcon size={15} />{/if}
+						<span class="ename">{e.name}</span>
+					</button>
+				{:else}
+					<div class="note" class:err={r.err} style:--depth={r.depth}>{r.note}</div>
+				{/if}
 			{/each}
-			{#if entries.length === 0}<div class="empty">{t('dock.files.empty')}</div>{/if}
+			{#if root && Array.isArray(dirs.get(root)) && rows.length === 0}<div class="empty">{t('dock.files.empty')}</div>{/if}
 		</div>
 	{/if}
 </div>
 
-{#if viewer}
-	<Modal title={viewer.name} width={720} padded={false} onClose={() => (viewer = null)}>
-		<pre class="code">{viewer.content}</pre>
-	</Modal>
-{/if}
 
 <style>
 	.files {
+		--indent: 14px;
 		display: flex;
 		flex-direction: column;
 		height: 100%;
@@ -89,42 +160,72 @@
 	.bar {
 		display: flex;
 		align-items: center;
-		gap: 8px;
-		padding: 10px 14px;
+		gap: 4px;
+		padding: 8px 10px 8px 16px;
 		border-bottom: 1px solid var(--hairline);
 	}
 	.crumb {
 		flex: 1;
-		font-family: var(--font-mono);
+		min-width: 0;
 		font-size: var(--fs-xs);
+		font-weight: 600;
 		color: var(--dim);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
-		direction: rtl;
-		text-align: left;
 	}
 	.list {
 		flex: 1;
-		overflow-y: auto;
+		overflow: auto;
 		padding: 6px;
 	}
 	.ent {
+		position: relative;
 		display: flex;
 		align-items: center;
-		gap: 9px;
+		gap: 6px;
 		width: 100%;
-		text-align: left;
-		padding: 7px 9px;
+		height: 28px;
+		padding: 0 8px 0 calc(6px + var(--depth) * var(--indent));
 		border: none;
 		border-radius: var(--r-sm);
 		background: none;
 		color: var(--text);
-		cursor: pointer;
+		text-align: left;
 		font-size: var(--fs-sm);
+		cursor: pointer;
 	}
 	.ent:hover {
 		background: var(--surface2);
+	}
+	.ent.active {
+		background: var(--surface2);
+		font-weight: 500;
+	}
+	.ent:focus-visible {
+		outline: 2px solid var(--brand);
+		outline-offset: -2px;
+	}
+	/* One hairline per level, under each parent's caret. */
+	.guide {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: calc(6px + var(--g) * var(--indent) + 6px);
+		width: 1px;
+		background: var(--hairline);
+	}
+	.caret {
+		display: inline-flex;
+		flex: none;
+		color: var(--dim2);
+		transition: transform var(--t-fast) var(--ease-out);
+	}
+	.caret.open {
+		transform: rotate(90deg);
+	}
+	.caret.none {
+		visibility: hidden;
 	}
 	:global(.fcol) {
 		color: var(--accent-bright);
@@ -134,6 +235,15 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
+	.note {
+		padding: 4px 8px 4px calc(6px + var(--depth) * var(--indent) + 17px);
+		font-size: var(--fs-xs);
+		color: var(--dim2);
+	}
+	.note.err {
+		color: var(--err);
+		overflow-wrap: anywhere;
+	}
 	.empty {
 		padding: 16px;
 		font-size: var(--fs-xs);
@@ -142,15 +252,5 @@
 	}
 	.err {
 		padding: 10px;
-	}
-	.code {
-		margin: 0;
-		padding: 14px;
-		overflow: auto;
-		font-family: var(--font-mono);
-		font-size: var(--fs-xs);
-		line-height: 1.55;
-		white-space: pre;
-		color: var(--text);
 	}
 </style>

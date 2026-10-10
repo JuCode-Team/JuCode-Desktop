@@ -10,6 +10,8 @@ export interface EditorTab {
 	name: string;
 	/** Path relative to the project root, for display. */
 	rel: string;
+	/** The project it was opened from: its reads and writes stay inside it. */
+	root: string;
 	/** Last content loaded from / written to disk, plus live edits synced in. */
 	doc: string;
 	dirty: boolean;
@@ -80,11 +82,12 @@ export class EditorStore {
 			if (at) this.reveal = { path: abs, line: at.line, col: at.col ?? 1, seq: ++this.#revealSeq };
 			return existing;
 		}
-		const doc = await readText(abs); // throws for binary / oversized / escaping paths
+		const within = this.root || undefined;
+		const doc = await readText(abs, within); // throws for binary / oversized / escaping paths
 		let mtime = 0;
 		let size = doc.length;
 		try {
-			const st = await statText(abs);
+			const st = await statText(abs, within);
 			mtime = st.mtime_ms;
 			size = st.size;
 		} catch {
@@ -94,6 +97,7 @@ export class EditorStore {
 			path: abs,
 			name: baseName(abs),
 			rel: this.#rel(abs),
+			root: this.root,
 			doc,
 			dirty: false,
 			mtime,
@@ -164,7 +168,7 @@ export class EditorStore {
 		if (!tab) return 'error';
 		const text = content ?? tab.doc;
 		try {
-			const st = await writeText(tab.path, text, force ? undefined : tab.mtime);
+			const st = await writeText(tab.path, text, force ? undefined : tab.mtime, tab.root || undefined);
 			tab.doc = text;
 			tab.mtime = st.mtime_ms;
 			tab.size = st.size;
@@ -193,8 +197,8 @@ export class EditorStore {
 		const tab = this.tab(path);
 		if (!tab) return;
 		try {
-			const doc = await readText(tab.path);
-			const st = await statText(tab.path);
+			const doc = await readText(tab.path, tab.root || undefined);
+			const st = await statText(tab.path, tab.root || undefined);
 			tab.doc = doc;
 			tab.mtime = st.mtime_ms;
 			tab.size = st.size;

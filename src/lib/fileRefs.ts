@@ -1,5 +1,6 @@
 // File references in a reply: `src/lib/a.ts:12`, `crates/x.rs:3:4`,
-// `./README.md`, `/abs/path.py#L7`. Recognized in prose only with a
+// `./README.md`, `/abs/path.py#L7`, `~/x/a.md`, `C:\x\a.rs` — directory
+// names in any script (`/Users/我/项目/a.ts`). Recognized in prose only with a
 // directory part (so "Node.js" or "and/or" stay text), and in inline code
 // also as a bare file name of a known kind (`Cargo.toml`). They render as
 // links whose href carries the line (`path#L12:4`), opened in the editor.
@@ -14,16 +15,18 @@ export interface FileRef {
 const KNOWN_EXT =
 	'rs|ts|tsx|js|jsx|mjs|cjs|svelte|vue|py|go|java|kt|kts|swift|c|h|cc|cpp|hpp|cs|rb|php|lua|dart|scala|sh|bash|zsh|fish|ps1|sql|md|mdx|txt|json|jsonc|toml|yaml|yml|ini|cfg|conf|env|lock|xml|html|htm|css|scss|less|proto|gradle|tf|dockerfile|mk';
 
-// A path: optional ~ / ./ / ../ / leading slash, one or more directories,
-// then a file with an extension; or (inline code only) a bare known file.
-const SEGMENT = String.raw`[\w@+.-]+`;
-const FILE = String.raw`[\w@+-][\w@+.-]*\.[A-Za-z][\w]{0,9}`;
-const WITH_DIR = String.raw`(?:~|\.{1,2})?\/?(?:${SEGMENT}\/)+${FILE}`;
-const BARE = String.raw`[\w@+-][\w@+.-]*\.(?:${KNOWN_EXT})`;
+// A path: optional ~ / ./ / ../ / drive / leading separator, one or more
+// directories, then a file with an extension; or (inline code only) a bare
+// known file. Either separator (Windows writes `\`).
+const WORD = String.raw`\p{L}\p{N}_`;
+const SEGMENT = String.raw`[${WORD}@+.-]+`;
+const FILE = String.raw`[${WORD}@+-][${WORD}@+.-]*\.[A-Za-z][\w]{0,9}`;
+const WITH_DIR = String.raw`(?:~|\.{1,2}|[A-Za-z]:)?[\\/]?(?:${SEGMENT}[\\/])+${FILE}`;
+const BARE = String.raw`[${WORD}@+-][${WORD}@+.-]*\.(?:${KNOWN_EXT})`;
 const POSITION = String.raw`(?::(\d+)(?::(\d+))?|#L(\d+)(?:C(\d+))?)?`;
 
-const IN_PROSE = new RegExp(String.raw`(^|[\s(\[{"'“‘（「，、：；])(${WITH_DIR})${POSITION}(?=$|[\s)\]}"'”’）」，。、：；!?,;]|\.(?:\s|$))`, 'g');
-const WHOLE = new RegExp(String.raw`^(${WITH_DIR}|${BARE})${POSITION}$`);
+const IN_PROSE = new RegExp(String.raw`(^|[\s(\[{"'“‘（「，、：；])(${WITH_DIR})${POSITION}(?=$|[\s)\]}"'”’）」，。、：；!?,;]|\.(?:\s|$))`, 'gu');
+const WHOLE = new RegExp(String.raw`^(${WITH_DIR}|${BARE})${POSITION}$`, 'u');
 
 /** A path that starts at a web domain is a URL without its scheme. */
 const looksLikeDomain = (path: string) => /^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,6}\//i.test(path) && !path.startsWith('.');
@@ -97,9 +100,10 @@ export function isAbsolutePath(path: string): boolean {
 	return /^(?:\/|[A-Za-z]:[\\/])/.test(path);
 }
 
-/** `path` under `root`, unless it is absolute already. */
+/** `path` under `root`, unless it is absolute already or starts at the home
+ *  directory (`~/`, which the side reading the file expands). */
 export function joinPath(root: string, path: string): string {
-	if (isAbsolutePath(path) || !root) return path;
+	if (isAbsolutePath(path) || /^~[\\/]/.test(path) || !root) return path;
 	return `${root.replace(/[\\/]+$/, '')}/${path.replace(/^\.?[\\/]/, '')}`;
 }
 
