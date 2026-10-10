@@ -9,6 +9,7 @@
 	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
 	import SquareSplitHorizontalIcon from 'phosphor-svelte/lib/SquareSplitHorizontalIcon';
 	import AppWindowIcon from 'phosphor-svelte/lib/AppWindowIcon';
+	import StopIcon from 'phosphor-svelte/lib/StopIcon';
 	import { t } from '$lib/i18n';
 	import { pillParts, planShown, planSummary, trayMode, type AgentRow } from '$lib/agentProgress';
 	import { formatCount, shortModel } from '$lib/agentTrace';
@@ -21,7 +22,8 @@
 		chat,
 		sessionId,
 		rows,
-		onOpen
+		onOpen,
+		onStop
 	}: {
 		chat: ChatState;
 		/** Keys the open state. */
@@ -29,7 +31,10 @@
 		rows: AgentRow[];
 		/** Shows a subagent's conversation. Absent: rows are not links. */
 		onOpen?: (row: AgentRow, how: OpenHow) => void;
+		/** Stops a subagent the engine runs as a background task (its id). */
+		onStop?: (id: string) => void;
 	} = $props();
+	const stoppable = (r: AgentRow) => !!onStop && r.state === 'running' && chat.bgTasks.some((task) => task.id === r.id);
 
 	const key = $derived(`jucode-progress-open:${sessionId}`);
 	let open = $state(false);
@@ -132,10 +137,13 @@
 											{#if agentMeta(r)}<span class="ameta">{agentMeta(r)}</span>{/if}
 										</span>
 									</button>
-									{#if onOpen && !r.workflow}
+									{#if (onOpen && !r.workflow) || stoppable(r)}
 										<span class="aacts">
+											{#if stoppable(r)}<button onclick={() => onStop?.(r.id)} title={t('chat.task.stop')} aria-label={t('chat.task.stop')}><StopIcon size={14} /></button>{/if}
+											{#if onOpen && !r.workflow}
 											<button onclick={() => onOpen?.(r, 'side')} title={t('chat.progress.openSide')} aria-label={t('chat.progress.openSide')}><SquareSplitHorizontalIcon size={14} /></button>
 											<button onclick={() => onOpen?.(r, 'tab')} title={t('chat.progress.openTab')} aria-label={t('chat.progress.openTab')}><AppWindowIcon size={14} /></button>
+											{/if}
 										</span>
 									{/if}
 								</li>

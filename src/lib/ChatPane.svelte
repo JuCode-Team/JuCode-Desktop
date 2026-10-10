@@ -1238,7 +1238,7 @@
 			<RateLimitBanner rateLimit={chat.rateLimit} onDismiss={() => (chat.rateLimit = null)} />
 		{/if}
 
-		<ProgressTray {chat} sessionId={session.id} rows={turnAgents} onOpen={traceable ? openAgent : undefined} />
+		<ProgressTray {chat} sessionId={session.id} rows={turnAgents} onOpen={traceable ? openAgent : undefined} onStop={(id) => send({ op: 'stop_task', task_id: id })} />
 
 		{#if chat.planRevising}
 			<div class="approval-wrap">

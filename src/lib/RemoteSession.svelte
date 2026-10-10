@@ -687,7 +687,7 @@
 			</div>
 		{/if}
 
-		<ProgressTray {chat} sessionId={sid || 'draft'} rows={turnAgents} onOpen={bcaps.agentTrace ? openAgent : undefined} />
+		<ProgressTray {chat} sessionId={sid || 'draft'} rows={turnAgents} onOpen={bcaps.agentTrace ? openAgent : undefined} onStop={(id) => send({ op: 'stop_task', task_id: id })} />
 		<div class="composer-wrap">
 			{#if chat.approvalPending && chat.busy}
 				<div class="queued">
