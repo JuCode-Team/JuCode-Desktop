@@ -40,6 +40,7 @@
 	import { effortLabel } from '$lib/composer/effort';
 	import type { ModelRow } from '$lib/composer/modelRows';
 	import type { ChatState } from '$lib/chat.svelte';
+	import { imageViewer } from '$lib/ui/imageViewer.svelte';
 	import { buildApproveOp, type ApprovalMode, type ApproveOp } from '$lib/approval';
 	import { caps, BACKEND_LABELS, type BackendId } from '$lib/backends';
 
@@ -196,6 +197,16 @@
 				const thumb = document.createElement('img');
 				thumb.src = convertFileSrc(path);
 				thumb.alt = '';
+				thumb.title = t('common.image.open');
+				// Full size, with the message's other images a step away. The
+				// mousedown would otherwise move the caret around the chip.
+				thumb.addEventListener('mousedown', (e) => e.preventDefault());
+				thumb.addEventListener('click', (e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					const all = [...images].sort((a, b) => a.n - b.n).map((i) => ({ path: i.path }));
+					imageViewer.open(all, all.findIndex((i) => i.path === path));
+				});
 				span.appendChild(thumb);
 			}
 			span.appendChild(document.createTextNode(t('chat.imageToken', { n: img[1]! })));
@@ -1056,6 +1067,7 @@
 		height: 18px;
 		border-radius: 3px;
 		object-fit: cover;
+		cursor: zoom-in;
 	}
 	/* A quoted passage: the opening words after a quote mark. */
 	.rich :global(.refchip.quotechip) {

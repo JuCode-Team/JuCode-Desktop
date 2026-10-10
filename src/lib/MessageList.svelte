@@ -474,7 +474,7 @@
 				<button class="uedit" onclick={() => onEdit(m.text)} aria-label="quote" title={t('chat.quoteTitle')}><PencilSimpleIcon size={12} /></button>
 				<div class="ucol">
 					<!-- One line: the bubble is pre-wrap, so template whitespace would show. -->
-					<div class="bubble" class:pending={m.state === 'sending'}>{#if m.images?.length}<div class="uimgs">{#each m.images as p (p)}<UserImage path={p} load={loadImage} />{/each}</div>{/if}{#each userBlocks(m.text) as block, b (b)}{#if block.quote}<span class="uquote">{block.text}</span>{:else}<span class="utext">{#each userSegments(block.text) as seg, j (j)}{#if seg.image}<span class="utoken">{t('chat.imageToken', { n: seg.image })}</span>{:else}{seg.text}{/if}{/each}</span>{/if}{/each}</div>
+					<div class="bubble" class:pending={m.state === 'sending'}>{#if m.images?.length}<div class="uimgs">{#each m.images as p (p)}<UserImage path={p} load={loadImage} group={m.images} />{/each}</div>{/if}{#each userBlocks(m.text) as block, b (b)}{#if block.quote}<span class="uquote">{block.text}</span>{:else}<span class="utext">{#each userSegments(block.text) as seg, j (j)}{#if seg.image}<span class="utoken">{t('chat.imageToken', { n: seg.image })}</span>{:else}{seg.text}{/if}{/each}</span>{/if}{/each}</div>
 					{#if m.state}
 						{#key m.state}
 							<div class="sendstate {m.state}" in:fade={{ duration: 160 }}>

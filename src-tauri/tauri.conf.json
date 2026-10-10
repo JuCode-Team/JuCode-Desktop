@@ -33,7 +33,8 @@
       "assetProtocol": {
         "enable": true,
         "scope": [
-          "**"
+          "**",
+          "$HOME/.jucode/uploads/**"
         ]
       }
     }

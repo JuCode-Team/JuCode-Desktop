@@ -2139,30 +2139,16 @@ fn find_ref(dir: &Path, rel: &Path, depth: usize, out: &mut Vec<PathBuf>) {
     }
 }
 
-/// Writes pasted image bytes to a temp file and returns its path, so the composer
+/// Writes pasted image bytes to a file and returns its path, so the composer
 /// can attach it the same way as a dragged/picked file (the protocol only accepts
-/// local paths, not inline data).
+/// local paths, not inline data). It goes where the daemon keeps files sent
+/// from the remote page (`~/.jucode/uploads`): the remote page may show images
+/// from there (and nowhere else outside the projects), and the daemon removes
+/// them after 30 days, so a conversation's images outlive a temp-dir cleanup.
 #[tauri::command]
 fn save_temp_image(data: Vec<u8>, ext: String) -> Result<String, String> {
-    let dir = std::env::temp_dir().join("jucode-paste");
+    let dir = jucode_dir().join("uploads").join("desktop");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    // Best-effort: drop paste images older than a day so this temp dir doesn't
-    // grow without bound across sessions.
-    if let Ok(entries) = std::fs::read_dir(&dir) {
-        let now = std::time::SystemTime::now();
-        for entry in entries.flatten() {
-            let stale = entry
-                .metadata()
-                .and_then(|m| m.modified())
-                .ok()
-                .and_then(|t| now.duration_since(t).ok())
-                .map(|age| age.as_secs() > 86_400)
-                .unwrap_or(false);
-            if stale {
-                let _ = std::fs::remove_file(entry.path());
-            }
-        }
-    }
     let safe_ext = if !ext.is_empty() && ext.chars().all(|c| c.is_ascii_alphanumeric()) {
         ext.to_lowercase()
     } else {

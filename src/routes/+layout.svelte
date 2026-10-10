@@ -8,6 +8,7 @@
 	import IconContext from 'phosphor-svelte/lib/IconContext';
 	import ContextMenuHost from '$lib/ui/ContextMenuHost.svelte';
 	import TooltipHost from '$lib/ui/TooltipHost.svelte';
+	import ImageViewerHost from '$lib/ui/ImageViewerHost.svelte';
 
 	// Tag the root with the host OS before first paint so platform-specific window
 	// chrome (macOS traffic-light insets vs a native Windows/Linux title bar) is
@@ -46,4 +47,5 @@
 	<!-- App-drawn replacements for the WebView's context menu and title tooltips. -->
 	<ContextMenuHost />
 	<TooltipHost />
+	<ImageViewerHost />
 </IconContext>

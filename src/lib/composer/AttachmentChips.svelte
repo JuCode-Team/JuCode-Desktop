@@ -7,6 +7,7 @@
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import type { WebRef } from '$lib/browser.svelte';
 	import { t } from '$lib/i18n';
+	import { imageViewer } from '$lib/ui/imageViewer.svelte';
 
 	let {
 		attachments,
@@ -26,12 +27,17 @@
 
 	const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
 	const refLabel = (r: WebRef) => r.title || r.selector || r.url;
+	/** The attached images full size, from the clicked one. */
+	function view(path: string) {
+		const images = attachments.filter((a) => a.image).map((a) => ({ path: a.path }));
+		imageViewer.open(images, images.findIndex((i) => i.path === path));
+	}
 </script>
 
 <div class="chips">
 	{#each attachments as a, i (a.path)}
 		<span class="chip" class:imgchip={a.image}>
-			{#if a.image}<img class="chip-thumb" src={convertFileSrc(a.path)} alt="" />{:else}<FileTextIcon size={12} />{/if}
+			{#if a.image}<button class="thumb-btn" onclick={() => view(a.path)} aria-label={t('common.image.open')} title={t('common.image.open')}><img class="chip-thumb" src={convertFileSrc(a.path)} alt="" /></button>{:else}<FileTextIcon size={12} />{/if}
 			<span class="chip-name">{base(a.path)}</span>
 			<IconButton size="xs" onclick={() => onRemove(i)} label="remove"><XIcon size={12} /></IconButton>
 		</span>
@@ -93,6 +99,19 @@
 		border-radius: var(--r-xs);
 		object-fit: cover;
 		flex-shrink: 0;
+	}
+	.thumb-btn {
+		display: inline-flex;
+		flex-shrink: 0;
+		padding: 0;
+		border: none;
+		border-radius: var(--r-xs);
+		background: none;
+		cursor: zoom-in;
+	}
+	.thumb-btn:focus-visible {
+		outline: 2px solid var(--brand);
+		outline-offset: 1px;
 	}
 	.chip-name {
 		white-space: nowrap;

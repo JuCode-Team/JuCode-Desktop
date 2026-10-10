@@ -49,6 +49,7 @@
 	import { buildSetApprovalModeOp, type ApprovalMode, type ApproveOp } from '$lib/approval';
 	import { loadComposerText, saveComposerText } from '$lib/composerText';
 	import { t } from '$lib/i18n';
+	import { imageViewer } from '$lib/ui/imageViewer.svelte';
 	import { followTop, shortOfEnd } from '$lib/chatFollow';
 
 	let {
@@ -329,6 +330,14 @@
 					if (a) a.error = e instanceof Error ? e.message : String(e);
 				});
 		}
+	}
+	/** The picked images full size (still on this device: their own URLs). */
+	function viewAttached(key: number) {
+		const shown = attachments.filter((a) => a.url);
+		imageViewer.open(
+			shown.map((a) => ({ path: a.name, load: () => Promise.resolve(a.url!) })),
+			shown.findIndex((a) => a.key === key)
+		);
 	}
 	function detach(key: number) {
 		const a = attachments.find((x) => x.key === key);
@@ -682,7 +691,7 @@
 					<div class="attachments">
 						{#each attachments as a (a.key)}
 							<span class="att" class:failed={!!a.error} title={a.error ?? a.name}>
-								{#if a.url}<img src={a.url} alt="" />{:else}<FileIcon size={16} />{/if}
+								{#if a.url}<button type="button" class="att-thumb" onclick={() => viewAttached(a.key)} aria-label={t('common.image.open')}><img src={a.url} alt="" /></button>{:else}<FileIcon size={16} />{/if}
 								<span class="att-name">{a.name}</span>
 								{#if a.error}<span class="att-state">{t('shell.upload.failed')}</span>
 								{:else if !a.done}<span class="att-state">{Math.round((a.sent / Math.max(a.total, 1)) * 100)}%</span>{/if}
@@ -1159,6 +1168,14 @@
 	.att.failed {
 		border-color: color-mix(in oklab, var(--err) 50%, transparent);
 		color: var(--err);
+	}
+	.att .att-thumb {
+		display: inline-flex;
+		flex: none;
+		padding: 0;
+		border: none;
+		background: none;
+		cursor: zoom-in;
 	}
 	.att img {
 		width: 28px;
