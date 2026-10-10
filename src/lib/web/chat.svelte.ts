@@ -1,13 +1,13 @@
 // The web app's conversations: kept in the cloud (/v1/oauth/chat/*, shared
 // with the Android app and the console), replies streamed from
-// /v1/oauth/chat/llm/* (only the models the admin opened to chat; Claude
-// models over Anthropic Messages, as their groups may serve nothing else,
-// the rest over Chat Completions), web search as tool calls the page runs (/tools/v1/*), deep research
+// /v1/oauth/chat/llm/* (only the models the admin opened to chat, each in
+// its own protocol: protocol.ts), web search as tool calls the page runs (/tools/v1/*), deep research
 // as a server task the page follows. Ported from the Android app's
 // ChatEngine so both behave alike.
 
 import { t } from '$lib/i18n';
 import { ApiError, json, request } from './api';
+import { parseArgs, protoOf, requestBody, streamRound, wireMessage, withToolRound, type Proto, type ToolCall } from './protocol';
 import { models, type ChatModel } from './models.svelte';
 
 export interface Attachment {
@@ -50,8 +50,19 @@ export interface WebMsg {
 	usage: Usage | null;
 	searches: string[];
 	sources: Source[];
+	/** What its web searches and page reads found (shortened), kept with it
+	 *  so later turns still have it, also after a reply cut short. */
+	found: Found[];
 	research: ResearchState | null;
 	createdAt: string;
+}
+
+/** One web search or page read of a reply, and what it returned. */
+export interface Found {
+	tool: string;
+	/** The query or the URL. */
+	arg: string;
+	text: string;
 }
 
 export interface ConversationInfo {
@@ -69,7 +80,12 @@ export interface SendOptions {
 }
 
 const MAX_TOOL_ROUNDS = 6;
+/** Searches and page reads in one reply: past it the model must answer
+ *  with what it has (models otherwise search on and on). */
+const MAX_TOOL_CALLS = 10;
 const MAX_TOOL_RESULT = 24_000;
+/** What is kept of each search or page read for later turns. */
+const FOUND_KEEP = 3_000;
 const IMAGE_TOKENS = 1_200;
 
 /** Rough tokens: one per CJK character, four ASCII characters per token. */
@@ -84,42 +100,10 @@ export function estimate(text: string): number {
 function systemPrompt(search: boolean): string {
 	const today = new Date().toISOString().slice(0, 10);
 	let s = `你是 JuCode 的 AI 助手。今天是 ${today}。回答使用用户的语言，结构清晰，必要时使用 Markdown；数学公式用 $…$（两侧与文字之间留一个空格）或 $$…$$ 书写。`;
-	if (search) s += '\n你可以调用 web_search 搜索网页、web_fetch 阅读网页全文。涉及最新信息或需要出处时先搜索，回答中用 Markdown 链接注明来源。';
+	if (search)
+		s += `\n你可以调用 web_search 搜索网页、web_fetch 阅读网页全文。涉及最新信息或需要出处时先搜索，回答中用 Markdown 链接注明来源。一次回答最多联网 ${MAX_TOOL_CALLS} 次：先想清楚要查什么，资料够用就直接回答，不要反复换词搜索同一件事。`;
 	return s;
 }
-
-const WEB_TOOLS = [
-	{
-		type: 'function',
-		function: {
-			name: 'web_search',
-			description:
-				'Search the web and return ranked results: title, url and a snippet. Use for current information or to find sources; then read pages in full with web_fetch.',
-			parameters: {
-				type: 'object',
-				properties: {
-					query: { type: 'string', description: 'Search query, at most 400 characters.' },
-					freshness: { type: 'string', enum: ['day', 'week', 'month', 'year'] }
-				},
-				required: ['query']
-			}
-		}
-	},
-	{
-		type: 'function',
-		function: {
-			name: 'web_fetch',
-			description: 'Read the text of a web page by URL.',
-			parameters: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] }
-		}
-	}
-];
-
-/** Claude models speak Anthropic Messages (as the console chat). */
-const isClaude = (model: string) => /^(claude|anthropic)([-.]|$)/i.test(model.trim());
-const ANTHROPIC_TOOLS = WEB_TOOLS.map((t) => ({ name: t.function.name, description: t.function.description, input_schema: t.function.parameters }));
-/** Room for a Claude reply, thinking included. */
-const ANTHROPIC_MAX_TOKENS = 32_000;
 
 // ── the cloud's message shape ──
 interface CloudMessage {
@@ -133,7 +117,7 @@ interface CloudMessage {
 	kind?: string;
 	attachments?: Attachment[];
 	usage?: { input_tokens?: number; output_tokens?: number; cached_tokens?: number; reasoning_tokens?: number; cost?: string } | null;
-	meta?: { searches?: string[]; sources?: Source[]; research_id?: string; thought_ms?: number; currency?: string } | null;
+	meta?: { searches?: string[]; sources?: Source[]; found?: Found[]; research_id?: string; thought_ms?: number; currency?: string } | null;
 	created_at?: string;
 }
 
@@ -162,6 +146,7 @@ function fromCloud(m: CloudMessage): WebMsg {
 			: null,
 		searches: meta.searches ?? [],
 		sources: meta.sources ?? [],
+		found: meta.found ?? [],
 		research: meta.research_id ? { id: meta.research_id, status: '', steps: [] } : null,
 		createdAt: m.created_at ?? new Date().toISOString()
 	};
@@ -174,7 +159,10 @@ const ERROR_MAX = 1_000;
 const bytes = (v: unknown) => new TextEncoder().encode(JSON.stringify(v)).length;
 
 function toCloud(m: WebMsg) {
+	// Over the store's limit: the oldest findings go first, then sources.
+	let found = m.found;
 	let sources = m.sources;
+	while (found.length && bytes({ found, sources, searches: m.searches }) > META_MAX_BYTES) found = found.slice(1);
 	while (sources.length && bytes({ sources, searches: m.searches }) > META_MAX_BYTES) sources = sources.slice(0, -1);
 	return {
 		role: m.role,
@@ -197,6 +185,7 @@ function toCloud(m: WebMsg) {
 		meta: {
 			...(m.searches.length ? { searches: m.searches } : {}),
 			...(sources.length ? { sources } : {}),
+			...(found.length ? { found } : {}),
 			...(m.research ? { research_id: m.research.id } : {}),
 			...(m.thoughtMs ? { thought_ms: m.thoughtMs } : {}),
 			...(m.usage?.currency ? { currency: m.usage.currency } : {})
@@ -219,6 +208,7 @@ const blank = (role: WebMsg['role'], model = ''): WebMsg => ({
 	usage: null,
 	searches: [],
 	sources: [],
+	found: [],
 	research: null,
 	createdAt: new Date().toISOString()
 });
@@ -261,178 +251,9 @@ export async function uploadAttachment(file: File, conversationId: string): Prom
 	return a;
 }
 
-// ── streaming ──
-interface StreamEvents {
-	onReasoning(text: string): void;
-	onContent(text: string): void;
-}
-interface ToolCall {
-	id: string;
-	name: string;
-	args: string;
-}
-type Block = Record<string, unknown>;
-interface Round {
-	content: string;
-	toolCalls: ToolCall[];
-	/** Anthropic: the reply's content blocks, so thinking signatures go back with tool results. */
-	blocks: Block[];
-	usage: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number }; completion_tokens_details?: { reasoning_tokens?: number } } | null;
-	requestId: string;
-}
-
-async function streamRound(anthropic: boolean, body: object, signal: AbortSignal, on: StreamEvents): Promise<Round> {
-	const res = await request(anthropic ? '/v1/oauth/chat/llm/anthropic/messages' : '/v1/oauth/chat/llm/chat/completions', { body, signal });
-	const round: Round = { content: '', toolCalls: [], blocks: [], usage: null, requestId: res.headers.get('X-Request-Id') ?? '' };
-	const reader = res.body!.getReader();
-	const dec = new TextDecoder();
-	let buf = '';
-	const calls = new Map<number, ToolCall>();
-	for (;;) {
-		const { value, done } = await reader.read();
-		if (done) break;
-		buf += dec.decode(value, { stream: true });
-		let nl: number;
-		while ((nl = buf.indexOf('\n')) >= 0) {
-			const line = buf.slice(0, nl).trim();
-			buf = buf.slice(nl + 1);
-			if (!line.startsWith('data:')) continue;
-			const data = line.slice(5).trim();
-			if (data === '[DONE]') continue;
-			let j: {
-				type?: string;
-				index?: number;
-				content_block?: Block;
-				delta?: { type?: string; text?: string; thinking?: string; signature?: string; partial_json?: string };
-				message?: { usage?: AnthropicUsage };
-				error?: { message?: string } | string;
-				usage?: Round['usage'];
-				choices?: {
-					delta?: {
-						content?: string;
-						reasoning_content?: string;
-						reasoning?: string;
-						tool_calls?: { index?: number; id?: string; function?: { name?: string; arguments?: string } }[];
-					};
-				}[];
-			};
-			try {
-				j = JSON.parse(data);
-			} catch {
-				continue;
-			}
-			if (j.error) throw new ApiError(502, typeof j.error === 'string' ? j.error : (j.error.message ?? 'stream error'), round.requestId);
-			if (anthropic) {
-				anthropicEvent(j, round, calls, on);
-				continue;
-			}
-			if (j.usage) round.usage = j.usage;
-			const delta = j.choices?.[0]?.delta;
-			if (!delta) continue;
-			const thinking = delta.reasoning_content ?? delta.reasoning;
-			if (thinking) on.onReasoning(thinking);
-			if (delta.content) {
-				round.content += delta.content;
-				on.onContent(delta.content);
-			}
-			for (const tc of delta.tool_calls ?? []) {
-				const i = tc.index ?? 0;
-				const call = calls.get(i) ?? { id: '', name: '', args: '' };
-				if (tc.id) call.id = tc.id;
-				if (tc.function?.name) call.name += tc.function.name;
-				if (tc.function?.arguments) call.args += tc.function.arguments;
-				calls.set(i, call);
-			}
-		}
-	}
-	round.toolCalls = [...calls.values()].filter((c) => c.name);
-	return round;
-}
-
-interface AnthropicUsage {
-	input_tokens?: number;
-	output_tokens?: number;
-	cache_read_input_tokens?: number;
-	cache_creation_input_tokens?: number;
-}
-
-/** One Anthropic Messages stream event into the round (calls keyed by block index). */
-function anthropicEvent(
-	j: { type?: string; index?: number; content_block?: Block; delta?: Record<string, string | undefined>; message?: { usage?: AnthropicUsage }; usage?: unknown },
-	round: Round,
-	calls: Map<number, ToolCall>,
-	on: StreamEvents
-) {
-	const i = j.index ?? 0;
-	if (j.type === 'message_start') {
-		const u = j.message?.usage ?? {};
-		const cached = u.cache_read_input_tokens ?? 0;
-		round.usage = {
-			prompt_tokens: (u.input_tokens ?? 0) + cached + (u.cache_creation_input_tokens ?? 0),
-			completion_tokens: u.output_tokens ?? 0,
-			prompt_tokens_details: { cached_tokens: cached }
-		};
-	} else if (j.type === 'message_delta') {
-		const out = (j.usage as AnthropicUsage | undefined)?.output_tokens;
-		if (out !== undefined) round.usage = { ...(round.usage ?? {}), completion_tokens: out };
-	} else if (j.type === 'content_block_start' && j.content_block) {
-		const b = { ...j.content_block };
-		if (b.type === 'tool_use') calls.set(i, { id: String(b.id ?? ''), name: String(b.name ?? ''), args: '' });
-		round.blocks[i] = b;
-	} else if (j.type === 'content_block_delta' && j.delta) {
-		const d = j.delta;
-		const b = round.blocks[i] ?? (round.blocks[i] = {});
-		if (d.type === 'text_delta' && d.text) {
-			b.text = String(b.text ?? '') + d.text;
-			round.content += d.text;
-			on.onContent(d.text);
-		} else if (d.type === 'thinking_delta' && d.thinking) {
-			b.thinking = String(b.thinking ?? '') + d.thinking;
-			on.onReasoning(d.thinking);
-		} else if (d.type === 'signature_delta' && d.signature) {
-			b.signature = String(b.signature ?? '') + d.signature;
-		} else if (d.type === 'input_json_delta' && d.partial_json) {
-			const call = calls.get(i);
-			if (call) call.args += d.partial_json;
-		}
-	}
-}
-
-/** The assistant turn that asked for tools, as it goes back to the model. */
-function toolTurn(anthropic: boolean, r: Round): object {
-	if (!anthropic)
-		return {
-			role: 'assistant',
-			content: r.content || null,
-			tool_calls: r.toolCalls.map((c) => ({ id: c.id, type: 'function', function: { name: c.name, arguments: c.args } }))
-		};
-	const content: Block[] = [];
-	for (const b of r.blocks) {
-		if (!b) continue;
-		if (b.type === 'thinking' && b.signature) content.push({ type: 'thinking', thinking: b.thinking ?? '', signature: b.signature });
-		else if (b.type === 'redacted_thinking') content.push(b);
-		else if (b.type === 'text' && String(b.text ?? '').trim()) content.push({ type: 'text', text: b.text });
-		else if (b.type === 'tool_use') {
-			const call = r.toolCalls.find((c) => c.id === b.id);
-			let input: unknown = {};
-			try {
-				input = JSON.parse(call?.args || '{}');
-			} catch {
-				/* sent as {} */
-			}
-			content.push({ type: 'tool_use', id: b.id, name: b.name, input });
-		}
-	}
-	return { role: 'assistant', content };
-}
-
 async function runTool(call: ToolCall, m: WebMsg, signal: AbortSignal): Promise<string> {
-	let args: Record<string, string> = {};
-	try {
-		args = JSON.parse(call.args || '{}');
-	} catch {
-		return JSON.stringify({ error: 'bad arguments' });
-	}
+	const args = parseArgs(call.args) as Record<string, string>;
+	const keep = (arg: string, text: string) => (m.found = [...m.found, { tool: call.name, arg, text: text.slice(0, FOUND_KEEP) }]);
 	try {
 		if (call.name === 'web_search') {
 			const query = String(args.query ?? '');
@@ -442,12 +263,15 @@ async function runTool(call: ToolCall, m: WebMsg, signal: AbortSignal): Promise<
 				signal
 			});
 			for (const r of res.results ?? []) if (r.url && !m.sources.some((s) => s.url === r.url)) m.sources = [...m.sources, { title: r.title ?? '', url: r.url }];
-			return JSON.stringify(res).slice(0, MAX_TOOL_RESULT);
+			const out = JSON.stringify(res).slice(0, MAX_TOOL_RESULT);
+			keep(query, out);
+			return out;
 		}
 		if (call.name === 'web_fetch') {
 			const url = String(args.url ?? '');
 			const res = await json<{ title?: string; content?: string }>('/tools/v1/fetch', { body: { url }, signal });
 			if (!m.sources.some((s) => s.url === url)) m.sources = [...m.sources, { title: res.title ?? '', url }];
+			keep(url, `${res.title ?? ''}\n${res.content ?? ''}`);
 			return JSON.stringify({ url, title: res.title, text: (res.content ?? '').slice(0, MAX_TOOL_RESULT) });
 		}
 		return JSON.stringify({ error: 'unknown tool' });
@@ -457,35 +281,41 @@ async function runTool(call: ToolCall, m: WebMsg, signal: AbortSignal): Promise<
 	}
 }
 
-/** What the model sees of a message: text, and a user's images. */
-async function wire(m: WebMsg, anthropic: boolean): Promise<object> {
-	const images = m.role === 'user' ? m.attachments.filter((a) => a.mime.startsWith('image/')) : [];
-	if (!images.length) return { role: m.role, content: m.content };
-	const parts: object[] = [];
-	for (const a of images) {
-		try {
-			const url = await dataURL(await attachmentBlob(a.id));
-			if (!anthropic) parts.push({ type: 'image_url', image_url: { url } });
-			else {
-				const [head, data] = url.split(',', 2);
-				parts.push({ type: 'image', source: { type: 'base64', media_type: head!.slice(5).replace(';base64', ''), data } });
-			}
-		} catch {
-			parts.push({ type: 'text', text: `[图片 ${a.name} 无法读取]` });
-		}
-	}
-	if (m.content) parts.push({ type: 'text', text: m.content });
-	return { role: m.role, content: parts };
+/** A reply as later turns see it: what its searches found, then what it
+ *  said (or that it was cut short). */
+function replyText(m: WebMsg): string {
+	if (!m.found.length) return m.content;
+	const found = m.found.map((f) => `[${f.tool === 'web_fetch' ? '阅读网页' : '搜索'}] ${f.arg}\n${f.text}`).join('\n\n');
+	const said = m.content.trim() ? m.content : '（这条回答在完成前中断了）';
+	return `<web_results>\n以下是这条回答联网检索到的资料（已截短），后续回答可以直接引用：\n\n${found}\n</web_results>\n\n${said}`;
 }
 
-const sent = (history: WebMsg[]) => history.filter((m) => (m.content.trim() || m.attachments.length) && m.status !== 'error' && m.kind === 'chat');
+/** What the model sees of a message: text, and a user's images. */
+async function wire(m: WebMsg, proto: Proto): Promise<object> {
+	if (m.role === 'assistant') return wireMessage(proto, 'assistant', replyText(m));
+	const images: string[] = [];
+	let text = m.content;
+	for (const a of m.attachments.filter((a) => a.mime.startsWith('image/'))) {
+		try {
+			images.push(await dataURL(await attachmentBlob(a.id)));
+		} catch {
+			text = `[图片 ${a.name} 无法读取]\n${text}`;
+		}
+	}
+	return wireMessage(proto, 'user', text, images);
+}
+
+/** The messages that go to the model: a reply that failed or was stopped
+ *  still goes when it said or found something. */
+const sent = (history: WebMsg[]) =>
+	history.filter((m) => m.kind === 'chat' && (m.content.trim() || m.attachments.length || m.found.length) && !(m.status === 'error' && !m.found.length && !m.content.trim()));
 
 /** The whole conversation as the model sees it: nothing is dropped or
  *  shortened (a conversation too long for the model ends instead). */
-async function context(history: WebMsg[], system: string, anthropic: boolean): Promise<object[]> {
+async function context(history: WebMsg[], proto: Proto): Promise<object[]> {
 	const kept: object[] = [];
-	for (const m of sent(history)) kept.push(await wire(m, anthropic));
-	return anthropic ? kept : [{ role: 'system', content: system }, ...kept];
+	for (const m of sent(history)) kept.push(await wire(m, proto));
+	return kept;
 }
 
 /** Whether the conversation has no room left in the model's window for
@@ -498,7 +328,10 @@ export function contextFull(model: ChatModel | undefined, history: WebMsg[], tex
 	const used =
 		last?.role === 'assistant' && last.usage?.input
 			? last.usage.input + last.usage.output
-			: sent(history).reduce((n, m) => n + estimate(m.content) + (m.role === 'user' ? m.attachments.filter((a) => a.mime.startsWith('image/')).length * IMAGE_TOKENS : 0), 0);
+			: sent(history).reduce(
+					(n, m) => n + estimate(m.role === 'assistant' ? replyText(m) : m.content) + (m.role === 'user' ? m.attachments.filter((a) => a.mime.startsWith('image/')).length * IMAGE_TOKENS : 0),
+					0
+				);
 	return used + estimate(text) + images * IMAGE_TOKENS > model.window * 0.75;
 }
 
@@ -685,32 +518,15 @@ class Chat {
 			if (opts.research) return await this.#startResearch(m, opts, convId);
 			await this.#put(m, convId);
 			const system = systemPrompt(opts.search);
-			const anthropic = isClaude(opts.model);
-			const messages: object[] = await context(this.msgs.slice(0, -1), system, anthropic);
+			const proto = protoOf(opts.model);
+			let input: object[] = await context(this.msgs.slice(0, -1), proto);
 			let thinkingSince = 0;
+			let toolCalls = 0;
 			for (let round = 0; ; round++) {
-				const last = round >= MAX_TOOL_ROUNDS;
-				const body = anthropic
-					? {
-							model: opts.model,
-							max_tokens: ANTHROPIC_MAX_TOKENS,
-							stream: true,
-							system,
-							messages,
-							...(opts.effort ? { output_config: { effort: opts.effort } } : {}),
-							// Tool rounds used up: the tools stay (the history holds tool_use
-							// blocks), the model may only answer.
-							...(opts.search ? { tools: ANTHROPIC_TOOLS, ...(last ? { tool_choice: { type: 'none' } } : {}) } : {})
-						}
-					: {
-							model: opts.model,
-							messages,
-							stream: true,
-							stream_options: { include_usage: true },
-							...(opts.effort ? { reasoning_effort: opts.effort } : {}),
-							...(opts.search && !last ? { tools: WEB_TOOLS } : {})
-						};
-				const r = await streamRound(anthropic, body, abort.signal, {
+				// Out of rounds or of searches: the model answers with what it found.
+				const answerOnly = round >= MAX_TOOL_ROUNDS || toolCalls >= MAX_TOOL_CALLS;
+				const body = requestBody(proto, { model: opts.model, system, input, effort: opts.effort, tools: opts.search, answerOnly });
+				const r = await streamRound(proto, body, abort.signal, {
 					onReasoning: (t) => {
 						if (!thinkingSince) thinkingSince = Date.now();
 						m.reasoning += t;
@@ -722,21 +538,28 @@ class Chat {
 				});
 				if (r.usage) {
 					m.usage = {
-						input: (m.usage?.input ?? 0) + (r.usage.prompt_tokens ?? 0),
-						output: (m.usage?.output ?? 0) + (r.usage.completion_tokens ?? 0),
-						reasoning: (m.usage?.reasoning ?? 0) + (r.usage.completion_tokens_details?.reasoning_tokens ?? 0),
-						cached: (m.usage?.cached ?? 0) + (r.usage.prompt_tokens_details?.cached_tokens ?? 0),
+						input: (m.usage?.input ?? 0) + r.usage.input,
+						output: (m.usage?.output ?? 0) + r.usage.output,
+						reasoning: (m.usage?.reasoning ?? 0) + r.usage.reasoning,
+						cached: (m.usage?.cached ?? 0) + r.usage.cached,
 						cost: m.usage?.cost ?? '',
 						currency: m.usage?.currency ?? ''
 					};
 					void this.#cost(m, r.requestId, convId, costs);
 				}
-				if (!r.toolCalls.length || last) break;
-				messages.push(toolTurn(anthropic, r));
+				if (!r.toolCalls.length || answerOnly) break;
 				const results: { id: string; out: string }[] = [];
-				for (const c of r.toolCalls) results.push({ id: c.id, out: await runTool(c, m, abort.signal) });
-				if (anthropic) messages.push({ role: 'user', content: results.map((x) => ({ type: 'tool_result', tool_use_id: x.id, content: x.out })) });
-				else for (const x of results) messages.push({ role: 'tool', tool_call_id: x.id, content: x.out });
+				for (const c of r.toolCalls) {
+					const out =
+						++toolCalls > MAX_TOOL_CALLS
+							? JSON.stringify({ error: `本次回答的联网次数已用完（${MAX_TOOL_CALLS} 次），请根据已经获得的资料直接回答。` })
+							: await runTool(c, m, abort.signal);
+					results.push({ id: c.id, out });
+				}
+				input = withToolRound(proto, input, r, results);
+				// What it found so far is kept even if the reply stops here.
+				// (awaited: a later save must not be overtaken by this one).
+				await this.#put(m, convId);
 			}
 			if (thinkingSince && !m.thoughtMs) m.thoughtMs = Date.now() - thinkingSince;
 			m.status = 'complete';
