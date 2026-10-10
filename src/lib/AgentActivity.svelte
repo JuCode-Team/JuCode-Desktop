@@ -1,123 +1,131 @@
 <script lang="ts">
-	// An agent's tasks on its page: what is waiting for the user, then one
-	// entry per task (a session): what started it and where from, its state,
-	// what it concluded, the reports it posted; reply to continue it, or open
-	// the session. Most recently active first; archived tasks (earlier runs
-	// of a scheduled task) only on request.
+	// An agent's tasks on its page: what waits for the user, then one entry
+	// per task (a scheduled one, or one with a session of its own) with its
+	// state, how it is triggered and what its latest run concluded; its runs
+	// unfold below it. Done and closed tasks are folded away at the end, with
+	// the items closed lately.
 	import UserIcon from 'phosphor-svelte/lib/UserIcon';
 	import ClockIcon from 'phosphor-svelte/lib/ClockIcon';
 	import AlarmIcon from 'phosphor-svelte/lib/AlarmIcon';
-	import ChatCircleTextIcon from 'phosphor-svelte/lib/ChatCircleTextIcon';
-	import ChatsIcon from 'phosphor-svelte/lib/ChatsIcon';
 	import ArrowBendDownRightIcon from 'phosphor-svelte/lib/ArrowBendDownRightIcon';
-	import FileTextIcon from 'phosphor-svelte/lib/FileTextIcon';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import AgentAvatar from '$lib/AgentAvatar.svelte';
 	import DeskContent from '$lib/DeskContent.svelte';
-	import { agentDirectory, type AgentView, type MessageView, type ReportView } from '$lib/agents.svelte';
-	import { threads, type Source, type Thread } from '$lib/agentActivity';
+	import DeskClosed from '$lib/DeskClosed.svelte';
+	import {
+		agentDirectory,
+		taskSession,
+		type AgentView,
+		type RunView,
+		type TaskView
+	} from '$lib/agents.svelte';
+	import { summary as scheduleSummary } from '$lib/schedules';
+	import { when } from '$lib/time';
 	import { t } from '$lib/i18n';
 
 	let {
 		agent,
 		onOpenSession,
-		onOpenAgent,
-		onNewSession
+		onOpenAgent
 	}: {
 		agent: AgentView;
 		onOpenSession: (session: string) => void;
 		onOpenAgent: (agent: string) => void;
-		/** Open a new, empty session of the agent. */
-		onNewSession: () => void;
 	} = $props();
 
-	let messages = $state<MessageView[] | null>(null);
-	let handoffs = $state<Record<string, string>>({});
-	let error = $state('');
-	let expanded = $state<Record<string, boolean>>({});
+	/** What needs the user first, then what is working, then what runs later. */
+	const ORDER: Record<TaskView['state'], number> = { needs_you: 0, running: 1, waiting: 2, paused: 3, done: 4, closed: 5 };
+	const tasks = $derived(agentDirectory.tasks.filter((task) => task.agent === agent.id));
+	const current = $derived(
+		tasks
+			.filter((task) => task.state !== 'done' && task.state !== 'closed')
+			.sort((a, b) => ORDER[a.state] - ORDER[b.state] || b.updated_at - a.updated_at)
+	);
+	const finished = $derived(tasks.filter((task) => task.state === 'done' || task.state === 'closed'));
+	let showFinished = $state(false);
 
-	// Reload on every delivery or report, and when a run ends (its handoff
-	// note follows); the daemon keeps the log.
+	/** Unfolded parts by key: `i:` instruction, `s:` summary, `r:` runs. */
+	let expanded = $state<Record<string, boolean>>({});
+	const toggle = (key: string) => (expanded[key] = !expanded[key]);
+
+	/** Runs of the tasks whose runs are unfolded, newest first. */
+	let runs = $state<Record<string, RunView[]>>({});
+	let error = $state('');
+	// Reload a task's runs when it changes while they are shown.
 	$effect(() => {
-		void agentDirectory.activity;
-		void agent.running?.length;
-		const id = agent.id;
-		agentDirectory.messages(id).then(
-			(list) => {
-				messages = list;
-				error = '';
-			},
-			(e) => (error = e instanceof Error ? e.message : String(e))
-		);
-		agentDirectory.handoffs(id).then((notes) => (handoffs = notes), () => {});
+		for (const task of tasks) {
+			if (!expanded[`r:${task.id}`]) continue;
+			void task.updated_at;
+			void task.latest_run?.status;
+			const id = task.id;
+			agentDirectory.task(id).then(
+				(detail) => (runs[id] = detail.runs),
+				(e) => (error = e instanceof Error ? e.message : String(e))
+			);
+		}
 	});
 
-	const list = $derived(
-		threads(
-			agent.id,
-			agentDirectory.sessions,
-			messages ?? [],
-			agentDirectory.reports,
-			agentDirectory.schedules,
-			agent.running ?? [],
-			handoffs
-		)
-	);
+	function trigger(task: TaskView): string {
+		const tr = task.trigger;
+		if ('repeat' in tr) return scheduleSummary(tr);
+		if ('at' in tr) return t('shell.activity.remind', { time: when(tr.at) });
+		if (task.origin.startsWith('agent:')) {
+			return t('shell.activity.fromAgent', { name: agentDirectory.agentName(task.origin.slice('agent:'.length)) });
+		}
+		return t('shell.activity.fromUser');
+	}
 
-	let showArchived = $state(false);
-	const archivedCount = $derived(list.filter((thread) => thread.archived).length);
-	const shown = $derived(showArchived ? list : list.filter((thread) => !thread.archived));
+	function stateText(task: TaskView): string {
+		switch (task.state) {
+			case 'needs_you':
+				return t('shell.activity.stateNeedsYou');
+			case 'running':
+				return t('shell.activity.stateRunning');
+			case 'waiting':
+				return task.next_at ? t('shell.activity.stateWaiting', { time: when(task.next_at) }) : '';
+			case 'paused':
+				return t('shell.activity.statePaused');
+			case 'done':
+				return t('shell.activity.stateDone');
+			case 'closed':
+				return t('shell.activity.stateClosed');
+		}
+	}
 
-	function sourceLabel(source: Source | null): string {
-		switch (source?.kind) {
-			case 'user':
-				return t('shell.activity.fromUser');
-			case 'schedule':
-				return t('shell.activity.fromSchedule', { name: source.name });
-			case 'timer':
-				return t('shell.activity.fromTimer');
-			case 'agent':
-				return t('shell.activity.fromAgent', { name: agentDirectory.agentName(source.id) });
-			case 'answer':
-				return t('shell.activity.fromAnswer');
-			case 'other':
-				return t('shell.activity.fromOther', { from: source.from });
+	function runLabel(run: RunView): string {
+		if (run.status === 'queued') return t('shell.activity.statusQueued');
+		if (run.status === 'running') return t('shell.activity.statusRunning');
+		if (run.status === 'interrupted') return t('shell.activity.statusInterrupted');
+		switch (run.outcome?.verdict) {
+			case 'quiet':
+				return t('shell.activity.verdictQuiet');
+			case 'needs_you':
+				return t('shell.activity.verdictNeedsYou');
+			case 'failed':
+				return t('shell.activity.verdictFailed');
 			default:
-				return t('shell.activity.fromSession');
+				return run.status === 'failed' ? t('shell.activity.verdictFailed') : t('shell.activity.verdictDone');
 		}
 	}
 
-	/** The task as the user wrote it: a scheduled run without its 定时任务「…」
-	 *  header and the last run's handoff the daemon appends (the thread shows
-	 *  its own conclusion). */
-	function taskText(thread: Thread): string {
-		let body = thread.task?.body ?? '';
-		if (thread.source?.kind === 'schedule') {
-			body = body.replace(/^定时任务「[^」]*」：\n/, '');
-			const cut = body.indexOf('\n\n上次运行（');
-			if (cut >= 0) body = body.slice(0, cut);
+	/** Runs to list: quiet ones in a row fold into one line. */
+	type Row = { run: RunView } | { quiet: RunView[] };
+	function rows(list: RunView[]): Row[] {
+		const out: Row[] = [];
+		for (const run of list) {
+			const last = out[out.length - 1];
+			if (run.outcome?.verdict === 'quiet' && run.status !== 'running') {
+				if (last && 'quiet' in last) last.quiet.push(run);
+				else out.push({ quiet: [run] });
+			} else out.push({ run });
 		}
-		return body;
+		return out;
 	}
+
 	const isLong = (text: string) => text.length > 220 || text.split('\n').length > 3;
-
-	function titleOf(thread: Thread): string {
-		return thread.title || thread.task?.body.split('\n')[0] || t('shell.agentPage.untitled');
-	}
-
-	function when(ms: number): string {
-		const d = new Date(ms);
-		const today = new Date().toDateString() === d.toDateString();
-		return d.toLocaleString(undefined, today ? { hour: '2-digit', minute: '2-digit' } : { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-	}
-
-	function toggle(key: string, report?: ReportView) {
-		expanded[key] = !expanded[key];
-		if (report && expanded[key] && !report.read) void agentDirectory.markRead(report).catch(() => {});
-	}
+	const firstLine = (text: string) => text.trim().split('\n')[0] ?? '';
 
 	/** The task being replied to, and the reply. */
 	let replyTo = $state<string | null>(null);
@@ -129,13 +137,13 @@
 		replyText = '';
 		replyError = '';
 	}
-	async function sendReply(session: string) {
+	async function sendReply(task: string) {
 		const body = replyText.trim();
 		if (!body || replying) return;
 		replying = true;
 		replyError = '';
 		try {
-			await agentDirectory.message(agent.id, body, session);
+			await agentDirectory.messageTask(task, body);
 			replyTo = null;
 			replyText = '';
 		} catch (e) {
@@ -144,157 +152,172 @@
 			replying = false;
 		}
 	}
+
+	async function setClosed(task: TaskView, closed: boolean) {
+		error = '';
+		try {
+			await (closed ? agentDirectory.closeTask(task.id) : agentDirectory.reopenTask(task.id));
+		} catch (e) {
+			error = e instanceof Error ? e.message : String(e);
+		}
+	}
 </script>
 
 <DeskContent agent={agent.id} {onOpenSession} />
 
 {#if error}<div class="err"><Notice>{t('shell.activity.loadFailed', { error })}</Notice></div>{/if}
 
-<div class="head">
-	<span class="count">{shown.length ? t('shell.activity.count', { n: shown.length }) : ''}</span>
-	<Button size="sm" variant="ghost" disabled={!agent.enabled} onclick={onNewSession}><PlusIcon size={13} /> {t('shell.agentPage.newSession')}</Button>
-</div>
+{#snippet entry(task: TaskView)}
+	{@const session = taskSession(task)}
+	{@const outcome = task.latest_run?.outcome}
+	<li class="entry" class:attention={task.state === 'needs_you'}>
+		<span class="mark">
+			{#if task.trigger.kind === 'repeat'}<ClockIcon size={14} />
+			{:else if task.trigger.kind === 'once'}<AlarmIcon size={14} />
+			{:else if task.origin.startsWith('agent:')}
+				{@const from = agentDirectory.agents.find((a) => a.id === task.origin.slice('agent:'.length))}
+				{#if from}<AgentAvatar agent={from} size={14} />{:else}<ArrowBendDownRightIcon size={14} />{/if}
+			{:else}<UserIcon size={14} />{/if}
+		</span>
+		<div class="content">
+			<div class="line">
+				<span class="title">{task.title || t('shell.agentPage.untitled')}</span>
+				<span class="state {task.state}">
+					{#if task.state === 'running'}<CircleNotchIcon size={12} class="spin" />{:else}<span class="dot"></span>{/if}
+					{stateText(task)}
+				</span>
+				<span class="at">{when(task.updated_at)}</span>
+			</div>
+			<div class="meta">
+				{#if task.origin.startsWith('agent:') && task.trigger.kind === 'manual'}
+					{@const from = task.origin.slice('agent:'.length)}
+					<button class="link" onclick={() => onOpenAgent(from)}>{trigger(task)}</button>
+				{:else}
+					<span>{trigger(task)}</span>
+				{/if}
+				{#if task.runs > 1}<span>· {t('shell.activity.runCount', { n: task.runs })}</span>{/if}
+				{#if task.quiet_runs > 0 && task.trigger.kind !== 'manual'}<span>· {t('shell.activity.quietRuns', { n: task.quiet_runs })}</span>{/if}
+			</div>
 
-{#if messages === null && !error}
-	<div class="loading"><CircleNotchIcon size={16} class="spin" /></div>
-{:else if list.length === 0 && !error}
+			{#if task.latest_run?.status === 'interrupted'}
+				<p class="note warn">{t('shell.activity.interrupted')}</p>
+			{/if}
+			{#if outcome?.summary}
+				<div class="body" class:clamp={isLong(outcome.summary) && !expanded[`s:${task.id}`]}>{outcome.summary}</div>
+				{#if isLong(outcome.summary)}
+					<button class="more" onclick={() => toggle(`s:${task.id}`)}>{expanded[`s:${task.id}`] ? t('shell.activity.less') : t('shell.activity.more')}</button>
+				{/if}
+			{/if}
+
+			{#if expanded[`i:${task.id}`] && task.instruction}
+				<div class="instruction">{task.instruction}</div>
+			{/if}
+
+			{#if expanded[`r:${task.id}`]}
+				<ol class="runs">
+					{#each rows(runs[task.id] ?? []) as row, i (i)}
+						{#if 'quiet' in row}
+							{@const newest = row.quiet[0]}
+							{@const oldest = row.quiet[row.quiet.length - 1]}
+							<li class="run quiet">
+								<span class="run-at">{row.quiet.length > 1 ? `${when(oldest.started_at)} – ${when(newest.started_at)}` : when(newest.started_at)}</span>
+								<span class="run-label">{t('shell.activity.quietGroup', { n: row.quiet.length })}</span>
+							</li>
+						{:else if row.run.status === 'skipped'}
+							<li class="run quiet">
+								<span class="run-at">{when(row.run.started_at)}</span>
+								<span class="run-label">{t('shell.activity.skipped')}</span>
+							</li>
+						{:else}
+							{@const run = row.run}
+							<li class="run">
+								<button class="run-row" disabled={!run.session} onclick={() => run.session && onOpenSession(run.session)}>
+									<span class="run-at">{when(run.started_at)}</span>
+									<span class="run-label {run.outcome?.verdict ?? run.status}">{runLabel(run)}</span>
+									<span class="run-text">{firstLine(run.outcome?.summary ?? '')}</span>
+								</button>
+							</li>
+						{/if}
+					{/each}
+				</ol>
+			{/if}
+
+			<div class="foot">
+				{#if agent.enabled && session && task.state !== 'closed'}
+					<button class="more" onclick={() => startReply(task.id)}>{t('shell.activity.reply')}</button>
+				{/if}
+				{#if task.instruction}
+					<button class="more" onclick={() => toggle(`i:${task.id}`)} aria-expanded={!!expanded[`i:${task.id}`]}>{t('shell.activity.instruction')}</button>
+				{/if}
+				{#if task.runs > 1}
+					<button class="more" onclick={() => toggle(`r:${task.id}`)} aria-expanded={!!expanded[`r:${task.id}`]}>{t('shell.activity.runs')}</button>
+				{/if}
+				{#if session}
+					<button class="more" onclick={() => onOpenSession(session)}>{t('shell.activity.open')}</button>
+				{/if}
+				<span class="grow"></span>
+				{#if task.state === 'closed'}
+					<button class="more" onclick={() => setClosed(task, false)}>{t('shell.activity.reopen')}</button>
+				{:else}
+					<button class="more" onclick={() => setClosed(task, true)}>{t('shell.activity.close')}</button>
+				{/if}
+			</div>
+			{#if replyTo === task.id}
+				<div class="reply">
+					<!-- svelte-ignore a11y_autofocus -->
+					<textarea
+						rows="2"
+						autofocus
+						bind:value={replyText}
+						placeholder={t('shell.activity.replyPlaceholder', { title: task.title })}
+						onkeydown={(e) => {
+							if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing) {
+								e.preventDefault();
+								void sendReply(task.id);
+							} else if (e.key === 'Escape') replyTo = null;
+						}}
+					></textarea>
+					<div class="reply-foot">
+						{#if replyError}<span class="reply-err">{replyError}</span>{/if}
+						<span class="grow"></span>
+						<Button variant="ghost" size="sm" onclick={() => (replyTo = null)}>{t('common.cancel')}</Button>
+						<Button variant="primary" size="sm" disabled={!replyText.trim() || replying} onclick={() => sendReply(task.id)}>
+							{#if replying}<CircleNotchIcon size={13} class="spin" />{/if}{t('shell.activity.replySend')}
+						</Button>
+					</div>
+				</div>
+			{/if}
+		</div>
+	</li>
+{/snippet}
+
+{#if tasks.length === 0}
 	<p class="empty">{t('shell.activity.empty')}</p>
 {:else}
-	<ol class="feed">
-		{#each shown as thread (thread.id)}
-			{@const session = thread.session}
-			{@const body = taskText(thread)}
-			{@const long = isLong(body)}
-			{@const unread = thread.reports.some((r) => !r.read)}
-			<li class="entry" class:unread>
-				<span class="mark">
-					{#if thread.source?.kind === 'user'}<UserIcon size={14} />
-					{:else if thread.source?.kind === 'schedule'}<ClockIcon size={14} />
-					{:else if thread.source?.kind === 'timer'}<AlarmIcon size={14} />
-					{:else if thread.source?.kind === 'agent'}
-						{@const from = agentDirectory.agents.find((a) => a.id === (thread.source as { id: string }).id)}
-						{#if from}<AgentAvatar agent={from} size={14} />{:else}<ArrowBendDownRightIcon size={14} />{/if}
-					{:else if thread.source?.kind === 'answer'}<ChatCircleTextIcon size={14} />
-					{:else if !thread.task && thread.reports.length}<FileTextIcon size={14} />
-					{:else}<ChatsIcon size={14} />{/if}
-				</span>
-				<div class="content">
-					<div class="line">
-						<span class="title">{titleOf(thread)}</span>
-						{#if thread.status === 'running'}
-							<span class="state live"><CircleNotchIcon size={12} class="spin" />{t('shell.activity.running')}</span>
-						{:else if thread.status === 'queued'}
-							<span class="state">{t('shell.activity.queued')}</span>
-						{/if}
-						<span class="at">{when(thread.latest)}</span>
-					</div>
-					<div class="meta">
-						{#if thread.source?.kind === 'agent'}
-							{@const from = thread.source.id}
-							<button class="link" onclick={() => onOpenAgent(from)}>{sourceLabel(thread.source)}</button>
-						{:else}
-							<span>{sourceLabel(thread.source)}</span>
-						{/if}
-						{#if thread.followUps.length}<span>· {t('shell.activity.followUps', { n: thread.followUps.length })}</span>{/if}
-					</div>
-
-					{#if body && thread.title}
-						<div class="body" class:clamp={long && !expanded[thread.id]}>{body}</div>
-						{#if long}
-							<button class="more" onclick={() => toggle(thread.id)}>{expanded[thread.id] ? t('shell.activity.less') : t('shell.activity.more')}</button>
-						{/if}
-					{/if}
-
-					{#if thread.status === 'undeliverable'}
-						{@const failed = [thread.task, ...thread.followUps].find((m) => m?.status === 'undeliverable')}
-						<p class="state warn">{t('shell.activity.undeliverable', { reason: failed?.reason ?? '' })}</p>
-					{/if}
-
-					{#if thread.handoff}
-						<div class="handoff">
-							<span class="tag">{t('shell.activity.conclusion')}</span>
-							<div class="handoff-text" class:clamp={!expanded[`h:${thread.id}`]}>{thread.handoff}</div>
-							{#if isLong(thread.handoff)}
-								<button class="more" onclick={() => toggle(`h:${thread.id}`)}>{expanded[`h:${thread.id}`] ? t('shell.activity.less') : t('shell.activity.more')}</button>
-							{/if}
-						</div>
-					{/if}
-
-					{#each thread.reports as report (report.id)}
-						{@const key = `r:${report.id}`}
-						<div class="report" class:unread={!report.read}>
-							<button class="report-head" onclick={() => toggle(key, report)} aria-expanded={!!expanded[key]}>
-								<FileTextIcon size={13} />
-								<span class="report-title">{report.title}</span>
-								<span class="at">{when(report.at)}</span>
-							</button>
-							{#if expanded[key] && report.body}<div class="body">{report.body}</div>{/if}
-						</div>
-					{/each}
-
-					{#if session}
-						<div class="foot">
-							{#if agent.enabled}
-								<button class="more" onclick={() => startReply(thread.id)}>{t('shell.activity.reply')}</button>
-							{/if}
-							<button class="more" onclick={() => onOpenSession(session)}>{t('shell.activity.openSession')}</button>
-						</div>
-						{#if replyTo === thread.id}
-							<div class="reply">
-								<!-- svelte-ignore a11y_autofocus -->
-								<textarea
-									rows="2"
-									autofocus
-									bind:value={replyText}
-									placeholder={t('shell.activity.replyPlaceholder', { title: titleOf(thread) })}
-									onkeydown={(e) => {
-										if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing) {
-											e.preventDefault();
-											void sendReply(session);
-										} else if (e.key === 'Escape') replyTo = null;
-									}}
-								></textarea>
-								<div class="reply-foot">
-									{#if replyError}<span class="reply-err">{replyError}</span>{/if}
-									<span class="grow"></span>
-									<Button variant="ghost" size="sm" onclick={() => (replyTo = null)}>{t('common.cancel')}</Button>
-									<Button variant="primary" size="sm" disabled={!replyText.trim() || replying} onclick={() => sendReply(session)}>
-										{#if replying}<CircleNotchIcon size={13} class="spin" />{/if}{t('shell.activity.replySend')}
-									</Button>
-								</div>
-							</div>
-						{/if}
-					{/if}
-				</div>
-			</li>
-		{/each}
-	</ol>
-	{#if archivedCount}
-		<button class="more archived" onclick={() => (showArchived = !showArchived)}>
-			{showArchived ? t('shell.activity.hideArchived') : t('shell.activity.showArchived', { n: archivedCount })}
+	{#if current.length}
+		<ol class="feed">
+			{#each current as task (task.id)}{@render entry(task)}{/each}
+		</ol>
+	{/if}
+	{#if finished.length}
+		<button class="more fold" onclick={() => (showFinished = !showFinished)} aria-expanded={showFinished}>
+			{showFinished ? t('shell.activity.hideFinished') : t('shell.activity.finished', { n: finished.length })}
 		</button>
+		{#if showFinished}
+			<ol class="feed">
+				{#each finished as task (task.id)}{@render entry(task)}{/each}
+			</ol>
+		{/if}
 	{/if}
 {/if}
+
+<div class="closed-items">
+	<DeskClosed inScope={(id) => id === agent.id} />
+</div>
 
 <style>
 	.err {
 		margin-top: 12px;
-	}
-	.head {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		margin-top: 14px;
-	}
-	.count {
-		font-size: var(--fs-xs);
-		color: var(--dim2);
-	}
-	.loading {
-		display: flex;
-		justify-content: center;
-		padding: 32px;
-		color: var(--dim);
 	}
 	.empty {
 		margin: 20px 0 0;
@@ -336,10 +359,6 @@
 		color: var(--dim);
 		box-shadow: 0 0 0 4px var(--bg);
 	}
-	.entry.unread .mark {
-		background: color-mix(in oklab, var(--accent) 16%, var(--surface2));
-		color: var(--accent-bright);
-	}
 	.content {
 		flex: 1;
 		min-width: 0;
@@ -366,8 +385,40 @@
 		font-size: var(--fs-2xs);
 		color: var(--dim2);
 	}
+	/* The state is a small signal beside the title, never a filled block. */
+	.state {
+		display: inline-flex;
+		flex-shrink: 0;
+		align-items: center;
+		gap: 5px;
+		font-size: var(--fs-xs);
+		color: var(--dim);
+		white-space: nowrap;
+	}
+	.dot {
+		width: 6px;
+		height: 6px;
+		border-radius: var(--r-full);
+		background: var(--dim2);
+	}
+	.state.needs_you {
+		color: var(--warn);
+	}
+	.state.needs_you .dot {
+		background: var(--warn);
+	}
+	.state.running {
+		color: var(--accent-bright);
+	}
+	.state.waiting .dot {
+		background: var(--accent);
+	}
+	.entry.attention .mark {
+		color: var(--warn);
+	}
 	.meta {
 		display: flex;
+		flex-wrap: wrap;
 		gap: 4px;
 		margin-top: 2px;
 		font-size: var(--fs-xs);
@@ -393,6 +444,17 @@
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
 	}
+	.instruction {
+		margin-top: 8px;
+		padding: 8px 12px;
+		border-radius: var(--r-md);
+		background: var(--surface);
+		font-size: var(--fs-xs);
+		line-height: 1.6;
+		color: var(--dim);
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
+	}
 	.clamp {
 		display: -webkit-box;
 		-webkit-line-clamp: 3;
@@ -400,64 +462,60 @@
 		-webkit-box-orient: vertical;
 		overflow: hidden;
 	}
-	.state {
-		display: inline-flex;
-		align-items: center;
-		gap: 5px;
-		margin: 0;
+	.note {
+		margin: 6px 0 0;
 		font-size: var(--fs-xs);
-		color: var(--dim);
 	}
-	.state.live {
-		color: var(--accent-bright);
-	}
-	.state.warn {
-		margin-top: 6px;
+	.note.warn {
 		color: var(--warn);
 	}
-	/* What the session concluded: the part worth reading first. */
-	.handoff {
-		margin-top: 8px;
-		padding: 8px 12px;
-		border-radius: var(--r-md);
-		background: var(--surface);
+	.runs {
+		margin: 8px 0 0;
+		padding: 0 0 0 2px;
+		list-style: none;
 	}
-	.tag {
-		font-size: var(--fs-2xs);
+	.run {
+		font-size: var(--fs-xs);
+	}
+	.run.quiet {
+		display: flex;
+		gap: 10px;
+		padding: 3px 0;
 		color: var(--dim2);
 	}
-	.handoff-text {
-		margin-top: 2px;
-		font-size: var(--fs-sm);
-		line-height: 1.6;
-		color: var(--text);
-		white-space: pre-wrap;
-		overflow-wrap: anywhere;
-	}
-	.report {
-		margin-top: 6px;
-	}
-	.report-head {
+	.run-row {
 		display: flex;
-		align-items: center;
-		gap: 6px;
+		align-items: baseline;
+		gap: 10px;
 		width: 100%;
-		padding: 2px 0;
+		padding: 3px 0;
 		border: none;
 		background: none;
 		color: var(--dim);
 		font: inherit;
-		font-size: var(--fs-sm);
 		text-align: left;
 		cursor: pointer;
 	}
-	.report-head:hover {
+	.run-row:hover:not(:disabled) {
 		color: var(--text);
 	}
-	.report.unread .report-head {
-		color: var(--accent-bright);
+	.run-row:disabled {
+		cursor: default;
 	}
-	.report-title {
+	.run-at {
+		flex: none;
+		font-family: var(--font-mono);
+		font-size: var(--fs-2xs);
+	}
+	.run-label {
+		flex: none;
+	}
+	.run-label.needs_you,
+	.run-label.failed,
+	.run-label.interrupted {
+		color: var(--warn);
+	}
+	.run-text {
 		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -481,8 +539,11 @@
 	.more:hover {
 		color: var(--text);
 	}
-	.more.archived {
-		margin: 4px 0 0 41px;
+	.more.fold {
+		margin: 10px 0 0 41px;
+	}
+	.closed-items {
+		margin-top: 18px;
 	}
 	.reply {
 		display: flex;
@@ -518,10 +579,5 @@
 	}
 	.grow {
 		flex: 1;
-	}
-	/* The status beside a long title stays on one line. */
-	.line .state {
-		flex-shrink: 0;
-		white-space: nowrap;
 	}
 </style>

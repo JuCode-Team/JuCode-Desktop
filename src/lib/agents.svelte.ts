@@ -129,6 +129,79 @@ export interface ReportView {
 	read: boolean;
 }
 
+/** What a run concluded: the agent's own `finish`, or inferred afterwards. */
+export interface OutcomeView {
+	verdict: 'quiet' | 'done' | 'needs_you' | 'failed';
+	summary: string;
+	next: string;
+	source: 'agent' | 'inferred';
+	at: number;
+}
+
+/** One execution of a task (see the daemon's "Tasks and runs"). */
+export interface RunView {
+	id: string;
+	agent: string;
+	task: string;
+	/** null: skipped before it reached a session. */
+	session: string | null;
+	trigger: 'user' | 'schedule' | 'reply' | 'answer' | 'timer' | 'agent' | 'other';
+	status: 'queued' | 'running' | 'succeeded' | 'failed' | 'interrupted' | 'skipped' | 'cancelled';
+	/** ms */
+	started_at: number;
+	ended_at: number | null;
+	outcome: OutcomeView | null;
+}
+
+/** How a task runs: by hand, at a reminder the agent set (`at`), or as a
+ *  scheduled task (its schedule's fields; `once` for a one-time one). */
+export type TaskTrigger =
+	| { kind: 'manual' }
+	| { kind: 'once'; at: number; enabled: boolean }
+	| ({ kind: 'repeat' | 'once'; enabled: boolean; next_run_at: number | null } & Pick<Schedule, 'repeat' | 'time' | 'days' | 'date'>);
+
+/** An agent's task: a scheduled one (its id is the schedule's) or one with
+ *  a session of its own. Its state is the daemon's reading of its runs,
+ *  questions and trigger. */
+export interface TaskView {
+	id: string;
+	agent: string;
+	title: string;
+	instruction: string;
+	/** `user`, `agent` (a schedule it proposed) or `agent:<id>`. */
+	origin: string;
+	session: string | null;
+	trigger: TaskTrigger;
+	state: 'needs_you' | 'running' | 'waiting' | 'paused' | 'done' | 'closed';
+	/** Runs, skipped ones left out. */
+	runs: number;
+	/** The latest runs in a row that found nothing for the user. */
+	quiet_runs: number;
+	open_questions: number;
+	open_actions: number;
+	/** ms: when it runs again by itself. */
+	next_at: number | null;
+	latest_run: RunView | null;
+	/** ms */
+	updated_at: number;
+	created_at: number;
+	closed_by?: string;
+	closed_reason?: string;
+	closed_at?: number;
+}
+
+export interface TaskDetail {
+	task: TaskView;
+	/** Newest first. */
+	runs: RunView[];
+	questions: { id: string; title: string; session: string; asked_at: number }[];
+}
+
+/** The session a task continues in: its own, or its latest run's. */
+export function taskSession(task: TaskView): string | null {
+	return task.session ?? task.latest_run?.session ?? null;
+}
+
 /** One message to an agent, as the daemon logged it: a task from the user, a
  *  scheduled run, a reminder it set, another agent's message or the answer
  *  to one of its questions. */
@@ -194,6 +267,8 @@ export class AgentDirectory {
 	closedActions = $state<Closed<ActionView>[]>([]);
 	reports = $state<ReportView[]>([]);
 	schedules = $state<Schedule[]>([]);
+	/** Every agent's tasks, most recently active first. */
+	tasks = $state<TaskView[]>([]);
 	/** Bumped when an agent's message log changes (a delivery, a report). */
 	activity = $state(0);
 	/** Items waiting for the user: open questions and pending actions. */
@@ -281,6 +356,16 @@ export class AgentDirectory {
 			this.reports = [report, ...this.reports];
 			this.activity++;
 			this.onArrival?.('report', this.agentName(report.agent), report.title, report.agent);
+		} else if (frame.type === 'report_read' && typeof frame.report === 'string') {
+			const id = frame.report;
+			this.reports = this.reports.map((r) => (r.id === id ? { ...r, read: true } : r));
+		} else if (frame.type === 'tasks' && Array.isArray(frame.tasks)) {
+			// One agent's tasks (or, without `agent`, everyone's).
+			const agent = typeof frame.agent === 'string' ? frame.agent : null;
+			const list = frame.tasks as TaskView[];
+			this.tasks = (agent ? [...this.tasks.filter((t) => t.agent !== agent), ...list] : list).sort(
+				(a, b) => b.updated_at - a.updated_at
+			);
 		} else if (frame.type === 'schedules' && Array.isArray(frame.schedules)) {
 			this.schedules = frame.schedules as Schedule[];
 		}
@@ -384,6 +469,28 @@ export class AgentDirectory {
 	async message(agent: string, body: string, session?: string) {
 		await this.#daemon.request({ op: 'message_send', agent, body, ...(session ? { session } : {}) });
 		this.activity++;
+	}
+
+	/** Continues task `task` (its own session, or its latest run's). */
+	async messageTask(task: string, body: string) {
+		await this.#daemon.request({ op: 'message_send', task, body });
+	}
+
+	async loadTasks() {
+		const reply = await this.#daemon.request({ op: 'task_list' });
+		this.handle(reply);
+	}
+
+	async task(id: string, limit = 50): Promise<TaskDetail> {
+		return (await this.#daemon.request({ op: 'task_get', task: id, limit })) as unknown as TaskDetail;
+	}
+
+	async closeTask(id: string) {
+		await this.#daemon.request({ op: 'task_close', task: id });
+	}
+
+	async reopenTask(id: string) {
+		await this.#daemon.request({ op: 'task_reopen', task: id });
 	}
 
 	/** The agent's messages, newest first. */
@@ -498,6 +605,7 @@ export class AgentDirectory {
 			await this.loadReports();
 			// An older daemon has no schedules.
 			this.loadSchedules().catch(() => {});
+			await this.loadTasks();
 		} catch (e) {
 			// Stopped while connecting: stay off.
 			if (!this.#retry) return;

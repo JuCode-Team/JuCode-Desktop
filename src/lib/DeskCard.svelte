@@ -13,6 +13,7 @@
 	import type { ActionView, QuestionView } from '$lib/agents.svelte';
 	import { useAgents } from '$lib/agentScope';
 	import { t } from '$lib/i18n';
+	import { when } from '$lib/time';
 
 	let {
 		question,
@@ -39,9 +40,6 @@
 	let busy = $state(false);
 	let error = $state('');
 
-	function when(ms: number): string {
-		return new Date(ms).toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-	}
 
 	async function run(work: () => Promise<void>) {
 		busy = true;

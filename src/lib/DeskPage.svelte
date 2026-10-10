@@ -12,6 +12,7 @@
 	import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon';
 	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
+	import ClockIcon from 'phosphor-svelte/lib/ClockIcon';
 	import type { Snippet } from 'svelte';
 	import AgentAvatar from '$lib/AgentAvatar.svelte';
 	import AgentPage from '$lib/AgentPage.svelte';
@@ -21,9 +22,10 @@
 	import RequirementDetail from '$lib/requirements/RequirementDetail.svelte';
 	import type { StartHow } from '$lib/requirements/StartButton.svelte';
 	import { needsYou, useRequirements, type Requirement } from '$lib/requirements.svelte';
-	import { agentDirectory, agentsOfWorkspace, agentWorkspace, type AgentView } from '$lib/agents.svelte';
+	import { agentDirectory, agentsOfWorkspace, agentWorkspace, taskSession, type AgentView, type TaskView } from '$lib/agents.svelte';
 	import { workspaces } from '$lib/workbench/workspaceStore.svelte';
 	import { t } from '$lib/i18n';
+	import { when } from '$lib/time';
 
 	let {
 		agentId = $bindable(null),
@@ -40,7 +42,6 @@
 		onClose,
 		onOpenSession,
 		onNewAgent,
-		onNewSession,
 		onStartRequirement
 	}: {
 		/** The agent shown; null for the overview. */
@@ -70,8 +71,6 @@
 		/** `agent`: whose it is, when the caller knows (the list may lag). */
 		onOpenSession: (session: string, agent?: string) => void;
 		onNewAgent: () => void;
-		/** Open a new, empty session of the agent. */
-		onNewSession: (agent: AgentView) => void;
 		onStartRequirement: (r: Requirement, how: StartHow) => void;
 	} = $props();
 
@@ -119,14 +118,21 @@
 	const pending = $derived(listed.reduce((n, a) => n + agentDirectory.pendingFor(a.id), 0) + yourTurn.length);
 	const workspaceName = (a: AgentView) =>
 		workspaces.workspaces.find((w) => w.id === agentWorkspace(a, workspaces.workspaces))?.name ?? '';
-	/** The shown agent's sessions, most recently active first. */
-	const shownSessions = $derived(
+	/** The shown agent's tasks still going (not done or closed): what needs
+	 *  the user first, then what is working, then the rest by recency. */
+	const STATE_ORDER: Record<TaskView['state'], number> = { needs_you: 0, running: 1, waiting: 2, paused: 3, done: 4, closed: 5 };
+	const shownTasks = $derived(
 		shown
-			? agentDirectory.sessions
-					.filter((s) => s.agent === shown.id)
-					.sort((a, b) => (b.updated_at ?? b.created_at) - (a.updated_at ?? a.created_at))
+			? agentDirectory.tasks
+					.filter((task) => task.agent === shown.id && task.state !== 'done' && task.state !== 'closed')
+					.sort((a, b) => STATE_ORDER[a.state] - STATE_ORDER[b.state] || b.updated_at - a.updated_at)
 			: []
 	);
+	function openTask(task: TaskView, agent: string) {
+		const session = taskSession(task);
+		if (session) onOpenSession(session, agent);
+		else openAgent(agent);
+	}
 
 	const scheduleCount = $derived(agentDirectory.schedules.filter((s) => s.enabled && listedIds.includes(s.agent)).length);
 	const onOverview = $derived(!shown && page === 'overview');
@@ -157,7 +163,7 @@
 		const next = nextRun(agent.id);
 		if (next)
 			return t('shell.desk.statusNext', {
-				time: new Date(next).toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+				time: when(next)
 			});
 		return (summary && agent.summary) || t('shell.desk.statusIdle');
 	}
@@ -209,10 +215,13 @@
 					{:else if a.busy && a.enabled}<CircleNotchIcon size={14} class="spin busy" />{/if}
 				</button>
 				{#if shown?.id === a.id}
-					{#each shownSessions as s (s.session)}
-						<button class="item sess" class:on={!!sessionId && openSid === s.session} onclick={() => onOpenSession(s.session, a.id)}>
-							<span class="label">{s.title || t('shell.agentPage.untitled')}</span>
-							{#if a.running?.includes(s.session)}<CircleNotchIcon size={12} class="spin busy" />{/if}
+					{#each shownTasks as task (task.id)}
+						{@const session = taskSession(task)}
+						<button class="item sess" class:on={!!sessionId && !!session && openSid === session} onclick={() => openTask(task, a.id)}>
+							{#if task.trigger.kind !== 'manual'}<ClockIcon size={12} />{/if}
+							<span class="label">{task.title || t('shell.agentPage.untitled')}</span>
+							{#if task.state === 'running'}<CircleNotchIcon size={12} class="spin busy" />
+							{:else if task.state === 'needs_you'}<span class="needs" title={t('shell.activity.stateNeedsYou')}></span>{/if}
 						</button>
 					{/each}
 				{/if}
@@ -234,7 +243,6 @@
 						onDeleted={() => (agentId = null)}
 						onOpenSession={(session) => onOpenSession(session, shown.id)}
 						onOpenAgent={openAgent}
-						onNewSession={() => onNewSession(shown)}
 					/>
 				</div>
 			{/key}
@@ -492,6 +500,16 @@
 	}
 	.item.sess.on {
 		color: var(--text);
+	}
+	.item.sess :global(svg:first-child) {
+		flex: none;
+	}
+	.needs {
+		flex: none;
+		width: 6px;
+		height: 6px;
+		border-radius: var(--r-full);
+		background: var(--warn);
 	}
 	.item :global(.busy) {
 		color: var(--accent-bright);

@@ -24,6 +24,7 @@
 	import type { Schedule } from '$lib/schedules';
 	import { useAgents } from '$lib/agentScope';
 	import { t } from '$lib/i18n';
+	import { when } from '$lib/time';
 
 	let {
 		onOpenSession,
@@ -52,10 +53,6 @@
 	const actions = $derived(agentDirectory.actions.filter((a) => inScope(agentDirectory.agentOfSession(a.session_id)?.id)));
 	const reports = $derived(agentDirectory.reports.filter((r) => inScope(r.agent)));
 	const pending = $derived(questions.length + actions.length + requirements.length);
-	const hasClosed = $derived(
-		agentDirectory.closedQuestions.some((q) => inScope(q.agent)) ||
-		agentDirectory.closedActions.some((a) => inScope(agentDirectory.agentOfSession(a.session_id)?.id))
-	);
 
 	let expanded = $state<Record<string, boolean>>({});
 	let changing = $state<Record<string, boolean>>({});
@@ -89,14 +86,6 @@
 			.slice(0, 3)
 	);
 
-	function when(ms: number): string {
-		return new Date(ms).toLocaleString(undefined, {
-			month: 'numeric',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
-	}
 
 	function toggleReport(r: ReportView) {
 		expanded[r.id] = !expanded[r.id];
@@ -112,7 +101,7 @@
 	<div class="unreachable"><Notice tone="warn">{t('shell.desk.unreachable')}</Notice></div>
 {/if}
 
-{#if !agent || pending || hasClosed}
+{#if !agent || pending}
 <section>
 	<h3>{t('shell.desk.pending')} <span class="count">{pending}</span></h3>
 	{#if pending === 0}
@@ -136,7 +125,7 @@
 			<DeskCard action={a} {onOpenSession} {onOpenAgent} />
 		{/each}
 	</div>
-	<DeskClosed {inScope} />
+	{#if !agent}<DeskClosed {inScope} />{/if}
 </section>
 {/if}
 

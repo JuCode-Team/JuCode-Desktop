@@ -13,6 +13,4 @@ export function parseDeskKey(key: string): { kind: DeskKind; id: string } {
 	return { kind: key.slice(0, cut) as DeskKind, id: key.slice(cut + 1) };
 }
 
-export function when(ms: number): string {
-	return new Date(ms).toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
+export { when } from '$lib/time';

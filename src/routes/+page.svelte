@@ -1672,10 +1672,6 @@
 					onClose={() => (showDesk = false)}
 					onOpenSession={openDaemonSession}
 					onNewAgent={() => newAgent()}
-					onNewSession={(agent) => {
-						deskSession = store.openAgentSession(agent);
-						deskAgent = agent.id;
-					}}
 				>
 					{#snippet chatView(id)}
 						{@const sess = sessionMap.get(id)}
