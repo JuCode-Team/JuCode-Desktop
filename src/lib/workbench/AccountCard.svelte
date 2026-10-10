@@ -207,4 +207,8 @@
 	.manage:hover {
 		color: var(--text);
 	}
+	.kv span:first-child {
+		flex-shrink: 0;
+		white-space: nowrap;
+	}
 </style>

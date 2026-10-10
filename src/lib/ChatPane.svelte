@@ -1371,7 +1371,11 @@
 		color: var(--dim);
 	}
 	.owner-name {
-		flex: none;
+		flex: 0 1 auto;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 		color: var(--text);
 		font-weight: 500;
 	}

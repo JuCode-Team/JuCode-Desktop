@@ -258,7 +258,7 @@
 	<div class="task-card">
 		<div class="meta">
 			<span class="mline"><GitBranchIcon size={12} /><span class="mono">{worktree.branch}</span></span>
-			<span class="mline dim2">{t('dock.tasks.base')} <span class="mono">{resolvedBase || worktree.baseBranch}</span></span>
+			<span class="mline dim2 base">{t('dock.tasks.base')} <span class="mono">{resolvedBase || worktree.baseBranch}</span></span>
 			{#if statLoaded}
 				<span class="mline dim2">{t('dock.tasks.vsBase', { base: resolvedBase, ahead, behind })}</span>
 				<span class="mline" class:warn={dirty} class:okc={!dirty}>{dirty ? t('dock.tasks.dirty') : t('dock.tasks.clean')}</span>
@@ -479,5 +479,8 @@
 		padding: 6px 9px;
 		font-size: var(--fs-xs);
 		color: var(--dim2);
+	}
+	.mline.base {
+		white-space: nowrap;
 	}
 </style>

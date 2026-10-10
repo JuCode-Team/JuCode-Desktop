@@ -519,4 +519,9 @@
 	.grow {
 		flex: 1;
 	}
+	/* The status beside a long title stays on one line. */
+	.line .state {
+		flex-shrink: 0;
+		white-space: nowrap;
+	}
 </style>

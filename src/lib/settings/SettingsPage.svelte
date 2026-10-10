@@ -1347,6 +1347,12 @@
 	}
 
 	.sync-state {
+		display: inline-block;
+		max-width: 240px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		vertical-align: middle;
 		color: var(--dim);
 		font-size: var(--fs-xs);
 	}

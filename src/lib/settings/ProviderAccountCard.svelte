@@ -286,4 +286,9 @@
 	.ekey :global(.tf) {
 		flex: 1;
 	}
+	.defbadge,
+	.tagx {
+		flex-shrink: 0;
+		white-space: nowrap;
+	}
 </style>

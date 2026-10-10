@@ -138,6 +138,8 @@
 		font-weight: 600;
 	}
 	.featured-tag {
+		flex-shrink: 0;
+		white-space: nowrap;
 		display: inline-flex;
 		align-items: center;
 		gap: 3px;

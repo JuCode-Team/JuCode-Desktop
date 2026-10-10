@@ -368,6 +368,8 @@
 		flex: 1;
 	}
 	.link {
+		flex-shrink: 0;
+		white-space: nowrap;
 		padding: 0;
 		border: none;
 		background: none;
@@ -480,5 +482,9 @@
 	}
 	.pad {
 		padding: 16px;
+	}
+	.reply-foot {
+		flex-wrap: wrap;
+		row-gap: 6px;
 	}
 </style>

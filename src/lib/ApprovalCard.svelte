@@ -196,7 +196,7 @@
 			<span>{t('shell.proposePlan')}</span>
 		{:else}
 			<ShieldWarningIcon size={15} />
-			<span
+			<span class="aname"
 				>{isShell ? t('shell.approveCommand') : t('shell.approveFile')} · <b>{approval.name}</b
 				></span
 			>
@@ -509,6 +509,7 @@
 	}
 	.approval-actions {
 		display: flex;
+		flex-wrap: wrap;
 		gap: 8px;
 		margin-top: 10px;
 	}
@@ -617,5 +618,13 @@
 		font: inherit;
 		font-size: 10px;
 		opacity: 0.75;
+	}
+	.aname {
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	.hunk-count {
+		flex-shrink: 0;
+		white-space: nowrap;
 	}
 </style>

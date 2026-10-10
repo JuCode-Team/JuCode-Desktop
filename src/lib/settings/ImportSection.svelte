@@ -323,6 +323,7 @@
 		padding: 14px 0;
 	}
 	.all {
+		white-space: nowrap;
 		font-size: var(--fs-xs);
 		color: var(--dim);
 	}

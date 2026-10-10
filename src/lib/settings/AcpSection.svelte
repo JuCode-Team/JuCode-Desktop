@@ -255,10 +255,16 @@
 		min-width: 0;
 	}
 	.aname {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 		font-size: var(--fs-sm);
 		font-weight: 500;
 	}
 	.astate {
+		flex-shrink: 0;
+		white-space: nowrap;
 		display: inline-flex;
 		align-items: center;
 		gap: 4px;

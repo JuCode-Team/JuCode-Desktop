@@ -101,4 +101,8 @@
 			box-shadow: 0 0 0 3px transparent;
 		}
 	}
+	/* The header's action (a select-all box, a button) keeps its size beside a long description. */
+	.head > :global(:not(.txt)) {
+		flex-shrink: 0;
+	}
 </style>

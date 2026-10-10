@@ -98,8 +98,17 @@
 		}
 	}
 	.title {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 		font-weight: 500;
 		color: var(--text);
+	}
+	.count,
+	.when {
+		flex-shrink: 0;
+		white-space: nowrap;
 	}
 	.count {
 		font-family: var(--font-mono);

@@ -844,8 +844,9 @@
 	}
 	.foot {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
-		gap: 12px;
+		gap: 4px 12px;
 		margin-top: 8px;
 		font-size: var(--fs-2xs);
 		color: var(--dim2);
@@ -952,5 +953,8 @@
 		font-size: var(--fs-sm);
 		line-height: 1.6;
 		word-break: break-word;
+	}
+	.foot .stat {
+		white-space: nowrap;
 	}
 </style>

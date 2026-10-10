@@ -621,6 +621,8 @@
 		overflow: hidden;
 	}
 	.again-foot {
+		flex-wrap: wrap;
+		row-gap: 6px;
 		display: flex;
 		align-items: center;
 		gap: 8px;
@@ -632,6 +634,8 @@
 		flex: 1;
 	}
 	.link {
+		flex-shrink: 0;
+		white-space: nowrap;
 		padding: 0;
 		border: none;
 		background: none;

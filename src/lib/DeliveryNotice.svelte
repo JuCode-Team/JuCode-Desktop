@@ -69,6 +69,8 @@
 		white-space: nowrap;
 	}
 	.dfail {
+		flex-shrink: 0;
+		white-space: nowrap;
 		color: var(--err);
 	}
 	.rchev {
