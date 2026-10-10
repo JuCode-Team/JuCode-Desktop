@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
 	agentOfCall,
 	agentRows,
-	cardMode,
+	trayMode,
 	pillParts,
 	planShown,
 	planSummary,
@@ -178,37 +178,28 @@ describe('spawn and wait payloads', () => {
 	});
 });
 
-describe('progress card', () => {
+describe('progress tray', () => {
 	const plan = planSummary([
 		{ step: 'a', status: 'completed' },
 		{ step: 'b', status: 'in_progress' }
 	]);
 	const runningRow = { state: 'running' } as AgentRow;
 	const doneRow = { state: 'done' } as AgentRow;
-	const base = { plan, rows: [] as AgentRow[], busy: true, fold: 'auto' as const, endedAt: 0, now: 10_000, planFresh: true };
+	const empty = planSummary([]);
 
-	it('opens while a turn has a plan or subagents', () => {
-		expect(cardMode(base)).toBe('card');
-		expect(cardMode({ ...base, plan: planSummary([]), rows: [runningRow] })).toBe('card');
-		expect(cardMode({ ...base, plan: planSummary([]) })).toBe('hidden');
+	it('shows while a turn has a plan or subagents, as a bar until opened', () => {
+		expect(trayMode(plan, [], true, true, false)).toBe('bar');
+		expect(trayMode(plan, [], true, true, true)).toBe('open');
+		expect(trayMode(empty, [runningRow], true, false, false)).toBe('bar');
+		expect(trayMode(empty, [], true, false, true)).toBe('hidden');
 	});
 
-	it('folds as the user says', () => {
-		expect(cardMode({ ...base, fold: 'folded' })).toBe('pill');
-		expect(cardMode({ ...base, busy: false, endedAt: 1, fold: 'open' })).toBe('card');
+	it('keeps an old plan out once its turn is over', () => {
+		expect(trayMode(plan, [], false, false, false)).toBe('hidden');
+		expect(trayMode(plan, [doneRow], false, false, false)).toBe('bar');
 	});
 
-	it('folds to the pill a few seconds after the turn, unless an agent still runs', () => {
-		const done = planSummary([{ step: 'a', status: 'completed' }]);
-		const after = { ...base, plan: done, busy: false, rows: [doneRow], endedAt: 8000 };
-		expect(cardMode({ ...after, now: 9000 })).toBe('card');
-		expect(cardMode({ ...after, now: 12_500 })).toBe('pill');
-		expect(cardMode({ ...after, now: 12_500, rows: [runningRow] })).toBe('card');
-		// Reopened later (no turn ended in this run): folded straight away.
-		expect(cardMode({ ...after, endedAt: 0 })).toBe('pill');
-	});
-
-	it('writes the pill', () => {
+	it('writes the bar counts', () => {
 		expect(pillParts(plan, [runningRow, doneRow], true)).toEqual({ steps: '1/2', agents: 2, running: 1 });
 		expect(pillParts(plan, [], false).steps).toBe('');
 	});

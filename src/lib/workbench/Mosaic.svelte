@@ -8,6 +8,7 @@
 	import {
 		activateTab,
 		closeTab,
+		insertTab,
 		leavesOf,
 		moveTab,
 		resizeSplit,
@@ -78,7 +79,12 @@
 
 	let rootEl = $state<HTMLElement | null>(null);
 	let drag = $state<{ tabId: string; label: string; x: number; y: number; live: boolean } | null>(null);
-	let hover = $state<{ leafId: string; zone: DropZone } | null>(null);
+	/** Where a dragged tab would land: a zone of a pane (stack / split), or a
+	 *  place in a tab bar (`index`; `x`: the insertion mark, from the bar's left). */
+	type Landing = { leafId: string; zone: DropZone } | { leafId: string; index: number; x: number };
+	let hover = $state<Landing | null>(null);
+	const zoneOf = (h: Landing | null) => (h && 'zone' in h ? h : null);
+	const slotOf = (h: Landing | null) => (h && 'index' in h ? h : null);
 	let addMenuFor = $state<string | null>(null);
 	const solo = $derived.by(() => {
 		if (!hideSoloBar || layout.maximized) return false;
@@ -126,8 +132,29 @@
 		return null;
 	}
 
-	// A press is a click (activate) until the pointer travels; then it becomes
-	// a drag with a floating label and a landing preview under the cursor.
+	/** The tab-bar slot under the pointer: the bar the tab came from keeps it
+	 *  until the pointer is well clear of it (DRAG_OUT below), so a reorder
+	 *  never turns into a split by accident. */
+	const DRAG_OUT = 28;
+	function slotAt(x: number, y: number, tabId: string, fromLeaf: string): Landing | null {
+		if (!rootEl) return null;
+		for (const bar of rootEl.querySelectorAll<HTMLElement>('[data-bar]')) {
+			const r = bar.getBoundingClientRect();
+			const slack = bar.dataset.bar === fromLeaf ? DRAG_OUT : 4;
+			if (x < r.left || x > r.right || y < r.top - slack || y > r.bottom + slack) continue;
+			const tabs = [...bar.querySelectorAll<HTMLElement>('[data-tab]')].filter((el) => el.dataset.tab !== tabId);
+			const rects = tabs.map((el) => el.getBoundingClientRect());
+			const index = rects.filter((tr) => tr.left + tr.width / 2 < x).length;
+			const edge = index < rects.length ? rects[index].left - 2 : rects.length ? rects[rects.length - 1].right + 1 : r.left + 8;
+			return { leafId: bar.dataset.bar!, index, x: edge - r.left };
+		}
+		return null;
+	}
+
+	// A press is a click (activate) until the pointer travels 8px; then it is
+	// a drag. Along a tab bar it reorders (a mark shows where the tab goes);
+	// pulled out of the bar, it moves to another pane or splits one, with a
+	// floating label and a landing preview under the cursor.
 	function tabPointerDown(e: PointerEvent, tab: TileTab) {
 		if (e.button !== 0) return;
 		// Stop the browser from starting a text selection under the drag
@@ -136,16 +163,17 @@
 		const startX = e.clientX;
 		const startY = e.clientY;
 		drag = { tabId: tab.id, label: label(tab), x: startX, y: startY, live: false };
+		const fromLeaf = (e.currentTarget as HTMLElement).closest<HTMLElement>('[data-bar]')?.dataset.bar ?? '';
 		const preventSelect = (ev: Event) => {
 			if (drag) ev.preventDefault();
 		};
 		const move = (ev: PointerEvent) => {
 			if (!drag) return;
-			if (!drag.live && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 5) return;
+			if (!drag.live && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 8) return;
 			drag.live = true;
 			drag.x = ev.clientX;
 			drag.y = ev.clientY;
-			hover = zoneAt(ev.clientX, ev.clientY);
+			hover = slotAt(ev.clientX, ev.clientY, drag.tabId, fromLeaf) ?? zoneAt(ev.clientX, ev.clientY);
 		};
 		const up = () => {
 			window.removeEventListener('pointermove', move);
@@ -157,6 +185,7 @@
 			hover = null;
 			if (!d) return;
 			if (!d.live) onchange(activateTab(layout, d.tabId));
+			else if (h && 'index' in h) onchange(insertTab(layout, d.tabId, h.leafId, h.index));
 			else if (h) onchange(moveTab(layout, d.tabId, h.leafId, h.zone));
 		};
 		window.addEventListener('pointermove', move);
@@ -221,7 +250,7 @@
 			</div>
 		</div>
 	{/if}
-	{#if drag?.live}
+	{#if drag?.live && !slotOf(hover)}
 		<div
 			class="ghost"
 			bind:clientWidth={ghostW}
@@ -259,12 +288,13 @@
 		class="leaf"
 		class:maxed={layout.maximized === leaf.id}
 		class:focus={focused === leaf.id}
-		class:droptarget={drag?.live && hover?.leafId === leaf.id}
+		class:droptarget={drag?.live && zoneOf(hover)?.leafId === leaf.id}
 		data-leaf={leaf.id}
 		onpointerdowncapture={() => onFocus?.(leaf.id)}
 	>
 		{#if !solo}
-		<div class="lbar" data-tauri-drag-region ondblclick={(e) => barDblClick(e, leaf)} role="tablist" tabindex="-1">
+		<div class="lbar" data-tauri-drag-region data-bar={leaf.id} ondblclick={(e) => barDblClick(e, leaf)} role="tablist" tabindex="-1">
+			{#if drag?.live && slotOf(hover)?.leafId === leaf.id}<span class="insert" style:left="{slotOf(hover)!.x}px"></span>{/if}
 			<div class="ltabs">
 				{#each leaf.tabs as tab (tab.id)}
 					{@const chrome = decorate?.(tab) ?? null}
@@ -272,6 +302,7 @@
 						class="ltab"
 						class:on={leaf.active === tab.id}
 						class:lifted={drag?.live && drag.tabId === tab.id}
+						data-tab={tab.id}
 						role="tab"
 						tabindex="0"
 						aria-selected={leaf.active === tab.id}
@@ -321,7 +352,7 @@
 			</div>
 			{#if addMenuFor === leaf.id}
 				<PopMenu
-					items={addOptions.map((o) => ({ key: o.key, label: o.label }))}
+					items={addOptions.map((o) => ({ key: o.key, label: o.label, icon: o.icon }))}
 					onSelect={(key) => {
 						addMenuFor = null;
 						onAdd?.(leaf.id, key);
@@ -336,10 +367,11 @@
 				<div class="lpane" class:hidden={leaf.active !== tab.id}>{@render panel(tab)}</div>
 			{/each}
 		</div>
-		{#if drag?.live && hover?.leafId === leaf.id}
-			<div class="dropzone {hover.zone}">
+		{#if drag?.live && zoneOf(hover)?.leafId === leaf.id}
+			{@const z = zoneOf(hover)!}
+			<div class="dropzone {z.zone}">
 				<span class="dropzone-label">
-					{hover.zone === 'center' ? t('dock.mosaic.stackHere') : t('dock.mosaic.splitHere')}
+					{z.zone === 'center' ? t('dock.mosaic.stackHere') : t('dock.mosaic.splitHere')}
 				</span>
 			</div>
 		{/if}
@@ -485,6 +517,18 @@
 	}
 	.ltab.lifted {
 		opacity: 0.45;
+	}
+	/* Where a tab dragged along a bar would go. */
+	.insert {
+		position: absolute;
+		top: 8px;
+		bottom: 8px;
+		z-index: 2;
+		width: 2px;
+		margin-left: -1px;
+		border-radius: 1px;
+		background: var(--brand);
+		pointer-events: none;
 	}
 	.llabel {
 		min-width: 0;

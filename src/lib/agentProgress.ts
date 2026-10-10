@@ -65,6 +65,11 @@ export interface AgentRow {
 	prompt: string;
 	result: string;
 	error: string;
+	/** Its kind as the engine names it (claude's subagent_type, e.g. Explore); '' when unknown. */
+	type: string;
+	/** Tokens and tool calls so far (the agent trace; 0 when the engine sends none). */
+	tokens: number;
+	toolCalls: number;
 	/** A Workflow (claude), not one agent: opens the trace's run list. */
 	workflow?: boolean;
 	/** Workflow agents finished out of all. */
@@ -114,6 +119,9 @@ export function agentRows({ runs, subagents, lastTool, since = 0 }: RowInput): A
 			prompt: w.description,
 			result: '',
 			error: '',
+			type: '',
+			tokens: w.tokens,
+			toolCalls: 0,
 			workflow: true,
 			progress: { done, total: w.agents.length }
 		});
@@ -136,7 +144,10 @@ export function agentRows({ runs, subagents, lastTool, since = 0 }: RowInput): A
 			toolUseId: a.toolUseId || life?.toolUseId || '',
 			prompt: a.prompt,
 			result: a.result,
-			error: a.error
+			error: a.error,
+			type: a.type,
+			tokens: a.tokens,
+			toolCalls: a.toolCalls
 		});
 	}
 	for (const [id, life] of Object.entries(subagents)) {
@@ -155,7 +166,10 @@ export function agentRows({ runs, subagents, lastTool, since = 0 }: RowInput): A
 			toolUseId: life.toolUseId ?? '',
 			prompt: '',
 			result: '',
-			error: state === 'failed' ? life.message : ''
+			error: state === 'failed' ? life.message : '',
+			type: '',
+			tokens: 0,
+			toolCalls: 0
 		});
 	}
 	return rows;
@@ -252,45 +266,22 @@ function parse(output: string): Record<string, unknown> | null {
 	}
 }
 
-/** The card's look: hidden (nothing to show), open, or folded to its pill. */
-export type CardMode = 'hidden' | 'card' | 'pill';
-
-/** What the user chose for this session's card: follow the turn, keep it
- *  open, or keep it folded. */
-export type CardFold = 'auto' | 'open' | 'folded';
-
-export interface CardInput {
-	plan: PlanSummary;
-	rows: AgentRow[];
-	busy: boolean;
-	fold: CardFold;
-	/** The turn ended at (ms; 0: none ended in this run), and now. */
-	endedAt: number;
-	now: number;
-	/** The plan changed during this run's latest turn. */
-	planFresh: boolean;
-	/** How long the card stays open once the turn is over, ms. */
-	linger?: number;
-}
-
 /** Whether the plan is worth showing: it changed in this turn, or the turn
  *  running now still has steps to do. */
 export const planShown = (plan: PlanSummary, busy: boolean, planFresh: boolean) =>
 	plan.total > 0 && (planFresh || (busy && plan.done < plan.total));
 
-/** Shown while a turn has a plan or subagents. It folds to its pill when the
- *  user folds it, or a few seconds after the turn is over with no agent
- *  still running; the pill stays until the next turn. */
-export function cardMode({ plan, rows, busy, fold, endedAt, now, planFresh, linger = 4000 }: CardInput): CardMode {
+/** The progress tray above the composer: hidden (nothing to show), its one-line
+ *  bar, or open (the bar plus the to-dos and subagents) when the user opened
+ *  it for this session. */
+export type TrayMode = 'hidden' | 'bar' | 'open';
+
+export function trayMode(plan: PlanSummary, rows: AgentRow[], busy: boolean, planFresh: boolean, open: boolean): TrayMode {
 	if (!planShown(plan, busy, planFresh) && !rows.length) return 'hidden';
-	if (fold === 'folded') return 'pill';
-	if (fold === 'open') return 'card';
-	const live = rows.some((r) => r.state === 'running' || r.state === 'queued');
-	const over = !busy && !live && (endedAt === 0 || now - endedAt >= linger);
-	return over ? 'pill' : 'card';
+	return open ? 'open' : 'bar';
 }
 
-/** The pill's text parts: steps done of all, and subagents (running ones while any run). */
+/** The bar's counts: steps done of all, and subagents (running ones while any run). */
 export function pillParts(plan: PlanSummary, rows: AgentRow[], showPlan: boolean): { steps: string; agents: number; running: number } {
 	return {
 		steps: showPlan ? `${plan.done}/${plan.total}` : '',

@@ -9,7 +9,7 @@
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
 	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
 	import { t } from '$lib/i18n';
-	import AgentTranscript from '$lib/agents/AgentTranscript.svelte';
+	import AgentDetail from '$lib/agents/AgentDetail.svelte';
 	import type { AgentRun, ChatState, WorkflowRun } from '$lib/chat.svelte';
 	import type { Op } from '$lib/protocol';
 	import {
@@ -79,23 +79,6 @@
 		return { tokens: all.reduce((s, r) => s + r.tokens, 0) };
 	});
 
-	// ── one subagent ──
-	const focused = $derived.by((): { agent: AgentRun; run: WorkflowRun | null } | null => {
-		const id = chat.agentFocus;
-		if (!id) return null;
-		for (const w of chat.agentRuns.workflows) {
-			const a = w.agents.find((x) => x.id === id);
-			if (a) return { agent: a, run: w };
-		}
-		const a = chat.agentRuns.agents.find((x) => x.id === id);
-		return a ? { agent: a, run: null } : null;
-	});
-	// A subagent only its lifecycle reports (an engine without the trace) runs
-	// while that says so.
-	const focusRunning = $derived(
-		focused ? runState(focused.agent.state) === 'running' : !!chat.agentFocus && runState(chat.subagents[chat.agentFocus]?.status ?? '') === 'running'
-	);
-
 	let scroller = $state<HTMLElement | null>(null);
 	function pick(id: string) {
 		chat.agentFocus = id;
@@ -143,42 +126,7 @@
 				{t('dock.agents.back')}
 			</button>
 		</div>
-		{#if focused}
-			{@const a = focused.agent}
-			{@const s = runState(a.state)}
-			<div class="focus-head">
-				<div class="ftitle">
-					{@render stateIcon(a.state)}
-					<span>{a.label || a.id}</span>
-				</div>
-				<div class="fmeta">
-					{#if focused.run}<span>{focused.run.name || focused.run.description}</span>{/if}
-					{#if a.model}<span>{shortModel(a.model)}</span>{/if}
-					<span>{t(`dock.agents.state.${s}`)}</span>
-					<span>{dur(elapsed(a, s, now))}</span>
-					<span>{t('dock.agents.tokens', { n: formatCount(a.tokens) })}</span>
-					<span>{t('dock.agents.toolCalls', { n: a.toolCalls })}</span>
-				</div>
-				{#if a.error}<p class="ferr">{a.error}</p>{/if}
-				{#if a.result && s !== 'running'}<p class="fres"><span>{t('dock.agents.result')}</span>{a.result}</p>{/if}
-			</div>
-		{:else if chat.subagents[chat.agentFocus]}
-			<!-- Known from its lifecycle only (an engine without the trace). -->
-			{@const life = chat.subagents[chat.agentFocus]}
-			<div class="focus-head">
-				<div class="ftitle">
-					{@render stateIcon(life.status)}
-					<span>{shortPath(life.label || chat.agentFocus)}</span>
-				</div>
-				<div class="fmeta">
-					{#if life.model}<span>{shortModel(life.model)}</span>{/if}
-					<span>{t(`dock.agents.state.${runState(life.status)}`)}</span>
-				</div>
-			</div>
-		{/if}
-		{#key chat.agentFocus}
-			<AgentTranscript {chat} agentId={chat.agentFocus} live={focusRunning} {scroller} {onOp} />
-		{/key}
+		<AgentDetail {chat} agentId={chat.agentFocus} {scroller} {onOp} />
 	{:else if chat.agentRuns.workflows.length || agents.length}
 		<div class="head">
 			<span class="title">{t('dock.agents.title')}</span>
@@ -337,8 +285,7 @@
 		color: var(--dim);
 		line-height: 1.45;
 	}
-	.rstats,
-	.fmeta {
+	.rstats {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 4px 12px;
@@ -346,9 +293,6 @@
 		font-size: var(--fs-xs);
 		color: var(--dim);
 		font-variant-numeric: tabular-nums;
-	}
-	.fmeta {
-		margin-left: 0;
 	}
 	.cols,
 	.arow {
@@ -496,32 +440,6 @@
 	.back:hover {
 		color: var(--text);
 		background: var(--surface2);
-	}
-	.focus-head {
-		padding: 4px 18px 8px;
-	}
-	.ftitle {
-		display: flex;
-		align-items: center;
-		gap: 7px;
-		font-size: var(--fs-md);
-		font-weight: 600;
-	}
-	.fres {
-		margin: 8px 0 0;
-		font-size: var(--fs-sm);
-		line-height: 1.5;
-		overflow-wrap: anywhere;
-	}
-	.fres span {
-		margin-right: 8px;
-		color: var(--dim);
-		font-size: var(--fs-xs);
-	}
-	.ferr {
-		margin: 6px 0 0;
-		font-size: var(--fs-xs);
-		color: var(--err);
 	}
 	.empty-line {
 		display: flex;

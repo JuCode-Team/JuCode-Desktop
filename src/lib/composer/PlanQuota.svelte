@@ -50,14 +50,14 @@
 	.quota {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
-		padding: 8px 10px 10px;
+		gap: 6px;
+		padding: 4px 8px 6px;
 	}
 	.qhead {
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		font-size: var(--fs-sm);
+		font-size: var(--fs-xs);
 	}
 	.qlabel {
 		flex: 1;
@@ -74,7 +74,7 @@
 		display: flex;
 		align-items: baseline;
 		gap: 8px;
-		margin-bottom: 4px;
+		margin-bottom: 3px;
 		font-size: var(--fs-xs);
 	}
 	.qname {

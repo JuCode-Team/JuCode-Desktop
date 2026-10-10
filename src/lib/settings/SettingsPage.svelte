@@ -631,6 +631,16 @@
 								onChange={(v) => prefs.setDefaultSurface(v === 'tui' ? 'tui' : 'gui')}
 							/>
 						</SettingsRow>
+						<SettingsRow id="open-elsewhere" title={t('settings.behavior.openElsewhere')} description={t('settings.behavior.openElsewhereHint')}>
+							<Segmented
+								value={prefs.openElsewhere}
+								options={[
+									{ value: 'side', label: t('settings.behavior.placeSide') },
+									{ value: 'tab', label: t('settings.behavior.placeTab') }
+								]}
+								onChange={(v) => prefs.setOpenElsewhere(v === 'tab' ? 'tab' : 'side')}
+							/>
+						</SettingsRow>
 						<SettingsRow id="terminal-font" title={t('settings.behavior.terminalFont')} description={t('settings.behavior.terminalFontHint')}>
 							<TextField mono placeholder="MesloLGS NF" bind:value={() => prefs.terminalFont, (v) => prefs.setTerminalFont(String(v ?? ''))} />
 						</SettingsRow>
@@ -667,6 +677,15 @@
 						</SettingsRow>
 						<SettingsRow id="scroll-on-send" title={t('settings.behavior.scrollOnSend')} description={t('settings.behavior.scrollOnSendHint')}>
 							<Switch checked={prefs.scrollOnSend} label={t('settings.behavior.scrollOnSend')} onChange={(on) => prefs.setScrollOnSend(on)} />
+						</SettingsRow>
+						<SettingsRow id="foot-context" title={t('settings.behavior.footContext')} description={t('settings.behavior.footContextHint')}>
+							<Switch checked={prefs.footContext} label={t('settings.behavior.footContext')} onChange={(on) => prefs.setFlag('footContext', on)} />
+						</SettingsRow>
+						<SettingsRow id="foot-cost" title={t('settings.behavior.footCost')} description={t('settings.behavior.footCostHint')}>
+							<Switch checked={prefs.footCost} label={t('settings.behavior.footCost')} onChange={(on) => prefs.setFlag('footCost', on)} />
+						</SettingsRow>
+						<SettingsRow id="thinking-summaries" title={t('settings.behavior.thinkingSummaries')} description={t('settings.behavior.thinkingSummariesHint')}>
+							<Switch checked={prefs.thinkingSummaries} label={t('settings.behavior.thinkingSummaries')} onChange={(on) => prefs.setFlag('thinkingSummaries', on)} />
 						</SettingsRow>
 						<SettingsRow id="cache-miss" title={t('settings.behavior.cacheMissAlert')} description={t('settings.behavior.cacheMissAlertHint')}>
 							<Switch checked={prefs.cacheMissAlert} label={t('settings.behavior.cacheMissAlert')} onChange={(on) => prefs.setCacheMissAlert(on)} />

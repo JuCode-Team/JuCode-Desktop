@@ -8,6 +8,7 @@ import { clearDraft, dispatch, dropHeldOps, holdOps, ioFor, markDraft, registerA
 import { buildBackendOpts, defaultBackendFor } from './backends/settings';
 import { toEngineMode } from './approval';
 import { getLocale, t } from '$lib/i18n';
+import { prefs } from './prefs.svelte';
 import { workMode } from './requirements.svelte';
 import { saveComposerText } from './composerText';
 import { toast } from './ui/toast.svelte';
@@ -242,7 +243,7 @@ export class SessionStore {
 							...(s.chat.ultracode ? { ultracode: true } : {}),
 							...(s.chat.fast ? { fast: true } : {}),
 							...(s.chat.effort ? { effort: s.chat.effort } : {}),
-							...(s.chat.thinkingSummaries === false ? { thinking: false } : {})
+							...(!prefs.thinkingSummaries ? { thinking: false } : {})
 						}
 					})
 				: s.backendId === 'codex'
@@ -254,7 +255,7 @@ export class SessionStore {
 								...program,
 								// A restarted engine keeps the session's switches.
 								...(s.chat.fast ? { fast: true } : {}),
-								...(s.chat.thinkingSummaries === false ? { thinking: false } : {})
+								...(!prefs.thinkingSummaries ? { thinking: false } : {})
 							}
 						})
 					: s.backendId === 'acp'

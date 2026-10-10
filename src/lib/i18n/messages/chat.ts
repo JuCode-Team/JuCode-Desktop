@@ -138,6 +138,7 @@ const chat = {
 		addPlan: '计划模式',
 		addPlanDesc: '先给出方案，不改动文件',
 		statusTitle: '状态',
+		statusUnread: '{n} 条新状态',
 		approvalModeTitle: '工具审批模式',
 		gitBranch: '当前 git 分支',
 		branchMenu: {
@@ -268,7 +269,11 @@ const chat = {
 			unfold: '展开进度',
 			step: { pending: '待开始', active: '进行中', done: '已完成', skipped: '已跳过' },
 			open: '查看 {name} 在做什么',
-			noActivity: '还没有动作'
+			noActivity: '还没有动作',
+			openSide: '在右侧分栏打开',
+			openTab: '在新标签页打开',
+			allDone: '全部完成',
+			waiting: '等待开始'
 		},
 		subagentCard: {
 			spawn: '子智能体',
@@ -442,6 +447,7 @@ const chat = {
 		addPlan: 'Plan mode',
 		addPlanDesc: 'Propose a plan without editing files',
 		statusTitle: 'Status',
+		statusUnread: '{n} new',
 		approvalModeTitle: 'Tool approval mode',
 		gitBranch: 'Current git branch',
 		branchMenu: {
@@ -572,7 +578,11 @@ const chat = {
 			unfold: 'Show progress',
 			step: { pending: 'To do', active: 'In progress', done: 'Done', skipped: 'Skipped' },
 			open: 'See what {name} is doing',
-			noActivity: 'No actions yet'
+			noActivity: 'No actions yet',
+			openSide: 'Open in the side column',
+			openTab: 'Open in a new tab',
+			allDone: 'All done',
+			waiting: 'Not started'
 		},
 		subagentCard: {
 			spawn: 'Subagent',

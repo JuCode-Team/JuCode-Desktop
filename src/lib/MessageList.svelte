@@ -11,6 +11,7 @@
 	import PlanCard, { type PlanAction } from '$lib/PlanCard.svelte';
 	import type { ApprovalMode } from '$lib/approval';
 	import { SPAWN_TOOLS, WAIT_TOOLS, type AgentRow } from '$lib/agentProgress';
+	import type { OpenHow } from '$lib/agents/subagentPages.svelte';
 	import DeliveryNotice from '$lib/DeliveryNotice.svelte';
 	import { parseDelivery } from '$lib/delivery';
 	import { stableBlocks } from '$lib/streamBlocks';
@@ -97,7 +98,7 @@
 		 *  cards (absent: plain tool rows). */
 		agents?: AgentRow[];
 		/** Shows a subagent's own conversation. */
-		onOpenAgent?: (row: AgentRow) => void;
+		onOpenAgent?: (row: AgentRow, how: OpenHow) => void;
 		/** Approves or revises a proposed plan (absent: plans have no actions). */
 		onPlan?: (id: string, action: PlanAction) => void;
 		/** The mode a plan's approval offers first. */
@@ -898,8 +899,10 @@
 	.tgroup:hover {
 		color: var(--text);
 	}
-	.tg-count {
+	.tg-count,
+	.tg-fail {
 		flex-shrink: 0;
+		white-space: nowrap;
 	}
 	/* The latest call, in the card's own format, trailing the count. */
 	.tg-latest {

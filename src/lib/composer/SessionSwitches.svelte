@@ -8,13 +8,18 @@
 	// Claude Code's per-session switches, shown only where the engine offers
 	// them: ultracode (standing Workflow orchestration), fast mode and
 	// thinking summaries.
-	let { chat, onSwitch }: { chat: ChatState; onSwitch: (name: SessionSwitch, on: boolean) => void } = $props();
+	// `thinking`: offer the thinking-summaries switch here (the desktop keeps it in settings).
+	let {
+		chat,
+		onSwitch,
+		thinking = true
+	}: { chat: ChatState; onSwitch: (name: SessionSwitch, on: boolean) => void; thinking?: boolean } = $props();
 
 	const rows = $derived(
 		[
 			chat.ultracodeAvailable && { name: 'ultracode' as const, label: 'Ultracode', desc: t('chat.ultracodeDesc'), on: chat.ultracode },
 			(chat.fastAvailable || chat.fast) && { name: 'fast' as const, label: t('chat.fastLabel'), desc: t('chat.fastDesc'), on: chat.fast },
-			chat.thinkingSummaries !== null && {
+			thinking && chat.thinkingSummaries !== null && {
 				name: 'thinking' as const,
 				label: t('chat.thinkingLabel'),
 				desc: t('chat.thinkingDesc'),
@@ -39,7 +44,7 @@
 		display: flex;
 		align-items: center;
 		gap: 12px;
-		padding: 6px 8px;
+		padding: 4px 8px;
 	}
 	.txt {
 		display: flex;
@@ -54,6 +59,6 @@
 	}
 	.desc {
 		color: var(--dim2);
-		font-size: var(--fs-xs);
+		font-size: var(--fs-2xs);
 	}
 </style>

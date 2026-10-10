@@ -1,4 +1,7 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
+	import { prefs } from '$lib/prefs.svelte';
+	import { costText } from '$lib/sessionCost';
 	import ArrowUpIcon from 'phosphor-svelte/lib/ArrowUpIcon';
 	import SquareIcon from 'phosphor-svelte/lib/SquareIcon';
 	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
@@ -74,8 +77,11 @@
 		onSwitch,
 		effortDisabled = false,
 		onApproval,
-		onRespond
+		onRespond,
+		foot
 	}: {
+		/** Extra controls on the strip under the card (right side). */
+		foot?: Snippet;
 		chat: ChatState;
 		input: string;
 		attachments: { path: string; image: boolean }[];
@@ -636,10 +642,11 @@
 	const ctxPct = $derived(
 		ctxLimit > 0 ? Math.min(100, Math.round((chat.contextTokens / ctxLimit) * 100)) : 0
 	);
-	// Context use is not shown all the time: only once it gets close to the
-	// limit, when it becomes something to act on.
+	// Context use shows when settings say so, and in any case once it gets
+	// close to the limit, when it becomes something to act on.
 	const CTX_SHOW_PCT = 70;
-	const showCtx = $derived(bcaps.contextUsage && ctxLimit > 0 && ctxPct >= CTX_SHOW_PCT);
+	const showCtx = $derived(bcaps.contextUsage && ctxLimit > 0 && (prefs.footContext || ctxPct >= CTX_SHOW_PCT));
+	const showCost = $derived(prefs.footCost && (chat.cost > 0 || !!chat.billing));
 
 	function onKey(e: KeyboardEvent) {
 		// While an IME is composing (e.g. selecting a Chinese candidate with Enter),
@@ -869,12 +876,12 @@
 				title={t('chat.addTitle')}
 				aria-expanded={showAdd}
 			>
-				<PlusIcon size={18} />
+				<PlusIcon size={15} />
 			</button>
 			{#if bcaps.approvalModes}
 				<div class="footsel">
 					<button class="foot-chip" class:auto={chat.approvalMode !== 'ask'} class:warn={approvalCurrent.tone === 'warn'} onclick={() => (showApproval = !showApproval)} title={withShortcut(t('chat.approvalModeTitle'), 'approvalMode')}>
-						{#if approvalCurrent.icon}<approvalCurrent.icon size={17} />{/if}<span>{approvalCurrent.label}</span>
+						{#if approvalCurrent.icon}<approvalCurrent.icon size={15} />{/if}<span>{approvalCurrent.label}</span>
 					</button>
 					{#if showApproval}
 						<PopMenu
@@ -946,12 +953,12 @@
 				aria-label="voice input"
 				title={voice === 'rec' ? t('chat.voiceStopTitle') : voice === 'busy' ? t('chat.voiceBusyTitle') : t('chat.voiceTitle')}
 			>
-				{#if voice === 'busy'}<CircleNotchIcon size={15} class="spin" />{:else if voice === 'rec'}<StopCircleIcon size={15} />{:else}<MicrophoneIcon size={17} />{/if}
+				{#if voice === 'busy'}<CircleNotchIcon size={15} class="spin" />{:else if voice === 'rec'}<StopCircleIcon size={15} />{:else}<MicrophoneIcon size={15} />{/if}
 			</button>
 			{#if chat.busy && !currentQ}
-				<button class="cact stop" onclick={onStop} aria-label="stop" title={withShortcut(t('chat.stopTitle'), 'stop')}><SquareIcon size={15} /></button>
+				<button class="cact stop" onclick={onStop} aria-label="stop" title={withShortcut(t('chat.stopTitle'), 'stop')}><SquareIcon size={13} /></button>
 			{:else}
-				<button class="cact send" onclick={submit} disabled={!input.trim() && !attachments.length && !videos.length} aria-label="send" title={t('chat.sendTitle')}><ArrowUpIcon size={17} /></button>
+				<button class="cact send" onclick={submit} disabled={!input.trim() && !attachments.length && !videos.length} aria-label="send" title={t('chat.sendTitle')}><ArrowUpIcon size={15} /></button>
 			{/if}
 		</div>
 	</div>
@@ -978,6 +985,8 @@
 			</span>
 		{/if}
 		<div class="fspace"></div>
+		{#if foot}{@render foot()}{/if}
+		{#if showCost}<span class="foot-cost" title={t('chat.cost')}>{costText(chat.cost, chat.billing)}</span>{/if}
 		{#if showCtx}
 			<div class="foot-ctx">
 				<ContextIndicator pct={ctxPct} atThreshold={ctxAtThreshold} contextTokens={chat.contextTokens} contextLimit={ctxLimit} totalIn={chat.totalIn} totalOut={chat.totalOut} cost={chat.cost} billing={chat.billing} billingError={chat.billingError} runMs={chat.runMs} />
@@ -989,15 +998,15 @@
 <style>
 	/* Lines up with the conversation column (ChatPane's --chat-w). */
 	.composer-wrap {
-		padding: 0 var(--chat-pad, 32px) 18px;
+		padding: 0 var(--chat-pad, 32px) 12px;
 		max-width: calc(var(--chat-w, 844px) + 2 * var(--chat-pad, 32px));
 		width: 100%;
 		margin: 0 auto;
 	}
 	.composer {
 		background: var(--panel);
-		border-radius: var(--r-2xl);
-		padding: 14px 16px 12px;
+		border-radius: var(--r-lg);
+		padding: 10px 12px 8px 14px;
 		box-shadow: var(--shadow-float);
 		transition: box-shadow var(--t-med) var(--ease-out);
 	}
@@ -1017,7 +1026,7 @@
 		font-family: var(--font-sans);
 		font-size: var(--fs-md);
 		line-height: 1.55;
-		padding: 2px 0 8px;
+		padding: 2px 0 6px;
 		white-space: pre-wrap;
 		overflow-wrap: break-word;
 		word-break: break-word;
@@ -1094,14 +1103,14 @@
 	.composer-bar {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: 6px;
 		white-space: nowrap;
 	}
 	.flatbtn {
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
-		padding: 5px 8px;
+		padding: 4px 7px;
 		border: none;
 		border-radius: var(--r-sm);
 		background: none;
@@ -1155,8 +1164,9 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 34px;
-		height: 34px;
+		width: 28px;
+		height: 28px;
+		margin-left: -2px;
 		flex-shrink: 0;
 		border: 1px solid var(--hairline);
 		border-radius: var(--r-full);
@@ -1198,8 +1208,8 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 36px;
-		height: 36px;
+		width: 30px;
+		height: 30px;
 		border-radius: var(--r-full);
 		border: none;
 		cursor: pointer;
@@ -1260,8 +1270,8 @@
 		display: flex;
 		align-items: center;
 		gap: 10px;
-		padding: 7px 10px 0;
-		min-height: 24px;
+		padding: 5px 10px 0;
+		min-height: 22px;
 		color: var(--dim);
 	}
 	.branch-anchor {
@@ -1298,11 +1308,18 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
+	.foot-cost {
+		flex: none;
+		white-space: nowrap;
+		font-size: var(--fs-2xs);
+		font-variant-numeric: tabular-nums;
+		color: var(--dim);
+	}
 	.foot-chip {
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
-		padding: 5px 8px;
+		gap: 5px;
+		padding: 4px 7px;
 		border: none;
 		border-radius: var(--r-sm);
 		background: none;

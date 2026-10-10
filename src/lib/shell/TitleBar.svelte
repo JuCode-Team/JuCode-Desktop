@@ -9,7 +9,7 @@
 	import { getCurrentWindow } from '@tauri-apps/api/window';
 	import { t } from '$lib/i18n';
 	import { withShortcut } from '$lib/shortcuts';
-	import PopMenu from '$lib/ui/PopMenu.svelte';
+	import PopMenu, { type PopMenuItem } from '$lib/ui/PopMenu.svelte';
 
 	// The window's title bar, across the full width in the chrome colour: the
 	// traffic lights (macOS) and the sidebar toggle over the rail and session
@@ -35,7 +35,7 @@
 		title?: string;
 		subtitle?: string;
 		/** Panels that can be opened next to the focused one. */
-		addOptions?: { key: string; label: string }[];
+		addOptions?: { key: string; label: string; icon?: PopMenuItem['icon'] }[];
 		onAdd?: (key: string) => void;
 		/** Extra actions for the session in front (e.g. continue in the TUI). */
 		actions?: Snippet;
@@ -84,7 +84,7 @@
 			>
 			{#if menuOpen}
 				<PopMenu
-					items={addOptions.map((o) => ({ key: o.key, label: o.label }))}
+					items={addOptions.map((o) => ({ key: o.key, label: o.label, icon: o.icon }))}
 					onSelect={(key) => {
 						menuOpen = false;
 						onAdd?.(key);

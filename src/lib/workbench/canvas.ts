@@ -11,6 +11,7 @@ import {
 	leavesOf,
 	openTab,
 	singleLeafLayout,
+	splitLeaf,
 	wrapRoot,
 	type TileLayout,
 	type TileTab
@@ -83,4 +84,22 @@ export function reconcileLayout(
 	if (!seedSessionId || chatSessionsIn(layout).length) return layout;
 	if (!layout.root) return singleLeafLayout([chatTab(seedSessionId)]);
 	return wrapRoot(layout, 'left', chatTab(seedSessionId), CHAT_SEED_RATIO);
+}
+
+/** Where a subagent or tool window opens: as a tab of the one side column
+ *  (the first tile holding no conversation, split off to the right of the
+ *  conversation only while there is none), or (`tab`) next to the
+ *  conversation. `leafId`: the tile whose own + was used (that tile, when it
+ *  holds no conversation). */
+export function openElsewhere(
+	layout: TileLayout,
+	tab: TileTab,
+	{ place, chatLeaf, leafId = null, focused = null }: { place: 'side' | 'tab'; chatLeaf: string | null; leafId?: string | null; focused?: string | null }
+): TileLayout {
+	if (place === 'tab') return openTab(layout, leafId ?? chatLeaf ?? focused, tab);
+	const hasChat = (leaf: { tabs: TileTab[] }) => leaf.tabs.some((x) => chatSessionOf(x.panel));
+	const leaves = leavesOf(layout.root);
+	const side = leaves.find((l) => l.id === leafId && !hasChat(l)) ?? leaves.find((l) => !hasChat(l));
+	if (side) return openTab(layout, side.id, tab);
+	return chatLeaf ? splitLeaf(layout, chatLeaf, 'right', tab).layout : openTab(layout, focused, tab);
 }

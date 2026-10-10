@@ -73,7 +73,8 @@
 	import RateLimitBanner from '$lib/RateLimitBanner.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import TaskStrip from '$lib/TaskStrip.svelte';
-	import ProgressCard from '$lib/agents/ProgressCard.svelte';
+	import ProgressTray from '$lib/agents/ProgressTray.svelte';
+	import { placeFor, subagentPages, type OpenHow } from '$lib/agents/subagentPages.svelte';
 	import { agentRows, type AgentRow } from '$lib/agentProgress';
 	import { parseToolOutput, toolTarget, toolVerb } from '$lib/toolSummary';
 	import { joinPath, parseFileHref, pathExt } from '$lib/fileRefs';
@@ -469,8 +470,11 @@
 	const turnAgents = $derived(
 		agentRows({ runs: chat.agentRuns, subagents: chat.subagents, lastTool, since: chat.turnStartedAt || Number.MAX_SAFE_INTEGER })
 	);
-	function openAgent(row: AgentRow) {
-		openTrace(row.workflow ? null : row.id);
+	/** A subagent's conversation in a page of its own (see OpenHow); a
+	 *  Workflow opens the trace's run list. */
+	function openAgent(row: AgentRow, how: OpenHow = 'default') {
+		if (row.workflow) return openTrace(null);
+		subagentPages.open(session.id, row.id, placeFor(how, prefs.openElsewhere));
 	}
 
 	// Plan mode: a proposed plan runs once approved, in the mode picked on its
@@ -883,6 +887,17 @@
 		}
 		if (chat.model && !pendingModel && !chat.switching) send({ op: 'command', input: `/model ${chat.model} ${effort}` });
 	}
+	// Thinking summaries follow settings: a running engine that reports the
+	// other way is switched (between turns; a start already gets the setting).
+	// Asked once per value: an engine that doesn't take it isn't asked again.
+	let thinkingAsked: boolean | null = null;
+	$effect(() => {
+		const want = prefs.thinkingSummaries;
+		if (chat.thinkingSummaries === null || chat.thinkingSummaries === want || thinkingAsked === want) return;
+		if (chat.busy || chat.restarting || chat.engineState === 'exited') return;
+		thinkingAsked = want;
+		untrack(() => send({ op: 'command', input: `/thinking ${want ? 'on' : 'off'}` }));
+	});
 	// Claude Code's session switches (SessionSwitches).
 	function setSwitch(name: SessionSwitch, on: boolean) {
 		const command = name === 'ultracode' ? '/effort ultracode' : `/${name}`;
@@ -1163,7 +1178,6 @@
 	{/if}
 
 	<div class="mainwrap" bind:clientWidth={wrapW}>
-	<ProgressCard {chat} sessionId={session.id} rows={turnAgents} onOpen={traceable ? openAgent : undefined} />
 	<main bind:this={scroller} onscroll={onScroll} onwheel={onWheel}>
 		<div bind:this={contentEl}>
 			<MessageList bind:this={messageList} bind:mark messages={chat.messages} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onNote={noteRequirement} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} traceOf={traceable ? traceOf : undefined} agents={allAgents} onOpenAgent={traceable ? openAgent : undefined} onPlan={planAction} {planMode} onOpenPlan={(id) => planPages.open(session.id, id)} />
@@ -1223,7 +1237,7 @@
 			<RateLimitBanner rateLimit={chat.rateLimit} onDismiss={() => (chat.rateLimit = null)} />
 		{/if}
 
-		<StatusStrip items={chat.statusLog} />
+		<ProgressTray {chat} sessionId={session.id} rows={turnAgents} onOpen={traceable ? openAgent : undefined} />
 
 		{#if chat.planRevising}
 			<div class="approval-wrap">
@@ -1247,6 +1261,7 @@
 
 		<Composer
 			{chat}
+			foot={statusBell}
 			bind:this={composerRef}
 			bind:input
 			bind:attachments
@@ -1340,6 +1355,8 @@
 		{/snippet}
 	</Modal>
 {/if}
+
+{#snippet statusBell()}<StatusStrip {chat} />{/snippet}
 
 <style>
 	/* Whose session this is: a quiet line above the transcript. */

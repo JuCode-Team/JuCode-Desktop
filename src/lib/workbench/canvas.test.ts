@@ -5,6 +5,7 @@ import {
 	chatSessionsIn,
 	chatTab,
 	openChatTab,
+	openElsewhere,
 	reconcileLayout,
 	CHAT_SEED_RATIO
 } from './canvas';
@@ -116,5 +117,23 @@ describe('reconcileLayout', () => {
 		const maxed = toggleMaximize(base, leavesOf(base.root)[0].id);
 		const next = reconcileLayout(JSON.parse(JSON.stringify(serializeLayout(maxed))), ['s1'], 's1');
 		expect(next).toEqual(maxed);
+	});
+});
+
+describe('openElsewhere', () => {
+	it('keeps one side column: windows become tabs of it', () => {
+		let layout = singleLeafLayout([chatTab('s1')]);
+		const chatLeaf = () => leavesOf(layout.root).find((l) => l.tabs.some((t) => t.id === chatPanel('s1')))!.id;
+		for (const id of ['files', 'agents', 'audit', 'subagent:s1:a', 'proposal:s1:p']) {
+			layout = openElsewhere(layout, panelTab(id), { place: 'side', chatLeaf: chatLeaf() });
+		}
+		const leaves = leavesOf(layout.root);
+		expect(leaves).toHaveLength(2);
+		expect(leaves[1].tabs.map((t) => t.id)).toEqual(['files', 'agents', 'audit', 'subagent:s1:a', 'proposal:s1:p']);
+	});
+
+	it('opens next to the conversation in tab mode', () => {
+		const layout = openElsewhere(singleLeafLayout([chatTab('s1')]), panelTab('git'), { place: 'tab', chatLeaf: null, focused: null });
+		expect(leavesOf(layout.root)).toHaveLength(1);
 	});
 });

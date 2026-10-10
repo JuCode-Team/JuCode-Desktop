@@ -76,6 +76,7 @@
 		chatSessionOf,
 		chatSessionsIn,
 		openChatTab,
+		openElsewhere as placeElsewhere,
 		reconcileLayout
 	} from '$lib/workbench/canvas';
 	import { tuiBackendOf, tuiTabTitle } from '$lib/workbench/tuiTab';
@@ -114,6 +115,11 @@
 	import PlanPanel from '$lib/PlanPanel.svelte';
 	import ProposalPane from '$lib/ProposalPane.svelte';
 	import { planPages, proposalOf, proposalPanel } from '$lib/planPages.svelte';
+	import { subagentPages, subagentOf, subagentPanel, type SubagentPlace } from '$lib/agents/subagentPages.svelte';
+	import SubagentPane from '$lib/agents/SubagentPane.svelte';
+	import StateIcon from '$lib/agents/StateIcon.svelte';
+	import { runState } from '$lib/agentTrace';
+	import { shortPath } from '$lib/agentProgress';
 	import type { ApprovalMode } from '$lib/approval';
 	import GoalPanel from '$lib/GoalPanel.svelte';
 	import ChangesPanel from '$lib/ChangesPanel.svelte';
@@ -419,7 +425,7 @@
 		files: FilesIcon, git: GitBranchIcon, term: TerminalWindowIcon, browser: GlobeIcon, diag: PulseIcon
 	};
 	const addOptions = $derived([
-		{ key: 'chat', label: t('shell.agentSession'), icon: PlusIcon, primary: true },
+		{ key: 'chat', label: t('shell.agentSession'), icon: ChatCircleTextIcon, primary: true },
 		...panelKeys.map((k) => ({ key: k, label: t(`dock.tabs.${k}`), icon: PANEL_ICONS[k] }))
 	]);
 
@@ -431,6 +437,8 @@
 		if (tab.panel === 'audit') return t('editor.title');
 		const proposal = proposalOf(tab.panel);
 		if (proposal) return planOf(proposal.sessionId, proposal.planId)?.title || t('chat.planCard.label');
+		const sub = subagentOf(tab.panel);
+		if (sub) return subagentInfo(sub.sessionId, sub.agentId).label;
 		return (ALL_PANELS as readonly string[]).includes(tab.panel) ? t(`dock.tabs.${tab.panel}`) : tab.panel;
 	}
 	function tuiReady(sid: string): boolean {
@@ -553,7 +561,16 @@
 				return;
 			}
 		}
-		applyTiles(openTab(tiles, leafId ?? focusedLeaf, { id: newTabId(), panel: key }));
+		applyTiles(openElsewhere({ id: newTabId(), panel: key }, { leafId }));
+	}
+
+	/** A subagent or tool window, where settings say (canvas.openElsewhere). */
+	function openElsewhere(
+		tab: TileTab,
+		{ leafId = null, place = prefs.openElsewhere, sessionId = store.activeId }: { leafId?: string | null; place?: 'side' | 'tab'; sessionId?: string | null } = {}
+	): TileLayout {
+		const chatLeaf = sessionId ? (leafOfTab(tiles.root, chatPanel(sessionId))?.id ?? null) : null;
+		return placeElsewhere(tiles, tab, { place, chatLeaf, leafId, focused: focusedLeaf });
 	}
 
 	/** Palette / signals: re-activate an existing tab of this panel kind (a
@@ -562,7 +579,7 @@
 	function openPanelTile(kind: string) {
 		const existing = findPanelTab(kind);
 		if (existing) applyTiles(activateTab(tiles, existing.id));
-		else applyTiles(openTab(tiles, focusedLeaf, { id: newTabId(), panel: kind }));
+		else applyTiles(openElsewhere({ id: newTabId(), panel: kind }));
 	}
 
 	/** The approval mode a plan runs in once approved: the one before plan mode. */
@@ -575,23 +592,45 @@
 		const m = sessionMap.get(sessionId)?.chat.messages.find((x) => x.kind === 'plan' && x.id === planId);
 		return m?.kind === 'plan' ? m : undefined;
 	}
-	/** A plan's page beside its session's chat: shown again if open, else a
-	 *  new tab (one per plan, closed one by one). */
+	/** A plan's page in the side column beside its session's chat: shown
+	 *  again if open, else a new tab (one per plan, closed one by one). */
 	function openPlanPage(sessionId: string, planId: string) {
 		const panel = proposalPanel(sessionId, planId);
 		const existing = findPanelTab(panel);
 		if (existing) return applyTiles(activateTab(tiles, existing.id));
-		const tab = { id: newTabId(), panel };
-		// Plan pages share one column right of the chat, as tabs.
-		const plans = leavesOf(tiles.root).find((leaf) => leaf.tabs.some((x) => x.panel.startsWith('proposal:')));
-		if (plans) return applyTiles(openTab(tiles, plans.id, tab));
-		const chat = leafOfTab(tiles.root, chatPanel(sessionId));
-		applyTiles(chat ? splitLeaf(tiles, chat.id, 'right', tab).layout : openTab(tiles, focusedLeaf, tab));
+		applyTiles(openElsewhere({ id: newTabId(), panel }, { place: 'side', sessionId }));
 	}
 	$effect(() => {
 		const request = planPages.request;
 		if (!request || !tilesReady) return;
 		untrack(() => openPlanPage(request.sessionId, request.planId));
+	});
+
+	/** A subagent of a session, for its tab: its name and state. */
+	function subagentInfo(sessionId: string, agentId: string): { label: string; state: ReturnType<typeof runState> | 'unknown' } {
+		const chat = sessionMap.get(sessionId)?.chat;
+		const run =
+			chat?.agentRuns.agents.find((a) => a.id === agentId) ??
+			chat?.agentRuns.workflows.flatMap((w) => w.agents).find((a) => a.id === agentId);
+		const life = chat?.subagents[agentId];
+		const status = run?.state || life?.status;
+		return {
+			label: run?.label || shortPath(life?.label || agentId),
+			state: status ? runState(status) : 'unknown'
+		};
+	}
+	/** A subagent's page: shown again if open; else beside the chat (one
+	 *  column, a tab per subagent) or as a tab next to the chat. */
+	function openSubagentPage(sessionId: string, agentId: string, place: SubagentPlace) {
+		const panel = subagentPanel(sessionId, agentId);
+		const existing = findPanelTab(panel);
+		if (existing) return applyTiles(activateTab(tiles, existing.id));
+		applyTiles(openElsewhere({ id: newTabId(), panel }, { place, sessionId }));
+	}
+	$effect(() => {
+		const request = subagentPages.request;
+		if (!request || !tilesReady) return;
+		untrack(() => openSubagentPage(request.sessionId, request.agentId, request.place));
 	});
 
 	// The workbench-active session always has a chat tile: activating a session
@@ -616,6 +655,11 @@
 		untrack(() => {
 			let next = tiles;
 			for (const sid of chatSessionsIn(next)) if (!ids.has(sid)) next = closeTab(next, chatPanel(sid));
+			// A closed session's subagent pages go with it.
+			for (const tab of leavesOf(next.root).flatMap((l) => l.tabs)) {
+				const sub = subagentOf(tab.panel);
+				if (sub && !ids.has(sub.sessionId)) next = closeTab(next, tab.id);
+			}
 			applyTiles(next);
 		});
 	});
@@ -637,7 +681,7 @@
 		if (!tilesReady) return;
 		untrack(() => {
 			const existing = findPanelTab('audit');
-			if (want && !existing) applyTiles(openTab(tiles, focusedLeaf, { id: newTabId(), panel: 'audit' }));
+			if (want && !existing) applyTiles(openElsewhere({ id: newTabId(), panel: 'audit' }));
 			else if (want && existing) applyTiles(activateTab(tiles, existing.id));
 			else if (!want && existing) applyTiles(closeTab(tiles, existing.id));
 		});
@@ -1345,6 +1389,8 @@
 	{@const sid = chatSessionOf(tab.panel)}
 	{@const s = sid ? sessionMap.get(sid) : undefined}
 	{#if s}<SessionMark status={sessionStatus(s.chat)} compact />{/if}
+	{@const sub = subagentOf(tab.panel)}
+	{#if sub}<StateIcon state={subagentInfo(sub.sessionId, sub.agentId).state} size={12} />{/if}
 {/snippet}
 
 <Toaster />
@@ -1568,6 +1614,11 @@
 											if (action.decision === 'revise') panes.get(p.sessionId)?.focusComposer();
 										}}
 									/>
+								{:else if subagentOf(tab.panel)}
+									{@const sub = subagentOf(tab.panel)!}
+									{#key tab.panel}
+										<SubagentPane chat={sessionMap.get(sub.sessionId)?.chat} agentId={sub.agentId} onOp={(op) => dispatch(sub.sessionId, op)} />
+									{/key}
 								{:else if tab.panel === 'goal'}<GoalPanel goal={chat?.goal ?? null} />
 								{:else if tab.panel === 'agents'}{#if chat && activeId}{#key activeId}<AgentRunsPanel {chat} onOp={(op) => activeId && dispatch(activeId, op)} />{/key}{/if}
 								{:else if tab.panel === 'changes'}<ChangesPanel cwd={activeProject?.path ?? ''} files={chat?.changedFiles ?? []} agentDiffs={chat?.agentDiffs ?? {}} onRevert={(p, rel) => {

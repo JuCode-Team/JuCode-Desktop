@@ -255,6 +255,22 @@ export function moveTab(
 	return splitLeaf(detached, targetLeafId, zone, tab).layout;
 }
 
+/** Move a tab into a leaf's stack at `index` (its own stack: a reorder),
+ *  and make it active there. `index` counts the target's tabs without the
+ *  moved one. */
+export function insertTab(layout: TileLayout, tabId: string, targetLeafId: string, index: number): TileLayout {
+	const source = leafOfTab(layout.root, tabId);
+	const tab = source?.tabs.find((t) => t.id === tabId);
+	if (!source || !tab || !layout.root || !findLeaf(layout.root, targetLeafId)) return layout;
+	const detached = source.id === targetLeafId ? layout : closeTab(layout, tabId);
+	const target = findLeaf(detached.root, targetLeafId);
+	if (!target || !detached.root) return layout;
+	const rest = target.tabs.filter((t) => t.id !== tabId);
+	const at = Math.max(0, Math.min(index, rest.length));
+	const tabs = [...rest.slice(0, at), tab, ...rest.slice(at)];
+	return { ...detached, root: mapLeaf(detached.root, targetLeafId, (l) => ({ ...l, tabs, active: tabId })) };
+}
+
 /** Set a split's ratio (clamped so neither side can be crushed away). */
 export function resizeSplit(layout: TileLayout, splitId: string, ratio: number): TileLayout {
 	if (!layout.root) return layout;

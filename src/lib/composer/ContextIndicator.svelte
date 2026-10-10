@@ -31,7 +31,8 @@
 		runMs?: number;
 	} = $props();
 
-	const fmtTokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
+	const fmtTokens = (n: number) =>
+		n >= 1_000_000 ? `${+(n / 1_000_000).toFixed(2)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`;
 </script>
 
 <!-- Laid out like the plan-quota panel in the model menu: dim labels, plain

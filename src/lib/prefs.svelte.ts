@@ -31,8 +31,16 @@ type PrefsShape = {
 	/** The view an existing conversation opens in: the chat, or its
 	 *  engine's own TUI. */
 	defaultSurface: 'gui' | 'tui';
+	/** Where subagents and tool windows (agents, changes, files…) open: in a
+	 *  column beside the chat, or as a tab next to it. */
+	openElsewhere: 'side' | 'tab';
 	/** Sending a message scrolls the conversation to its end. */
 	scrollOnSend: boolean;
+	/** Under the composer: the context in use (else only once it nears the limit) and the session's cost. */
+	footContext: boolean;
+	footCost: boolean;
+	/** Engines that can summarize their thinking (Claude, Codex) do, before replying. */
+	thinkingSummaries: boolean;
 };
 
 export const TURN_STAT_KEYS = ['elapsed', 'ttft', 'tokens', 'files', 'tools', 'cost', 'model'] as const;
@@ -48,7 +56,11 @@ const DEFAULTS: PrefsShape = {
 	terminalFont: '',
 	terminalFontSize: 12.5,
 	defaultSurface: 'gui',
-	scrollOnSend: true
+	openElsewhere: 'side',
+	scrollOnSend: true,
+	footContext: true,
+	footCost: true,
+	thinkingSummaries: true
 };
 
 /** A terminal font size within 8–32 px; anything else is the default. */
@@ -101,7 +113,11 @@ class PrefsStore {
 	terminalFont = $state(DEFAULTS.terminalFont);
 	terminalFontSize = $state(DEFAULTS.terminalFontSize);
 	defaultSurface = $state(DEFAULTS.defaultSurface);
+	openElsewhere = $state(DEFAULTS.openElsewhere);
 	scrollOnSend = $state(DEFAULTS.scrollOnSend);
+	footContext = $state(DEFAULTS.footContext);
+	footCost = $state(DEFAULTS.footCost);
+	thinkingSummaries = $state(DEFAULTS.thinkingSummaries);
 
 	init() {
 		const p = load();
@@ -116,7 +132,11 @@ class PrefsStore {
 		this.terminalFont = typeof p.terminalFont === 'string' ? p.terminalFont : DEFAULTS.terminalFont;
 		this.terminalFontSize = fontSize(p.terminalFontSize);
 		this.defaultSurface = p.defaultSurface === 'tui' ? 'tui' : 'gui';
+		this.openElsewhere = p.openElsewhere === 'tab' ? 'tab' : 'side';
 		this.scrollOnSend = p.scrollOnSend !== false;
+		this.footContext = p.footContext !== false;
+		this.footCost = p.footCost !== false;
+		this.thinkingSummaries = p.thinkingSummaries !== false;
 		this.#applyVibrancy();
 		if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
 			invoke<string | null>('window_effect')
@@ -142,7 +162,11 @@ class PrefsStore {
 					terminalFont: this.terminalFont,
 					terminalFontSize: this.terminalFontSize,
 					defaultSurface: this.defaultSurface,
-					scrollOnSend: this.scrollOnSend
+					openElsewhere: this.openElsewhere,
+					scrollOnSend: this.scrollOnSend,
+					footContext: this.footContext,
+					footCost: this.footCost,
+					thinkingSummaries: this.thinkingSummaries
 				})
 			);
 		} catch {
@@ -194,6 +218,17 @@ class PrefsStore {
 
 	setDefaultSurface(v: 'gui' | 'tui') {
 		this.defaultSurface = v;
+		this.#save();
+	}
+
+	setOpenElsewhere(v: 'side' | 'tab') {
+		this.openElsewhere = v;
+		this.#save();
+	}
+
+	/** The switches without side effects of their own. */
+	setFlag(name: 'footContext' | 'footCost' | 'thinkingSummaries', v: boolean) {
+		this[name] = v;
 		this.#save();
 	}
 

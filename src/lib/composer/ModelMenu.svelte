@@ -196,7 +196,7 @@
 			</section>
 		{/if}
 
-		<SessionSwitches {chat} {onSwitch} />
+		<SessionSwitches {chat} {onSwitch} thinking={false} />
 
 		{#if chat.backendId === 'jucode' && chat.provider === 'jucode' && chat.model}
 			{#key chat.model}<GroupPicker model={chat.model} />{/key}
@@ -305,6 +305,8 @@
 		   running over the composer. */
 		overflow-y: auto;
 		overscroll-behavior: contain;
+		/* It sits in the composer's bar, which keeps its own row on one line. */
+		white-space: normal;
 		gap: 0;
 		padding: 6px;
 		transform-origin: bottom right;
@@ -312,8 +314,8 @@
 	}
 	/* GroupPicker renders its own section, hence :global. */
 	.mm > :global(section + section) {
-		margin-top: 6px;
-		padding-top: 8px;
+		margin-top: 4px;
+		padding-top: 5px;
 		border-top: 1px solid var(--hairline);
 	}
 	.current .pop-row {
@@ -394,21 +396,21 @@
 		cursor: default;
 	}
 	.effort {
-		padding: 4px 8px 6px;
+		padding: 2px 8px 4px;
 	}
 	.ehead {
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		margin-bottom: 10px;
+		margin-bottom: 6px;
 	}
 	.elabel {
 		color: var(--dim2);
-		font-size: var(--fs-sm);
+		font-size: var(--fs-xs);
 	}
 	.evalue {
 		color: var(--text);
-		font-size: var(--fs-sm);
+		font-size: var(--fs-xs);
 		font-weight: 500;
 		animation: rise var(--t-fast) var(--ease-out);
 	}

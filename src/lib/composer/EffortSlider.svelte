@@ -100,7 +100,7 @@
 >
 	<div class="rail" bind:this={railEl}>
 		<div class="track"></div>
-		<div class="fill" style:width="calc({pct(shown)}% + 30px)"></div>
+		<div class="fill" style:width="calc({pct(shown)}% + 24px)"></div>
 		{#each efforts as e, i (e)}
 			<span class="stop" class:passed={i <= shown} style:left="{pct(i)}%"></span>
 		{/each}
@@ -115,10 +115,10 @@
 
 <style>
 	/* The slider: padded hit area around a rail; the thumb is centred on a stop. */
-	/* A 30px pill: stops sit on an inner line inset by the thumb's radius, so
+	/* A 24px pill: stops sit on an inner line inset by the thumb's radius, so
 	   the thumb stays inside the pill at both ends. */
 	.slider {
-		padding: 0 15px;
+		padding: 0 12px;
 		border-radius: var(--r-sm);
 		cursor: pointer;
 		touch-action: none;
@@ -133,18 +133,18 @@
 	}
 	.rail {
 		position: relative;
-		height: 30px;
+		height: 24px;
 	}
 	.track,
 	.fill {
 		position: absolute;
 		top: 0;
-		left: -15px;
-		height: 30px;
+		left: -12px;
+		height: 24px;
 		border-radius: var(--r-full);
 	}
 	.track {
-		right: -15px;
+		right: -12px;
 		background: var(--surface2);
 	}
 	.fill {
@@ -188,8 +188,8 @@
 	.thumb {
 		position: absolute;
 		top: 50%;
-		width: 26px;
-		height: 26px;
+		width: 20px;
+		height: 20px;
 		border-radius: var(--r-full);
 		background: var(--text);
 		border: 1px solid var(--border);
@@ -209,7 +209,7 @@
 	.ticks {
 		position: relative;
 		height: 14px;
-		margin: 2px 9px 0;
+		margin: 2px 6px 0;
 	}
 	.tick {
 		position: absolute;

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+	insertTab,
 	activateTab,
 	closeTab,
 	deserializeLayout,
@@ -293,5 +294,30 @@ describe('serialize / deserialize', () => {
 		const ser = serializeLayout(singleLeafLayout([tab('a')]));
 		const parsed = deserializeLayout({ ...ser, maximized: 'gone' });
 		expect(parsed?.maximized).toBeNull();
+	});
+});
+
+describe('insertTab', () => {
+	const tab = (id: string) => ({ id, panel: id });
+	it('reorders within a stack and moves into another at a position', () => {
+		let layout = singleLeafLayout([tab('a'), tab('b'), tab('c')]);
+		const leaf = () => leavesOf(layout.root)[0];
+		layout = insertTab(layout, 'c', leaf().id, 0);
+		expect(leaf().tabs.map((t) => t.id)).toEqual(['c', 'a', 'b']);
+		expect(leaf().active).toBe('c');
+		layout = insertTab(layout, 'c', leaf().id, 9);
+		expect(leaf().tabs.map((t) => t.id)).toEqual(['a', 'b', 'c']);
+		const split = splitLeaf(layout, leaf().id, 'right', tab('d')).layout;
+		const [left, right] = leavesOf(split.root);
+		const moved = insertTab(split, 'a', right.id, 0);
+		expect(leavesOf(moved.root).map((l) => l.tabs.map((t) => t.id))).toEqual([['b', 'c'], ['a', 'd']]);
+		expect(left.id).not.toBe(right.id);
+	});
+	it('collapses a stack it empties', () => {
+		const base = singleLeafLayout([tab('a')]);
+		const split = splitLeaf(base, leavesOf(base.root)[0].id, 'right', tab('b')).layout;
+		const [, right] = leavesOf(split.root);
+		const moved = insertTab(split, 'a', right.id, 1);
+		expect(leavesOf(moved.root).map((l) => l.tabs.map((t) => t.id))).toEqual([['b', 'a']]);
 	});
 });

@@ -799,6 +799,9 @@ export class ChatState {
 	 *  notices) — kept out of the conversation bubble stream and shown in the
 	 *  collapsible status strip instead. Real conversation (user/assistant/
 	 *  reasoning/tool) and errors stay inline. */
+	/** How many of statusLog the user has seen (opened the notices since). */
+	statusSeen = $state(0);
+
 	get statusLog(): string[] {
 		const out: string[] = [];
 		for (const m of this.messages) if (m.kind === 'system') out.push(m.text);
