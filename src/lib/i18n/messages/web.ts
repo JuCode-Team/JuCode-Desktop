@@ -43,6 +43,7 @@ const web = {
 		chat: {
 			greeting: '有什么可以帮忙的？',
 			placeholder: '给 JuCode 发消息',
+			full: '这个对话已达到模型的上下文上限，请新建对话继续。',
 			closed: '对话暂未开放',
 			closedHint: '管理员还没有开放可用的模型。',
 			loadFailed: '读取失败：{msg}',
@@ -137,6 +138,7 @@ const web = {
 		chat: {
 			greeting: 'What can I help with?',
 			placeholder: 'Message JuCode',
+			full: 'This conversation has reached the model\'s context limit. Start a new chat to continue.',
 			closed: 'Chat is not open yet',
 			closedHint: 'An administrator has not opened any model to chat.',
 			loadFailed: 'Could not load: {msg}',

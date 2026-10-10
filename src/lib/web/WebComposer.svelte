@@ -170,7 +170,7 @@
 					<PopMenu
 						placement="up-right"
 						title={t('web.chat.model')}
-						items={models.list.map((m) => ({ key: m.id, label: m.name, desc: m.window ? `${Math.round(m.window / 1000)}K` : undefined, checked: m.id === chatPrefs.current }))}
+						items={models.list.map((m) => ({ key: m.id, label: m.name, checked: m.id === chatPrefs.current }))}
 						onSelect={(k) => {
 							chatPrefs.setModel(k);
 							menu = null;

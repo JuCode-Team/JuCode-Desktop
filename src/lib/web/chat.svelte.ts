@@ -6,6 +6,7 @@
 // as a server task the page follows. Ported from the Android app's
 // ChatEngine so both behave alike.
 
+import { t } from '$lib/i18n';
 import { ApiError, json, request } from './api';
 import { models, type ChatModel } from './models.svelte';
 
@@ -69,7 +70,6 @@ export interface SendOptions {
 
 const MAX_TOOL_ROUNDS = 6;
 const MAX_TOOL_RESULT = 24_000;
-const DEFAULT_WINDOW = 32_000;
 const IMAGE_TOKENS = 1_200;
 
 /** Rough tokens: one per CJK character, four ASCII characters per token. */
@@ -478,21 +478,28 @@ async function wire(m: WebMsg, anthropic: boolean): Promise<object> {
 	return { role: m.role, content: parts };
 }
 
-/** The newest messages that fit the model's window (a quarter kept for the
- *  reply); the user's latest message always goes. */
-async function context(model: ChatModel | undefined, history: WebMsg[], system: string, anthropic: boolean): Promise<object[]> {
-	const budget = Math.max(8_000, model?.window || DEFAULT_WINDOW) * 0.75 - estimate(system);
-	const usable = history.filter((m) => (m.content.trim() || m.attachments.length) && m.status !== 'error' && m.kind === 'chat');
+const sent = (history: WebMsg[]) => history.filter((m) => (m.content.trim() || m.attachments.length) && m.status !== 'error' && m.kind === 'chat');
+
+/** The whole conversation as the model sees it: nothing is dropped or
+ *  shortened (a conversation too long for the model ends instead). */
+async function context(history: WebMsg[], system: string, anthropic: boolean): Promise<object[]> {
 	const kept: object[] = [];
-	let used = 0;
-	for (let i = usable.length - 1; i >= 0; i--) {
-		const m = usable[i]!;
-		const cost = estimate(m.content) + (m.role === 'user' ? m.attachments.filter((a) => a.mime.startsWith('image/')).length * IMAGE_TOKENS : 0);
-		if (used + cost > budget && kept.length) break;
-		used += cost;
-		kept.unshift(await wire(m, anthropic));
-	}
+	for (const m of sent(history)) kept.push(await wire(m, anthropic));
 	return anthropic ? kept : [{ role: 'system', content: system }, ...kept];
+}
+
+/** Whether the conversation has no room left in the model's window for
+ *  `text` and a reply (a quarter of the window kept for it). The last
+ *  reply's real token count when known, else an estimate; a model whose
+ *  window is not known is never full. */
+export function contextFull(model: ChatModel | undefined, history: WebMsg[], text = '', images = 0): boolean {
+	if (!model?.window) return false;
+	const last = history.at(-1);
+	const used =
+		last?.role === 'assistant' && last.usage?.input
+			? last.usage.input + last.usage.output
+			: sent(history).reduce((n, m) => n + estimate(m.content) + (m.role === 'user' ? m.attachments.filter((a) => a.mime.startsWith('image/')).length * IMAGE_TOKENS : 0), 0);
+	return used + estimate(text) + images * IMAGE_TOKENS > model.window * 0.75;
 }
 
 class Chat {
@@ -592,6 +599,7 @@ class Chat {
 	/** A question (with images, uploaded first) and its reply. */
 	async send(text: string, files: File[], opts: SendOptions) {
 		if (this.busy) return;
+		if (contextFull(models.find(opts.model), this.msgs, text, files.length)) throw new Error(t('web.chat.full'));
 		this.error = '';
 		this.busy = true;
 		let id: string;
@@ -663,7 +671,6 @@ class Chat {
 	}
 
 	async #reply(opts: SendOptions, convId: string) {
-		const model = models.find(opts.model);
 		const reply = { ...blank('assistant', opts.model), status: 'streaming' as const };
 		if (opts.research) reply.kind = 'research';
 		this.msgs = [...this.msgs, reply];
@@ -679,7 +686,7 @@ class Chat {
 			await this.#put(m, convId);
 			const system = systemPrompt(opts.search);
 			const anthropic = isClaude(opts.model);
-			const messages: object[] = await context(model, this.msgs.slice(0, -1), system, anthropic);
+			const messages: object[] = await context(this.msgs.slice(0, -1), system, anthropic);
 			let thinkingSince = 0;
 			for (let round = 0; ; round++) {
 				const last = round >= MAX_TOOL_ROUNDS;

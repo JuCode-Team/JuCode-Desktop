@@ -10,7 +10,7 @@
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import { t } from '$lib/i18n';
 	import { toast } from '$lib/ui/toast.svelte';
-	import { chat } from './chat.svelte';
+	import { chat, contextFull } from './chat.svelte';
 	import { models } from './models.svelte';
 	import { chatPrefs } from './prefs.svelte';
 	import { shell } from './shell.svelte';
@@ -74,6 +74,8 @@
 
 	const empty = $derived(!chat.loading && chat.msgs.length === 0);
 	const closed = $derived(models.loaded && !models.list.length);
+	// Too long for the model: it ends here (never shortened behind your back).
+	const full = $derived(!chat.busy && contextFull(models.find(chatPrefs.current), chat.msgs));
 </script>
 
 <div class="view">
@@ -124,7 +126,14 @@
 				<button class="jump" onclick={() => ((follow = true), toEnd(true))} title={t('web.chat.jump')} aria-label={t('web.chat.jump')}><ArrowDownIcon size={16} /></button>
 			{/if}
 			<div class="col">
-				<WebComposer busy={chat.busy} onSend={send} onStop={() => chat.interrupt()} />
+				{#if full}
+					<div class="full">
+						<span>{t('web.chat.full')}</span>
+						<button onclick={() => (chat.fresh(), goto('/chat'))}><NotePencilIcon size={16} />{t('web.side.newChat')}</button>
+					</div>
+				{:else}
+					<WebComposer busy={chat.busy} onSend={send} onStop={() => chat.interrupt()} />
+				{/if}
 				<p class="disclaimer">{t('web.chat.disclaimer')}</p>
 			</div>
 		</div>
@@ -239,6 +248,32 @@
 		color: var(--text);
 		box-shadow: var(--shadow-float);
 		transform: translateX(-50%);
+		cursor: pointer;
+	}
+	.full {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		padding: 12px 12px 12px 16px;
+		border: 1px solid var(--border);
+		border-radius: var(--r-lg);
+		background: var(--panel);
+		font-size: var(--fs-sm);
+		color: var(--dim);
+	}
+	.full button {
+		display: inline-flex;
+		flex-shrink: 0;
+		align-items: center;
+		gap: 6px;
+		padding: 7px 12px;
+		border: none;
+		border-radius: var(--r-md);
+		background: var(--text);
+		color: var(--bg);
+		font: inherit;
+		font-weight: 500;
 		cursor: pointer;
 	}
 	.disclaimer {
