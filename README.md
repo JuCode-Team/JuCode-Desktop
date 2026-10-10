@@ -5,6 +5,10 @@ Claude Code, Codex and any [ACP](https://agentclientprotocol.com) agent side by
 side, across projects, with the files, git and terminal of each project next to
 the conversation.
 
+JuCode's own agent, and the `jucode daemon` that runs every session, come from
+[JuCode CLI](https://github.com/JuCode-Team/JuCode-CLI), which also works on its
+own in a terminal (`npm install -g @jucode/cli`).
+
 Status: closed beta.
 
 ## Download
