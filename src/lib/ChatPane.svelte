@@ -1262,6 +1262,7 @@
 		<Composer
 			{chat}
 			foot={statusBell}
+			onContextBreakdown={session.draft || chat.engineState === 'exited' ? undefined : () => send({ op: 'context_usage' })}
 			bind:this={composerRef}
 			bind:input
 			bind:attachments

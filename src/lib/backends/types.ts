@@ -87,6 +87,8 @@ export interface BackendCaps {
 	/** The agent trace panel: Workflows and subagents with their own
 	 *  conversations (agent_runs / subagent_transcript). */
 	agentTrace: boolean;
+	/** What the context holds, by category (`context_usage` → `context_breakdown`). */
+	contextBreakdown: boolean;
 }
 
 /** Normalized events are the existing jucode AgentEvent dialect — adapters

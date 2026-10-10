@@ -62,6 +62,8 @@ export type Op =
 	// MCP server management (engine config is global; any live session's engine
 	// can answer). Each op is acknowledged by an `mcp_servers` event.
 	| { op: 'mcp_list' }
+	// What the context holds, by category (caps.contextBreakdown): a `context_breakdown` event.
+	| { op: 'context_usage' }
 	| { op: 'mcp_set'; server: McpServerEntry }
 	| { op: 'mcp_remove'; name: string }
 	| { op: 'mcp_toggle'; name: string; enabled: boolean }

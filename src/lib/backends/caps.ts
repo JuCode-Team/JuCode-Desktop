@@ -28,7 +28,8 @@ export const CLAUDE_CAPS: BackendCaps = {
 	mcpEngineOwned: true, // mcp_status / mcp_toggle / mcp_reconnect on Claude Code's own config
 	ruleScopes: true, // can_use_tool updatedPermissions destination + list_permission_rules
 	sideQuestions: true, // side_question control request
-	agentTrace: true // system/task_* + the session's saved workflows/subagents files
+	agentTrace: true, // system/task_* + the session's saved workflows/subagents files
+	contextBreakdown: true // get_context_usage
 };
 
 export const CODEX_CAPS: BackendCaps = {
@@ -53,7 +54,8 @@ export const CODEX_CAPS: BackendCaps = {
 	mcpEngineOwned: true, // Codex's own config: listed, reloaded and signed in to, not edited
 	ruleScopes: false,
 	sideQuestions: false,
-	agentTrace: true // subagent threads, read back with thread/turns/list
+	agentTrace: true, // subagent threads, read back with thread/turns/list
+	contextBreakdown: false // the app server reports a total only
 };
 
 export const ACP_CAPS: BackendCaps = {
@@ -78,5 +80,6 @@ export const ACP_CAPS: BackendCaps = {
 	mcpEngineOwned: false,
 	ruleScopes: false,
 	sideQuestions: false,
-	agentTrace: false
+	agentTrace: false,
+	contextBreakdown: false
 };

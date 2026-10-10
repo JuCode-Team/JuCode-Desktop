@@ -78,10 +78,13 @@
 		effortDisabled = false,
 		onApproval,
 		onRespond,
-		foot
+		foot,
+		onContextBreakdown
 	}: {
 		/** Extra controls on the strip under the card (right side). */
 		foot?: Snippet;
+		/** Asks the engine what its context holds, by category (engines that can say). */
+		onContextBreakdown?: () => void;
 		chat: ChatState;
 		input: string;
 		attachments: { path: string; image: boolean }[];
@@ -989,7 +992,7 @@
 		{#if showCost}<span class="foot-cost" title={t('chat.cost')}>{costText(chat.cost, chat.billing)}</span>{/if}
 		{#if showCtx}
 			<div class="foot-ctx">
-				<ContextIndicator pct={ctxPct} atThreshold={ctxAtThreshold} contextTokens={chat.contextTokens} contextLimit={ctxLimit} totalIn={chat.totalIn} totalOut={chat.totalOut} cost={chat.cost} billing={chat.billing} billingError={chat.billingError} runMs={chat.runMs} />
+				<ContextIndicator pct={ctxPct} atThreshold={ctxAtThreshold} contextTokens={chat.contextTokens} contextLimit={ctxLimit} totalIn={chat.totalIn} totalOut={chat.totalOut} cost={chat.cost} billing={chat.billing} billingError={chat.billingError} runMs={chat.runMs} breakdown={chat.contextBreakdown} onBreakdown={bcaps.contextBreakdown ? onContextBreakdown : undefined} />
 			</div>
 		{/if}
 	</div>

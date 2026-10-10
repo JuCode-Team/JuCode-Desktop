@@ -32,7 +32,9 @@ export const JUCODE_CAPS: BackendCaps = {
 	sideQuestions: false,
 	// agent_runs / subagent_transcript (an older engine refuses both: ChatState
 	// drops the refusal and the spawn calls report the agents).
-	agentTrace: true
+	agentTrace: true,
+	// An older engine refuses context_usage: the panel shows the total only.
+	contextBreakdown: true
 };
 
 /** Wire protocol version this desktop speaks (`hello.protocol`). */

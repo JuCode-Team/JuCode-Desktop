@@ -313,6 +313,19 @@ export interface RetryState {
 /** A session's title before the daemon names it. */
 export const UNTITLED = 'New session';
 
+/** The context by category (`context_breakdown`): `kind` is `used`,
+ *  `deferred` (tools loaded only when called), `buffer` (kept free for
+ *  auto-compaction) or `free`. */
+export type ContextBreakdown =
+	| {
+			total: number;
+			max: number;
+			categories: { name: string; tokens: number; kind: string }[];
+			memoryFiles: { path: string; tokens: number }[];
+			error?: undefined;
+	  }
+	| { error: string };
+
 export class ChatState {
 	/** Set by the page: invoked when the agent's `browser_open` tool succeeds,
 	 *  so the embedded browser panel navigates to the requested URL. Static —
@@ -378,6 +391,8 @@ export class ChatState {
 	// the engine only rewinds the conversation, not files).
 	fileCheckpoints = $state<Record<number, string>>({});
 	contextTokens = $state(0);
+	/** What the context holds, by category, as last asked (`context_usage`). */
+	contextBreakdown = $state<ContextBreakdown | null>(null);
 	contextWindow = $state(0);
 	contextLimit = $state(0);
 	cost = $state(0);
@@ -1291,6 +1306,20 @@ export class ChatState {
 				}
 				break;
 			}
+			case 'context_breakdown':
+				this.contextBreakdown = ev.error
+					? { error: str(ev.error) }
+					: {
+							total: num(ev.total),
+							max: num(ev.max),
+							categories: arr<Record<string, unknown>>(ev.categories).map((c) => ({
+								name: str(c.name),
+								tokens: num(c.tokens),
+								kind: str(c.kind) || 'used'
+							})),
+							memoryFiles: arr<Record<string, unknown>>(ev.memory_files).map((f) => ({ path: str(f.path), tokens: num(f.tokens) }))
+						};
+				break;
 			case 'context_usage':
 				this.contextTokens = num(ev.tokens);
 				if (typeof ev.cost === 'number') {
@@ -1761,8 +1790,9 @@ export class ChatState {
 				break;
 			case 'error': {
 				// An engine without the agent trace refuses its ops: nothing failed.
-				const refused = /^unknown op: (agent_runs|subagent_transcript)$/.exec(str(ev.message));
+				const refused = /^unknown op: (agent_runs|subagent_transcript|context_usage)$/.exec(str(ev.message));
 				if (refused) {
+					if (refused[1] === 'context_usage') this.contextBreakdown = { error: str(ev.message) };
 					if (refused[1] === 'subagent_transcript' && this.agentFocus && !this.subagentTranscripts[this.agentFocus])
 						this.subagentTranscripts[this.agentFocus] = { task: '', messages: [], error: t('dock.agents.noTranscript') };
 					break;
