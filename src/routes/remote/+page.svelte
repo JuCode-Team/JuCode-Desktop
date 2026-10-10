@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ChatCircleTextIcon from 'phosphor-svelte/lib/ChatCircleTextIcon';
 	// The remote control page for a phone's browser: pair once, then the desk,
 	// the agents and their sessions. Two ways to reach a computer:
 	// - LAN: the daemon served this page; pair with a code for a device token.
@@ -451,6 +452,14 @@
 			{#if switchMenu}
 				<button class="backdrop" aria-label="close menu" tabindex="-1" onclick={() => (switchMenu = false)}></button>
 				<div class="pop switch-menu" class:left={wide} role="menu">
+					{#if relayOrigin}
+						<!-- app.jucode.net: the remote computers are one part of the web app. -->
+						<a class="pop-row" role="menuitem" href="/chat">
+							<span class="pop-ico"><ChatCircleTextIcon size={18} /></span>
+							<span class="pop-txt"><span class="pop-label">{t('shell.remote.backToChat')}</span></span>
+						</a>
+						<div class="sep"></div>
+					{/if}
 					<div class="pop-head">{t('shell.remote.computers')}</div>
 					{#each conns as conn (conn)}
 						<button
@@ -570,6 +579,7 @@
 			<h1>{conns.length ? t('shell.remote.addComputer') : t('shell.remote.scanTitle')}</h1>
 			<p>{t('shell.remote.scanHint')}</p>
 			{@render linkEntry()}
+			{#if relayOrigin && !conns.length}<a class="licenses" href="/chat">{t('shell.remote.backToChat')}</a>{/if}
 			<a class="licenses" href={LICENSES_URL} target="_blank" rel="noopener">{t('shell.remote.licenses')}</a>
 		</div>
 	{:else if view === 'lan'}

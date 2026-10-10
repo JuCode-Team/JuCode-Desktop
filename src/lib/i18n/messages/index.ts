@@ -10,6 +10,7 @@ import setup from './setup';
 import dock from './dock';
 import shell from './shell';
 import editor from './editor';
+import web from './web';
 
 export type Locale = 'zh' | 'en';
 
@@ -21,7 +22,8 @@ export const catalog = {
 		setup: setup.zh,
 		dock: dock.zh,
 		shell: shell.zh,
-		editor: editor.zh
+		editor: editor.zh,
+		web: web.zh
 	},
 	en: {
 		common: common.en,
@@ -30,6 +32,7 @@ export const catalog = {
 		setup: setup.en,
 		dock: dock.en,
 		shell: shell.en,
-		editor: editor.en
+		editor: editor.en,
+		web: web.en
 	}
 } as const;

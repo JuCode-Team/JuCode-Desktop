@@ -1,5 +1,6 @@
 <script lang="ts">
 	import DOMPurify from 'dompurify';
+	import 'katex/dist/katex.min.css';
 	import { openExternal } from '$lib/openExternal';
 	import { renderMarkdown } from '$lib/markdown';
 	import { t } from '$lib/i18n';

@@ -1,5 +1,6 @@
 import { Marked } from 'marked';
 import { markedHighlight } from 'marked-highlight';
+import markedKatex from 'marked-katex-extension';
 import hljs from '$lib/hljs';
 import { t } from '$lib/i18n';
 import { codeFileRef, fileHref, splitFileRefs, type FileRef } from '$lib/fileRefs';
@@ -23,6 +24,9 @@ const marked = new Marked(
 	})
 );
 marked.setOptions({ breaks: true, gfm: true });
+// Math: $…$ inline (with a space or punctuation around it, so "$5 和 $10"
+// stays text), $$…$$ display. A formula KaTeX can't parse shows as its source.
+marked.use(markedKatex({ throwOnError: false, output: 'htmlAndMathml' }));
 
 const escapeHtml = (s: string) =>
 	s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
