@@ -12,9 +12,10 @@
 	import QrCodeIcon from 'phosphor-svelte/lib/QrCodeIcon';
 	import DesktopIcon from 'phosphor-svelte/lib/DesktopIcon';
 	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
-	import ChatsCircleIcon from 'phosphor-svelte/lib/ChatsCircleIcon';
 	import PaperPlaneTiltIcon from 'phosphor-svelte/lib/PaperPlaneTiltIcon';
 	import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon';
+	import ChatCircleTextIcon from 'phosphor-svelte/lib/ChatCircleTextIcon';
+	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
 	import RequirementList from './RequirementList.svelte';
 	import RequirementCompose from './RequirementCompose.svelte';
 	import RequirementScreen from './RequirementScreen.svelte';
@@ -45,6 +46,7 @@
 		screens,
 		switcher,
 		resizer,
+		chatHref,
 		onAdd,
 		onForget,
 		onRepair,
@@ -64,8 +66,11 @@
 			FilesScreen: Component<any> | null;
 			ChangesScreen: Component<any> | null;
 		};
-		/** The computer switcher, in the list header. */
-		switcher: Snippet;
+		/** The computer switcher: in the list header, or (`true`) the wide
+		 *  sidebar's foot. */
+		switcher: Snippet<[boolean?]>;
+		/** The web app's chat (app.jucode.net): a way back to it in the sidebar. */
+		chatHref?: string;
 		/** The list column's resize handle (wide screens). */
 		resizer: Snippet;
 		/** Opens pairing (to scan this computer's code again). */
@@ -238,7 +243,14 @@
 		</div>
 	{:else}
 		<aside class="side">
+			{#if wide}<div class="brand">JuCode</div>{/if}
 			<nav>
+				{#if wide && chatHref}
+					<a class="chat" href={chatHref}>
+						<ChatCircleTextIcon size={18} />
+						<span class="label">{t('shell.remote.backToChat')}</span>
+					</a>
+				{/if}
 				<button class:on={tab === 'projects'} onclick={() => (tab = 'projects')}>
 					<ListIcon size={18} weight={tab === 'projects' ? 'fill' : 'regular'} />
 					<span class="label">{t('shell.remote.sessions')}</span>
@@ -259,11 +271,14 @@
 					{#if conn.agents.pending > 0}<span class="badge">{conn.agents.pending}</span>{/if}
 				</button>
 			</nav>
-			<!-- Outside the scrolling list, so the switcher's menu is not cut off. -->
-			<div class="top">
-				<h1>{t(TAB_TITLES[tab])}</h1>
-				{@render switcher()}
-			</div>
+			<!-- Outside the scrolling list, so the switcher's menu is not cut off.
+			     Wide: the nav names the tab, the switcher sits in the foot. -->
+			{#if !wide}
+				<div class="top">
+					<h1>{t(TAB_TITLES[tab])}</h1>
+					{@render switcher()}
+				</div>
+			{/if}
 			<main>
 				{#if conn.kind === 'lan' && conn.agents.status === 'unreachable'}
 					<!-- The daemon served this page, so a failing connection most likely
@@ -320,7 +335,10 @@
 					/>
 				</div>
 			</main>
-			{#if wide}{@render resizer()}{/if}
+			{#if wide}
+				<div class="foot">{@render switcher(true)}</div>
+				{@render resizer()}
+			{/if}
 		</aside>
 		<section class="pane">
 			<!-- With nothing opened from the list, a wide pane shows the tab's
@@ -334,8 +352,8 @@
 					<DeskHome onOpenSession={(s) => push(sessionScreen(s))} onOpenAgent={(id) => push(agentScreen(id))} />
 				{:else}
 					<div class="pane-empty">
-						<ChatsCircleIcon size={32} />
-						<p>{t('shell.remote.pickSomething')}</p>
+						<h1>{t('shell.remote.pickSomething')}</h1>
+						<button class="start" onclick={() => (creating = { replace: true })}><PlusIcon size={16} />{t('shell.remote.newSession')}</button>
 					</div>
 				{/if}
 			{/if}
@@ -354,7 +372,7 @@
 								title={screen.title}
 								{hostName}
 								register={conn.register}
-								onBack={pop}
+								onBack={wide && i === 0 ? undefined : pop}
 								onFiles={root ? () => push({ kind: 'files', root, title: baseName(root) }) : undefined}
 								onFile={root ? (file: string, line?: number) => push({ kind: 'files', root, title: baseName(root), file, line }) : undefined}
 								onChanges={root ? () => push({ kind: 'changes', root, title: baseName(root) }) : undefined}
@@ -467,13 +485,31 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: 10px;
-		color: var(--dim2);
+		gap: 22px;
+		padding-bottom: 12vh;
 		animation: fade var(--t-slow) var(--ease-out);
 	}
-	.pane-empty p {
+	.pane-empty h1 {
 		margin: 0;
-		font-size: var(--fs-md);
+		font-size: var(--fs-2xl);
+		font-weight: 600;
+		letter-spacing: -0.01em;
+		text-align: center;
+	}
+	.start {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		height: 36px;
+		padding: 0 16px;
+		border: none;
+		border-radius: var(--r-full);
+		background: var(--text);
+		color: var(--bg);
+		font: inherit;
+		font-size: var(--fs-sm);
+		font-weight: 500;
+		cursor: pointer;
 	}
 	/* Wide screens: the list in the page's resizable left column, pages in
 	   the right one. The pane is the containing block of its fixed-position
@@ -489,52 +525,78 @@
 		border-right: 1px solid var(--hairline);
 		background: var(--sidebar);
 	}
-	/* Wide: the tabs are one segmented control; a narrow column keeps only
-	   their names. */
+	/* Wide: as the chat's sidebar — the name, the sections one per row. */
+	.brand {
+		padding: calc(env(safe-area-inset-top) + 14px) 16px 6px;
+		font-size: var(--fs-md);
+		font-weight: 600;
+		letter-spacing: -0.01em;
+	}
 	.wide nav {
 		position: static;
+		flex-direction: column;
 		gap: 2px;
-		margin: calc(env(safe-area-inset-top) + 12px) 12px 4px;
-		padding: 3px;
+		padding: 6px 8px 8px;
 		border: none;
-		border-radius: var(--r-md);
-		background: var(--surface);
+		background: none;
 	}
-	.wide nav button {
-		min-width: 0;
+	.wide nav button,
+	.wide nav .chat {
+		flex: none;
 		flex-direction: row;
-		justify-content: center;
-		gap: 6px;
-		height: 30px;
-		padding: 0 8px;
-		border-radius: calc(var(--r-md) - 2px);
+		justify-content: flex-start;
+		gap: 10px;
+		height: 36px;
+		padding: 0 10px;
+		border-radius: var(--r-md);
+		color: var(--text);
 		font-size: var(--fs-sm);
+		text-decoration: none;
+	}
+	.wide nav .chat {
+		display: flex;
+		align-items: center;
+	}
+	.wide nav :global(svg) {
+		flex: none;
+		color: var(--dim);
+	}
+	.wide nav button:hover,
+	.wide nav .chat:hover {
+		background: var(--surface2);
 	}
 	.wide nav button:active {
 		transform: none;
 	}
 	.wide nav button.on {
 		background: var(--surface2);
+		font-weight: 500;
+	}
+	.wide nav button.on :global(svg) {
 		color: var(--text);
 	}
 	.wide nav .label {
+		flex: 1;
+		min-width: 0;
 		overflow: hidden;
+		text-align: left;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
-	@container side (max-width: 320px) {
-		.wide nav button > :global(svg) {
-			display: none;
-		}
-	}
 	.wide .badge {
 		position: static;
+		animation: none;
+	}
+	.foot {
+		padding: 8px;
+		border-top: 1px solid var(--hairline);
 	}
 	.wide main {
 		flex: 1;
 		min-height: 0;
 		overflow-y: auto;
-		padding: 0 12px 24px;
+		padding: 4px 12px 24px;
+		border-top: 1px solid var(--hairline);
 	}
 	.wide .pane {
 		display: flex;

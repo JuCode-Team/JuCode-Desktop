@@ -94,7 +94,8 @@
 		onChanges?: () => void;
 		/** Routes daemon frames and exits for `id` here; returns an unregister. */
 		register: (id: string, onFrame: (raw: string) => void, onExit: () => void) => () => void;
-		onBack: () => void;
+		/** Absent: nothing to go back to (the first page of a wide pane). */
+		onBack?: () => void;
 		/** The page on top of the shown tab: its approval card answers keys. */
 		active?: boolean;
 	} = $props();
@@ -589,7 +590,7 @@
 
 <div class="session">
 	<header>
-		<button class="back" onclick={onBack} aria-label={t('shell.remote.back')}><ArrowLeftIcon size={18} /></button>
+		{#if onBack}<button class="back" onclick={onBack} aria-label={t('shell.remote.back')}><ArrowLeftIcon size={18} /></button>{/if}
 		<span class="heading">
 			<span class="title">{title}</span>
 			{#if hostName}<span class="host"><DesktopIcon size={11} /><span>{hostName}</span></span>{/if}
@@ -887,13 +888,13 @@
 		background: var(--bg);
 		z-index: 10;
 	}
+	/* As the web chat's: no bar, the title quiet above the conversation. */
 	header {
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		padding: calc(env(safe-area-inset-top) + 8px) 12px 8px;
-		border-bottom: 1px solid var(--hairline);
-		background: var(--panel);
+		min-height: 52px;
+		padding: calc(env(safe-area-inset-top) + 8px) 12px 8px 16px;
 	}
 	.back {
 		display: inline-flex;
@@ -920,8 +921,9 @@
 		flex-direction: column;
 	}
 	.title {
-		font-weight: 600;
-		font-size: var(--fs-lg);
+		font-weight: 500;
+		font-size: var(--fs-sm);
+		color: var(--dim);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
