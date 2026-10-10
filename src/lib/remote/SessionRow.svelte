@@ -4,6 +4,7 @@
 	import ArchiveIcon from 'phosphor-svelte/lib/ArchiveIcon';
 	import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon';
 	import { t } from '$lib/i18n';
+	import { when } from '$lib/time';
 
 	let {
 		title,
@@ -25,14 +26,6 @@
 		onArchive?: () => void;
 	} = $props();
 
-	function when(ms: number): string {
-		const d = new Date(ms);
-		const today = new Date().toDateString() === d.toDateString();
-		return d.toLocaleString(
-			undefined,
-			today ? { hour: '2-digit', minute: '2-digit' } : { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }
-		);
-	}
 </script>
 
 <div class="row">

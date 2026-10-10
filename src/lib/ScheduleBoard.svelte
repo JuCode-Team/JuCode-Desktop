@@ -9,6 +9,7 @@
 	import { toast } from '$lib/ui/toast.svelte';
 	import { agentDirectory, type AgentView, type TimerView } from '$lib/agents.svelte';
 	import { t } from '$lib/i18n';
+	import { when } from '$lib/time';
 
 	let {
 		agents,
@@ -50,9 +51,6 @@
 		}
 	});
 
-	function when(ms: number): string {
-		return new Date(ms).toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-	}
 </script>
 
 <h1>{t('shell.schedule.title')}</h1>

@@ -22,7 +22,5 @@ export function projectLabel(id: string | null | undefined, projects: { id: stri
 	return projects.find((p) => p.id === id)?.name ?? id;
 }
 
-/** A date and time, short (month/day hour:minute). */
-export function when(ms: number): string {
-	return new Date(ms).toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
+/** A date and time, short and 24-hour. */
+export { when } from '$lib/time';

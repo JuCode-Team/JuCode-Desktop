@@ -3,7 +3,7 @@
 	// per task (a scheduled one, or one with a session of its own) with its
 	// state, how it is triggered and what its latest run concluded; its runs
 	// unfold below it. Done and closed tasks are folded away at the end, with
-	// the items closed lately.
+	// the items closed lately and the sessions from before tasks existed.
 	import UserIcon from 'phosphor-svelte/lib/UserIcon';
 	import ClockIcon from 'phosphor-svelte/lib/ClockIcon';
 	import AlarmIcon from 'phosphor-svelte/lib/AlarmIcon';
@@ -45,6 +45,13 @@
 	);
 	const finished = $derived(tasks.filter((task) => task.state === 'done' || task.state === 'closed'));
 	let showFinished = $state(false);
+	/** Sessions of the agent that no task carries: history from before tasks. */
+	const older = $derived(
+		agentDirectory.sessions
+			.filter((s) => s.agent === agent.id && !s.task)
+			.sort((a, b) => (b.updated_at ?? b.created_at) - (a.updated_at ?? a.created_at))
+	);
+	let showOlder = $state(false);
 
 	/** Unfolded parts by key: `i:` instruction, `s:` summary, `r:` runs. */
 	let expanded = $state<Record<string, boolean>>({});
@@ -153,14 +160,16 @@
 		}
 	}
 
-	async function setClosed(task: TaskView, closed: boolean) {
+	async function act(work: () => Promise<unknown>) {
 		error = '';
 		try {
-			await (closed ? agentDirectory.closeTask(task.id) : agentDirectory.reopenTask(task.id));
+			await work();
 		} catch (e) {
 			error = e instanceof Error ? e.message : String(e);
 		}
 	}
+	const setClosed = (task: TaskView, closed: boolean) =>
+		act(() => (closed ? agentDirectory.closeTask(task.id) : agentDirectory.reopenTask(task.id)));
 </script>
 
 <DeskContent agent={agent.id} {onOpenSession} />
@@ -256,6 +265,10 @@
 					<button class="more" onclick={() => onOpenSession(session)}>{t('shell.activity.open')}</button>
 				{/if}
 				<span class="grow"></span>
+				{#if task.latest_run?.status === 'running'}
+					{@const run = task.latest_run.id}
+					<button class="more" onclick={() => act(() => agentDirectory.cancelRun(run))}>{t('shell.activity.stop')}</button>
+				{/if}
 				{#if task.state === 'closed'}
 					<button class="more" onclick={() => setClosed(task, false)}>{t('shell.activity.reopen')}</button>
 				{:else}
@@ -314,6 +327,24 @@
 <div class="closed-items">
 	<DeskClosed inScope={(id) => id === agent.id} />
 </div>
+
+{#if older.length}
+	<button class="more fold" onclick={() => (showOlder = !showOlder)} aria-expanded={showOlder}>
+		{showOlder ? t('shell.activity.hideOlder') : t('shell.activity.older', { n: older.length })}
+	</button>
+	{#if showOlder}
+		<ol class="older">
+			{#each older as s (s.session)}
+				<li>
+					<button class="run-row" onclick={() => onOpenSession(s.session)}>
+						<span class="run-at">{when(s.updated_at ?? s.created_at)}</span>
+						<span class="run-text">{s.title || t('shell.agentPage.untitled')}</span>
+					</button>
+				</li>
+			{/each}
+		</ol>
+	{/if}
+{/if}
 
 <style>
 	.err {
@@ -544,6 +575,12 @@
 	}
 	.closed-items {
 		margin-top: 18px;
+	}
+	.older {
+		margin: 6px 0 0 41px;
+		padding: 0;
+		list-style: none;
+		font-size: var(--fs-xs);
 	}
 	.reply {
 		display: flex;

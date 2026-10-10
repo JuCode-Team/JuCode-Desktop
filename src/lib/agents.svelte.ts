@@ -87,6 +87,8 @@ export interface DaemonSessionView {
 	chat?: boolean;
 	/** `jucode`, `claude`, `codex` or `acp` (newer daemons). */
 	engine?: string;
+	/** The task an agent session carries; none for one from before tasks. */
+	task?: string | null;
 }
 
 export interface QuestionView {
@@ -491,6 +493,11 @@ export class AgentDirectory {
 
 	async reopenTask(id: string) {
 		await this.#daemon.request({ op: 'task_reopen', task: id });
+	}
+
+	/** Interrupts a working run. */
+	async cancelRun(id: string) {
+		await this.#daemon.request({ op: 'run_cancel', run: id });
 	}
 
 	/** The agent's messages, newest first. */

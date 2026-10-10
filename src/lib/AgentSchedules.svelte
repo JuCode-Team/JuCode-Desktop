@@ -1,6 +1,7 @@
 <script lang="ts">
 	// An agent's scheduled tasks on the workbench's 定时任务 page: when each
-	// runs next, its last run, and the controls to switch, run, edit and delete it.
+	// runs next, what its latest run concluded (or that it needs the user),
+	// and the controls to switch, run, edit and delete it.
 	import type { Snippet } from 'svelte';
 	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
 	import PlayIcon from 'phosphor-svelte/lib/PlayIcon';
@@ -16,6 +17,7 @@
 	import { agentDirectory } from '$lib/agents.svelte';
 	import { summary, type Schedule } from '$lib/schedules';
 	import { t } from '$lib/i18n';
+	import { when as at } from '$lib/time';
 
 	let {
 		agentId,
@@ -35,14 +37,8 @@
 	let editing = $state<Schedule | null | undefined>(undefined);
 	let showUsage = $state<Record<string, boolean>>({});
 
-	function when(seconds: number): string {
-		return new Date(seconds * 1000).toLocaleString(undefined, {
-			month: 'numeric',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
-	}
+	const when = (seconds: number) => at(seconds * 1000);
+	const taskOf = (id: string) => agentDirectory.tasks.find((task) => task.id === id);
 
 	async function act(work: () => Promise<unknown>) {
 		try {
@@ -84,6 +80,7 @@
 		<p class="empty">{t('shell.schedule.empty')}</p>
 	{/if}
 	{#each schedules as s (s.id)}
+		{@const task = taskOf(s.id)}
 		<div class="task" class:off={!s.enabled}>
 			<Switch
 				checked={s.enabled}
@@ -94,6 +91,8 @@
 				<div class="name">
 					{s.name}
 					{#if s.by_agent && !s.enabled}<span class="proposed">{t('shell.schedule.proposed')}</span>{/if}
+					{#if task?.state === 'needs_you'}<span class="needs">{t('shell.activity.stateNeedsYou')}</span>
+					{:else if task?.state === 'running'}<span class="working">{t('shell.activity.stateRunning')}</span>{/if}
 				</div>
 				<div class="meta">
 					<span>{summary(s)}</span>
@@ -114,6 +113,11 @@
 						</span>
 					{/if}
 				</div>
+				{#if task?.latest_run?.outcome?.summary}
+					<div class="result">
+						{#if task.quiet_runs > 1}{t('shell.activity.quietRuns', { n: task.quiet_runs })} · {/if}{task.latest_run.outcome.summary.trim().split('\n')[0]}
+					</div>
+				{/if}
 			</div>
 			<IconButton size="sm" title={t('shell.schedule.runNow')} disabled={starting[s.id]} onclick={() => run(s)}><PlayIcon size={14} /></IconButton>
 			<IconButton size="sm" title={t('shell.schedule.edit')} onclick={() => (editing = s)}><PencilSimpleIcon size={14} /></IconButton>
@@ -135,6 +139,26 @@
 <style>
 	section {
 		margin-top: 16px;
+	}
+	.needs,
+	.working {
+		margin-left: 8px;
+		font-size: var(--fs-xs);
+		font-weight: 400;
+	}
+	.needs {
+		color: var(--warn);
+	}
+	.working {
+		color: var(--accent-bright);
+	}
+	.result {
+		margin-top: 2px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: var(--fs-xs);
+		color: var(--dim);
 	}
 	.section-head {
 		display: flex;

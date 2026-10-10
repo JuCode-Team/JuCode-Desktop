@@ -682,7 +682,10 @@ const shell = {
 			statusQueued: '排队中',
 			statusRunning: '进行中',
 			statusInterrupted: '中断',
-			loadFailed: '读取失败：{error}'
+			loadFailed: '读取失败：{error}',
+			stop: '停止',
+			older: '更早的会话 {n}',
+			hideOlder: '收起更早的会话'
 		},
 		schedule: {
 			title: '定时任务',
@@ -1605,7 +1608,10 @@ const shell = {
 			statusQueued: 'Queued',
 			statusRunning: 'Running',
 			statusInterrupted: 'Interrupted',
-			loadFailed: 'Could not load: {error}'
+			loadFailed: 'Could not load: {error}',
+			stop: 'Stop',
+			older: 'Earlier sessions {n}',
+			hideOlder: 'Hide earlier sessions'
 		},
 		schedule: {
 			title: 'Scheduled tasks',
