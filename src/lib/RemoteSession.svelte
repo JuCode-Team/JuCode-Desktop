@@ -50,6 +50,13 @@
 	import { loadComposerText, saveComposerText } from '$lib/composerText';
 	import { t } from '$lib/i18n';
 	import { imageViewer } from '$lib/ui/imageViewer.svelte';
+	import ProgressTray from '$lib/agents/ProgressTray.svelte';
+	import StatusStrip from '$lib/composer/StatusStrip.svelte';
+	import ContextIndicator from '$lib/composer/ContextIndicator.svelte';
+	import { agentRows, type AgentRow } from '$lib/agentProgress';
+	import { parseToolOutput, toolTarget, toolVerb } from '$lib/toolSummary';
+	import { costText } from '$lib/sessionCost';
+	import { prefs } from '$lib/prefs.svelte';
 	import { followTop, shortOfEnd } from '$lib/chatFollow';
 
 	let {
@@ -538,6 +545,26 @@
 		if (chat.agentRuns.workflows.some((w) => w.toolUseId === m.callId)) return { label: t('dock.agents.open'), run: () => openTrace(null) };
 		return null;
 	}
+	// The subagents of this conversation, as Desktop's chat shows them: every
+	// run (the message list's cards) and the current turn's (the progress tray).
+	const lastTool = (label: string) => {
+		const m = chat.subagentLastTool[label];
+		return m ? `${toolVerb(m.name)} ${toolTarget(m.name, parseToolOutput(m.output))}`.trim() : '';
+	};
+	const allAgents = $derived(agentRows({ runs: chat.agentRuns, subagents: chat.subagents, lastTool }));
+	const turnAgents = $derived(
+		agentRows({ runs: chat.agentRuns, subagents: chat.subagents, lastTool, since: chat.turnStartedAt || Number.MAX_SAFE_INTEGER })
+	);
+	// A subagent opens in the trace sheet on its own conversation (one place
+	// on a phone, whatever Desktop's setting); a Workflow on the run list.
+	function openAgent(row: AgentRow) {
+		openTrace(row.workflow ? null : row.id);
+	}
+	// Under the composer, as on Desktop: notices, cost, context in use.
+	const ctxLimit = $derived(chat.contextLimit || chat.contextWindow);
+	const ctxPct = $derived(ctxLimit > 0 ? Math.min(100, Math.round((chat.contextTokens / ctxLimit) * 100)) : 0);
+	const showCtx = $derived(bcaps.contextUsage && ctxLimit > 0 && (prefs.footContext || ctxPct >= 70));
+	const showCost = $derived(prefs.footCost && (chat.cost > 0 || !!chat.billing));
 	function setEffort(effort: string) {
 		if (chat.model && !pendingModel) send({ op: 'command', input: `/model ${chat.model} ${effort}` });
 	}
@@ -578,6 +605,7 @@
 		onStop={(id) => send({ op: 'stop_task', task_id: id })}
 		onOutput={(id) => send({ op: 'task_output', task_id: id })}
 		onTrace={bcaps.agentTrace ? openTrace : undefined}
+		agents={false}
 	/>
 	{#if traceOpen}
 		<!-- The agent trace, full screen over the session. -->
@@ -606,6 +634,8 @@
 				call={chat.call}
 				compactionTokens={chat.compactionTokens}
 				traceOf={bcaps.agentTrace ? traceOf : undefined}
+				agents={allAgents}
+				onOpenAgent={bcaps.agentTrace ? openAgent : undefined}
 				{loadImage}
 				onFile={onFile ? openReplyFile : undefined}
 				{scroller}
@@ -657,6 +687,7 @@
 			</div>
 		{/if}
 
+		<ProgressTray {chat} sessionId={sid || 'draft'} rows={turnAgents} onOpen={bcaps.agentTrace ? openAgent : undefined} />
 		<div class="composer-wrap">
 			{#if chat.approvalPending && chat.busy}
 				<div class="queued">
@@ -781,6 +812,28 @@
 					{/if}
 				</div>
 			</form>
+			{#if chat.statusLog.length || showCost || showCtx}
+				<div class="composer-foot">
+					<StatusStrip {chat} />
+					{#if showCost}<span class="foot-cost">{costText(chat.cost, chat.billing)}</span>{/if}
+					{#if showCtx}
+						<ContextIndicator
+							pct={ctxPct}
+							atThreshold={chat.contextLimit > 0}
+							contextTokens={chat.contextTokens}
+							contextLimit={ctxLimit}
+							totalIn={chat.totalIn}
+							totalOut={chat.totalOut}
+							cost={chat.cost}
+							billing={chat.billing}
+							billingError={chat.billingError}
+							runMs={chat.runMs}
+							breakdown={chat.contextBreakdown}
+							onBreakdown={bcaps.contextBreakdown && connected ? () => send({ op: 'context_usage' }) : undefined}
+						/>
+					{/if}
+				</div>
+			{/if}
 		</div>
 	</div>
 
@@ -979,6 +1032,21 @@
 	}
 	/* The desktop composer: a floating card, the text on top, the model and
 	   send / stop in a row under it. */
+	.composer-foot {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 10px;
+		min-height: 22px;
+		padding: 5px 8px 0;
+		color: var(--dim);
+	}
+	.foot-cost {
+		flex: none;
+		white-space: nowrap;
+		font-size: var(--fs-2xs);
+		font-variant-numeric: tabular-nums;
+	}
 	.composer-wrap {
 		max-width: 920px;
 		margin: 0 auto;

@@ -1,9 +1,12 @@
 <script lang="ts">
-	// Browse a project's files read-only: folders (git-ignored entries
-	// hidden) and a highlighted view of one file.
+	// Browse a project's files read-only, as a tree: a folder opens and
+	// closes in place (read when first opened; git-ignored entries hidden),
+	// a file shows highlighted.
 	import hljs from '$lib/hljs';
-	import ArrowUpIcon from 'phosphor-svelte/lib/ArrowUpIcon';
+	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
 	import FolderIcon from 'phosphor-svelte/lib/FolderIcon';
+	import FolderOpenIcon from 'phosphor-svelte/lib/FolderOpenIcon';
 	import FileIcon from 'phosphor-svelte/lib/FileIcon';
 	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
 	import Notice from '$lib/ui/Notice.svelte';
@@ -28,7 +31,9 @@
 	} = $props();
 	const remoteProjects = useHost().projects;
 
-	let listing = $state<DirListing | null>(null);
+	/** Each folder read so far, by path: its listing, or why it could not be read. */
+	const dirs = new SvelteMap<string, DirListing | { error: string }>();
+	const open = new SvelteSet<string>();
 	let file = $state<FileContent | null>(null);
 	let error = $state('');
 	let loading = $state(false);
@@ -50,12 +55,20 @@
 		}
 	}
 
-	async function openDir(path: string) {
-		const next = await load(() => remoteProjects.list(path), path);
-		if (next) {
-			listing = next;
-			file = null;
+	async function readDir(path: string) {
+		pending = path;
+		try {
+			dirs.set(path, await remoteProjects.list(path));
+		} catch (e) {
+			dirs.set(path, { error: e instanceof Error ? e.message : String(e) });
+		} finally {
+			if (pending === path) pending = null;
 		}
+	}
+	function toggle(path: string) {
+		if (open.has(path)) return void open.delete(path);
+		open.add(path);
+		if (!dirs.has(path)) void readDir(path);
 	}
 
 	async function openFile(path: string) {
@@ -64,7 +77,9 @@
 	}
 
 	$effect(() => {
-		void openDir(root).then(() => {
+		dirs.clear();
+		open.clear();
+		void readDir(rootPath).then(() => {
 			if (target) void openFile(target);
 		});
 	});
@@ -84,9 +99,24 @@
 
 	const rootPath = $derived(root.replace(/[\\/]+$/, ''));
 	const relative = (path: string) => path.slice(rootPath.length).replace(/^[\\/]/, '') || undefined;
-	const parent = $derived.by(() => {
-		if (!listing || listing.path === rootPath) return null;
-		return listing.path.slice(0, listing.path.search(/[\\/][^\\/]*$/));
+	/** The rows shown: every entry of an open folder, depth first. */
+	type Row = { path: string; name: string; dir: boolean; size: number; depth: number } | { note: string; depth: number; err?: boolean };
+	const rows = $derived.by(() => {
+		const out: Row[] = [];
+		const walk = (path: string, depth: number) => {
+			const listed = dirs.get(path);
+			if (!listed) return void out.push({ note: '', depth });
+			if ('error' in listed) return void out.push({ note: listed.error, depth, err: true });
+			if (!listed.entries.length) return void out.push({ note: t('shell.remote.emptyFolder'), depth });
+			for (const entry of listed.entries) {
+				const child = `${listed.path}/${entry.name}`;
+				out.push({ path: child, name: entry.name, dir: entry.dir, size: entry.size, depth });
+				if (entry.dir && open.has(child)) walk(child, depth + 1);
+			}
+			if (listed.truncated) out.push({ note: t('shell.remote.truncated'), depth });
+		};
+		walk(rootPath, 0);
+		return out;
 	});
 
 	const highlighted = $derived.by(() => {
@@ -101,7 +131,6 @@
 
 	function back() {
 		if (file) file = null;
-		else if (parent) void openDir(parent);
 		else onBack();
 	}
 
@@ -110,7 +139,7 @@
 	}
 </script>
 
-<RemoteScreen {title} subtitle={file ? relative(file.path) : listing ? relative(listing.path) : undefined} onBack={back}>
+<RemoteScreen {title} subtitle={file ? relative(file.path) : undefined} onBack={back}>
 	{#if error}<Notice tone="error">{error}</Notice>{/if}
 	{#if file}
 		<div class="view">
@@ -126,39 +155,43 @@
 			</div>
 		{/if}
 		</div>
-	{:else if listing}
-		{#key listing.path}
-		<div class="view">
-		{#if parent}
-			<button class="row" class:pending={pending === parent} disabled={loading} onclick={() => openDir(parent!)}>
-				{#if pending === parent}<CircleNotchIcon size={16} class="spin" />{:else}<ArrowUpIcon size={16} />{/if}
-				<span class="name">..</span>
-			</button>
-		{/if}
-		{#each listing.entries as entry (entry.name)}
-			{@const path = `${listing.path}/${entry.name}`}
-			<button class="row" class:pending={pending === path} disabled={loading} onclick={() => (entry.dir ? openDir(path) : openFile(path))}>
-				{#if pending === path}<CircleNotchIcon size={16} class="spin" />{:else if entry.dir}<FolderIcon size={16} />{:else}<FileIcon size={16} />{/if}
-				<span class="name">{entry.name}</span>
-				{#if !entry.dir}<span class="size">{size(entry.size)}</span>{/if}
-			</button>
-		{:else}
-			<p class="empty">{t('shell.remote.emptyFolder')}</p>
-		{/each}
-		{#if listing.truncated}<p class="empty">{t('shell.remote.truncated')}</p>{/if}
+	{:else}
+		<div class="view tree" role="tree">
+			{#each rows as r, i ('path' in r ? r.path : `note:${i}`)}
+				{#if 'path' in r}
+					{@const isOpen = r.dir && open.has(r.path)}
+					<button
+						class="row"
+						class:pending={pending === r.path}
+						style:--depth={r.depth}
+						role="treeitem"
+						aria-expanded={r.dir ? isOpen : undefined}
+						aria-selected={false}
+						disabled={loading}
+						onclick={() => (r.dir ? toggle(r.path) : openFile(r.path))}
+					>
+						<span class="caret" class:open={isOpen} class:none={!r.dir}><CaretRightIcon size={12} /></span>
+						{#if pending === r.path}<CircleNotchIcon size={16} class="spin" />{:else if r.dir}{#if isOpen}<FolderOpenIcon size={16} />{:else}<FolderIcon size={16} />{/if}{:else}<FileIcon size={16} />{/if}
+						<span class="name">{r.name}</span>
+						{#if !r.dir}<span class="size">{size(r.size)}</span>{/if}
+					</button>
+				{:else if r.note}
+					<p class="note" class:err={r.err} style:--depth={r.depth}>{r.note}</p>
+				{:else}
+					<p class="note" style:--depth={r.depth}><CircleNotchIcon size={14} class="spin" /></p>
+				{/if}
+			{/each}
 		</div>
-		{/key}
 	{/if}
-	{#if loading && !listing}<p class="empty"><CircleNotchIcon size={14} class="spin" /></p>{/if}
 </RemoteScreen>
 
 <style>
 	.row {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: 8px;
 		width: 100%;
-		padding: 11px 4px;
+		padding: 10px 4px 10px calc(4px + var(--depth, 0) * 16px);
 		border: none;
 		border-bottom: 1px solid var(--hairline);
 		background: none;
@@ -265,5 +298,27 @@
 	}
 	.src :global(.hljs-meta) {
 		color: var(--dim);
+	}
+	.caret {
+		display: inline-flex;
+		flex: none;
+		color: var(--dim2);
+		transition: transform var(--t-fast) var(--ease-out);
+	}
+	.caret.open {
+		transform: rotate(90deg);
+	}
+	.caret.none {
+		visibility: hidden;
+	}
+	.note {
+		margin: 0;
+		padding: 8px 4px 8px calc(4px + var(--depth, 0) * 16px + 20px);
+		font-size: var(--fs-xs);
+		color: var(--dim2);
+	}
+	.note.err {
+		color: var(--err);
+		overflow-wrap: anywhere;
 	}
 </style>
