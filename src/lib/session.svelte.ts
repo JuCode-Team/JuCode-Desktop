@@ -1,6 +1,6 @@
 import { AUTO_CONTINUE, ChatState, UNTITLED } from './chat.svelte';
 import { acpAgentsList, closeSession, daemon, hostSession, sessionMeta, sessionHistory, projectRoot, chatsDir, writeConfig, git } from './protocol';
-import type { EngineSpec } from './daemon';
+import { DaemonError, type EngineSpec } from './daemon';
 import { canHandOffToTui, isValidResumeSessionId } from './tuiHandoff';
 import { normalizeBackendId, type BackendId } from './backends';
 import { createJucodeAdapter } from './backends/jucode';
@@ -132,8 +132,14 @@ export class SessionStore {
 		const s = this.allSessions.find((x) => x.chat === chat);
 		// The daemon can't be reached (restarting, being upgraded): keep trying
 		// for about 4.5 minutes, backing off, without spending the crash budget
-		// or stacking an error per attempt.
-		if (s && s.surface !== 'tui' && chat.daemonRetries < DAEMON_RETRY_DELAYS.length) {
+		// or stacking an error per attempt. An error the daemon replied with
+		// (e.g. the engine's program not found) is shown as is.
+		if (
+			s &&
+			s.surface !== 'tui' &&
+			!(e instanceof DaemonError) &&
+			chat.daemonRetries < DAEMON_RETRY_DELAYS.length
+		) {
 			if (chat.daemonRetries === 0) chat.messages.push({ kind: 'system', text: t('shell.daemonReconnecting') });
 			const delay = DAEMON_RETRY_DELAYS[chat.daemonRetries++]!;
 			setTimeout(() => {

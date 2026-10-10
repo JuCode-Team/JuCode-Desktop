@@ -57,6 +57,10 @@ const DAEMON_EVENTS = new Set([
 ]);
 const CLOSE_TIMEOUT_MS = 10_000;
 
+/** An error the daemon replied with: it was reached, so retrying the
+ *  connection won't help. */
+export class DaemonError extends Error {}
+
 export class DaemonClient {
 	/** Called with the desktop session id and one raw frame (JSON text). */
 	onFrame: (desktopId: string, raw: string) => void = () => {};
@@ -249,7 +253,7 @@ export class DaemonClient {
 		if (typeof frame.id === 'number' && this.#pending.has(frame.id)) {
 			const pending = this.#pending.get(frame.id)!;
 			this.#pending.delete(frame.id);
-			if (frame.type === 'error') pending.reject(new Error(String(frame.message)));
+			if (frame.type === 'error') pending.reject(new DaemonError(String(frame.message)));
 			else pending.resolve(frame);
 			return;
 		}

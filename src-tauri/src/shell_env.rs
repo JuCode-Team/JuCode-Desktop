@@ -150,11 +150,29 @@ fn capture_and_store() -> ShellEnvStatus {
     status()
 }
 
+/// 启动时那次捕获结束的信号；`wait_initial_capture` 等它。
+static INITIAL_CAPTURE: std::sync::Mutex<Option<std::sync::mpsc::Receiver<()>>> =
+    std::sync::Mutex::new(None);
+
 /// 应用启动时异步捕获，不阻塞 setup。
 pub fn init_async() {
-    std::thread::spawn(|| {
+    let (done, wait) = std::sync::mpsc::channel();
+    *INITIAL_CAPTURE.lock().unwrap_or_else(|e| e.into_inner()) = Some(wait);
+    std::thread::spawn(move || {
         let _ = capture_and_store();
+        let _ = done.send(());
     });
+}
+
+/// 等启动时的捕获结束，最多比 CAPTURE_TIMEOUT 多一秒（rc 里起的后台进程占着
+/// 输出管道时，捕获线程本身可能迟迟不结束）。刚开机时 rc 加载慢，桌面端两秒内
+/// 就会拉起 daemon；不等的话 daemon 带着 launchd 的裸 PATH 常驻，之后所有会话
+/// 都找不到 ~/.local/bin 等目录里的程序。
+fn wait_initial_capture() {
+    let mut guard = INITIAL_CAPTURE.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(wait) = guard.take() {
+        let _ = wait.recv_timeout(CAPTURE_TIMEOUT + Duration::from_secs(1));
+    }
 }
 
 pub fn status() -> ShellEnvStatus {
@@ -210,6 +228,7 @@ pub fn apply_to_command(
     custom: &[(String, String)],
 ) {
     let snapshot = if use_shell_env && !cfg!(windows) {
+        wait_initial_capture();
         state().read().unwrap().clone()
     } else {
         None
