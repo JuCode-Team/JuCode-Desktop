@@ -74,6 +74,7 @@
 	import Button from '$lib/ui/Button.svelte';
 	import TaskStrip from '$lib/TaskStrip.svelte';
 	import ProgressTray from '$lib/agents/ProgressTray.svelte';
+	import NewSessionPicker from '$lib/NewSessionPicker.svelte';
 	import { placeFor, subagentPages, type OpenHow } from '$lib/agents/subagentPages.svelte';
 	import { agentRows, type AgentRow } from '$lib/agentProgress';
 	import { parseToolOutput, toolTarget, toolVerb } from '$lib/toolSummary';
@@ -1193,6 +1194,7 @@
 			</div>
 		{:else if chat.messages.length === 0 && !chat.busy}
 			<div class="welcome">
+				{#if session.draft && !project?.chats}<NewSessionPicker {store} {session} />{/if}
 				<p class="welcome-tip">{t('shell.welcomeTip')}</p>
 				<div class="welcome-hints">
 					<span><kbd>/</kbd> {t('shell.hintCommand')}</span>

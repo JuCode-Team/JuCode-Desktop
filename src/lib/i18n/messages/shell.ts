@@ -145,6 +145,11 @@ const shell = {
 		findNext: '下一个',
 
 		// welcome / empty states
+		startPicker: {
+			project: '项目',
+			backend: '后端',
+			openFolder: '打开文件夹…'
+		},
 		welcomeTip: '给 JuCode 指派一个任务，开始新对话',
 		hintCommand: '命令',
 		hintRef: '引用文件',
@@ -1051,6 +1056,11 @@ const shell = {
 		findNext: 'Next',
 
 		// welcome / empty states
+		startPicker: {
+			project: 'Project',
+			backend: 'Agent',
+			openFolder: 'Open a folder…'
+		},
 		welcomeTip: 'Assign JuCode a task to start a new conversation',
 		hintCommand: 'Commands',
 		hintRef: 'Reference files',

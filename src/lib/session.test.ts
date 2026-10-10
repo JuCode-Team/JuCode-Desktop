@@ -1316,3 +1316,23 @@ describe('SessionStore: a session started on a requirement', () => {
 		expect(s.requirementStart).toBeUndefined();
 	});
 });
+
+describe('moveDraft', () => {
+	it('moves a new conversation to another project, and it starts there', async () => {
+		const store = new SessionStore();
+		const a = proj('a');
+		const b = proj('b');
+		store.projects.push(a, b);
+		const id = store.addSession(a, undefined, 'claude');
+		store.moveDraft(id, 'b');
+		expect(store.projects[0]!.sessions).toHaveLength(0);
+		expect(store.projects[1]!.sessions.map((s) => s.id)).toEqual([id]);
+		expect(store.projects[1]!.lastBackend).toBe('claude');
+		await begin(id);
+		await flush();
+		expect(vi.mocked(hostSession).mock.calls.at(-1)![1]).toBe('/tmp/b');
+		// Started: it stays where it is.
+		store.moveDraft(id, 'a');
+		expect(store.projects[1]!.sessions.map((s) => s.id)).toEqual([id]);
+	});
+});

@@ -535,6 +535,18 @@ export class SessionStore {
 		p.sessions = rest;
 	}
 
+	/** A new conversation not started yet (a draft) moves to another
+	 *  project: it starts there, in that project's directory. */
+	moveDraft(id: string, projectId: string) {
+		const from = this.projects.find((p) => p.sessions.some((x) => x.id === id));
+		const to = this.userProjects.find((p) => p.id === projectId && !p.chats && !p.stale);
+		const s = from?.sessions.find((x) => x.id === id);
+		if (!from || !to || !s?.draft || from === to) return;
+		from.sessions = from.sessions.filter((x) => x !== s);
+		to.sessions.unshift(s);
+		to.lastBackend = s.backendId;
+	}
+
 	/** A session's title, archive state or removal goes to the daemon, which
 	 *  every other client follows. */
 	#share(s: Session, changes: { title?: string; archived?: boolean; hidden?: boolean; group?: string }) {
