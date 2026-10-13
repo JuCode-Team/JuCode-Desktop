@@ -172,7 +172,7 @@
 			});
 			telemetry.track('requirement_create');
 			toast.success(t('shell.requirement.noted', { id: r.id }), {
-				action: { label: t('shell.requirement.undo'), run: () => void reqs.remove(r.id).catch(() => {}) }
+				action: { label: t('shell.requirement.undo'), run: () => void reqs.remove(r.id).catch((e) => toast.error(e instanceof Error ? e.message : String(e))) }
 			});
 		} catch (e) {
 			toast.error(e instanceof Error ? e.message : String(e));
@@ -1447,7 +1447,8 @@
 		}
 	}
 	.jump:hover {
-		background: var(--surface2);
+		/* --surface2 is translucent; layer it over --panel so the transcript doesn't show through */
+		background: linear-gradient(var(--surface2), var(--surface2)), var(--panel);
 		transform: translateX(-50%) translateY(-1px);
 		box-shadow: 0 6px 20px rgba(0, 0, 0, 0.32);
 	}

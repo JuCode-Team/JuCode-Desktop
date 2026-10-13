@@ -72,10 +72,17 @@
 	const base64 = (bytes: Uint8Array) => btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(''));
 	const unbase64 = (data: string) => Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
 
+	// Input that can't be delivered means the terminal is gone: show the
+	// failure (with retry) instead of dropping keystrokes unseen.
+	function writeFailed(e: unknown) {
+		if (disposed || closing || status !== 'running') return;
+		status = 'error';
+		errMsg = String(e);
+	}
 	function write(data: string) {
 		if (session) {
-			if (daemonTerm) daemon.post({ op: 'term_input', term: daemonTerm, data: base64(encoder.encode(data)) }).catch(() => {});
-		} else ptyWrite(id, data).catch(() => {});
+			if (daemonTerm) daemon.post({ op: 'term_input', term: daemonTerm, data: base64(encoder.encode(data)) }).catch(writeFailed);
+		} else ptyWrite(id, data).catch(writeFailed);
 	}
 	function resize(cols: number, rows: number) {
 		if (session) {
