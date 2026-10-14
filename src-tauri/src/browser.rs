@@ -15,6 +15,9 @@
 //! `browser-event`.
 
 use base64::Engine as _;
+use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
+use tauri::webview::NewWindowResponse;
 use tauri::webview::PageLoadEvent;
 use tauri::{
     AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, Url, WebviewUrl, WebviewWindow,
@@ -35,20 +38,76 @@ fn emit_browser(app: &AppHandle, payload: serde_json::Value) {
     let _ = app.emit("browser-event", payload);
 }
 
-/// Accepts bare hosts ("example.com") by defaulting to https, and rejects
-/// anything that isn't http(s) so the panel can't be pointed at file: etc.
+/// Accepts an absolute file path (a local HTML page), and a bare host:
+/// http for a loopback or IP address (local dev servers serve plain http),
+/// https otherwise. Schemes other than http(s) and file are refused.
 fn normalize_url(url: &str) -> Result<Url, String> {
+    let url = url.trim();
+    let path = Path::new(url);
+    if path.is_absolute() {
+        return Url::from_file_path(path).map_err(|_| format!("invalid file path: {url}"));
+    }
     let candidate = if url.contains("://") {
         url.to_string()
     } else {
-        format!("https://{}", url.trim())
+        let local = Url::parse(&format!("http://{url}")).is_ok_and(|u| {
+            let host = u.host_str().unwrap_or_default();
+            host == "localhost"
+                || host.ends_with(".localhost")
+                || host.starts_with('[')
+                || host.parse::<std::net::Ipv4Addr>().is_ok()
+        });
+        format!("{}://{url}", if local { "http" } else { "https" })
     };
     let parsed = Url::parse(&candidate).map_err(|e| format!("invalid url: {e}"))?;
     match parsed.scheme() {
-        "http" | "https" => Ok(parsed),
+        "http" | "https" | "file" => Ok(parsed),
         other => Err(format!("unsupported scheme: {other}")),
     }
 }
+
+/// Bumped by every page-load event, so a load watcher knows when its load
+/// has moved on (finished, or replaced by another navigation).
+static LOAD_GENERATION: AtomicU64 = AtomicU64::new(0);
+
+/// A load that fails before the page commits (connection refused, DNS, TLS)
+/// reports no page-load event on macOS: wry only forwards start and finish,
+/// and WKWebView shows no error page. It does stop loading, so poll that and
+/// report `nav-error` when the load ended without finishing. Windows and
+/// Linux show their own error page and finish the load.
+#[cfg(target_os = "macos")]
+fn watch_load(webview: WebviewWindow, app: AppHandle, generation: u64, url: String) {
+    std::thread::spawn(move || {
+        // Long enough for a slow page; a load still running then is left alone.
+        for _ in 0..300 {
+            std::thread::sleep(std::time::Duration::from_millis(400));
+            if LOAD_GENERATION.load(Ordering::SeqCst) != generation {
+                return;
+            }
+            let (tx, rx) = std::sync::mpsc::channel();
+            let asked = webview.with_webview(move |view| {
+                let wk = view.inner() as *mut objc2::runtime::AnyObject;
+                // SAFETY: on macOS `inner()` is the live WKWebView, and
+                // with_webview runs this on the main thread.
+                let loading: bool = unsafe { objc2::msg_send![&*wk, isLoading] };
+                let _ = tx.send(loading);
+            });
+            if asked.is_err() {
+                return;
+            }
+            let Ok(loading) = rx.recv_timeout(std::time::Duration::from_secs(2)) else {
+                continue;
+            };
+            if !loading && LOAD_GENERATION.load(Ordering::SeqCst) == generation {
+                emit_browser(&app, serde_json::json!({ "kind": "nav-error", "url": url }));
+                return;
+            }
+        }
+    });
+}
+
+#[cfg(not(target_os = "macos"))]
+fn watch_load(_webview: WebviewWindow, _app: AppHandle, _generation: u64, _url: String) {}
 
 fn get_browser(app: &AppHandle) -> Result<WebviewWindow, String> {
     app.get_webview_window(BROWSER_LABEL)
@@ -102,6 +161,7 @@ pub fn browser_open(
 
     let nav_handle = app.clone();
     let load_handle = app.clone();
+    let new_window_handle = app.clone();
     let window = WebviewWindowBuilder::new(&app, BROWSER_LABEL, WebviewUrl::External(target))
         .parent(&main)
         .map_err(|e| e.to_string())?
@@ -130,14 +190,31 @@ pub fn browser_open(
             }
             true
         })
-        .on_page_load(move |_webview, payload| {
+        // target=_blank links and window.open load here: there is one browser tab.
+        // Navigated from another thread: on the main thread `navigate` runs at
+        // once, re-entering WebKit from inside its own delegate callback.
+        .on_new_window(move |url, _| {
+            let app = new_window_handle.clone();
+            std::thread::spawn(move || {
+                if let Some(child) = app.get_webview_window(BROWSER_LABEL) {
+                    let _ = child.navigate(url);
+                }
+            });
+            NewWindowResponse::Deny
+        })
+        .on_page_load(move |webview, payload| {
+            let url = payload.url().to_string();
+            let generation = LOAD_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
             let kind = match payload.event() {
-                PageLoadEvent::Started => "nav-start",
+                PageLoadEvent::Started => {
+                    watch_load(webview, load_handle.clone(), generation, url.clone());
+                    "nav-start"
+                }
                 PageLoadEvent::Finished => "nav",
             };
             emit_browser(
                 &load_handle,
-                serde_json::json!({ "kind": kind, "url": payload.url().to_string() }),
+                serde_json::json!({ "kind": kind, "url": url }),
             );
         })
         .build()
@@ -217,6 +294,32 @@ mod tests {
     #[test]
     fn bare_host_gets_https() {
         assert_eq!(normalize_url("example.com").unwrap().scheme(), "https");
+        assert_eq!(
+            normalize_url("example.com:8080/a").unwrap().as_str(),
+            "https://example.com:8080/a"
+        );
+    }
+
+    #[test]
+    fn bare_local_address_gets_http() {
+        for (input, want) in [
+            ("localhost:5173", "http://localhost:5173/"),
+            ("127.0.0.1:3000/app", "http://127.0.0.1:3000/app"),
+            ("192.168.1.8:8080", "http://192.168.1.8:8080/"),
+            ("[::1]:4000", "http://[::1]:4000/"),
+            ("web.localhost", "http://web.localhost/"),
+        ] {
+            assert_eq!(normalize_url(input).unwrap().as_str(), want);
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn absolute_path_becomes_file_url() {
+        assert_eq!(
+            normalize_url("/tmp/a b/index.html").unwrap().as_str(),
+            "file:///tmp/a%20b/index.html"
+        );
     }
 
     #[test]
@@ -228,7 +331,8 @@ mod tests {
     }
 
     #[test]
-    fn file_scheme_rejected() {
-        assert!(normalize_url("file:///etc/passwd").is_err());
+    fn other_schemes_rejected() {
+        assert!(normalize_url("javascript:alert(1)").is_err());
+        assert!(normalize_url("ftp://example.com").is_err());
     }
 }

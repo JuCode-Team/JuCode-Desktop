@@ -1065,7 +1065,7 @@
 		const abs = (await resolveFileRef(cwd, rel).catch(() => null)) ?? joinPath(cwd, rel);
 		const ext = pathExt(abs);
 		if ((ext === 'html' || ext === 'htm') && prefs.htmlOpenInBrowser) {
-			browser.open(`file://${abs}`);
+			browser.open(abs);
 		} else {
 			const at = ref.line ? { line: ref.line, col: ref.col } : undefined;
 			editorStore.open(abs, cwd, at).catch((e) => toast.error(t('chat.fileOpenFailed', { path: ref.path, error: String(e) })));

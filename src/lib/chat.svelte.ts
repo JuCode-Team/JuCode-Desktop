@@ -305,10 +305,6 @@ export type ContextBreakdown =
 	| { error: string };
 
 export class ChatState {
-	/** Set by the page: invoked when the agent's `browser_open` tool succeeds,
-	 *  so the embedded browser panel navigates to the requested URL. Static —
-	 *  there's one browser panel regardless of which session's agent asked. */
-	static onBrowserOpen: ((url: string) => void) | null = null;
 
 	/** Set by the page: invoked with the file paths a successful edit tool
 	 *  touched, so the built-in editor can auto-reload open tabs (⌘K flow). */
@@ -1134,16 +1130,6 @@ export class ChatState {
 					t.isError = ev.is_error === true;
 				}
 				if (str(ev.name) === 'spawn_agent' && ev.is_error !== true) this.#spawned(str(ev.call_id), str(ev.output));
-				// A successful browser_open acknowledgement carries the URL the agent
-				// wants shown — drive the embedded browser panel.
-				if (ev.is_error !== true && str(ev.name) === 'browser_open') {
-					try {
-						const out = JSON.parse(str(ev.output)) as Record<string, unknown>;
-						if (typeof out.url === 'string' && out.url) ChatState.onBrowserOpen?.(out.url);
-					} catch {
-						/* non-JSON output */
-					}
-				}
 				// Reload editor tabs of files a successful edit tool touched.
 				if (ev.is_error !== true && EDIT_TOOLS.includes(str(ev.name))) {
 					try {

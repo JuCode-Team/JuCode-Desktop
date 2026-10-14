@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { t } from '$lib/i18n';
 
 /** A page element captured by the embedded browser's picker, attached to the
  *  next user message as textual context. */
@@ -29,6 +30,8 @@ class BrowserStore {
 	title = $state('');
 	loading = $state(false);
 	picking = $state(false);
+	/** Why the last navigation failed; cleared by the next one. */
+	error = $state('');
 	/** URL waiting for the panel placeholder to become visible/measurable. */
 	pendingUrl = $state<string | null>(null);
 	/** Bumped by open() so the page/dock can reveal the browser tab. */
@@ -42,10 +45,11 @@ class BrowserStore {
 	/** Open a URL: navigate the live webview, or remember it until the panel
 	 *  placeholder reports usable bounds. Always signals the UI to reveal the tab. */
 	open(url: string) {
+		this.error = '';
 		if (this.created) {
 			this.url = url;
 			this.loading = true;
-			invoke('browser_navigate', { url }).catch((e) => console.error('browser_navigate', e));
+			invoke('browser_navigate', { url }).catch((e) => this.#failed(url, e));
 		} else {
 			this.pendingUrl = url;
 		}
@@ -67,12 +71,18 @@ class BrowserStore {
 					this.loading = true;
 					this.#applied = rect;
 				} catch (e) {
-					console.error('browser_open', e);
+					this.#failed(url, e);
 				}
 			}
 			return;
 		}
 		this.#apply(this.suspended ? { x: 0, y: 0, w: 0, h: 0 } : rect);
+	}
+
+	#failed(url: string, e: unknown) {
+		this.loading = false;
+		this.url = url;
+		this.error = String(e);
 	}
 
 	#apply(r: Rect) {
@@ -127,11 +137,17 @@ class BrowserStore {
 		switch (kind) {
 			case 'nav-start':
 				this.loading = true;
+				this.error = '';
 				if (url) this.url = url;
 				break;
 			case 'nav':
 				this.loading = false;
+				this.error = '';
 				if (url) this.url = url;
+				break;
+			case 'nav-error':
+				this.loading = false;
+				this.error = t('dock.browser.loadFailed', { url });
 				break;
 			case 'state':
 				if (url) this.url = url;

@@ -85,6 +85,12 @@
 	{#if browser.picking}
 		<div class="pickhint">{t('dock.browser.pickHint')}</div>
 	{/if}
+	{#if browser.error}
+		<div class="loaderr" role="alert">
+			<span>{browser.error}</span>
+			<button type="button" onclick={() => browser.open(browser.url)}>{t('dock.browser.retry')}</button>
+		</div>
+	{/if}
 	<div class="ph" bind:this={placeholder}>
 		{#if !browser.created}
 			<div class="empty">
@@ -155,6 +161,44 @@
 		background: var(--accent-soft);
 		padding: 5px 10px;
 		flex-shrink: 0;
+	}
+	.loaderr {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 6px 10px;
+		font-size: var(--fs-xs);
+		color: var(--text);
+		border-bottom: 1px solid var(--hairline);
+		flex-shrink: 0;
+	}
+	.loaderr span {
+		flex: 1;
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	.loaderr span::before {
+		content: '';
+		display: inline-block;
+		width: 6px;
+		height: 6px;
+		margin-right: 7px;
+		border-radius: 50%;
+		background: var(--err);
+		vertical-align: 1px;
+	}
+	.loaderr button {
+		flex-shrink: 0;
+		font: inherit;
+		color: var(--dim);
+		background: none;
+		border: 1px solid var(--hairline);
+		border-radius: var(--r-sm);
+		padding: 2px 8px;
+		cursor: pointer;
+	}
+	.loaderr button:hover {
+		color: var(--text);
 	}
 	.ph {
 		flex: 1;

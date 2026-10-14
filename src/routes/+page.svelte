@@ -1319,9 +1319,6 @@
 				await invoke('quit_app');
 			});
 			cleanups.push(undrop, unbrowser, untray, unquit);
-			// The agent's browser_open tool navigates the embedded browser.
-			ChatState.onBrowserOpen = (url) => browser.open(url);
-			cleanups.push(() => (ChatState.onBrowserOpen = null));
 			// Successful edit-tool completions auto-reload matching editor tabs
 			// (and resolve pending ⌘K AI edits).
 			ChatState.onFilesEdited = (paths) => editorStore.handleEngineEdit(paths);

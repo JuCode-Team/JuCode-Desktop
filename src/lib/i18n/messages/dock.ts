@@ -61,7 +61,9 @@ const dock = {
 			pick: '选择页面元素，引用到对话',
 			pickHint: '在页面中点击要引用的元素（Esc 取消）',
 			empty: '输入网址开始浏览',
-			emptyHint: 'AI 也可以通过 browser_open 工具在这里打开页面'
+			emptyHint: '本地服务可以只输入地址和端口，如 localhost:5173',
+			loadFailed: '无法打开 {url}。如果是本地服务，请确认它已经启动。',
+			retry: '重试'
 		},
 		git: {
 			notRepo: '不是 Git 仓库',
@@ -230,7 +232,9 @@ const dock = {
 			pick: 'Pick a page element to reference in chat',
 			pickHint: 'Click the element to reference (Esc to cancel)',
 			empty: 'Enter a URL to start browsing',
-			emptyHint: 'The AI can also open pages here via the browser_open tool'
+			emptyHint: 'For a local server, the host and port are enough, e.g. localhost:5173',
+			loadFailed: 'Could not open {url}. If it is a local server, check that it is running.',
+			retry: 'Retry'
 		},
 		git: {
 			notRepo: 'Not a Git repository',

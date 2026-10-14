@@ -4,5 +4,10 @@
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>JuCode 使用麦克风进行语音输入转写。JuCode uses the microphone for voice-input transcription.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<true/>
+	</dict>
 </dict>
 </plist>
