@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ActiveIcon from '$lib/icons/ActiveIcon.svelte';
 	import { paneOut } from '$lib/ui/motion';
 	// The settings page: covers the content panel (session list + canvas stay
 	// mounted underneath) with a nav column on the left — grouped sections and
@@ -582,7 +583,7 @@
 					{#each g.sections as key (key)}
 						{@const Icon = ICONS[key]}
 						<button class="item" class:on={current === key} aria-current={current === key ? 'page' : undefined} onclick={() => (section = key)}>
-							<Icon size={16} strokeWidth={current === key ? 2 : undefined} />
+							<ActiveIcon icon={Icon} size={16} active={current === key} />
 							<span class="label">{t(`settings.section.${key}`)}</span>
 						</button>
 					{/each}

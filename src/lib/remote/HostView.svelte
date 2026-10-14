@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ActiveIcon from '$lib/icons/ActiveIcon.svelte';
 	// One paired computer on the remote page: its list (sessions and desk) and
 	// the pages opened over it, or, until its daemon has accepted this device,
 	// a connecting / pair-again screen. The page keeps one mounted per
@@ -252,21 +253,21 @@
 					</a>
 				{/if}
 				<button class:on={tab === 'projects'} onclick={() => (tab = 'projects')}>
-					<MenuIcon size={16} strokeWidth={tab === 'projects' ? 2 : undefined} />
+					<ActiveIcon icon={MenuIcon} size={16} active={tab === 'projects'} />
 					<span class="label">{t('shell.remote.sessions')}</span>
 				</button>
 				<button class:on={tab === 'requirements'} onclick={() => (tab = 'requirements')}>
-					<ListChecksIcon size={16} strokeWidth={tab === 'requirements' ? 2 : undefined} />
+					<ActiveIcon icon={ListChecksIcon} size={16} active={tab === 'requirements'} />
 					<span class="label">{t('shell.requirement.title')}</span>
 					{#if conn.requirements.pending > 0}<span class="badge">{conn.requirements.pending}</span>{/if}
 				</button>
 				<button class:on={tab === 'dispatch'} onclick={() => (tab = 'dispatch')}>
-					<SendIcon size={16} strokeWidth={tab === 'dispatch' ? 2 : undefined} />
+					<ActiveIcon icon={SendIcon} size={16} active={tab === 'dispatch'} />
 					<span class="label">{t('shell.dispatch.title')}</span>
 					{#if conn.dispatches.pending > 0}<span class="badge">{conn.dispatches.pending}</span>{/if}
 				</button>
 				<button class:on={tab === 'desk'} onclick={() => (tab = 'desk')}>
-					<InboxIcon size={16} strokeWidth={tab === 'desk' ? 2 : undefined} />
+					<ActiveIcon icon={InboxIcon} size={16} active={tab === 'desk'} />
 					<span class="label">{t('shell.desk.title')}</span>
 					{#if conn.agents.pending > 0}<span class="badge">{conn.agents.pending}</span>{/if}
 				</button>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ActiveIcon from '$lib/icons/ActiveIcon.svelte';
 	// One session in a remote list: its title, when it last changed, and
 	// whether the daemon is running it now.
 	import ArchiveIcon from '@lucide/svelte/icons/archive';
@@ -38,7 +39,7 @@
 	{/if}
 	{#if onArchive}
 		<button class="mini" onclick={onArchive} aria-label={archived ? t('shell.remote.unarchive') : t('shell.remote.archive')}>
-			<ArchiveIcon size={16} strokeWidth={archived ? 2 : undefined} />
+			<ActiveIcon icon={ArchiveIcon} size={16} active={archived} />
 		</button>
 	{/if}
 </div>

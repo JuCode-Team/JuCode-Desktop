@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ActiveIcon from '$lib/icons/ActiveIcon.svelte';
 	import { paneOut } from '$lib/ui/motion';
 	// The workbench: a page over the content panel, like Settings. The nav
 	// lists the overview, the requirements, the scheduled tasks and every
@@ -181,17 +182,17 @@
 		</div>
 		<div class="nav-list">
 			<button class="item" class:on={onOverview} aria-current={onOverview ? 'page' : undefined} onclick={() => openPage('overview')}>
-				<InboxIcon size={16} strokeWidth={onOverview ? 2 : undefined} />
+				<ActiveIcon icon={InboxIcon} size={16} active={onOverview} />
 				<span class="label">{t('shell.desk.overview')}</span>
 				{#if pending}<span class="badge">{pending}</span>{/if}
 			</button>
 			<button class="item" class:on={onRequirements} aria-current={onRequirements ? 'page' : undefined} onclick={() => openPage('requirements')}>
-				<ListChecksIcon size={16} strokeWidth={onRequirements ? 2 : undefined} />
+				<ActiveIcon icon={ListChecksIcon} size={16} active={onRequirements} />
 				<span class="label">{t('shell.requirement.title')}</span>
 				{#if yourTurn.length}<span class="badge">{yourTurn.length}</span>{/if}
 			</button>
 			<button class="item" class:on={onSchedules} aria-current={onSchedules ? 'page' : undefined} onclick={() => openPage('schedules')}>
-				<CalendarIcon size={16} strokeWidth={onSchedules ? 2 : undefined} />
+				<ActiveIcon icon={CalendarIcon} size={16} active={onSchedules} />
 				<span class="label">{t('shell.schedule.title')}</span>
 				{#if scheduleCount}<span class="count">{scheduleCount}</span>{/if}
 			</button>

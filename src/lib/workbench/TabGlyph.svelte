@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ActiveIcon from '$lib/icons/ActiveIcon.svelte';
 	import LayersIcon from '@lucide/svelte/icons/layers';
 	import FolderIcon from '@lucide/svelte/icons/folder';
 	import CodeIcon from '@lucide/svelte/icons/code';
@@ -25,7 +26,7 @@
 	import WrenchIcon from '@lucide/svelte/icons/wrench';
 	import { isEmojiSlug, type TabIcon } from './tabChrome';
 
-	// One tab glyph: builtin icon (heavier stroke when active), slug (icon name / emoji / short
+	// One tab glyph: builtin icon (filled when active), slug (icon name / emoji / short
 	// badge), sanitized SVG, or the plain status dot fallback.
 	let {
 		icon = null,
@@ -63,7 +64,7 @@
 
 <span class="glyph" style:width="{size + 2}px" style:height="{size + 2}px" style:color={color ?? undefined}>
 	{#if Glyph}
-		<Glyph {size} strokeWidth={active ? 2 : undefined} />
+		<ActiveIcon icon={Glyph} {size} {active} />
 	{:else if icon?.kind === 'slug' && isEmojiSlug(icon.value)}
 		<span class="emoji" style:font-size="{size}px">{icon.value.trim()}</span>
 	{:else if badge}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ActiveIcon from '$lib/icons/ActiveIcon.svelte';
 	import { tick } from 'svelte';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import RotateCcwClockIcon from '@lucide/svelte/icons/rotate-ccw-clock';
@@ -552,7 +553,7 @@
 								onclick={() => (collapsed[p.id] = !collapsed[p.id])}><ChevronRightIcon size={12} /></button
 							>
 							<button class="folder-row" onpointerdown={(e) => rowDown(e, p)} onclick={() => onOpenProject(p)} oncontextmenu={(e) => onProjectMenu(p, e)} title={p.worktree ? t('shell.task.worktreeTip', { branch: p.worktree.branch, base: p.worktree.baseBranch || '?' }) : p.path}>
-								{#if p.icon}<TabGlyph icon={p.icon} color={p.color ?? 'var(--dim)'} active={holdsActive} size={16} />{:else if p.worktree}<GitBranchIcon size={16} strokeWidth={holdsActive ? 2 : undefined} color={p.color} />{:else if open}<FolderOpenIcon size={16} strokeWidth={holdsActive ? 2 : undefined} color={p.color} />{:else}<FolderIcon size={16} strokeWidth={holdsActive ? 2 : undefined} color={p.color} />{/if}
+								{#if p.icon}<TabGlyph icon={p.icon} color={p.color ?? 'var(--dim)'} active={holdsActive} size={16} />{:else if p.worktree}<ActiveIcon icon={GitBranchIcon} size={16} active={holdsActive} color={p.color} />{:else if open}<ActiveIcon icon={FolderOpenIcon} size={16} active={holdsActive} color={p.color} />{:else}<ActiveIcon icon={FolderIcon} size={16} active={holdsActive} color={p.color} />{/if}
 								<span class="folder-name">{p.name}</span>
 							</button>
 							{#if p.stale}

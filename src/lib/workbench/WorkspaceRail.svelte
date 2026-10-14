@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ActiveIcon from '$lib/icons/ActiveIcon.svelte';
 	import LayersIcon from '@lucide/svelte/icons/layers';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import CircleUserIcon from '@lucide/svelte/icons/circle-user';
@@ -109,7 +110,7 @@
 					{#if w.icon || w.isDefault}
 						<TabGlyph icon={w.icon ?? { kind: 'builtin', id: 'home' }} color={w.color} active={w.id === activeId} size={20} />
 					{:else}
-						<LayersIcon size={20} strokeWidth={w.id === activeId ? 2 : undefined} />
+						<ActiveIcon icon={LayersIcon} size={20} active={w.id === activeId} />
 					{/if}
 				</span>
 			</button>
@@ -136,10 +137,10 @@
 			onmouseleave={hideCardSoon}
 			onclick={toggleCard}
 		>
-			<span class="tile"><CircleUserIcon size={20} strokeWidth={card ? 2 : undefined} /></span>
+			<span class="tile"><ActiveIcon icon={CircleUserIcon} size={20} active={!!card} /></span>
 		</button>
 		<button class="ws" class:on={settingsOpen} title={withShortcut(t('shell.settings'), 'settings')} aria-label={t('shell.settings')} aria-pressed={settingsOpen} onclick={onSettings}>
-			<span class="tile"><SettingsIcon size={20} strokeWidth={settingsOpen ? 2 : undefined} /></span>
+			<span class="tile"><ActiveIcon icon={SettingsIcon} size={20} active={settingsOpen} /></span>
 		</button>
 	</div>
 </nav>

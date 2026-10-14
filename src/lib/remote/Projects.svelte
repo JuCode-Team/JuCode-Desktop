@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ActiveIcon from '$lib/icons/ActiveIcon.svelte';
 	// The remote app's list, laid out like the desktop sidebar: agents, chats,
 	// then projects with their sessions nested and an archived section each.
 	// Sessions come from the daemon's list, the one the desktop shows too, so
@@ -245,7 +246,7 @@
 			{@const color = normalizeColor(p.color)}
 			<div class="folder">
 				<button class="folder-row" onclick={() => (collapsed[p.id] = !collapsed[p.id])} title={p.path}>
-					{#if icon}<TabGlyph {icon} color={color ?? 'var(--dim)'} active={holdsActive} size={16} />{:else if open}<FolderOpenIcon size={16} strokeWidth={holdsActive ? 2 : undefined} {color} />{:else}<FolderIcon size={16} strokeWidth={holdsActive ? 2 : undefined} {color} />{/if}
+					{#if icon}<TabGlyph {icon} color={color ?? 'var(--dim)'} active={holdsActive} size={16} />{:else if open}<ActiveIcon icon={FolderOpenIcon} size={16} active={holdsActive} {color} />{:else}<ActiveIcon icon={FolderIcon} size={16} active={holdsActive} {color} />{/if}
 					<span class="folder-name">{p.name}</span>
 				</button>
 				<button class="act" onclick={() => onNewSession(p)} aria-label={t('shell.remote.newSession')} title={t('shell.remote.newSession')}>
