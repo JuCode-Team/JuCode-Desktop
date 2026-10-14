@@ -86,6 +86,7 @@
 	import Mosaic from '$lib/workbench/Mosaic.svelte';
 	import WorkspaceRail from '$lib/workbench/WorkspaceRail.svelte';
 	import TitleBar from '$lib/shell/TitleBar.svelte';
+	import { fade } from 'svelte/transition';
 	import TabChromePopover from '$lib/workbench/TabChromePopover.svelte';
 	import ChatPane, { type ChatPaneApi, type ProviderOption } from '$lib/ChatPane.svelte';
 	import SettingsPage from '$lib/settings/SettingsPage.svelte';
@@ -1127,6 +1128,16 @@
 		}
 	}
 
+	// A zoom step shows the new size at the top right for a moment.
+	let zoomNote = $state(false);
+	let zoomNoteTimer: ReturnType<typeof setTimeout> | undefined;
+	function stepZoom(dir: 1 | -1 | 0) {
+		prefs.stepZoom(dir);
+		zoomNote = true;
+		clearTimeout(zoomNoteTimer);
+		zoomNoteTimer = setTimeout(() => (zoomNote = false), 1200);
+	}
+
 	function onWindowKey(e: KeyboardEvent) {
 		// Something closer to the target already claimed this key (e.g. the code
 		// editor's own ⌘K / ⌘S keymap, or a pane's picker) — never double-fire.
@@ -1142,9 +1153,9 @@
 		if (matches(e, 'palette')) return act(() => (showPalette = !showPalette));
 		if (matches(e, 'searchSessions')) return act(searchSessions);
 		if (matches(e, 'shortcuts')) return act(() => (showShortcuts = !showShortcuts));
-		if (matches(e, 'zoomIn')) return act(() => prefs.stepZoom(1));
-		if (matches(e, 'zoomOut')) return act(() => prefs.stepZoom(-1));
-		if (matches(e, 'zoomReset')) return act(() => prefs.stepZoom(0));
+		if (matches(e, 'zoomIn')) return act(() => stepZoom(1));
+		if (matches(e, 'zoomOut')) return act(() => stepZoom(-1));
+		if (matches(e, 'zoomReset')) return act(() => stepZoom(0));
 		if (matches(e, 'captureRequirement'))
 			return act(() => {
 				openRequirements();
@@ -1403,6 +1414,9 @@
 {/snippet}
 
 <Toaster />
+{#if zoomNote}
+	<div class="zoom-note" role="status" transition:fade={{ duration: 160 }}>{Math.round(prefs.zoom * 100)}%</div>
+{/if}
 <CornerNotices />
 <ConfirmHost />
 
@@ -1842,6 +1856,21 @@
 </div>
 
 <style>
+	/* Under the title bar's right end, over everything. */
+	.zoom-note {
+		position: fixed;
+		top: 56px;
+		right: 16px;
+		z-index: 400;
+		padding: 6px 12px;
+		border-radius: var(--r);
+		background: var(--panel);
+		box-shadow: var(--shadow-pop);
+		color: var(--text);
+		font-size: var(--fs-sm);
+		font-variant-numeric: tabular-nums;
+		pointer-events: none;
+	}
 	/* The window is the app, not a page: the document never scrolls, by a
 	   trackpad (WebKit chains a scroll an inner list cannot take up to the
 	   root) or by scrollIntoView, which `hidden` still allows and `clip`

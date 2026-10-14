@@ -112,6 +112,10 @@
 	/* Two 1fr sides keep the title centred on the window; a side only grows
 	   past its half when its own content is wider. */
 	.titlebar {
+		/* Not zoomed with the rest of the interface: the traffic lights it
+		   holds are the system's and stay their size and place (Tauri cannot
+		   move them at run time). */
+		zoom: calc(1 / var(--ui-zoom, 1));
 		position: relative;
 		display: grid;
 		grid-template-columns: 1fr minmax(0, auto) 1fr;

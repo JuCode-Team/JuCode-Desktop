@@ -279,6 +279,9 @@ class PrefsStore {
 	}
 
 	#applyZoom() {
+		// The title bar stays at its size (TitleBar.svelte) so it keeps lining
+		// up with the system's traffic lights, which do not zoom.
+		document.documentElement.style.setProperty('--ui-zoom', String(this.zoom));
 		if (inTauri()) getCurrentWebview().setZoom(this.zoom).catch((e) => console.error('setZoom', e));
 	}
 
