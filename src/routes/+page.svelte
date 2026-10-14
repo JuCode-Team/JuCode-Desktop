@@ -142,8 +142,11 @@
 	const activeProject = $derived(store.activeProject);
 	const activeId = $derived(store.activeId);
 	// O(1) session lookup for the hot agent-event path (fires per stream chunk),
-	// instead of an O(n) allSessions.find on every event.
-	const sessionMap = $derived(new Map(allSessions.map((s) => [s.id, s])));
+	// instead of an O(n) allSessions.find on every event. Read from the store,
+	// not through the `allSessions` derived: chained, the map once stopped
+	// following new sessions until a restart (Svelte 5.57.1), so a new
+	// conversation's tab showed it as closed.
+	const sessionMap = $derived(new Map(store.allSessions.map((s) => [s.id, s])));
 	// The requirements on this computer (the daemon's list).
 	const requirements = new Requirements(daemon);
 	provideRequirements(requirements);
