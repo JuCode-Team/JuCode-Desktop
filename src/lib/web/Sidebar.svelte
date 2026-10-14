@@ -16,7 +16,9 @@
 	import MoonIcon from '@lucide/svelte/icons/moon';
 	import PcCaseIcon from '@lucide/svelte/icons/pc-case';
 	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
+	import XIcon from '@lucide/svelte/icons/x';
 	import { t } from '$lib/i18n';
+	import { matches, shortcutLabel } from '$lib/shortcuts';
 	import PopMenu from '$lib/ui/PopMenu.svelte';
 	import { confirm } from '$lib/ui/confirm.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
@@ -26,6 +28,19 @@
 	import { shell } from './shell.svelte';
 
 	let query = $state('');
+	let searchEl = $state<HTMLInputElement | null>(null);
+	// ⌘K: into the filter, as on the desktop.
+	function onWindowKey(e: KeyboardEvent) {
+		if (e.defaultPrevented || !matches(e, 'searchSessions')) return;
+		e.preventDefault();
+		searchEl?.select();
+	}
+	function searchKey(e: KeyboardEvent) {
+		if (e.key !== 'Escape') return;
+		e.preventDefault();
+		query = '';
+		searchEl?.blur();
+	}
 	let menuFor = $state<string | null>(null);
 	let accountMenu = $state(false);
 	let renaming = $state<string | null>(null);
@@ -109,6 +124,8 @@
 	}
 </script>
 
+<svelte:window onkeydown={onWindowKey} />
+
 <nav class="sidebar" aria-label={t('web.brand')}>
 	<div class="top">
 		<a class="brand" href="/chat" onclick={(e) => (e.preventDefault(), newChat())}>{t('web.brand')}</a>
@@ -116,13 +133,19 @@
 		<button class="icon" onclick={() => shell.toggle()} title={t('web.side.collapse')} aria-label={t('web.side.collapse')}><PanelLeftIcon size={16} /></button>
 	</div>
 
+	<label class="search">
+		<SearchIcon size={16} />
+		<input bind:this={searchEl} bind:value={query} placeholder={t('web.side.search')} aria-label={t('web.side.search')} onkeydown={searchKey} />
+		{#if query}
+			<button class="clear" onclick={() => ((query = ''), searchEl?.focus())} aria-label={t('web.side.clearSearch')} title={t('web.side.clearSearch')}><XIcon size={14} /></button>
+		{:else}
+			<kbd>{shortcutLabel('searchSessions')}</kbd>
+		{/if}
+	</label>
+
 	<div class="actions">
 		<button class="row strong" onclick={newChat}><SquarePenIcon size={16} /><span>{t('web.side.newChat')}</span></button>
 		<a class="row" href="/remote" title={t('web.side.remoteHint')}><MonitorIcon size={16} /><span>{t('web.side.remote')}</span></a>
-		<label class="search">
-			<SearchIcon size={16} />
-			<input type="search" bind:value={query} placeholder={t('web.side.search')} aria-label={t('web.side.search')} />
-		</label>
 	</div>
 
 	<div class="list">
@@ -210,7 +233,7 @@
 		display: flex;
 		align-items: center;
 		gap: 6px;
-		padding: 12px 10px 6px 16px;
+		padding: 12px 10px 8px 16px;
 	}
 	.brand {
 		font-size: var(--fs-md);
@@ -239,7 +262,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
-		padding: 6px 8px 8px;
+		padding: 0 8px 8px;
 	}
 	.row {
 		display: flex;
@@ -269,12 +292,36 @@
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		height: 34px;
-		margin-top: 4px;
-		padding: 0 10px;
+		height: 36px;
+		margin: 0 8px 8px;
+		padding: 0 8px 0 12px;
 		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--dim2);
+		flex-shrink: 0;
+		cursor: text;
+	}
+	.search kbd {
+		flex-shrink: 0;
+		padding: 1px 6px;
+		border-radius: var(--r);
+		background: var(--surface2);
+		color: var(--dim2);
+		font-family: var(--font-sans);
+		font-size: var(--fs-2xs);
+	}
+	.clear {
+		display: inline-flex;
+		flex-shrink: 0;
+		padding: 3px;
+		border: none;
+		border-radius: var(--r);
+		background: none;
+		color: var(--dim2);
+		cursor: pointer;
+	}
+	.clear:hover {
+		color: var(--text);
 	}
 	.search input {
 		flex: 1;

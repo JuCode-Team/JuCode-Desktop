@@ -5,11 +5,12 @@
 	// what it cost; copied, or (the last one) generated again.
 	import CopyIcon from '@lucide/svelte/icons/copy';
 	import CheckIcon from '@lucide/svelte/icons/check';
+	import XIcon from '@lucide/svelte/icons/x';
+	import BrainIcon from '@lucide/svelte/icons/brain';
 	import RotateCwIcon from '@lucide/svelte/icons/rotate-cw';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
-	import GlobeIcon from '@lucide/svelte/icons/globe';
 	import InfoIcon from '@lucide/svelte/icons/info';
 	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
 	import { getLocale, t } from '$lib/i18n';
@@ -38,6 +39,8 @@
 	} = $props();
 
 	const streaming = $derived(m.status === 'streaming');
+	// Searches (and the thinking before them) show as one card, as tool calls do on the desktop.
+	const searchCard = $derived(m.searches.length > 0 || m.sources.length > 0);
 	const thinkingNow = $derived(streaming && !!m.reasoning && !m.content);
 	let thoughtOpen = $state(false);
 	let sourcesOpen = $state(false);
@@ -145,7 +148,8 @@
 	<div class="reply">
 		<span class="mark" title={models.find(m.model)?.name ?? m.model}><Vendor model={m.model} size={16} /></span>
 		<div class="body">
-			{#if m.reasoning}
+			<!-- Thinking that led to searches goes in their card; without searches it stands alone. -->
+			{#if m.reasoning && !searchCard}
 				<button class="thought" onclick={() => (thoughtOpen = !thoughtOpen)} aria-expanded={thoughtOpen}>
 					{#if thinkingNow}<LoaderCircleIcon size={14} class="spin" /><span>{t('web.chat.thinking')}</span>
 					{:else}<span>{m.thoughtMs ? t('web.chat.thought', { s: secs(m.thoughtMs) }) : t('web.chat.thoughtShort')}</span>{/if}
@@ -173,20 +177,48 @@
 				</div>
 			{/if}
 
-			{#if m.searches.length || m.sources.length}
-				<button class="thought" onclick={() => (sourcesOpen = !sourcesOpen)} aria-expanded={sourcesOpen}>
-					<GlobeIcon size={14} />
-					{#if streaming && !m.content && m.searches.length}<span>{t('web.chat.searching', { q: m.searches.at(-1) ?? '' })}</span>
-					{:else}<span>{[m.searches.length ? t('web.chat.searched', { n: m.searches.length }) : '', m.sources.length ? t('web.chat.sources', { n: m.sources.length }) : ''].filter(Boolean).join(' · ')}</span>{/if}
-					<span class="caret" class:open={sourcesOpen}><ChevronRightIcon size={12} /></span>
-				</button>
-				{#if sourcesOpen && m.sources.length}
-					<ol class="sources">
-						{#each m.sources as s, i (i)}
-							<li><a href={s.url} target="_blank" rel="noopener noreferrer"><span class="sn">{i + 1}</span><span class="st">{s.title || domain(s.url)}</span><span class="sd">{domain(s.url)}</span></a></li>
-						{/each}
-					</ol>
-				{/if}
+			{#if searchCard}
+				{@const searching = streaming && !m.content}
+				<div class="tcard">
+					<button class="thead" class:open={sourcesOpen} onclick={() => (sourcesOpen = !sourcesOpen)} aria-expanded={sourcesOpen}>
+						<span class="tst">
+							{#if searching}<LoaderCircleIcon size={14} class="spin" />{:else if m.status === 'error' && !m.content}<XIcon size={14} class="bad" />{:else}<CheckIcon size={14} class="good" />{/if}
+						</span>
+						<span class="tverb">{t('web.chat.searchVerb')}</span>
+						{#if m.searches.length}<span class="ttarget">{m.searches.at(-1)}</span>{/if}
+						<span class="grow"></span>
+						{#if m.searches.length > 1}<span class="tmeta">{t('web.chat.searchCount', { n: m.searches.length })}</span>{/if}
+						{#if m.sources.length}<span class="tmeta">{t('web.chat.sources', { n: m.sources.length })}</span>{/if}
+						<span class="caret"><ChevronRightIcon size={14} /></span>
+					</button>
+					{#if sourcesOpen}
+						<div class="trows">
+							{#if m.reasoning}
+								<button class="trow" class:open={thoughtOpen} onclick={() => (thoughtOpen = !thoughtOpen)} aria-expanded={thoughtOpen}>
+									<span class="tst"><BrainIcon size={14} /></span>
+									<span>{m.thoughtMs ? t('web.chat.thought', { s: secs(m.thoughtMs) }) : t('web.chat.thoughtShort')}</span>
+									<span class="grow"></span>
+									<span class="caret"><ChevronRightIcon size={14} /></span>
+								</button>
+								{#if thoughtOpen}<div class="reasoning"><Markdown text={m.reasoning} /></div>{/if}
+							{/if}
+							{#each m.searches as q, i (i)}
+								<div class="trow static">
+									<span class="tst">{#if searching && i === m.searches.length - 1}<LoaderCircleIcon size={14} class="spin" />{:else}<CheckIcon size={14} class="good" />{/if}</span>
+									<span class="tverb">{t('web.chat.searchVerb')}</span>
+									<span class="ttarget">{q}</span>
+								</div>
+							{/each}
+							{#if m.sources.length}
+								<ol class="sources">
+									{#each m.sources as src, i (i)}
+										<li><a href={src.url} target="_blank" rel="noopener noreferrer"><span class="sn">{i + 1}</span><span class="st">{src.title || domain(src.url)}</span><span class="sd">{domain(src.url)}</span></a></li>
+									{/each}
+								</ol>
+							{/if}
+						</div>
+					{/if}
+				</div>
 			{/if}
 
 			{#if m.content}
@@ -330,6 +362,82 @@
 		padding: 2px 0 2px 14px;
 		color: var(--dim);
 		font-size: var(--fs-sm);
+	}
+	.tcard {
+		border: 1px solid var(--border);
+		border-radius: var(--r);
+	}
+	.thead,
+	.trow {
+		display: flex;
+		align-items: center;
+		gap: 7px;
+		width: 100%;
+		text-align: left;
+		border: none;
+		background: none;
+		color: var(--dim);
+		font: inherit;
+		font-size: var(--fs-sm);
+		cursor: pointer;
+	}
+	.thead {
+		min-height: 34px;
+		padding: 4px 10px;
+	}
+	.trow {
+		min-height: 26px;
+		padding: 2px 0;
+	}
+	.trow.static {
+		cursor: default;
+	}
+	.thead:hover,
+	.trow:not(.static):hover {
+		color: var(--text);
+	}
+	.thead.open .caret,
+	.trow.open .caret {
+		transform: rotate(90deg);
+	}
+	.trows {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		padding: 4px 10px 8px;
+		border-top: 1px solid var(--hairline);
+	}
+	.trows .reasoning {
+		padding-left: 21px;
+	}
+	.trows .sources {
+		margin-top: 6px;
+	}
+	.tst {
+		display: inline-flex;
+		flex-shrink: 0;
+		color: var(--dim2);
+	}
+	.tst :global(.good) {
+		color: var(--ok);
+	}
+	.tst :global(.bad) {
+		color: var(--err);
+	}
+	.tverb {
+		flex-shrink: 0;
+		font-weight: 500;
+	}
+	.ttarget {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.tmeta {
+		flex-shrink: 0;
+		color: var(--dim2);
+		font-size: var(--fs-2xs);
 	}
 	.research {
 		display: flex;

@@ -51,7 +51,7 @@
 	function autosize() {
 		if (!input) return;
 		input.style.height = 'auto';
-		input.style.height = `${Math.min(input.scrollHeight, 240)}px`;
+		input.style.height = `${Math.min(input.scrollHeight, 280)}px`;
 	}
 
 	function add(list: Iterable<File>) {
@@ -213,7 +213,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		padding: 10px 10px 8px 14px;
+		padding: 14px 14px 10px 16px;
 		border: 1px solid var(--border);
 		border-radius: var(--r);
 		background: var(--panel);
@@ -230,8 +230,8 @@
 	}
 	textarea {
 		width: 100%;
-		min-height: 26px;
-		max-height: 240px;
+		min-height: 52px;
+		max-height: 280px;
 		padding: 4px 4px 2px 0;
 		border: none;
 		outline: none;
