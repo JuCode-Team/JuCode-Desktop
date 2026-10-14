@@ -56,6 +56,7 @@ const DAEMON_EVENTS = new Set([
 	'workspaces',
 	'dispatches',
 	'requirements',
+	'dev_servers',
 	'session_reopened'
 ]);
 const CLOSE_TIMEOUT_MS = 10_000;

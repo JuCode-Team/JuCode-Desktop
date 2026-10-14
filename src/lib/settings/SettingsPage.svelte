@@ -700,6 +700,9 @@
 								onChange={(v) => prefs.setHtmlOpenInBrowser(v === 'browser')}
 							/>
 						</SettingsRow>
+						<SettingsRow id="dev-server-open" title={t('settings.behavior.devServerAutoOpen')} description={t('settings.behavior.devServerAutoOpenHint')}>
+							<Switch checked={prefs.devServerAutoOpen} label={t('settings.behavior.devServerAutoOpen')} onChange={(on) => prefs.setFlag('devServerAutoOpen', on)} />
+						</SettingsRow>
 					</SettingsSection>
 					<SettingsSection title={t('settings.page.help')}>
 						<SettingsRow id="feedback" title={t('settings.help.feedback')} description={t('settings.help.feedbackHint')}>

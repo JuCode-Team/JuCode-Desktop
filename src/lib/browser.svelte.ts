@@ -39,6 +39,9 @@ class BrowserStore {
 	/** Native webviews always render above the DOM, so modals hide the browser
 	 *  by collapsing its bounds to zero while they're open. */
 	suspended = false;
+	/** Where the native webview sits (window points), null while hidden: DOM
+	 *  overlays (corner notices) keep clear of it. */
+	shown = $state<Rect | null>(null);
 	#lastRect: Rect | null = null;
 	#applied: Rect | null = null;
 
@@ -70,6 +73,7 @@ class BrowserStore {
 					this.url = url;
 					this.loading = true;
 					this.#applied = rect;
+					this.shown = rect;
 				} catch (e) {
 					this.#failed(url, e);
 				}
@@ -89,6 +93,7 @@ class BrowserStore {
 		const a = this.#applied;
 		if (a && a.x === r.x && a.y === r.y && a.w === r.w && a.h === r.h) return;
 		this.#applied = r;
+		this.shown = r.w > 1 && r.h > 1 ? r : null;
 		invoke('browser_set_bounds', { x: r.x, y: r.y, width: r.w, height: r.h }).catch(() => {});
 	}
 
@@ -126,6 +131,7 @@ class BrowserStore {
 		this.created = false;
 		this.loading = false;
 		this.#applied = null;
+		this.shown = null;
 		await invoke('browser_close').catch(() => {});
 	}
 

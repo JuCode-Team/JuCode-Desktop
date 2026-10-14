@@ -89,6 +89,12 @@ const shell = {
 			retry: '重试',
 			openDownload: '打开下载页'
 		},
+		devServer: {
+			started: '本地服务已启动',
+			opened: '本地服务已启动，已在浏览器打开',
+			open: '打开',
+			list: '本地服务'
+		},
 		daemonUpdate: {
 			idle: '后台服务会在没有任务运行时更新到 {version}',
 			failed: '后台服务更新失败：{error}'
@@ -1018,6 +1024,12 @@ const shell = {
 			later: 'Later',
 			retry: 'Try again',
 			openDownload: 'Open download page'
+		},
+		devServer: {
+			started: 'A local server started',
+			opened: 'A local server started and opened in the browser',
+			open: 'Open',
+			list: 'Local servers'
 		},
 		daemonUpdate: {
 			idle: 'The background service updates to {version} once no task is running',

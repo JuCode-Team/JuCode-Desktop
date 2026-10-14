@@ -42,6 +42,8 @@ type PrefsShape = {
 	footCost: boolean;
 	/** Engines that can summarize their thinking (Claude, Codex) do, before replying. */
 	thinkingSummaries: boolean;
+	/** A dev server an agent starts opens in the built-in browser (else a notice offers it). */
+	devServerAutoOpen: boolean;
 	/** Interface zoom (the webview's page zoom), one of ZOOM_STEPS. */
 	zoom: number;
 };
@@ -67,6 +69,7 @@ const DEFAULTS: PrefsShape = {
 	footContext: true,
 	footCost: true,
 	thinkingSummaries: true,
+	devServerAutoOpen: false,
 	zoom: 1
 };
 
@@ -127,6 +130,7 @@ class PrefsStore {
 	footContext = $state(DEFAULTS.footContext);
 	footCost = $state(DEFAULTS.footCost);
 	thinkingSummaries = $state(DEFAULTS.thinkingSummaries);
+	devServerAutoOpen = $state(DEFAULTS.devServerAutoOpen);
 	zoom = $state(DEFAULTS.zoom);
 
 	init() {
@@ -147,6 +151,7 @@ class PrefsStore {
 		this.footContext = p.footContext !== false;
 		this.footCost = p.footCost !== false;
 		this.thinkingSummaries = p.thinkingSummaries !== false;
+		this.devServerAutoOpen = p.devServerAutoOpen === true;
 		this.zoom = zoomLevel(p.zoom);
 		this.#applyVibrancy();
 		if (inTauri()) {
@@ -179,6 +184,7 @@ class PrefsStore {
 					footContext: this.footContext,
 					footCost: this.footCost,
 					thinkingSummaries: this.thinkingSummaries,
+					devServerAutoOpen: this.devServerAutoOpen,
 					zoom: this.zoom
 				})
 			);
@@ -240,7 +246,7 @@ class PrefsStore {
 	}
 
 	/** The switches without side effects of their own. */
-	setFlag(name: 'footContext' | 'footCost' | 'thinkingSummaries', v: boolean) {
+	setFlag(name: 'footContext' | 'footCost' | 'thinkingSummaries' | 'devServerAutoOpen', v: boolean) {
 		this[name] = v;
 		this.#save();
 	}

@@ -17,6 +17,7 @@
 	import GlobeIcon from '@lucide/svelte/icons/globe';
 	import NetworkIcon from '@lucide/svelte/icons/network';
 	import Toaster from '$lib/ui/Toaster.svelte';
+	import CornerNotices from '$lib/ui/CornerNotices.svelte';
 	import ModelSetup from '$lib/ModelSetup.svelte';
 	import { modelSetup } from '$lib/modelSetupState.svelte';
 	import ConfirmHost from '$lib/ui/ConfirmHost.svelte';
@@ -46,6 +47,7 @@
 	import { checkDaemonVersion } from '$lib/daemonVersion';
 	import UpdatePrompt from '$lib/UpdatePrompt.svelte';
 	import { browser, type WebRef } from '$lib/browser.svelte';
+	import { devServers } from '$lib/devServers.svelte';
 	import { prefs } from '$lib/prefs.svelte';
 	import { fmtTokens } from '$lib/usageStats';
 	import { cloudSync } from '$lib/cloudSync.svelte';
@@ -1268,10 +1270,12 @@
 				agentDirectory.handle(frame);
 				sync.handle(frame);
 				requirements.handle(frame);
+				devServers.handle(frame);
 			};
 			daemon.onDisconnect = () => {
 				agentDirectory.disconnected();
 				sync.reset();
+				devServers.disconnected();
 			};
 			daemon.onHello = (version) => {
 				checkDaemonVersion(version).then((outcome) => {
@@ -1385,6 +1389,7 @@
 {/snippet}
 
 <Toaster />
+<CornerNotices />
 <ConfirmHost />
 
 <div class="app">

@@ -7,6 +7,7 @@
 	import SquareDashedIcon from '@lucide/svelte/icons/square-dashed';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import { browser } from '$lib/browser.svelte';
+	import { devServers } from '$lib/devServers.svelte';
 	import { prefs } from '$lib/prefs.svelte';
 	import { t } from '$lib/i18n';
 
@@ -82,6 +83,16 @@
 			<SquareDashedIcon size={14} />
 		</button>
 	</form>
+	{#if devServers.list.length}
+		<div class="servers">
+			<span class="slabel">{t('shell.devServer.list')}</span>
+			{#each devServers.list as s (s.port)}
+				<button type="button" class="server" class:current={browser.url.startsWith(s.url)} title={s.url} onclick={() => browser.open(s.url)}>
+					{s.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+				</button>
+			{/each}
+		</div>
+	{/if}
 	{#if browser.picking}
 		<div class="pickhint">{t('dock.browser.pickHint')}</div>
 	{/if}
@@ -161,6 +172,36 @@
 		background: var(--accent-soft);
 		padding: 5px 10px;
 		flex-shrink: 0;
+	}
+	.servers {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 5px 10px;
+		border-bottom: 1px solid var(--hairline);
+		overflow-x: auto;
+		flex-shrink: 0;
+	}
+	.slabel {
+		font-size: var(--fs-2xs);
+		color: var(--dim2);
+		flex-shrink: 0;
+	}
+	.server {
+		flex-shrink: 0;
+		font-family: var(--font-mono);
+		font-size: var(--fs-2xs);
+		color: var(--dim);
+		background: none;
+		border: 1px solid var(--hairline);
+		border-radius: var(--r-sm);
+		padding: 2px 7px;
+		cursor: pointer;
+	}
+	.server:hover,
+	.server.current {
+		color: var(--text);
+		border-color: var(--dim2);
 	}
 	.loaderr {
 		display: flex;
