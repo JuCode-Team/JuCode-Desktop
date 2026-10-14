@@ -503,7 +503,11 @@
 	 *  closed the audit tab directly (so a later ⌘E can re-create it). */
 	function applyTiles(next: TileLayout) {
 		if (next === tiles) return;
+		// A draft whose tab closes before its first message leaves nothing behind.
+		const open = new Set(chatSessionsIn(next));
+		const dropped = chatSessionsIn(tiles).filter((sid) => !open.has(sid) && sessionMap.get(sid)?.draft);
 		tiles = next;
+		for (const sid of dropped) store.removeSession(sid);
 		if (tilesReady) workspaces.updateLayout(serializeLayout(next));
 		if (editorStore.visible && !findPanelTab('audit')) editorStore.visible = false;
 	}

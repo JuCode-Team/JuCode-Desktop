@@ -116,8 +116,11 @@ describe('SessionStore lifecycle', () => {
 		expect(p.sessions[0].draft).toBe(true);
 		expect(p.sessions[0].chat.booting).toBe(false);
 		expect(hostSession).not.toHaveBeenCalled();
+		// Only its tab shows a draft; the sidebar lists it from its first message.
+		expect(listedSessions(p)).toEqual([]);
 		begin(id);
 		expect(p.sessions[0].draft).toBe(false);
+		expect(listedSessions(p).map((s) => s.id)).toEqual([id]);
 		await flush();
 		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined, undefined, false, undefined);
 		// The daemon named the new session.
@@ -911,11 +914,17 @@ describe('project order', () => {
 
 describe('session order and pins', () => {
 	const titles = (p: Project) => listedSessions(p).map((s) => s.chat.title);
+	/** A new session past its first message (drafts are not listed). */
+	const started = (store: SessionStore, p: Project, title: string) => {
+		const id = store.addSession(p);
+		store.renameSession(id, title);
+		begin(id);
+	};
 	function three() {
 		const store = new SessionStore();
 		const p = proj();
 		store.projects.push(p);
-		for (const title of ['c', 'b', 'a']) store.renameSession(store.addSession(p), title);
+		for (const title of ['c', 'b', 'a']) started(store, p, title);
 		return { store, p, id: (title: string) => p.sessions.find((s) => s.chat.title === title)!.id };
 	}
 
@@ -945,12 +954,13 @@ describe('session order and pins', () => {
 		store.setPinned(id('c'), true);
 		store.moveSession(id('c'), id('b'), false);
 		expect(titles(p)).toEqual(['c', 'b', 'a']);
-		store.renameSession(store.addSession(p), 'd');
+		started(store, p, 'd');
 		expect(titles(p)).toEqual(['c', 'b', 'd', 'a']);
 	});
 
 	it('order and pins survive serialize and restore', async () => {
 		const { store, id } = three();
+		await flush();
 		store.moveSession(id('a'), id('c'), true);
 		store.setPinned(id('c'), true);
 		const saved = store.serialize();

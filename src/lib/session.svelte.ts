@@ -69,9 +69,10 @@ const samePath = (a: string, b: string) => a.replace(/[\\/]+$/, '') === b.replac
 
 /** A project's sessions as the sidebar lists them: pinned first, each group
  *  in the project's own order (new sessions join at the start); archived
- *  ones are left out. */
+ *  ones are left out, and so are drafts: one joins the list with its first
+ *  message, and until then only its tab shows it. */
 export function listedSessions(p: Project): Session[] {
-	const live = p.sessions.filter((s) => !s.archived);
+	const live = p.sessions.filter((s) => !s.archived && !s.draft);
 	return [...live.filter((s) => s.pinned), ...live.filter((s) => !s.pinned)];
 }
 
