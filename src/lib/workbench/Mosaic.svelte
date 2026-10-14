@@ -2,8 +2,6 @@
 	import type { Snippet } from 'svelte';
 	import XIcon from '@lucide/svelte/icons/x';
 	import PlusIcon from '@lucide/svelte/icons/plus';
-	import MaximizeIcon from '@lucide/svelte/icons/maximize';
-	import MinimizeIcon from '@lucide/svelte/icons/minimize';
 	import { t } from '$lib/i18n';
 	import {
 		activateTab,
@@ -36,6 +34,7 @@
 		label,
 		addOptions = [],
 		onAdd,
+		barAdd = true,
 		emptyText = '',
 		emptyHint = '',
 		focused = null,
@@ -59,6 +58,8 @@
 		 *  `primary` option leads as the main action; the rest form a grid. */
 		addOptions?: { key: string; label: string; icon?: typeof PlusIcon; primary?: boolean }[];
 		onAdd?: (leafId: string | null, key: string) => void;
+		/** The + on each tab bar; off where the window title bar has one. */
+		barAdd?: boolean;
 		emptyText?: string;
 		emptyHint?: string;
 		/** The focused leaf (owned by the caller; drives engine-action targeting). */
@@ -334,21 +335,13 @@
 				{#if layout.maximized === leaf.id}
 					<span class="lmax-hint">{t('dock.mosaic.maximizedHint')}</span>
 				{/if}
-				{#if addOptions.length}
+				{#if barAdd && addOptions.length}
 					<button
 						class="lbtn"
 						aria-label="add panel"
 						onclick={() => (addMenuFor = addMenuFor === leaf.id ? null : leaf.id)}><PlusIcon size={14} /></button
 					>
 				{/if}
-				<button
-					class="lbtn"
-					title={layout.maximized === leaf.id ? t('dock.mosaic.restore') : t('dock.mosaic.maximize')}
-					aria-label={layout.maximized === leaf.id ? t('dock.mosaic.restore') : t('dock.mosaic.maximize')}
-					onclick={() => onchange(toggleMaximize(layout, leaf.id))}
-				>
-					{#if layout.maximized === leaf.id}<MinimizeIcon size={12} />{:else}<MaximizeIcon size={12} />{/if}
-				</button>
 			</div>
 			{#if addMenuFor === leaf.id}
 				<PopMenu

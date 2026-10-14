@@ -1539,6 +1539,7 @@
 							label={tileLabel}
 							{addOptions}
 							onAdd={mosaicAdd}
+							barAdd={false}
 							emptyText={t('dock.dock.empty')}
 							emptyHint={t('dock.dock.hint')}
 							focused={focusedLeaf}
@@ -1548,25 +1549,6 @@
 							onTabContext={openTileChrome}
 							onTabRename={openTileChrome}
 						>
-								{#snippet actions(tab)}
-									{@const sid = chatSessionOf(tab.panel)}
-									{@const session = sid ? sessionMap.get(sid) : undefined}
-									{#if sid && session?.surface === 'tui'}
-										<button class="tile-action" title={t('dock.tui.backToGui')} aria-label={t('dock.tui.backToGui')} onclick={() => tuiPanels[sid]?.backToGui()}>
-											<MessageSquareTextIcon size={14} />
-										</button>
-									{:else if sid && session && canHandOffToTui(session.backendId)}
-										<button
-											class="tile-action"
-											disabled={!tuiReady(sid)}
-											title={tuiReady(sid) ? t('chat.tuiContinueTitle') : t('chat.tuiContinueUnavailable')}
-											aria-label={t('chat.tuiContinue')}
-											onclick={() => continueInTui(sid)}
-										>
-											<SquareTerminalIcon size={14} />
-										</button>
-									{/if}
-								{/snippet}
 								{#snippet panel(tab)}
 								{@const sid = chatSessionOf(tab.panel)}
 								{@const tui = tuiBackendOf(tab.panel)}
