@@ -57,7 +57,7 @@
 	import { parseToolOutput, toolTarget, toolVerb } from '$lib/toolSummary';
 	import { costText } from '$lib/sessionCost';
 	import { prefs } from '$lib/prefs.svelte';
-	import { followTop, shortOfEnd } from '$lib/chatFollow';
+	import { followAfterScroll, fromEnd, followTop, shortOfEnd } from '$lib/chatFollow';
 
 	let {
 		session,
@@ -175,17 +175,21 @@
 	// a streaming reply holds still once it fills the view (see chatFollow),
 	// as the desktop does.
 	let atBottom = $state(true);
+	/** The view is well short of the end: the jump button shows. */
+	let farFromEnd = $state(false);
 	// The position last pinned to the end, and the last one seen.
 	let pinnedTop = -1;
 	let lastTop = 0;
+	// Content height at the last scroll event: a pull-back after it shrank
+	// arrives as a scroll event a frame later.
+	let lastHeight = 0;
 	function onScroll() {
 		if (!scroller) return;
-		const top = scroller.scrollTop;
 		// The scroll event of our own pin says nothing about the reader.
-		// Otherwise follow again once they scroll down near the end, never
-		// while they scroll up.
-		if (top !== pinnedTop) atBottom = top >= lastTop && scroller.scrollHeight - top - scroller.clientHeight < 60;
-		lastTop = top;
+		if (scroller.scrollTop !== pinnedTop) atBottom = followAfterScroll(atBottom, scroller, lastTop, lastHeight);
+		lastTop = scroller.scrollTop;
+		lastHeight = scroller.scrollHeight;
+		farFromEnd = fromEnd(scroller) > 60;
 	}
 	// Scrolling up leaves the end. Caught at the input (wheel up, a finger
 	// dragging down): WebKit applies the scroll later, and while a reply
@@ -202,11 +206,14 @@
 	$effect(() => {
 		if (!contentEl || !scroller) return;
 		const ro = new ResizeObserver(() => {
-			if (!atBottom || !scroller || !contentEl) return;
-			const top = followTop(scroller, contentEl, chat.busy);
-			scroller.scrollTop = top;
-			pinnedTop = scroller.scrollTop;
-			if (shortOfEnd(scroller, top)) atBottom = false;
+			if (!scroller || !contentEl) return;
+			if (atBottom) {
+				const top = followTop(scroller, contentEl, chat.busy);
+				scroller.scrollTop = top;
+				pinnedTop = scroller.scrollTop;
+				if (shortOfEnd(scroller, top)) atBottom = false;
+			}
+			farFromEnd = fromEnd(scroller) > 60;
 		});
 		ro.observe(contentEl);
 		return () => ro.disconnect();
@@ -676,7 +683,7 @@
 	</main>
 
 	<div class="bottom">
-		{#if !atBottom}
+		{#if farFromEnd}
 			<button class="jump" onclick={jumpToBottom} aria-label={t('shell.remote.back')}><ChevronDownIcon size={16} /></button>
 		{/if}
 		{#if chat.inTerminal}
@@ -984,6 +991,10 @@
 		min-height: 0;
 		overflow-y: auto;
 		overscroll-behavior: contain;
+		/* Rows that change height above the view keep it in place
+		   themselves (MessageList); the browser's own anchoring (Chromium)
+		   would do it twice. */
+		overflow-anchor: none;
 		display: flex;
 		flex-direction: column;
 		padding: 18px max(14px, calc((100% - 880px) / 2)) 16px;

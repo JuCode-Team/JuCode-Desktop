@@ -183,12 +183,20 @@
 	const padTop = $derived(virtual ? offsets[range.first] : 0);
 	const padBottom = $derived(virtual ? Math.max(0, totalH - offsets[range.last + 1]) : 0);
 
+	let clickedAt = 0;
 	// Measure a rendered row and cache its height, coalescing recomputes into one rAF.
 	function measure(node: HTMLElement, msg: Msg) {
 		const record = () => {
 			const h = node.offsetHeight;
-			if (h > 0 && heights.get(msg) !== h) {
+			const prev = heights.get(msg);
+			if (h > 0 && prev !== h) {
 				heights.set(msg, h);
+				// A row that starts above the view changed height on its own (an
+				// image in it loaded, mostly as it is windowed back in on the way
+				// up): it grows upwards, so what is being read stays put. Not
+				// right after a click, which opens or folds something in view.
+				if (prev !== undefined && scroller && performance.now() - clickedAt > 1000 && node.getBoundingClientRect().top < scroller.getBoundingClientRect().top)
+					scroller.scrollTop += h - prev;
 				if (!raf)
 					raf = requestAnimationFrame(() => {
 						raf = 0;
@@ -446,7 +454,7 @@
 
 <svelte:document onselectionchange={() => cite && window.getSelection()?.isCollapsed && (cite = null)} />
 
-<div class="list" bind:this={listEl} onmouseup={() => setTimeout(offerCite)} role="presentation" style:padding-top="{padTop}px" style:padding-bottom="{padBottom}px">
+<div class="list" bind:this={listEl} onclickcapture={() => (clickedAt = performance.now())} onmouseup={() => setTimeout(offerCite)} role="presentation" style:padding-top="{padTop}px" style:padding-bottom="{padBottom}px">
 	{#each windowRows as m, k (m)}
 		{@const i = range.first + k}
 		{#if shown(m)}

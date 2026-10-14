@@ -60,7 +60,7 @@
 	import { dispatch } from '$lib/backends/router';
 	import { browser } from '$lib/browser.svelte';
 	import { prefs } from '$lib/prefs.svelte';
-	import { followTop, shortOfEnd } from '$lib/chatFollow';
+	import { followAfterScroll, fromEnd, followTop, shortOfEnd } from '$lib/chatFollow';
 	import { t } from '$lib/i18n';
 	import type { SessionStore } from '$lib/session.svelte';
 	import type { Session } from '$lib/types';
@@ -206,6 +206,8 @@
 	let composerRef = $state<{ insertToken: (t: string) => void; openModelMenu: () => void } | undefined>();
 	let bottomH = $state(120);
 	let atBottom = $state(true);
+	/** The view is well short of the end: the jump button shows. */
+	let farFromEnd = $state(false);
 	let messageList = $state<MessageList | null>(null);
 	let mark = $state(-1);
 	const marks = $derived(chat.messages.flatMap((m) => (m.kind === 'user' && !parseDelivery(m.text) ? [m.text] : [])));
@@ -941,14 +943,16 @@
 	// The position this pane last pinned to the end, and the last one seen.
 	let pinnedTop = -1;
 	let lastTop = 0;
+	// Content height at the last scroll event: a pull-back after it shrank
+	// arrives as a scroll event a frame later.
+	let lastHeight = 0;
 	function onScroll() {
 		if (!scroller) return;
-		const top = scroller.scrollTop;
 		// The scroll event of our own pin says nothing about the reader.
-		// Otherwise follow again once they scroll down near the end, never
-		// while they scroll up.
-		if (top !== pinnedTop) atBottom = top >= lastTop && scroller.scrollHeight - top - scroller.clientHeight < 60;
-		lastTop = top;
+		if (scroller.scrollTop !== pinnedTop) atBottom = followAfterScroll(atBottom, scroller, lastTop, lastHeight);
+		lastTop = scroller.scrollTop;
+		lastHeight = scroller.scrollHeight;
+		farFromEnd = fromEnd(scroller) > 60;
 	}
 	/** Wheel up leaves the end. Caught at the input: WebKit applies the
 	 *  scroll a frame later, and while a reply streams the next pin would
@@ -970,11 +974,14 @@
 	$effect(() => {
 		if (!contentEl || !scroller) return;
 		const ro = new ResizeObserver(() => {
-			if (!scroller || !contentEl || !atBottom) return;
-			const top = followTop(scroller, contentEl, chat.busy);
-			scroller.scrollTop = top;
-			pinnedTop = scroller.scrollTop;
-			if (shortOfEnd(scroller, top)) atBottom = false;
+			if (!scroller || !contentEl) return;
+			if (atBottom) {
+				const top = followTop(scroller, contentEl, chat.busy);
+				scroller.scrollTop = top;
+				pinnedTop = scroller.scrollTop;
+				if (shortOfEnd(scroller, top)) atBottom = false;
+			}
+			farFromEnd = fromEnd(scroller) > 60;
 		});
 		ro.observe(contentEl);
 		return () => ro.disconnect();
@@ -984,6 +991,7 @@
 		if (scroller && (atBottom || force)) {
 			pin();
 			atBottom = true;
+			farFromEnd = false;
 		}
 	}
 	function jumpToBottom() {
@@ -1207,7 +1215,7 @@
 		<TurnRail {marks} current={mark} onJump={(n) => messageList?.jumpToMark(n)} />
 	{/if}
 	</div>
-	{#if !atBottom}
+	{#if farFromEnd}
 		<button class="jump" style:bottom="{bottomH + 14}px" onclick={jumpToBottom} aria-label="scroll to bottom"><ChevronDownIcon size={16} /></button>
 	{/if}
 
@@ -1551,6 +1559,10 @@
 		flex: 1;
 		min-height: 0;
 		overflow-y: auto;
+		/* Rows that change height above the view keep it in place
+		   themselves (MessageList); the browser's own anchoring (Chromium)
+		   would do it twice. */
+		overflow-anchor: none;
 		padding: 22px 18px 26px;
 		display: flex;
 		flex-direction: column;
