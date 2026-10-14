@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { overBrowser } from '$lib/browser.svelte';
 	import XIcon from '@lucide/svelte/icons/x';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import SearchIcon from '@lucide/svelte/icons/search';
@@ -95,7 +96,7 @@
 
 {#if anchored}
 	<button class="pop-backdrop" aria-label="close" onclick={onClose}></button>
-	<div class="modal anchored" role="dialog" aria-label={title}>
+	<div use:overBrowser class="modal anchored" role="dialog" aria-label={title}>
 		{@render body()}
 	</div>
 {:else}

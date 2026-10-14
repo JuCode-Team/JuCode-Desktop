@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { overBrowser } from '$lib/browser.svelte';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import type { Snippet } from 'svelte';
@@ -43,7 +44,7 @@
 	</button>
 	{#if open}
 		<button class="backdrop" aria-label="close" onclick={() => (open = false)}></button>
-		<div class="menu">
+		<div use:overBrowser class="menu">
 			{#each options as o, i (o.value)}
 				{#if o.group && (i === 0 || options[i - 1]?.group !== o.group)}
 					<div class="opt-group">{o.group}</div>

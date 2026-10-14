@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { t } from '$lib/i18n';
+import { prefs } from '$lib/prefs.svelte';
 
 /** A page element captured by the embedded browser's picker, attached to the
  *  next user message as textual context. */
@@ -37,8 +38,12 @@ class BrowserStore {
 	/** Bumped by open() so the page/dock can reveal the browser tab. */
 	openSignal = $state(0);
 	/** Native webviews always render above the DOM, so modals hide the browser
-	 *  by collapsing its bounds to zero while they're open. */
+	 *  by collapsing its bounds to zero while they're open… */
 	suspended = false;
+	#modal = false;
+	/** …and so does any floating layer (menu, popover, viewer, drag preview)
+	 *  over its area, while it is there (`overBrowser`). */
+	#covering = new Set<HTMLElement>();
 	/** Where the native webview sits (window points), null while hidden: DOM
 	 *  overlays (corner notices) keep clear of it. */
 	shown = $state<Rect | null>(null);
@@ -97,7 +102,33 @@ class BrowserStore {
 		invoke('browser_set_bounds', { x: r.x, y: r.y, width: r.w, height: r.h }).catch(() => {});
 	}
 
-	setSuspended(s: boolean) {
+	/** A modal is open (the page) or a floating layer covers the browser. */
+	setSuspended(modal: boolean) {
+		this.#modal = modal;
+		this.#resuspend();
+	}
+
+	/** A floating layer `el` was laid out at `rect` (CSS px; null: gone). */
+	cover(el: HTMLElement, rect: DOMRect | null) {
+		const r = this.#lastRect;
+		const z = prefs.zoom || 1;
+		// The webview's own place, in CSS px, compared with the layer's.
+		const over =
+			!!rect &&
+			!!r &&
+			rect.width > 0 &&
+			rect.height > 0 &&
+			rect.left < (r.x + r.w) / z &&
+			rect.right > r.x / z &&
+			rect.top < (r.y + r.h) / z &&
+			rect.bottom > r.y / z;
+		if (over) this.#covering.add(el);
+		else this.#covering.delete(el);
+		this.#resuspend();
+	}
+
+	#resuspend() {
+		const s = this.#modal || this.#covering.size > 0;
 		if (s === this.suspended) return;
 		this.suspended = s;
 		if (!this.created) return;
@@ -167,3 +198,21 @@ class BrowserStore {
 }
 
 export const browser = new BrowserStore();
+
+/** Marks a floating layer: while it overlaps the native browser (which draws
+ *  above every DOM element), the browser steps aside. */
+export function overBrowser(node: HTMLElement) {
+	const check = () => browser.cover(node, node.isConnected ? node.getBoundingClientRect() : null);
+	const ro = new ResizeObserver(check);
+	ro.observe(node);
+	// Placed after mount (anchored popovers measure themselves first).
+	const raf = requestAnimationFrame(check);
+	check();
+	return {
+		destroy() {
+			cancelAnimationFrame(raf);
+			ro.disconnect();
+			browser.cover(node, null);
+		}
+	};
+}

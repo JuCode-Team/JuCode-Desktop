@@ -26,6 +26,7 @@
 </script>
 
 <script lang="ts">
+	import { overBrowser } from '$lib/browser.svelte';
 	// Which JuCode group serves the current model. "Auto" leaves routing to
 	// the gateway (lowest multiplier first, then the others); a group pins
 	// requests for this model to it (`jucode_groups` in config.json, sent as
@@ -122,7 +123,7 @@
 			<span class="caret" class:open><ChevronDownIcon size={14} /></span>
 		</button>
 		{#if open}
-			<div class="list" role="listbox" aria-label={tool ? t('chat.provider') : t('chat.groupTitle')}>
+			<div use:overBrowser class="list" role="listbox" aria-label={tool ? t('chat.provider') : t('chat.groupTitle')}>
 				{#if tool?.local}
 					<button class="pop-row" role="option" aria-selected={local} onclick={pickLocal}>
 						<span class="pop-txt">

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { overBrowser } from '$lib/browser.svelte';
 	// The image the user clicked, over the whole window: fitted first; a click
 	// on it (or the size button) shows it at its own size, scrollable; ← → go
 	// through the set it came from; Escape or a click beside it closes.
@@ -68,6 +69,7 @@
 		<div
 			use:portal
 			use:focusTrap
+			use:overBrowser
 			class="viewer"
 			role="dialog"
 			aria-modal="true"

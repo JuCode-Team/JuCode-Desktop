@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { overBrowser } from '$lib/browser.svelte';
 	// The composer's branch picker, opened from the branch chip under the input:
 	// filter the local branches, switch to one, or create one and switch to it.
 	// git itself refuses a switch that would lose uncommitted changes; its
@@ -95,7 +96,7 @@
 <svelte:window onkeydown={(e) => e.key === 'Escape' && !creating && onClose()} />
 
 <button class="bm-backdrop" aria-label="close menu" tabindex="-1" onclick={onClose}></button>
-<div class="pop bm" role="dialog" aria-label={t('chat.branchMenu.title')}>
+<div use:overBrowser class="pop bm" role="dialog" aria-label={t('chat.branchMenu.title')}>
 	{#if creating}
 		<label class="field">
 			<GitBranchIcon size={16} />

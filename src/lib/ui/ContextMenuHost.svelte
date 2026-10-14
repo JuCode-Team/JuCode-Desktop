@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { overBrowser } from '$lib/browser.svelte';
 	// Replaces the WebView's native context menu. Components with their own
 	// menu (sessions, tabs, workspaces) call preventDefault first and are left
 	// alone; elsewhere the native menu is suppressed, and text fields or a text
@@ -93,7 +94,7 @@
 <svelte:window oncontextmenu={onContextMenu} onblur={() => (menu = null)} />
 
 {#if menu}
-	<div class="ctx" bind:this={wrap} style:left="{pos.x}px" style:top="{pos.y}px">
+	<div use:overBrowser class="ctx" bind:this={wrap} style:left="{pos.x}px" style:top="{pos.y}px">
 		<PopMenu items={menu.items} placement="down-left" onSelect={run} onClose={() => (menu = null)} />
 	</div>
 {/if}
