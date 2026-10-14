@@ -881,6 +881,22 @@
 			>
 				<PlusIcon size={16} />
 			</button>
+			{#if bcaps.approvalModes}
+				<div class="footsel">
+					<button class="foot-chip" class:auto={chat.approvalMode !== 'ask'} class:warn={approvalCurrent.tone === 'warn'} onclick={() => (showApproval = !showApproval)} title={withShortcut(t('chat.approvalModeTitle'), 'approvalMode')}>
+						{#if approvalCurrent.icon}<approvalCurrent.icon size={15} />{/if}<span>{approvalCurrent.label}</span>
+					</button>
+					{#if showApproval}
+						<PopMenu
+							title={chat.agent ? t('chat.approvalAgent') : t('chat.approvalQuestion')}
+							items={APPROVAL}
+							placement="up-left"
+							onSelect={setApproval}
+							onClose={() => (showApproval = false)}
+						/>
+					{/if}
+				</div>
+			{/if}
 			<div class="cspace"></div>
 			{#if chat.efforts.length || bcaps.modelPicker || !backendLocked}
 				<!-- Model · effort: one button, one menu (agent, effort, models). -->
@@ -949,24 +965,8 @@
 			{/if}
 		</div>
 	</div>
-	<!-- Slim strip in the blank area under the card: approval · branch | context. -->
+	<!-- Slim strip in the blank area under the card: branch · approval | context. -->
 	<div class="composer-foot">
-		{#if bcaps.approvalModes}
-			<div class="footsel">
-				<button class="foot-chip" class:auto={chat.approvalMode !== 'ask'} class:warn={approvalCurrent.tone === 'warn'} onclick={() => (showApproval = !showApproval)} title={withShortcut(t('chat.approvalModeTitle'), 'approvalMode')}>
-					{#if approvalCurrent.icon}<approvalCurrent.icon size={13} />{/if}<span>{approvalCurrent.label}</span>
-				</button>
-				{#if showApproval}
-					<PopMenu
-						title={chat.agent ? t('chat.approvalAgent') : t('chat.approvalQuestion')}
-						items={APPROVAL}
-						placement="up-left"
-						onSelect={setApproval}
-						onClose={() => (showApproval = false)}
-					/>
-				{/if}
-			</div>
-		{/if}
 		{#if gitBranch}
 			<!-- Switching under a running turn would change its files mid-edit. -->
 			<span class="branch-anchor">
@@ -1327,13 +1327,12 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 5px;
-		margin: -2px 0 -2px -6px;
-		padding: 2px 6px;
+		padding: 4px 7px;
 		border: none;
 		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
-		font-size: var(--fs-xs);
+		font-size: var(--fs-sm);
 		font-family: var(--font-sans);
 		cursor: pointer;
 		transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
