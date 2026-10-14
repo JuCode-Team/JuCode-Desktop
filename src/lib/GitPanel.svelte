@@ -102,6 +102,20 @@
 		});
 	}
 
+	// Not a repository: one click makes the project directory one.
+	let initing = $state(false);
+	async function initRepo() {
+		initing = true;
+		try {
+			await git(['init'], dir());
+			await refresh();
+		} catch (e) {
+			error = String(e);
+		} finally {
+			initing = false;
+		}
+	}
+
 	async function refresh() {
 		error = '';
 		try {
@@ -363,7 +377,14 @@
 
 <div class="git">
 	{#if error && changes.length === 0 && !branch}
-		<div class="err">{error.includes('not a git repository') ? t('dock.git.notRepo') : error}</div>
+		{#if error.includes('not a git repository')}
+			<div class="norepo">
+				<span>{t('dock.git.notRepo')}</span>
+				<Button size="sm" disabled={initing} onclick={initRepo}><GitBranchIcon size={14} />{t('dock.git.init')}</Button>
+			</div>
+		{:else}
+			<div class="err">{error}</div>
+		{/if}
 	{:else}
 		<div class="bar">
 			<GitBranchIcon size={14} class="bcol" />
@@ -1022,6 +1043,15 @@
 	}
 	.commitbar input::placeholder {
 		color: var(--dim2);
+	}
+	.norepo {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 12px;
+		padding: 28px 18px;
+		color: var(--dim);
+		font-size: var(--fs-sm);
 	}
 	.err {
 		padding: 18px;

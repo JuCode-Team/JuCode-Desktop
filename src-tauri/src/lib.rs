@@ -2331,6 +2331,7 @@ const GIT_SUBCOMMANDS: &[&str] = &[
     "remote",
     "merge",
     "rev-list",
+    "init",
 ];
 
 /// 需要访问网络的子命令：禁用凭据交互提示、限时执行（防止卡在等待输入上）。
@@ -2518,6 +2519,10 @@ fn validate_git_args(args: &[String]) -> Result<(), String> {
                     return Err(format!("invalid ref name: {r}"));
                 }
             }
+        }
+        // init 只在项目目录本身创建仓库，不接受别的路径。
+        "init" if !positionals.is_empty() => {
+            return Err("git init takes no path".to_string());
         }
         // remote 只用于列出（remote -v），不放行 add/set-url 等子操作。
         "remote" if !positionals.is_empty() => {
@@ -3929,6 +3934,7 @@ mod tests {
             vec!["checkout", "-b", "feature/new-ui"],
             vec!["checkout", "main"],
             vec!["remote", "-v"],
+            vec!["init"],
         ] {
             assert!(
                 validate_git_args(&args(&cmd)).is_ok(),
@@ -3980,6 +3986,9 @@ mod tests {
             vec!["remote", "set-url", "origin", "https://evil"],
             // 远端子命令禁止 `--` 逃逸
             vec!["push", "--", "origin"],
+            // init 只在项目目录里建仓库
+            vec!["init", "/tmp/elsewhere"],
+            vec!["init", "--separate-git-dir=/tmp/x"],
         ] {
             assert!(
                 validate_git_args(&args(&cmd)).is_err(),
