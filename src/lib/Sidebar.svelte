@@ -133,9 +133,23 @@
 		selecting = '';
 		picked = [];
 	}
-	// Collapsed project folders, and folders showing all of their sessions
-	// instead of the first SHOW_LIMIT.
-	let collapsed = $state<Record<string, boolean>>({});
+	// Collapsed project folders (kept across restarts), and folders showing
+	// all of their sessions instead of the first SHOW_LIMIT.
+	const COLLAPSED_KEY = 'jucode-sidebar-collapsed';
+	let collapsed = $state<Record<string, boolean>>(
+		(() => {
+			try {
+				return JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '{}') ?? {};
+			} catch {
+				return {};
+			}
+		})()
+	);
+	function toggleCollapsed(id: string) {
+		if (collapsed[id]) delete collapsed[id];
+		else collapsed[id] = true;
+		localStorage.setItem(COLLAPSED_KEY, JSON.stringify(collapsed));
+	}
 	let showAll = $state<Record<string, boolean>>({});
 	const SHOW_LIMIT = 6;
 	/** A project's first sessions, and the active one wherever it is. */
@@ -204,10 +218,12 @@
 	// Drag projects, or session rows within their project and pinned group.
 	// Pointer events, as the workbench tabs do (HTML drag and drop is not
 	// reliable in the macOS webview): a press stays a click until the
-	// pointer travels, then a line marks where the row lands.
+	// pointer travels, then the row follows it and the others of its group
+	// slide aside to show where it lands.
 	let listEl = $state<HTMLElement | null>(null);
-	let drag = $state<{ id: string; group: string; live: boolean } | null>(null);
-	let drop = $state<{ id: string; after: boolean } | null>(null);
+	/** `dy`: how far the row has moved; `others`: the group's other rows in
+	 *  order; `at`: where it would land among them; `size`: the room it takes. */
+	let drag = $state<{ id: string; group: string; live: boolean; dy: number; from: number; at: number; size: number; others: string[] } | null>(null);
 	function rowDown(e: PointerEvent, p: Project, s?: Session) {
 		if (e.button !== 0 || (s && renaming === s.id) || !listEl) return;
 		const list = listEl;
@@ -217,18 +233,31 @@
 		const startY = e.clientY;
 		let y = startY;
 		let frame = 0;
-		drag = { id, group, live: false };
-		/** Where the row would land among the rows of its group (null: where it is). */
-		const target = () => {
+		// The group's rows as they were when the drag began: the rows move
+		// aside while it goes on, so where it lands is read from these.
+		let centres: number[] = [];
+		let startScroll = 0;
+		drag = { id, group, live: false, dy: 0, from: 0, at: 0, size: 0, others: [] };
+		const begin = () => {
 			const rows = [...list.querySelectorAll<HTMLElement>('[data-group]')].filter((el) => el.dataset.group === group);
-			let at = rows.findIndex((el) => {
-				const r = el.getBoundingClientRect();
-				return y < r.top + r.height / 2;
-			});
-			if (at < 0) at = rows.length;
+			const rects = rows.map((el) => el.getBoundingClientRect());
 			const from = rows.findIndex((el) => el.dataset.rowId === id);
-			if (at === from || at === from + 1) return null;
-			return at < rows.length ? { id: rows[at].dataset.rowId!, after: false } : { id: rows[at - 1].dataset.rowId!, after: true };
+			if (!drag || from < 0) return false;
+			// A row's room is its height plus the space to its neighbour.
+			const next = rects[from + 1] ?? null;
+			const prev = rects[from - 1] ?? null;
+			const size = next ? next.top - rects[from]!.top : prev ? rects[from]!.bottom - prev.bottom : rects[from]!.height;
+			const others = rows.filter((_, i) => i !== from);
+			centres = rects.filter((_, i) => i !== from).map((r) => r.top + r.height / 2);
+			startScroll = list.scrollTop;
+			Object.assign(drag, { live: true, from, at: from, size, others: others.map((el) => el.dataset.rowId!) });
+			return true;
+		};
+		const update = () => {
+			if (!drag?.live) return;
+			const scrolled = list.scrollTop - startScroll;
+			drag.dy = y - startY + scrolled;
+			drag.at = centres.filter((c) => c < y + scrolled).length;
 		};
 		// Held near the top or bottom edge, the list scrolls.
 		const scroll = () => {
@@ -236,7 +265,7 @@
 			const step = y < r.top + 32 ? -8 : y > r.bottom - 32 ? 8 : 0;
 			if (step) {
 				list.scrollTop += step;
-				drop = target();
+				update();
 			}
 			frame = requestAnimationFrame(scroll);
 		};
@@ -244,11 +273,10 @@
 		const move = (ev: PointerEvent) => {
 			y = ev.clientY;
 			if (!drag?.live) {
-				if (!drag || Math.hypot(ev.clientX - startX, ev.clientY - startY) < 5) return;
-				drag.live = true;
+				if (!drag || Math.hypot(ev.clientX - startX, ev.clientY - startY) < 5 || !begin()) return;
 				frame = requestAnimationFrame(scroll);
 			}
-			drop = target();
+			update();
 		};
 		const end = (ev: PointerEvent) => {
 			window.removeEventListener('pointermove', move);
@@ -256,22 +284,35 @@
 			window.removeEventListener('pointercancel', end);
 			window.removeEventListener('selectstart', noSelect);
 			cancelAnimationFrame(frame);
-			const live = drag?.live;
-			const to = drop;
+			const d = drag;
 			drag = null;
-			drop = null;
-			if (!live) return;
+			if (!d?.live) return;
 			// The release ends the drag; it does not open the row.
 			const swallow = (c: Event) => c.stopPropagation();
 			window.addEventListener('click', swallow, { capture: true, once: true });
 			setTimeout(() => window.removeEventListener('click', swallow, { capture: true }));
-			if (ev.type === 'pointerup' && to) (s ? onMoveSession : onMoveProject)(id, to.id, to.after);
+			if (ev.type !== 'pointerup' || d.at === d.from || !d.others.length) return;
+			const to = d.at < d.others.length ? { id: d.others[d.at]!, after: false } : { id: d.others[d.others.length - 1]!, after: true };
+			(s ? onMoveSession : onMoveProject)(id, to.id, to.after);
 		};
 		window.addEventListener('pointermove', move);
 		window.addEventListener('pointerup', end);
 		window.addEventListener('pointercancel', end);
 		window.addEventListener('selectstart', noSelect);
 	}
+	/** How far row `id` of `group` moves while a row of it is dragged. */
+	function shiftOf(group: string, id: string): number {
+		if (!drag?.live || drag.group !== group) return 0;
+		if (id === drag.id) return drag.dy;
+		const k = drag.others.indexOf(id);
+		if (k >= drag.from && k < drag.at) return -drag.size;
+		if (k >= drag.at && k < drag.from) return drag.size;
+		return 0;
+	}
+	const shiftStyle = (group: string, id: string) => {
+		const dy = shiftOf(group, id);
+		return dy ? `translateY(${dy}px)` : undefined;
+	};
 	// Width the content lays out at; kept while the panel closes.
 	let openWidth = $state(292);
 	$effect(() => {
@@ -326,9 +367,8 @@
 			class:on={!selectable && s.id === activeId}
 			class:arch={s.archived}
 			class:selectable
-			class:lifted={drag?.live && drag.group !== 'projects' && drag.id === s.id}
-			class:drop-before={drag?.group !== 'projects' && drop?.id === s.id && !drop.after}
-			class:drop-after={drag?.group !== 'projects' && drop?.id === s.id && drop.after}
+			class:held={drag?.live && drag.group !== 'projects' && drag.id === s.id}
+			style:transform={p ? shiftStyle(`${p.id}:${s.pinned ? 'pin' : ''}`, s.id) : undefined}
 			data-sid={s.id}
 			data-row-id={s.id}
 			data-group={p ? `${p.id}:${s.pinned ? 'pin' : ''}` : undefined}
@@ -537,9 +577,8 @@
 				{#if !query || active.length || arch.length}
 					<div
 						class="project"
-						class:lifted={drag?.live && drag.group === 'projects' && drag.id === p.id}
-						class:drop-before={drag?.group === 'projects' && drop?.id === p.id && !drop.after}
-						class:drop-after={drag?.group === 'projects' && drop?.id === p.id && drop.after}
+						class:held={drag?.live && drag.group === 'projects' && drag.id === p.id}
+						style:transform={shiftStyle('projects', p.id)}
 						data-group="projects"
 						data-row-id={p.id}
 					>
@@ -550,7 +589,7 @@
 								aria-expanded={open}
 								aria-label={t('shell.projectPage.toggle')}
 								title={t('shell.projectPage.toggle')}
-								onclick={() => (collapsed[p.id] = !collapsed[p.id])}><ChevronRightIcon size={12} /></button
+								onclick={() => toggleCollapsed(p.id)}><ChevronRightIcon size={12} /></button
 							>
 							<button class="folder-row" onpointerdown={(e) => rowDown(e, p)} onclick={() => onOpenProject(p)} oncontextmenu={(e) => onProjectMenu(p, e)} title={p.worktree ? t('shell.task.worktreeTip', { branch: p.worktree.branch, base: p.worktree.baseBranch || '?' }) : p.path}>
 								{#if p.icon}<TabGlyph icon={p.icon} color={p.color ?? 'var(--dim)'} active={holdsActive} size={16} />{:else if p.worktree}<ActiveIcon icon={GitBranchIcon} size={16} active={holdsActive} color={p.color} />{:else if open}<ActiveIcon icon={FolderOpenIcon} size={16} active={holdsActive} color={p.color} />{:else}<ActiveIcon icon={FolderIcon} size={16} active={holdsActive} color={p.color} />{/if}
@@ -803,7 +842,8 @@
 	.project {
 		position: relative;
 	}
-	/* Dragging a row: it fades where it was and a line marks where it lands. */
+	/* Dragging a row: it follows the pointer above the others, which slide
+	   aside to show where it lands. */
 	.list.dragging {
 		cursor: grabbing;
 		user-select: none;
@@ -811,35 +851,15 @@
 	.list.dragging .sess,
 	.list.dragging .project {
 		pointer-events: none;
+		transition: transform 150ms var(--ease-out);
 	}
-	.sess.lifted,
-	.project.lifted {
-		opacity: 0.45;
-	}
-	.sess.drop-before::before,
-	.sess.drop-after::after,
-	.project.drop-before::before,
-	.project.drop-after::after {
-		content: '';
-		position: absolute;
-		left: 12px;
-		right: 8px;
-		height: 2px;
+	.list.dragging .sess.held,
+	.list.dragging .project.held {
+		z-index: 2;
 		border-radius: var(--r);
-		background: var(--accent);
-		pointer-events: none;
-	}
-	.sess.nested.drop-before::before,
-	.sess.nested.drop-after::after {
-		left: 42px;
-	}
-	.sess.drop-before::before,
-	.project.drop-before::before {
-		top: -1px;
-	}
-	.sess.drop-after::after,
-	.project.drop-after::after {
-		bottom: -1px;
+		background: var(--panel);
+		box-shadow: var(--shadow-sm);
+		transition: none;
 	}
 	.pin-mark {
 		display: inline-flex;
