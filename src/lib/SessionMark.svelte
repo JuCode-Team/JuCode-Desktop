@@ -10,16 +10,16 @@
 	import type { SessionStatus } from '$lib/sessionStatus';
 	import { describeError, stripEngineHint } from '$lib/errorInfo';
 
-	let { status, compact = false }: { status: SessionStatus; compact?: boolean } = $props();
+	let { status }: { status: SessionStatus } = $props();
 
-	const size = $derived(compact ? 12 : 14);
+	const size = 14;
 </script>
 
 {#if status?.kind === 'input'}
 	{@const label = status.ask === 'answer' ? t('shell.status.answer') : t('shell.status.approve')}
-	<span class="mark input" class:compact title={label} aria-label={label}>
+	<span class="mark input" title={label} aria-label={label}>
 		{#if status.ask === 'answer'}<MessageCircleMoreIcon size={size - 1} />{:else}<HandIcon size={size - 1} />{/if}
-		{#if !compact}<span>{label}</span>{/if}
+		<span>{label}</span>
 	</span>
 {:else if status?.kind === 'failed'}
 	{@const known = describeError(status.message)}
@@ -32,7 +32,7 @@
 		<LoaderCircleIcon {size} class="spin" />
 	</span>
 {:else if status?.kind === 'unread'}
-	<span class="mark unread" class:compact title={t('shell.unread')} aria-label={t('shell.unread')}></span>
+	<span class="mark unread" title={t('shell.unread')} aria-label={t('shell.unread')}></span>
 {/if}
 
 <style>
@@ -54,13 +54,6 @@
 		box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 30%, transparent);
 		animation: ask 2.4s var(--ease-out) infinite;
 	}
-	.input.compact {
-		width: 18px;
-		height: 18px;
-		padding: 0;
-		justify-content: center;
-		border-radius: var(--r);
-	}
 	@keyframes ask {
 		50% {
 			box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 70%, transparent);
@@ -78,9 +71,6 @@
 		margin: 0 4px;
 		border-radius: 50%;
 		background: var(--text);
-	}
-	.unread.compact {
-		margin: 0 2px;
 	}
 	@media (prefers-reduced-motion: reduce) {
 		.input {

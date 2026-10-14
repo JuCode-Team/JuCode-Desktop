@@ -79,10 +79,22 @@
 	} = $props();
 
 	let rootEl = $state<HTMLElement | null>(null);
-	let drag = $state<{ tabId: string; label: string; x: number; y: number; live: boolean } | null>(null);
+	/** A tab being dragged: `dx` is how far the pointer has moved along its
+	 *  own bar, `width` the room the other tabs make for it, `from` its index. */
+	let drag = $state<{
+		tabId: string;
+		label: string;
+		x: number;
+		y: number;
+		dx: number;
+		live: boolean;
+		fromLeaf: string;
+		from: number;
+		width: number;
+	} | null>(null);
 	/** Where a dragged tab would land: a zone of a pane (stack / split), or a
-	 *  place in a tab bar (`index`; `x`: the insertion mark, from the bar's left). */
-	type Landing = { leafId: string; zone: DropZone } | { leafId: string; index: number; x: number };
+	 *  place in a tab bar (`index` among the bar's other tabs). */
+	type Landing = { leafId: string; zone: DropZone } | { leafId: string; index: number };
 	let hover = $state<Landing | null>(null);
 	const zoneOf = (h: Landing | null) => (h && 'zone' in h ? h : null);
 	const slotOf = (h: Landing | null) => (h && 'index' in h ? h : null);
@@ -135,27 +147,51 @@
 
 	/** The tab-bar slot under the pointer: the bar the tab came from keeps it
 	 *  until the pointer is well clear of it (DRAG_OUT below), so a reorder
-	 *  never turns into a split by accident. */
+	 *  never turns into a split by accident. `bars`: the bars and the centres
+	 *  of their other tabs as they were when the drag began (the tabs move
+	 *  aside while it goes on). */
 	const DRAG_OUT = 28;
-	function slotAt(x: number, y: number, tabId: string, fromLeaf: string): Landing | null {
-		if (!rootEl) return null;
-		for (const bar of rootEl.querySelectorAll<HTMLElement>('[data-bar]')) {
-			const r = bar.getBoundingClientRect();
-			const slack = bar.dataset.bar === fromLeaf ? DRAG_OUT : 4;
+	type Bar = { leafId: string; rect: DOMRect; centres: number[] };
+	function measureBars(tabId: string): Bar[] {
+		if (!rootEl) return [];
+		return [...rootEl.querySelectorAll<HTMLElement>('[data-bar]')].map((bar) => ({
+			leafId: bar.dataset.bar!,
+			rect: bar.getBoundingClientRect(),
+			centres: [...bar.querySelectorAll<HTMLElement>('[data-tab]')]
+				.filter((el) => el.dataset.tab !== tabId)
+				.map((el) => {
+					const r = el.getBoundingClientRect();
+					return r.left + r.width / 2;
+				})
+		}));
+	}
+	function slotAt(bars: Bar[], x: number, y: number, fromLeaf: string): Landing | null {
+		for (const { leafId, rect: r, centres } of bars) {
+			const slack = leafId === fromLeaf ? DRAG_OUT : 4;
 			if (x < r.left || x > r.right || y < r.top - slack || y > r.bottom + slack) continue;
-			const tabs = [...bar.querySelectorAll<HTMLElement>('[data-tab]')].filter((el) => el.dataset.tab !== tabId);
-			const rects = tabs.map((el) => el.getBoundingClientRect());
-			const index = rects.filter((tr) => tr.left + tr.width / 2 < x).length;
-			const edge = index < rects.length ? rects[index].left - 2 : rects.length ? rects[rects.length - 1].right + 1 : r.left + 8;
-			return { leafId: bar.dataset.bar!, index, x: edge - r.left };
+			return { leafId, index: centres.filter((c) => c < x).length };
 		}
 		return null;
 	}
 
+	/** How far tab `j` of `leaf` moves while a tab is dragged along a bar: the
+	 *  dragged one follows the pointer, the others make room where it would land. */
+	function shiftOf(leaf: LeafNode, j: number): number {
+		const slot = slotOf(hover);
+		if (!drag?.live || !slot || slot.leafId !== leaf.id) return 0;
+		const own = leaf.id === drag.fromLeaf;
+		if (own && j === drag.from) return drag.dx;
+		const k = own && j > drag.from ? j - 1 : j;
+		if (!own) return k >= slot.index ? drag.width : 0;
+		if (k >= drag.from && k < slot.index) return -drag.width;
+		if (k >= slot.index && k < drag.from) return drag.width;
+		return 0;
+	}
+
 	// A press is a click (activate) until the pointer travels 8px; then it is
-	// a drag. Along a tab bar it reorders (a mark shows where the tab goes);
-	// pulled out of the bar, it moves to another pane or splits one, with a
-	// floating label and a landing preview under the cursor.
+	// a drag. Along a tab bar it reorders: the tab follows the pointer and the
+	// others slide aside; pulled out of the bar, it moves to another pane or
+	// splits one, with a floating label and a landing preview under the cursor.
 	function tabPointerDown(e: PointerEvent, tab: TileTab) {
 		if (e.button !== 0) return;
 		// Stop the browser from starting a text selection under the drag
@@ -163,18 +199,25 @@
 		e.preventDefault();
 		const startX = e.clientX;
 		const startY = e.clientY;
-		drag = { tabId: tab.id, label: label(tab), x: startX, y: startY, live: false };
-		const fromLeaf = (e.currentTarget as HTMLElement).closest<HTMLElement>('[data-bar]')?.dataset.bar ?? '';
+		const el = e.currentTarget as HTMLElement;
+		const fromLeaf = el.closest<HTMLElement>('[data-bar]')?.dataset.bar ?? '';
+		const from = leavesOf(layout.root).find((l) => l.id === fromLeaf)?.tabs.findIndex((x) => x.id === tab.id) ?? -1;
+		// The bar's gap between tabs (.ltabs) is part of the room a tab takes.
+		const width = el.getBoundingClientRect().width + 2;
+		let bars: Bar[] = [];
+		drag = { tabId: tab.id, label: label(tab), x: startX, y: startY, dx: 0, live: false, fromLeaf, from, width };
 		const preventSelect = (ev: Event) => {
 			if (drag) ev.preventDefault();
 		};
 		const move = (ev: PointerEvent) => {
 			if (!drag) return;
 			if (!drag.live && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 8) return;
+			if (!drag.live) bars = measureBars(drag.tabId);
 			drag.live = true;
 			drag.x = ev.clientX;
 			drag.y = ev.clientY;
-			hover = slotAt(ev.clientX, ev.clientY, drag.tabId, fromLeaf) ?? zoneAt(ev.clientX, ev.clientY);
+			drag.dx = ev.clientX - startX;
+			hover = slotAt(bars, ev.clientX, ev.clientY, fromLeaf) ?? zoneAt(ev.clientX, ev.clientY);
 		};
 		const up = () => {
 			window.removeEventListener('pointermove', move);
@@ -251,7 +294,7 @@
 			</div>
 		</div>
 	{/if}
-	{#if drag?.live && !slotOf(hover)}
+	{#if drag?.live && slotOf(hover)?.leafId !== drag.fromLeaf}
 		<div
 			class="ghost"
 			bind:clientWidth={ghostW}
@@ -295,14 +338,17 @@
 	>
 		{#if !solo}
 		<div class="lbar" data-tauri-drag-region data-bar={leaf.id} ondblclick={(e) => barDblClick(e, leaf)} role="tablist" tabindex="-1">
-			{#if drag?.live && slotOf(hover)?.leafId === leaf.id}<span class="insert" style:left="{slotOf(hover)!.x}px"></span>{/if}
 			<div class="ltabs">
-				{#each leaf.tabs as tab (tab.id)}
+				{#each leaf.tabs as tab, j (tab.id)}
 					{@const chrome = decorate?.(tab) ?? null}
+					{@const dragged = drag?.live && drag.tabId === tab.id}
+					{@const shift = shiftOf(leaf, j)}
 					<div
 						class="ltab"
 						class:on={leaf.active === tab.id}
-						class:lifted={drag?.live && drag.tabId === tab.id}
+						class:lifted={dragged && slotOf(hover)?.leafId !== leaf.id}
+						class:held={dragged && slotOf(hover)?.leafId === leaf.id}
+						style:transform={shift ? `translateX(${shift}px)` : undefined}
 						data-tab={tab.id}
 						role="tab"
 						tabindex="0"
@@ -480,8 +526,8 @@
 	.ltabs::-webkit-scrollbar {
 		height: 0;
 	}
-	/* Tabs read like the sidebar's rows: no outline, a soft fill marks the
-	   open one, the rest are dim text until hovered. */
+	/* Block tabs: a fill marks the open one, the rest are dim text on the bar
+	   until hovered. */
 	.ltab {
 		display: flex;
 		align-items: center;
@@ -501,27 +547,29 @@
 			color var(--t-fast) var(--ease-out);
 	}
 	.ltab:hover {
-		background: var(--surface);
 		color: var(--text);
 	}
 	.ltab.on {
 		background: var(--surface2);
 		color: var(--text);
 	}
+	/* While a tab is dragged along its bar the others slide aside; it rides
+	   above them under the pointer. */
+	.mosaic.dragging .ltab {
+		transition:
+			transform 150ms var(--ease-out),
+			background var(--t-fast) var(--ease-out),
+			color var(--t-fast) var(--ease-out);
+	}
+	.mosaic.dragging .ltab.held {
+		position: relative;
+		z-index: 2;
+		background: var(--panel);
+		box-shadow: var(--shadow-sm);
+		transition: none;
+	}
 	.ltab.lifted {
 		opacity: 0.45;
-	}
-	/* Where a tab dragged along a bar would go. */
-	.insert {
-		position: absolute;
-		top: 8px;
-		bottom: 8px;
-		z-index: 2;
-		width: 2px;
-		margin-left: -1px;
-		border-radius: var(--r);
-		background: var(--brand);
-		pointer-events: none;
 	}
 	.llabel {
 		min-width: 0;

@@ -1397,7 +1397,7 @@
 {#snippet tabMark(tab: TileTab)}
 	{@const sid = chatSessionOf(tab.panel)}
 	{@const s = sid ? sessionMap.get(sid) : undefined}
-	{#if s}<SessionMark status={sessionStatus(s.chat)} compact />{/if}
+	{#if s}<SessionMark status={sessionStatus(s.chat)} />{/if}
 	{@const sub = subagentOf(tab.panel)}
 	{#if sub}<StateIcon state={subagentInfo(sub.sessionId, sub.agentId).state} size={12} />{/if}
 {/snippet}
