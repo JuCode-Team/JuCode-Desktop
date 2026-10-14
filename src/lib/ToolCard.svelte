@@ -1,11 +1,14 @@
 <script lang="ts">
 	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import CheckIcon from '@lucide/svelte/icons/check';
+	import XIcon from '@lucide/svelte/icons/x';
 	import { untrack } from 'svelte';
 	import Collapse from '$lib/ui/Collapse.svelte';
 	import { t } from '$lib/i18n';
 	import Notice from '$lib/ui/Notice.svelte';
-	import { parseToolOutput, toolIcon, toolTarget, toolVerb, unwrapShell } from '$lib/toolSummary';
+	import { parseToolOutput, toolTarget, toolVerb, unwrapShell } from '$lib/toolSummary';
+	import { fmtDur } from '$lib/turnStats';
 
 	let {
 		name,
@@ -13,7 +16,11 @@
 		running,
 		isError,
 		subagent = '',
-		trace
+		trace,
+		startedAt,
+		endedAt,
+		now = 0,
+		framed = false
 	}: {
 		name: string;
 		output: string;
@@ -23,7 +30,16 @@
 		subagent?: string;
 		/** An Agent / Workflow call: opens what it ran in the agent trace. */
 		trace?: { label: string; run: () => void };
+		/** When the call started and returned, ms (absent: no time shown). */
+		startedAt?: number;
+		endedAt?: number;
+		/** The clock a running call's time counts to. */
+		now?: number;
+		/** The call is a tool card of its own (a run of one call). */
+		framed?: boolean;
 	} = $props();
+
+	const took = $derived(startedAt ? Math.max(0, (endedAt ?? (running ? now : startedAt)) - startedAt) : null);
 
 	// Auto-expand while the tool runs, auto-collapse once it finishes. Starts in
 	// that state (a card remounting — windowed back in, its group reopened — must
@@ -40,7 +56,6 @@
 	const parsed = $derived(parseToolOutput(output));
 	const s = (v: unknown) => (typeof v === 'string' ? v : '');
 	const verb = $derived(toolVerb(name));
-	const Icon = $derived(toolIcon(name));
 	const target = $derived(toolTarget(name, parsed));
 
 	const kind = $derived(s(parsed?.kind));
@@ -98,6 +113,10 @@
 			: []
 	);
 	const truncated = $derived(parsed?.truncated === true);
+
+	// Long output shows its first lines until expanded, per block.
+	const CLAMP = 4;
+	let fullBlocks = $state<Record<string, boolean>>({});
 	const bytes = $derived(
 		typeof parsed?.written_bytes === 'number'
 			? (parsed!.written_bytes as number)
@@ -130,9 +149,25 @@
 	const unsupportedImage = $derived(kind === 'image' && typeof parsed?.base64 === 'string' && !imageSrc);
 </script>
 
-<div class="tool" class:err={isError || !!errorText}>
+{#snippet clamped(key: string, lines: { text: string; cls?: string }[], cls = '')}
+	{@const full = fullBlocks[key] || lines.length <= CLAMP}
+	<pre class={cls}>{#each full ? lines : lines.slice(0, CLAMP) as l, i (i)}<span class={l.cls}>{l.text}
+</span>{/each}</pre>
+	{#if lines.length > CLAMP}
+		<button class="more" onclick={() => (fullBlocks[key] = !fullBlocks[key])}>
+			{#if full}{t('chat.lines.less')}{:else}{t('chat.lines.shown', { n: CLAMP, m: lines.length })} · {t('chat.lines.all')}{/if}
+		</button>
+	{/if}
+{/snippet}
+{#snippet plain(key: string, text: string, cls = '')}
+	{@render clamped(key, text.replace(/\n$/, '').split('\n').map((l) => ({ text: l })), cls)}
+{/snippet}
+
+<div class="tool" class:framed class:err={isError || !!errorText}>
 	<button class="head" class:static={isRead} onclick={() => !isRead && (collapsed = !collapsed)}>
-		<span class="ico"><Icon size={14} /></span>
+		<span class="st">
+			{#if running}<LoaderCircleIcon size={14} class="spin" />{:else if isError || errorText}<XIcon size={14} class="bad" />{:else}<CheckIcon size={14} class="good" />{/if}
+		</span>
 		<span class="verb">{verb}</span>
 		{#if target}<span class="target">{target}</span>{/if}
 		{#if subagent}<span class="by" title={t('chat.bySubagent', { name: subagent })}>{subagent}</span>{/if}
@@ -142,12 +177,9 @@
 		{#if partialApply}
 			<span class="partial">{t('chat.partialApply', { n: partialApply.n, m: partialApply.m })}</span>
 		{/if}
-		{#if isError || errorText}
-			<span class="fail">{t('chat.toolError')}</span>
-		{/if}
-		{#if running}
-			<LoaderCircleIcon size={12} class="spin" />
-		{:else if !isRead}
+		<span class="grow"></span>
+		{#if took !== null}<span class="took">{fmtDur(took)}</span>{/if}
+		{#if !isRead}
 			<span class="chev" class:open={!collapsed}><ChevronRightIcon size={14} /></span>
 		{/if}
 	</button>
@@ -161,7 +193,7 @@
 				{#if errorText}
 					<div class="err-text"><Notice mono>{errorText}</Notice></div>
 				{:else if !parsed}
-					{#if output}<pre>{output}</pre>{/if}
+					{#if output}{@render plain('out', output)}{/if}
 				{:else if imageSrc}
 					<img class="img" src={imageSrc} alt={target} />
 				{:else if unsupportedImage}
@@ -169,23 +201,21 @@
 				{:else if kind === 'binary'}
 					<div class="meta">{t('chat.binaryFile')}{#if bytes !== null} · {fmtBytes(bytes)}{/if}</div>
 				{:else if diffLines.length}
-					<pre class="diff">{#each diffLines as d (d)}<span class={d.cls}>{d.line}
-	</span>{/each}</pre>
+					{@render clamped('diff', diffLines.map((d) => ({ text: d.line, cls: d.cls })), 'diff')}
 				{:else if command || stdout || stderr || exitCode !== null}
 					{#if command}<div class="cmd">$ {command}</div>{/if}
-					{#if stdout}<pre>{stdout}</pre>{/if}
-					{#if stderr}<pre class="stderr">{stderr}</pre>{/if}
+					{#if stdout}{@render plain('stdout', stdout)}{/if}
+					{#if stderr}{@render plain('stderr', stderr, 'stderr')}{/if}
 				{:else if hasEntries}
-					{#if entries.length}<pre class="entries">{entries.join('\n')}</pre>{:else}<div class="meta">{t('chat.emptyDir')}</div>{/if}
+					{#if entries.length}{@render clamped('entries', entries.map((e) => ({ text: e })), 'entries')}{:else}<div class="meta">{t('chat.emptyDir')}</div>{/if}
 				{:else if symbols.length}
-					<pre class="entries">{#each symbols as sym (sym.line)}{sym.line}  {sym.symbol}
-	{/each}</pre>
+					{@render clamped('symbols', symbols.map((sym) => ({ text: `${sym.line}  ${sym.symbol}` })), 'entries')}
 				{:else if kind === 'text'}
-					{#if content}<pre>{content}</pre>{:else}<div class="meta">{t('chat.emptyFile')}</div>{/if}
+					{#if content}{@render plain('content', content)}{:else}<div class="meta">{t('chat.emptyFile')}</div>{/if}
 				{:else if bytes !== null || truncated}
 					<div class="meta">{[bytes !== null ? fmtBytes(bytes) : '', truncated ? t('chat.truncated') : ''].filter(Boolean).join(' · ')}</div>
 				{:else if fallbackText}
-					<pre>{fallbackText}</pre>
+					{@render plain('fallback', fallbackText)}
 				{/if}
 			</div>
 		</Collapse>
@@ -193,14 +223,14 @@
 </div>
 
 <style>
-	/* Flat, card-less row: a muted one-line label with a trailing chevron,
-	 * matching the reasoning header's aesthetic. The expanded body hangs below
-	 * behind a hairline left rule instead of inside a bordered box. */
+	/* One call as a row of its tool card (ToolGroup.svelte): its status, what it
+	 * did, its time and a chevron; the output expands below. `framed`: the row
+	 * is the card's header itself. */
 	.head {
-		display: inline-flex;
+		display: flex;
 		align-items: center;
 		gap: 7px;
-		max-width: 100%;
+		width: 100%;
 		min-height: 26px;
 		text-align: left;
 		padding: 2px 0;
@@ -226,17 +256,40 @@
 	.chev.open {
 		transform: rotate(90deg);
 	}
-	.ico {
+	.st {
 		display: inline-flex;
 		flex-shrink: 0;
 		color: var(--dim2);
-		transition: color var(--t-fast) var(--ease-out);
 	}
-	.head:hover:not(.static) .ico {
-		color: var(--text);
+	.st :global(.good) {
+		color: var(--ok);
 	}
-	.tool.err .ico {
-		color: color-mix(in oklab, var(--err) 70%, var(--dim));
+	.st :global(.bad) {
+		color: var(--err);
+	}
+	.grow {
+		flex: 1;
+	}
+	.took {
+		flex-shrink: 0;
+		color: var(--dim2);
+		font-size: var(--fs-2xs);
+		font-variant-numeric: tabular-nums;
+	}
+	.framed {
+		border: 1px solid var(--border);
+		border-radius: var(--r);
+	}
+	.framed .head {
+		padding: 4px 10px;
+		min-height: 34px;
+	}
+	.framed .body {
+		margin: 0;
+		padding: 2px 10px 8px 31px;
+	}
+	.framed .trace {
+		margin: 0 0 6px 31px;
 	}
 	.verb {
 		font-weight: 500;
@@ -250,7 +303,7 @@
 		text-overflow: ellipsis;
 	}
 	.trace {
-		margin: 2px 0 2px 22px;
+		margin: 2px 0 2px 21px;
 		padding: 0;
 		border: none;
 		background: none;
@@ -280,16 +333,11 @@
 	.exit.bad {
 		color: var(--err);
 	}
-	.fail {
-		font-size: var(--fs-2xs);
-		color: var(--err);
-		flex-shrink: 0;
-	}
 	.tool.err .head {
 		color: color-mix(in oklab, var(--err) 70%, var(--dim));
 	}
 	.body {
-		margin: 2px 0 6px 20px;
+		margin: 2px 0 6px 21px;
 	}
 	.partial {
 		font-size: var(--fs-2xs);
@@ -306,10 +354,21 @@
 		font-size: var(--fs-2xs);
 		line-height: 1.45;
 		color: var(--dim);
-		max-height: 200px;
+		max-height: 480px;
 		overflow: auto;
 		white-space: pre-wrap;
 		word-break: break-word;
+	}
+	.more {
+		padding: 0;
+		border: none;
+		background: none;
+		color: var(--dim2);
+		font-size: var(--fs-2xs);
+		cursor: pointer;
+	}
+	.more:hover {
+		color: var(--text);
 	}
 	.cmd {
 		padding: 4px 0 0;

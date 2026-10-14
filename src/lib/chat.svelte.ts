@@ -75,6 +75,10 @@ export type Msg =
 			/** A subagent call's arguments as the engine showed them before its
 			 *  output replaced them (the agent's name and task). */
 			args?: string;
+			/** When the call started and returned, ms; absent on calls replayed
+			 *  from a transcript. */
+			startedAt?: number;
+			endedAt?: number;
 	  }
 	| { kind: 'system'; text: string }
 	| { kind: 'error'; text: string }
@@ -892,7 +896,10 @@ export class ChatState {
 	 *  delivered (see the `status` handler). */
 	#finishStuckTools() {
 		for (const m of this.messages) {
-			if (m.kind === 'tool' && m.running) m.running = false;
+			if (m.kind === 'tool' && m.running) {
+				m.running = false;
+				m.endedAt ??= Date.now();
+			}
 		}
 	}
 
@@ -1096,6 +1103,7 @@ export class ChatState {
 						output: '',
 						running: true,
 						isError: false,
+						startedAt: Date.now(),
 						...(str(ev.subagent) ? { subagent: str(ev.subagent) } : {})
 					};
 					this.messages.push(toolMsg);
@@ -1126,6 +1134,7 @@ export class ChatState {
 					t.output = boundedOutput(str(ev.output));
 					t.running = false;
 					t.isError = ev.is_error === true;
+					t.endedAt = Date.now();
 				}
 				if (str(ev.name) === 'spawn_agent' && ev.is_error !== true) this.#spawned(str(ev.call_id), str(ev.output));
 				// Reload editor tabs of files a successful edit tool touched.

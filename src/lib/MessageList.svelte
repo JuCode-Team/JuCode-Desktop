@@ -6,7 +6,7 @@
 	import { fade } from 'svelte/transition';
 	import Markdown from '$lib/Markdown.svelte';
 	import Collapse from '$lib/ui/Collapse.svelte';
-	import ToolCard from '$lib/ToolCard.svelte';
+	import ToolGroup from '$lib/ToolGroup.svelte';
 	import SubagentCard from '$lib/agents/SubagentCard.svelte';
 	import PlanCard, { type PlanAction } from '$lib/PlanCard.svelte';
 	import type { ApprovalMode } from '$lib/approval';
@@ -15,7 +15,6 @@
 	import DeliveryNotice from '$lib/DeliveryNotice.svelte';
 	import { parseDelivery } from '$lib/delivery';
 	import { stableBlocks } from '$lib/streamBlocks';
-	import { parseToolOutput, toolIcon, toolTarget, toolVerb } from '$lib/toolSummary';
 	import Indicator from '$lib/Indicator.svelte';
 	import CallTimer from '$lib/CallTimer.svelte';
 	import RetryNotice from '$lib/RetryNotice.svelte';
@@ -27,7 +26,6 @@
 	import { fmtDur, turnParts } from '$lib/turnStats';
 	import { SvelteSet } from 'svelte/reactivity';
 	import UserImage from '$lib/UserImage.svelte';
-	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import QuoteIcon from '@lucide/svelte/icons/quote';
 	import ListPlusIcon from '@lucide/svelte/icons/list-plus';
 
@@ -406,25 +404,29 @@
 		return !!m.text && m.text.trim().length > 0;
 	}
 
-	// A run of consecutive tool calls (rows that show nothing don't break it)
-	// renders as one row on its first call: a header naming the count and the
-	// latest call, then — expanded — the calls in a tight list. The other calls
-	// of the run render no row of their own.
-	const GROUP_MIN = 2;
+	// A run of consecutive tool calls (rows that show nothing don't break it),
+	// with the reasoning that led to each of them, renders as one card on its
+	// first row; the run's other rows render no row of their own. Reasoning
+	// that no call follows (yet) stays a block of its own.
 	const toolGroups = $derived.by(() => {
-		const members = new Map<Msg, Msg[]>(); // first call → the run
+		const members = new Map<Msg, Msg[]>(); // first row → the run
 		const headOf = new Map<Msg, Msg>();
 		let run: Msg[] = [];
+		let thoughts: Msg[] = [];
 		const flush = () => {
-			if (run.length >= GROUP_MIN) {
+			if (run.length) {
 				members.set(run[0]!, run);
 				for (const x of run) headOf.set(x, run[0]!);
 			}
 			run = [];
+			thoughts = [];
 		};
 		for (const m of messages) {
 			if (!hasContent(m)) continue;
-			if (m.kind === 'tool' && !isAgentCall(m)) run.push(m);
+			if (m.kind === 'tool' && !isAgentCall(m)) {
+				run.push(...thoughts, m);
+				thoughts = [];
+			} else if (m.kind === 'reasoning') thoughts.push(m);
 			else flush();
 		}
 		flush();
@@ -440,21 +442,6 @@
 	function shown(m: Msg): boolean {
 		return hasContent(m) && (!toolGroups.headOf.has(m) || toolGroups.members.has(m));
 	}
-	function groupInfo(run: Msg[]) {
-		let running = false;
-		let failed = 0;
-		for (const x of run) {
-			if (x.kind !== 'tool') continue;
-			if (x.running) running = true;
-			if (x.isError) failed++;
-		}
-		const last = run[run.length - 1];
-		const latest =
-			last?.kind === 'tool'
-				? { Icon: toolIcon(last.name), verb: toolVerb(last.name), target: toolTarget(last.name, parseToolOutput(last.output)) }
-				: null;
-		return { running, failed, latest };
-	}
 </script>
 
 <svelte:document onselectionchange={() => cite && window.getSelection()?.isCollapsed && (cite = null)} />
@@ -463,8 +450,11 @@
 	{#each windowRows as m, k (m)}
 		{@const i = range.first + k}
 		{#if shown(m)}
+			{@const run = toolGroups.members.get(m)}
 			<div class="mwrap" class:animate={!virtual} class:hit={i === findActive} bind:this={rowEls[i]} use:measure={m}>
-				{#if m.kind === 'user'}
+				{#if run}
+					<ToolGroup {run} open={openGroups.has(m)} onToggle={() => (openGroups.has(m) ? openGroups.delete(m) : openGroups.add(m))} {onFile} {traceOf} />
+				{:else if m.kind === 'user'}
 			{@const delivery = parseDelivery(m.text)}
 			{@const drop = userOrdinal.size - (userOrdinal.get(m) ?? 0)}
 			{#if delivery}
@@ -535,36 +525,8 @@
 					</div>
 				</Collapse>
 			</div>
-		{:else if m.kind === 'tool'}
-			{@const run = toolGroups.members.get(m)}
-			{#if run}
-				{@const g = groupInfo(run)}
-				{@const open = openGroups.has(m)}
-				<button class="tgroup" class:open onclick={() => (open ? openGroups.delete(m) : openGroups.add(m))}>
-					<span class="tg-count">{t('chat.toolGroup', { n: run.length })}</span>
-					{#if g.failed}<span class="tg-fail">{t('chat.toolGroupFailed', { n: g.failed })}</span>{/if}
-					{#if g.latest && !open}
-						<span class="tg-latest">
-							<g.latest.Icon size={13} />
-							<span class="tg-verb">{g.latest.verb}</span>
-							{#if g.latest.target}<span class="tg-target">{g.latest.target}</span>{/if}
-						</span>
-					{/if}
-					{#if g.running}<LoaderCircleIcon size={12} class="spin" />{/if}
-					<span class="rchev"><ChevronRightIcon size={14} /></span>
-				</button>
-				{#if open}
-					<div class="tg-list">
-						{#each run as x (x)}
-							{#if x.kind === 'tool'}<ToolCard name={x.name} output={x.output} running={x.running} isError={x.isError} subagent={x.subagent} trace={traceOf?.(x) ?? undefined} />{/if}
-						{/each}
-					</div>
-				{/if}
-			{:else if agents && isAgentCall(m)}
-				<SubagentCard name={m.name} callId={m.callId} output={m.output} args={m.args} running={m.running} isError={m.isError} rows={agents} onOpen={onOpenAgent} />
-			{:else}
-				<ToolCard name={m.name} output={m.output} running={m.running} isError={m.isError} subagent={m.subagent} trace={traceOf?.(m) ?? undefined} />
-			{/if}
+		{:else if m.kind === 'tool' && agents}
+			<SubagentCard name={m.name} callId={m.callId} output={m.output} args={m.args} running={m.running} isError={m.isError} rows={agents} onOpen={onOpenAgent} />
 		{:else if m.kind === 'plan'}
 			<PlanCard id={m.id} title={m.title} text={m.text} status={m.status} actionable={m === lastShown} defaultMode={planMode} onAction={onPlan} onOpen={onOpenPlan} />
 		{:else if m.kind === 'error'}
@@ -879,74 +841,8 @@
 		color: var(--dim2);
 		transition: transform var(--t-base) var(--ease-base);
 	}
-	.reason.open .rchev,
-	.tgroup.open .rchev {
+	.reason.open .rchev {
 		transform: rotate(90deg);
-	}
-	.tgroup {
-		display: inline-flex;
-		align-items: center;
-		gap: 8px;
-		max-width: 100%;
-		min-height: 26px;
-		text-align: left;
-		padding: 2px 0;
-		border: none;
-		background: none;
-		color: var(--dim);
-		font-size: var(--fs-sm);
-		font-weight: 500;
-		cursor: pointer;
-		transition: color var(--t-fast) var(--ease-out);
-	}
-	.tgroup:hover {
-		color: var(--text);
-	}
-	.tg-count,
-	.tg-fail {
-		flex-shrink: 0;
-		white-space: nowrap;
-	}
-	/* The latest call, in the card's own format, trailing the count. */
-	.tg-latest {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		min-width: 0;
-		padding-left: 8px;
-		border-left: 1px solid var(--border);
-		color: var(--dim2);
-		font-weight: 400;
-	}
-	.tg-latest :global(svg) {
-		flex-shrink: 0;
-	}
-	.tg-verb {
-		flex-shrink: 0;
-	}
-	.tg-target {
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		font-family: var(--font-mono);
-		font-size: var(--fs-xs);
-	}
-	.tgroup .rchev,
-	.tgroup :global(.spin) {
-		flex-shrink: 0;
-	}
-	.tg-fail {
-		font-size: var(--fs-2xs);
-		font-weight: 400;
-		color: var(--err);
-	}
-	/* The group's calls hang indented under its header. */
-	.tg-list {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		margin: 6px 0 0 20px;
 	}
 	.reason-body {
 		margin-top: 4px;
