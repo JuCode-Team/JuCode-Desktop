@@ -55,7 +55,8 @@ const DAEMON_EVENTS = new Set([
 	'tasks',
 	'workspaces',
 	'dispatches',
-	'requirements'
+	'requirements',
+	'session_reopened'
 ]);
 const CLOSE_TIMEOUT_MS = 10_000;
 
@@ -68,6 +69,11 @@ export class DaemonClient {
 	onFrame: (desktopId: string, raw: string) => void = () => {};
 	/** Called when a hosted session stops or the connection is lost. */
 	onExit: (desktopId: string) => void = () => {};
+	/** Called when the daemon closed a session's engine because nothing went
+	 *  on in it (`session_closed` reason `idle`): the session is not gone and
+	 *  opens again, resuming, when the user next sends to it. Unset, it is an
+	 *  exit like any other. */
+	onIdleClose: ((desktopId: string) => void) | null = null;
 	/** Daemon-wide frames: agents, sessions, deliveries, questions, pending
 	 *  actions and new reports. */
 	onEvent: (frame: Record<string, unknown>) => void = () => {};
@@ -272,7 +278,8 @@ export class DaemonClient {
 			if (desktopId) {
 				this.#toDaemon.delete(desktopId);
 				this.#toDesktop.delete(session);
-				this.onExit(desktopId);
+				if (frame.reason === 'idle' && this.onIdleClose) this.onIdleClose(desktopId);
+				else this.onExit(desktopId);
 			}
 			return;
 		}

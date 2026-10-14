@@ -46,6 +46,65 @@ beforeEach(() => {
 });
 
 describe('SessionStore lifecycle', () => {
+	it('a sleeping session wakes on a plan decision, and any start ends its sleep', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p);
+		begin(id);
+		await flush();
+		vi.mocked(hostSession).mockClear();
+
+		store.sleep(id);
+		dispatch(id, { op: 'approve_plan', id: 'plan-1', decision: 'approve' });
+		await flush();
+		expect(hostSession).toHaveBeenCalledTimes(1);
+
+		// Another client woke it: this one follows it again.
+		store.sleep(id);
+		vi.mocked(hostSession).mockClear();
+		store.followReopened(p.sessions[0].chat.sessionId);
+		await flush();
+		expect(hostSession).toHaveBeenCalledTimes(1);
+
+		// A restart (a provider switch, say) of a sleeping session leaves it awake.
+		store.sleep(id);
+		store.restartSession(id);
+		await flush();
+		expect(p.sessions[0].dormant).toBe(false);
+		vi.mocked(hostSession).mockClear();
+		dispatch(id, { op: 'user_message', content: 'no second start' });
+		await flush();
+		expect(hostSession).not.toHaveBeenCalled();
+	});
+
+	it('a session closed for idleness sleeps, and the next message resumes it', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p);
+		begin(id);
+		await flush();
+		const conv = p.sessions[0].chat.sessionId;
+		vi.mocked(hostSession).mockClear();
+		vi.mocked(sendLine).mockClear();
+
+		store.sleep(id);
+		expect(p.sessions[0].dormant).toBe(true);
+		// Nothing restarts it on its own, as an exit would.
+		await flush();
+		expect(hostSession).not.toHaveBeenCalled();
+		expect(p.sessions[0].chat.messages.some((m) => m.kind === 'error')).toBe(false);
+
+		dispatch(id, { op: 'user_message', content: 'back' });
+		await flush();
+		expect(hostSession).toHaveBeenCalledTimes(1);
+		expect(vi.mocked(hostSession).mock.calls[0][2]).toBe(conv);
+		expect(p.sessions[0].dormant).toBe(false);
+		const sent = vi.mocked(sendLine).mock.calls.map(([, line]) => JSON.parse(line));
+		expect(sent.at(-1)).toMatchObject({ op: 'user_message', content: 'back' });
+	});
+
 	it('addSession makes a draft active; its first message opens it in the daemon', async () => {
 		const store = new SessionStore();
 		const p = proj();

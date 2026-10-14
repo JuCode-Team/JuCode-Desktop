@@ -376,8 +376,12 @@
 		refreshGitBranch();
 	});
 	// …and refreshed in place on window focus + a slow poll, so a checkout made
-	// in GitPanel or an external terminal doesn't leave the footer stale.
+	// in GitPanel or an external terminal doesn't leave the footer stale. Only
+	// the active pane polls: every tab stays mounted, and each poll is a git
+	// process.
 	$effect(() => {
+		if (!isActive) return;
+		untrack(refreshGitBranch);
 		const iv = setInterval(refreshGitBranch, 12_000);
 		return () => clearInterval(iv);
 	});
@@ -896,6 +900,8 @@
 		const want = prefs.thinkingSummaries;
 		if (chat.thinkingSummaries === null || chat.thinkingSummaries === want || thinkingAsked === want) return;
 		if (chat.busy || chat.restarting || chat.engineState === 'exited') return;
+		// Asleep: the engine it wakes to starts with the setting.
+		if (session.dormant) return;
 		thinkingAsked = want;
 		untrack(() => send({ op: 'command', input: `/thinking ${want ? 'on' : 'off'}` }));
 	});
@@ -1130,7 +1136,7 @@
 	});
 </script>
 
-<svelte:window onkeydown={onWindowKey} onfocus={refreshGitBranch} />
+<svelte:window onkeydown={onWindowKey} onfocus={() => isActive && refreshGitBranch()} />
 
 <div class="chatpane" style:--chat-w="{chatW}px" style:--chat-pad="{chatPad}px">
 	{#if owner}

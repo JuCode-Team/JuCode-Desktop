@@ -13,6 +13,9 @@
 	let fit: FitAddon | undefined;
 	const id = `term-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 	let cleanups: Array<() => void> = [];
+	/** Unmounted: the setup below may still be awaiting. */
+	let disposed = false;
+	const runCleanups = () => cleanups.splice(0).forEach((f) => f());
 
 	/** Fit the grid to the panel and tell the shell its new size. */
 	function refit() {
@@ -24,7 +27,6 @@
 	}
 
 	onMount(() => {
-		let disposed = false;
 		(async () => {
 			term = new Terminal({ ...terminalLook(), cursorBlink: true, allowProposedApi: true });
 			fit = new FitAddon();
@@ -41,20 +43,22 @@
 				if (e.payload === id) term?.write('\r\n\x1b[2m[process exited]\x1b[0m\r\n');
 			});
 			cleanups.push(unOut, unExit);
+			if (disposed) return runCleanups();
 
 			term.onData((d) => ptyWrite(id, d));
 			term.onResize(({ cols, rows }) => ptyResize(id, cols, rows).catch(() => {}));
 			await ptyOpen(id, term.cols, term.rows, cwd || undefined);
+			// Closed while the shell was starting: onDestroy's close came
+			// before the shell existed, so it is closed here.
+			if (disposed) {
+				ptyClose(id);
+				return runCleanups();
+			}
 
 			const ro = new ResizeObserver(refit);
 			if (host) ro.observe(host);
 			cleanups.push(() => ro.disconnect());
-
-			if (disposed) cleanups.forEach((f) => f());
 		})();
-		return () => {
-			disposed = true;
-		};
 	});
 
 	// Theme and font changes; a new font size changes the grid.
@@ -66,7 +70,8 @@
 	});
 
 	onDestroy(() => {
-		cleanups.forEach((f) => f());
+		disposed = true;
+		runCleanups();
 		ptyClose(id);
 		term?.dispose();
 	});

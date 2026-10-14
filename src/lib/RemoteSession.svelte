@@ -93,7 +93,7 @@
 		onFile?: (path: string, line?: number) => void;
 		onChanges?: () => void;
 		/** Routes daemon frames and exits for `id` here; returns an unregister. */
-		register: (id: string, onFrame: (raw: string) => void, onExit: () => void) => () => void;
+		register: (id: string, onFrame: (raw: string) => void, onExit: () => void, onIdleClose?: () => void) => () => void;
 		/** Absent: nothing to go back to (the first page of a wide pane). */
 		onBack?: () => void;
 		/** The page on top of the shown tab: its approval card answers keys. */
@@ -116,6 +116,15 @@
 	$effect(() => saveComposerText(textKey, text));
 	let error = $state('');
 	let exited = $state(false);
+	/** The computer closed the engine because nothing went on in it: the
+	 *  session opens again, resuming, when something is sent. */
+	let asleep = $state(false);
+	/** The open in progress (sends while asleep share it). */
+	let reopening: Promise<void> | null = null;
+	/** Asleep: opens the session again, once however many sends ask. */
+	function reopen(): Promise<void> {
+		return (reopening ??= connect().finally(() => (reopening = null)));
+	}
 	/** Set once the session is open here; sending earlier would fail and the
 	 *  arriving snapshot would wipe the optimistic message. */
 	let connected = $state(false);
@@ -231,6 +240,7 @@
 	async function connect() {
 		error = '';
 		exited = false;
+		asleep = false;
 		connected = false;
 		try {
 			// A new session gets its id from the snapshot; later reconnects
@@ -267,13 +277,21 @@
 					fromCache = true;
 				}
 			});
-		unregister = register(id, onFrame, () => {
-			exited = true;
-			connected = false;
-			// The connection's own disconnect is handled before its sessions
-			// exit, so a computer that still looks reachable closed the session.
-			dropped = agentDirectory.status !== 'on';
-		});
+		unregister = register(
+			id,
+			onFrame,
+			() => {
+				exited = true;
+				connected = false;
+				// The connection's own disconnect is handled before its sessions
+				// exit, so a computer that still looks reachable closed the session.
+				dropped = agentDirectory.status !== 'on';
+			},
+			() => {
+				asleep = true;
+				connected = false;
+			}
+		);
 		if (!draft) void connect();
 		if (text) tick().then(autosize);
 	});
@@ -283,10 +301,17 @@
 		daemon.detach(id);
 	});
 
-	function send(op: Op) {
-		for (const line of adapter.encodeOp(op) ?? []) {
-			daemon.send(id, line).catch((e) => (error = String(e)));
+	/** Writes one op line; asleep (or reopening), once the session is open. */
+	function sendLine(line: string) {
+		if (asleep || reopening) {
+			void reopen().then(() => connected && sendLine(line));
+			return;
 		}
+		daemon.send(id, line).catch((e) => (error = String(e)));
+	}
+
+	function send(op: Op) {
+		for (const line of adapter.encodeOp(op) ?? []) sendLine(line);
 	}
 
 	/** Phones send with the button (Enter is a new line); keyboards with Enter. */
@@ -368,7 +393,7 @@
 		if (draft) {
 			draft = false;
 			await connect();
-		}
+		} else if (asleep || reopening) await reopen();
 		if (!connected) return;
 		// /btw asks beside the conversation (claude): the answer shows in the task strip.
 		const btw = !attached.length && bcaps.sideQuestions ? typed.match(/^\/btw\s+([\s\S]+)/) : null;
@@ -497,7 +522,7 @@
 		pendingModel = model;
 		clearTimeout(pendingTimer);
 		pendingTimer = setTimeout(() => (pendingModel = ''), 30_000);
-		daemon.send(id, JSON.stringify({ op: 'set_gateway', gateway, model })).catch((e) => (error = String(e)));
+		sendLine(JSON.stringify({ op: 'set_gateway', gateway, model }));
 	}
 	function closeModels() {
 		modelOpen = false;
@@ -585,7 +610,7 @@
 		chat.pendingApproval = null;
 	}
 
-	const opening = $derived(!draft && !connected && !exited);
+	const opening = $derived(!draft && !asleep && !connected && !exited);
 </script>
 
 <div class="session">

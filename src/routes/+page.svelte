@@ -42,7 +42,7 @@
 		gitCheckpointCapture,
 		daemon
 	} from '$lib/protocol';
-	import { dispatch } from '$lib/backends/router';
+	import { dispatch, isAsleep } from '$lib/backends/router';
 	import { caps } from '$lib/backends';
 	import { loadBackendSettings } from '$lib/backends/settings';
 	import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
@@ -844,10 +844,11 @@
 				store.activeId = back?.id ?? '';
 			});
 	});
-	// A session listed from the daemon opens when it is first shown.
+	// A session listed from the daemon opens when it is first shown; one the
+	// daemon closed for idleness waits for the user to send something.
 	$effect(() => {
 		const s = store.active;
-		if (s?.dormant) untrack(() => store.wake(s.id));
+		if (s?.dormant && !isAsleep(s.id)) untrack(() => store.wake(s.id));
 	});
 
 	const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
@@ -1295,7 +1296,9 @@
 			};
 			daemon.onFrame = deliver;
 			daemon.onExit = (id) => store.handleExit(id);
+			daemon.onIdleClose = (id) => store.sleep(id);
 			daemon.onEvent = (frame) => {
+				if (frame.type === 'session_reopened' && typeof frame.session === 'string') store.followReopened(frame.session);
 				agentDirectory.handle(frame);
 				sync.handle(frame);
 				requirements.handle(frame);

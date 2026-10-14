@@ -9,3 +9,4 @@
 
 - An `$effect` that calls store methods reads that store's state too, so the store's own changes re-run it (the web chat reset a new conversation as its first message saved it). Wrap the calls in `untrack` and depend only on the inputs that should drive it.
 - The CSP applies only to the packaged app, so dev mode and CI never hit it. Tauri adds a nonce to `style-src` once the HTML has a `<style>`, and that disables `'unsafe-inline'`; CodeMirror then loses every style. `src/csp.test.ts` pins the settings the frontend needs. Before a release, open the editor and a reply with math in a packaged build.
+- A session the daemon closed for idleness is asleep (`markAsleep`), not exited: it must not restart on its own, and anything that starts its engine clears the sleep (`#spawn` does). An op a sleeping session should act on goes in the router's `WAKING`, or it waits silently.

@@ -4,7 +4,7 @@ import { DaemonError, type EngineSpec } from './daemon';
 import { canHandOffToTui, isValidResumeSessionId } from './tuiHandoff';
 import { normalizeBackendId, type BackendId } from './backends';
 import { createJucodeAdapter } from './backends/jucode';
-import { clearDraft, dispatch, dropHeldOps, holdOps, ioFor, markDraft, registerAdapter, startDraft, unregisterAdapter } from './backends/router';
+import { clearAsleep, clearDraft, dispatch, dropHeldOps, holdOps, ioFor, isAsleep, markAsleep, markDraft, registerAdapter, startDraft, unregisterAdapter } from './backends/router';
 import { buildBackendOpts, defaultBackendFor } from './backends/settings';
 import { toEngineMode } from './approval';
 import { getLocale, t } from '$lib/i18n';
@@ -216,6 +216,10 @@ export class SessionStore {
 		// Ops sent until the engine is up wait for it instead of reaching no
 		// engine (or the one being replaced).
 		holdOps(s.id);
+		// Whatever starts it (a wake, a provider switch, a restart), a session
+		// asleep is not any more.
+		clearAsleep(s.id);
+		if (s.dormant) s.dormant = false;
 		s.chat.restarting = true;
 		// Background tasks belong to the engine process being replaced.
 		s.chat.bgTasks = [];
@@ -602,13 +606,13 @@ export class SessionStore {
 		return id;
 	}
 
-	/** Opens a dormant session's engine (through the daemon). */
-	wake(id: string) {
+	/** Opens a dormant session's engine (through the daemon); resolves once
+	 *  it is up. */
+	wake(id: string): Promise<void> | undefined {
 		const s = this.allSessions.find((x) => x.id === id);
 		const path = this.projectPathOf(id);
 		if (!s?.dormant || !path) return;
-		s.dormant = false;
-		this.#spawn(s, path, undefined, this.#keepModel(s), s.chat.sessionId).catch((e) => this.#engineFailed(s.chat, e));
+		return this.#spawn(s, path, undefined, this.#keepModel(s), s.chat.sessionId).catch((e) => this.#engineFailed(s.chat, e));
 	}
 
 	/** Drops a session another client removed, without telling the daemon. */
@@ -619,6 +623,7 @@ export class SessionStore {
 		unregisterAdapter(id);
 		clearDraft(id);
 		saveComposerText(id, '');
+		ChatState.forgetRunTime(id);
 		dropHeldOps(id);
 		const p = this.projects.find((pr) => pr.sessions.includes(s));
 		if (p) p.sessions = p.sessions.filter((x) => x !== s);
@@ -846,6 +851,29 @@ export class SessionStore {
 	#keepModel(s: Session): Record<string, unknown> | undefined {
 		const model = s.backendId === 'claude' ? s.chat.model || s.model : '';
 		return model ? { model } : undefined;
+	}
+
+	/** Another client sent to a session asleep here, and the daemon opened it
+	 *  again: this one follows it (watches it) again too. */
+	followReopened(sid: string) {
+		const s = this.allSessions.find((x) => x.chat.sessionId === sid);
+		if (s && isAsleep(s.id)) void this.wake(s.id);
+	}
+
+	/** The daemon closed this session's engine because nothing went on in it
+	 *  (30 minutes, or more engines open than it keeps). The session stays as
+	 *  it is on screen, without an engine, until the user sends something,
+	 *  which opens it again, resuming (see `markAsleep`). */
+	sleep(id: string) {
+		const s = this.allSessions.find((x) => x.id === id);
+		if (!s) return;
+		// Closed while this client was switching or handing it to the TUI:
+		// that flow brings the engine back itself.
+		if (s.surface === 'tui' || s.chat.switching) return this.handleExit(id);
+		s.dormant = true;
+		s.chat.engineState = 'ready';
+		s.chat.restarting = false;
+		markAsleep(id, () => this.wake(id));
 	}
 
 	/** Handle an engine exit: mark exited and auto-restart unless we've already
@@ -1095,6 +1123,8 @@ export class SessionStore {
 		unregisterAdapter(id);
 		clearDraft(id);
 		dropHeldOps(id);
+		saveComposerText(id, '');
+		ChatState.forgetRunTime(id);
 		const p = this.projects.find((pr) => pr.sessions.some((s) => s.id === id));
 		if (p) p.sessions = p.sessions.filter((s) => s.id !== id);
 		if (this.activeId === id) this.activeId = this.shownSessions[0]?.id ?? '';
@@ -1202,6 +1232,8 @@ export class SessionStore {
 		const s = this.allSessions.find((x) => x.id === id);
 		if (!s || s.surface === 'tui' || s.chat.switching || !canHandOffToTui(s.backendId)) return;
 		if (!isValidResumeSessionId(s.chat.sessionId) || !(s.chat.resumable || s.restored)) return;
+		// Asleep: the daemon hands over an open session only.
+		if (isAsleep(id)) return void this.wake(id)?.then(() => this.openInTui(id));
 		if (!daemon.sessionOf(id)) return;
 		s.surface = 'tui';
 	}

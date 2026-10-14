@@ -764,6 +764,15 @@ export class ChatState {
 		this.#assistantIdx = -1;
 	}
 
+	/** A removed session's saved run time goes with it. */
+	static forgetRunTime(key: string) {
+		try {
+			localStorage.removeItem(`jucode-run-ms:${key}`);
+		} catch {
+			/* no localStorage (e.g. tests) */
+		}
+	}
+
 	/** Keys this chat's running total to its session and loads what it ran
 	 *  before (the transcript replay carries no timing). */
 	bindRunKey(key: string) {
@@ -1401,7 +1410,7 @@ export class ChatState {
 								kind: 'tool',
 								callId: '',
 								name: str(it.name),
-								output: str(it.output),
+								output: boundedOutput(str(it.output)),
 								running: false,
 								isError: false
 							};
@@ -1623,7 +1632,7 @@ export class ChatState {
 				break;
 			case 'task_output':
 				this.taskOutputs[str(ev.task_id)] = {
-					output: str(ev.output),
+					output: boundedOutput(str(ev.output)),
 					truncated: ev.truncated === true,
 					error: str(ev.error)
 				};

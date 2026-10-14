@@ -7,7 +7,7 @@ vi.mock('$lib/protocol', () => ({
 }));
 
 import { sendOp, sendLine } from '$lib/protocol';
-import { dispatch, registerAdapter, unregisterAdapter, adapterFor, ioFor } from './router';
+import { dispatch, registerAdapter, unregisterAdapter, adapterFor, ioFor, markAsleep, isAsleep, releaseOps, clearDraft, holdOps } from './router';
 import { createJucodeAdapter } from './jucode';
 
 beforeEach(() => {
@@ -45,5 +45,33 @@ describe('backend router dispatch', () => {
 		const io = ioFor('s-ju');
 		io.sendLine('{"op":"interrupt"}');
 		expect(sendLine).toHaveBeenCalledWith('s-ju', '{"op":"interrupt"}');
+	});
+});
+
+describe('a session the daemon closed for idleness', () => {
+	it('drops live-state requests, holds settings, and wakes once on a message', () => {
+		registerAdapter('s-ju', createJucodeAdapter());
+		const wake = vi.fn(() => holdOps('s-ju'));
+		markAsleep('s-ju', wake);
+		dispatch('s-ju', { op: 'context_usage' });
+		dispatch('s-ju', { op: 'set_approval_mode', mode: 'full-auto' });
+		expect(wake).not.toHaveBeenCalled();
+		expect(sendLine).not.toHaveBeenCalled();
+
+		dispatch('s-ju', { op: 'user_message', content: 'hi' });
+		dispatch('s-ju', { op: 'user_message', content: 'again' });
+		expect(wake).toHaveBeenCalledTimes(1);
+		expect(isAsleep('s-ju')).toBe(false);
+
+		// The engine is up: what was held goes, in order; the poll did not.
+		releaseOps('s-ju');
+		const sent = vi.mocked(sendLine).mock.calls.map(([, line]) => JSON.parse(line).op);
+		expect(sent).toEqual(['set_approval_mode', 'user_message', 'user_message']);
+	});
+
+	it('is forgotten with the session', () => {
+		markAsleep('s-ju', () => {});
+		clearDraft('s-ju');
+		expect(isAsleep('s-ju')).toBe(false);
 	});
 });

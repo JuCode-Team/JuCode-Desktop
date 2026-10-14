@@ -34,7 +34,7 @@ export const LAN_ID = 'lan';
 /** How long a connection that looks up has to answer when the page wakes. */
 const WAKE_PING_MS = 5000;
 
-type Route = { onFrame: (raw: string) => void; onExit: () => void };
+type Route = { onFrame: (raw: string) => void; onExit: () => void; onIdleClose?: () => void };
 
 export type ConnectionTone = 'ok' | 'wait' | 'off';
 
@@ -169,6 +169,10 @@ export class HostConnection {
 		};
 		this.daemon.onFrame = (id, raw) => this.#routes.get(id)?.onFrame(raw);
 		this.daemon.onExit = (id) => this.#routes.get(id)?.onExit();
+		this.daemon.onIdleClose = (id) => {
+			const route = this.#routes.get(id);
+			(route?.onIdleClose ?? route?.onExit)?.();
+		};
 		this.agents.start();
 	}
 
@@ -220,9 +224,11 @@ export class HostConnection {
 		return connectionState(this.kind, this.agents.status, this.relayError?.kind);
 	}
 
-	/** Routes daemon frames and exits for session `id` here; returns an unregister. */
-	register = (id: string, onFrame: (raw: string) => void, onExit: () => void) => {
-		this.#routes.set(id, { onFrame, onExit });
+	/** Routes daemon frames and exits for session `id` here (`onIdleClose`:
+	 *  its engine was closed for idleness, see DaemonClient); returns an
+	 *  unregister. */
+	register = (id: string, onFrame: (raw: string) => void, onExit: () => void, onIdleClose?: () => void) => {
+		this.#routes.set(id, { onFrame, onExit, onIdleClose });
 		return () => {
 			this.#routes.delete(id);
 		};

@@ -41,10 +41,64 @@ export function isDraft(sessionId: string): boolean {
 	return drafts.has(sessionId);
 }
 
-/** Forget a draft that was removed before it started. */
+/** Sessions whose engine the daemon closed for idleness: the function that
+ *  opens it again (resuming). */
+const sleepers = new Map<string, () => void>();
+/** What wakes a sleeping session: the user sending something or acting on
+ *  what the engine runs (a plan, MCP servers, permission rules). */
+const WAKING = new Set<Op['op']>([
+	'user_message',
+	'command',
+	'continue',
+	'approve_plan',
+	'mcp_set',
+	'mcp_remove',
+	'mcp_toggle',
+	'mcp_login',
+	'mcp_reconnect',
+	'permission_rules'
+]);
+/** What a sleeping session drops: requests for the engine's live state (the
+ *  next engine answers them anew) and ops for a turn that is not running.
+ *  Held and repeated (a panel polling), they would pile up while it sleeps. */
+const SLEEP_DROPS = new Set<Op['op']>([
+	'interrupt',
+	'approve',
+	'steer',
+	'stop_task',
+	'shutdown',
+	'context_usage',
+	'agent_runs',
+	'mcp_list',
+	'subagent_transcript',
+	'task_output'
+]);
+
+/** The daemon closed this session's engine for idleness: what is sent to it
+ *  waits, and the first message the user sends opens it again with `wake`. */
+export function markAsleep(sessionId: string, wake: () => void): void {
+	// Ops already waiting (an engine was starting) stay, in order.
+	if (!held.has(sessionId)) held.set(sessionId, []);
+	sleepers.set(sessionId, wake);
+}
+
+/** Asleep (see `markAsleep`). */
+export function isAsleep(sessionId: string): boolean {
+	return sleepers.has(sessionId);
+}
+
+/** Forget a draft that was removed before it started (or a sleeping
+ *  session that was removed). */
 export function clearDraft(sessionId: string): void {
 	drafts.delete(sessionId);
+	sleepers.delete(sessionId);
 	held.delete(sessionId);
+}
+
+/** The session is being opened: it no longer sleeps (its held ops wait for
+ *  the engine, see `holdOps`). */
+export function clearAsleep(sessionId: string): void {
+	sleepers.delete(sessionId);
 }
 
 /** The engine is up: deliver the held ops in order and stop holding. */
@@ -105,6 +159,15 @@ export function dispatch(
 		return true;
 	}
 	const queue = held.get(sessionId);
+	const wake = sleepers.get(sessionId);
+	if (queue && wake) {
+		if (!SLEEP_DROPS.has(op.op)) queue.push(op);
+		if (WAKING.has(op.op)) {
+			sleepers.delete(sessionId);
+			wake();
+		}
+		return true;
+	}
 	if (queue) {
 		// Only what still means something to the next engine: an interrupt or
 		// an approval answer belongs to the one that is gone.

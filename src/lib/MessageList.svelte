@@ -120,7 +120,9 @@
 	const GAP = 16; // px, matches .list gap
 	const OVERSCAN = 800; // px rendered beyond the viewport on each side
 
-	const heights = new Map<Msg, number>();
+	// Weak: a transcript replay replaces the messages, and the old ones (with
+	// their tool output) must not stay alive here.
+	const heights = new WeakMap<Msg, number>();
 	let measureVersion = $state(0);
 	let scrollTop = $state(0);
 	let viewH = $state(0);
