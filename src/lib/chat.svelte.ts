@@ -151,8 +151,6 @@ const str = (v: unknown) => (typeof v === 'string' ? v : '');
 const num = (v: unknown) => (typeof v === 'number' ? v : 0);
 const arr = <T>(v: unknown) => (Array.isArray(v) ? (v as T[]) : []);
 
-/** Count added/removed lines in a unified-diff-ish string (ignoring +++/--- file
- *  headers). Used to attribute an edit's line delta to its turn. */
 /** A claude task type (`local_workflow`, `local_bash`, …) as the user says it. */
 export function taskKindLabel(kind: string): string {
 	const known = ['local_workflow', 'local_bash', 'local_agent', 'monitor'];

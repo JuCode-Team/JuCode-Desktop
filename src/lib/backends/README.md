@@ -122,7 +122,7 @@ never test `backendId` directly.
   read-only (`subagent_transcript`, re-read every 2.5 s while it runs).
   `chat.agentFocus` says which subagent it shows. The desktop opens it as a
   workbench panel, the web page as a full-screen sheet.
-- **Background tasks** (`TaskStrip.svelte`): `background_tasks` is the live
+- **Background tasks** (the progress tray, `agents/ProgressTray.svelte`): `background_tasks` is the live
   set, with a stop button each and a shell's output on demand; a finished
   one is a system line (`task_done`).
 - `/resume` has no wire form in stream-json mode: ChatPane builds the picker

@@ -1,19 +1,22 @@
 <script lang="ts">
 	// The turn's progress, on the composer's top edge while the turn has a
-	// to-do list or runs subagents. A one-line bar says where it is (the step
-	// being worked on, how many subagents run); opened, the tray lists the
-	// to-dos and the subagents side by side (stacked when narrow), each
-	// subagent a click away from its own conversation. Open or not is kept
-	// per session; the bar stays until the next turn.
+	// to-do list, runs subagents or the session has background commands. A
+	// one-line bar says where it is (the step being worked on, how many
+	// subagents and commands run); opened, the tray lists the to-dos and the
+	// subagents side by side (stacked when narrow), each subagent a click
+	// away from its own conversation, and the commands below with their
+	// output and a stop button. Open or not is kept per session; the bar
+	// stays until the next turn.
 	import ChevronUpIcon from '@lucide/svelte/icons/chevron-up';
 	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
 	import Columns2Icon from '@lucide/svelte/icons/columns-2';
 	import AppWindowIcon from '@lucide/svelte/icons/app-window';
 	import SquareIcon from '@lucide/svelte/icons/square';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import { t } from '$lib/i18n';
 	import { pillParts, planShown, planSummary, trayMode, type AgentRow } from '$lib/agentProgress';
 	import { formatCount, shortModel } from '$lib/agentTrace';
-	import type { ChatState } from '$lib/chat.svelte';
+	import { taskKindLabel, type ChatState } from '$lib/chat.svelte';
 	import type { OpenHow } from './subagentPages.svelte';
 	import StateIcon from './StateIcon.svelte';
 	import Elapsed from './Elapsed.svelte';
@@ -23,7 +26,8 @@
 		sessionId,
 		rows,
 		onOpen,
-		onStop
+		onStop,
+		onOutput
 	}: {
 		chat: ChatState;
 		/** Keys the open state. */
@@ -31,8 +35,10 @@
 		rows: AgentRow[];
 		/** Shows a subagent's conversation. Absent: rows are not links. */
 		onOpen?: (row: AgentRow, how: OpenHow) => void;
-		/** Stops a subagent the engine runs as a background task (its id). */
+		/** Stops a subagent or command the engine runs as a background task (its id). */
 		onStop?: (id: string) => void;
+		/** Asks for a background command's output (lands in chat.taskOutputs). */
+		onOutput?: (id: string) => void;
 	} = $props();
 	const stoppable = (r: AgentRow) => !!onStop && r.state === 'running' && chat.bgTasks.some((task) => task.id === r.id);
 
@@ -58,7 +64,25 @@
 	const plan = $derived(planSummary(chat.plan));
 	const planFresh = $derived(chat.turnStartedAt > 0 && chat.planAt >= chat.turnStartedAt);
 	const showPlan = $derived(planShown(plan, chat.busy, planFresh));
-	const mode = $derived(trayMode(plan, rows, chat.busy, planFresh, open));
+	// Background commands (shells, monitors). Subagents and Workflows the
+	// engine also runs as tasks are listed with the subagents.
+	const tasks = $derived(
+		chat.bgTasks.filter((x) => !(x.id in chat.subagents) && !x.kind.startsWith('local_agent') && !x.kind.startsWith('local_workflow'))
+	);
+	const taskSum = $derived.by(() => {
+		const by = new Map<string, number>();
+		for (const x of tasks) by.set(taskKindLabel(x.kind), (by.get(taskKindLabel(x.kind)) ?? 0) + 1);
+		return [...by].map(([label, n]) => `${label} ${n}`).join(' · ');
+	});
+	// Shell and Monitor tasks write output the engine can read back.
+	const hasOutput = (kind: string) => kind.startsWith('local_bash') || kind.startsWith('monitor');
+	let outputOf = $state<string | null>(null);
+	function toggleOutput(id: string) {
+		outputOf = outputOf === id ? null : id;
+		if (outputOf) onOutput?.(id);
+	}
+	const agentMode = $derived(trayMode(plan, rows, chat.busy, planFresh, open));
+	const mode = $derived(agentMode === 'hidden' && tasks.length ? (open ? 'open' : 'bar') : agentMode);
 	const counts = $derived(pillParts(plan, rows, showPlan));
 	const allDone = $derived(showPlan && plan.done === plan.total);
 	const current = $derived(showPlan && plan.current >= 0 ? plan.steps[plan.current] : undefined);
@@ -66,7 +90,12 @@
 	// subagent does (none running: the latest one, with its result).
 	const live = $derived(rows.find((r) => r.state === 'running') ?? rows.find((r) => r.state === 'queued') ?? rows.at(-1));
 	const headline = $derived(
-		current?.text ?? (allDone ? t('chat.progress.allDone') : live ? `${live.label} · ${live.activity || t('chat.progress.noActivity')}` : '')
+		current?.text ??
+			(allDone
+				? t('chat.progress.allDone')
+				: live
+					? `${live.label} · ${live.activity || t('chat.progress.noActivity')}`
+					: (tasks[0]?.description ?? ''))
 	);
 	// Up to six subagents as dots in the bar, running ones first.
 	const beads = $derived([...rows].sort((a, b) => Number(b.state === 'running') - Number(a.state === 'running')).slice(0, 6));
@@ -151,6 +180,51 @@
 						</ul>
 					</section>
 				{/if}
+				{#if tasks.length}
+					<section class="col tasks" aria-label={t('chat.task.list')}>
+						<h3>{t('chat.task.list')}<span class="num">{tasks.length}</span></h3>
+						<ul class="agents">
+							{#each tasks as task (task.id)}
+								<li class="task">
+									<div class="trow">
+										<LoaderCircleIcon size={14} class="spin" />
+										<span class="acol">
+											<span class="aline">
+												<span class="aname" title={task.description}>{task.description || taskKindLabel(task.kind)}</span>
+												<span class="kind">{taskKindLabel(task.kind)}</span>
+											</span>
+											{#if task.message}<span class="act" title={task.message}>{task.message}</span>{/if}
+										</span>
+										<span class="tacts">
+											{#if onOutput && hasOutput(task.kind)}
+												<button class="tlink" onclick={() => toggleOutput(task.id)}>
+													{outputOf === task.id ? t('chat.task.hideOutput') : t('chat.task.output')}
+												</button>
+											{/if}
+											{#if onStop}
+												<button onclick={() => onStop?.(task.id)} title={t('chat.task.stop')} aria-label={t('chat.task.stop')}><SquareIcon size={14} /></button>
+											{/if}
+										</span>
+									</div>
+									{#if outputOf === task.id}
+										{@const out = chat.taskOutputs[task.id]}
+										<div class="out">
+											{#if !out}
+												<span class="dim">{t('chat.task.loading')}</span>
+											{:else if out.error}
+												<span class="dim">{out.error}</span>
+											{:else}
+												{#if out.truncated}<span class="dim">{t('chat.task.truncated')}</span>{/if}
+												<pre>{out.output || t('chat.task.noOutput')}</pre>
+												<button class="tlink" onclick={() => onOutput?.(task.id)}>{t('chat.task.refresh')}</button>
+											{/if}
+										</div>
+									{/if}
+								</li>
+							{/each}
+						</ul>
+					</section>
+				{/if}
 			</div>
 		{/if}
 		<button
@@ -179,6 +253,9 @@
 					</span>
 					<span>{counts.running ? t('chat.progress.runningN', { n: counts.running }) : t('chat.progress.agentsN', { n: counts.agents })}</span>
 				</span>
+			{/if}
+			{#if tasks.length}
+				<span class="agentsum"><LoaderCircleIcon size={12} class="spin" /><span>{taskSum}</span></span>
 			{/if}
 			<span class="chev"><ChevronUpIcon size={14} /></span>
 		</button>
@@ -527,6 +604,91 @@
 	.aacts button:focus-visible {
 		outline: 2px solid var(--brand);
 		outline-offset: 0;
+	}
+
+	/* ── background commands: below the to-dos and subagents, full width ── */
+	.panel .col.tasks {
+		grid-column: 1 / -1;
+		border-left: none;
+		border-top: 1px solid var(--hairline, var(--border));
+	}
+	.panel .col.tasks:first-child {
+		border-top: none;
+	}
+	.task {
+		padding: 6px 8px;
+		border-radius: var(--r-md);
+	}
+	.trow {
+		display: flex;
+		align-items: flex-start;
+		gap: 8px;
+		color: var(--text);
+	}
+	.trow > :global(.spin) {
+		flex: none;
+		margin-top: 2px;
+		color: var(--dim);
+	}
+	.tacts {
+		display: inline-flex;
+		align-items: center;
+		gap: 2px;
+		flex: none;
+		opacity: 0;
+		transition: opacity var(--t-fast) var(--ease-out);
+	}
+	.task:hover .tacts,
+	.tacts:focus-within {
+		opacity: 1;
+	}
+	.tacts button {
+		display: inline-flex;
+		align-items: center;
+		padding: 3px;
+		border: none;
+		border-radius: var(--r-xs);
+		background: none;
+		color: var(--dim);
+		cursor: pointer;
+	}
+	.tacts button:hover {
+		background: var(--surface2);
+		color: var(--text);
+	}
+	.tlink {
+		font-size: var(--fs-2xs);
+		padding: 2px 6px !important;
+	}
+	.out {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 4px;
+		margin: 6px 0 2px 22px;
+		font-size: var(--fs-2xs);
+	}
+	.out pre {
+		align-self: stretch;
+		max-height: 200px;
+		overflow: auto;
+		margin: 0;
+		padding: 8px 10px;
+		border-radius: var(--r-sm);
+		background: var(--surface);
+		font-family: var(--font-mono);
+		font-size: var(--fs-2xs);
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
+	}
+	.dim {
+		color: var(--dim2);
+	}
+	.out .tlink {
+		border: none;
+		background: none;
+		color: var(--dim);
+		cursor: pointer;
 	}
 	@media (prefers-reduced-motion: reduce) {
 		.panel,

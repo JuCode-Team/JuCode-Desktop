@@ -72,7 +72,7 @@
 	import ApprovalCard from '$lib/ApprovalCard.svelte';
 	import RateLimitBanner from '$lib/RateLimitBanner.svelte';
 	import Button from '$lib/ui/Button.svelte';
-	import TaskStrip from '$lib/TaskStrip.svelte';
+	import SideAnswers from '$lib/composer/SideAnswers.svelte';
 	import ProgressTray from '$lib/agents/ProgressTray.svelte';
 	import NewSessionPicker from '$lib/NewSessionPicker.svelte';
 	import { placeFor, subagentPages, type OpenHow } from '$lib/agents/subagentPages.svelte';
@@ -1162,13 +1162,6 @@
 			<button class="owner-link" onclick={() => ((session.requirement = undefined), (session.requirementStart = undefined))}>{t('shell.requirement.unlink')}</button>
 		</div>
 	{/if}
-	<TaskStrip
-		{chat}
-		onStop={(id) => send({ op: 'stop_task', task_id: id })}
-		onOutput={(id) => send({ op: 'task_output', task_id: id })}
-		onTrace={traceable ? openTrace : undefined}
-		agents={false}
-	/>
 
 	{#if showFind}
 		<FindBar
@@ -1244,7 +1237,15 @@
 			<RateLimitBanner rateLimit={chat.rateLimit} onDismiss={() => (chat.rateLimit = null)} />
 		{/if}
 
-		<ProgressTray {chat} sessionId={session.id} rows={turnAgents} onOpen={traceable ? openAgent : undefined} onStop={(id) => send({ op: 'stop_task', task_id: id })} />
+		<SideAnswers {chat} />
+		<ProgressTray
+			{chat}
+			sessionId={session.id}
+			rows={turnAgents}
+			onOpen={traceable ? openAgent : undefined}
+			onStop={(id) => send({ op: 'stop_task', task_id: id })}
+			onOutput={(id) => send({ op: 'task_output', task_id: id })}
+		/>
 
 		{#if chat.planRevising}
 			<div class="approval-wrap">

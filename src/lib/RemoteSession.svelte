@@ -26,7 +26,7 @@
 	import { sendFile, type Uploaded } from '$lib/upload';
 	import { loadSession, saveSession } from '$lib/remote/cache';
 	import ModelMenu from '$lib/remote/ModelMenu.svelte';
-	import TaskStrip from '$lib/TaskStrip.svelte';
+	import SideAnswers from '$lib/composer/SideAnswers.svelte';
 	import { joinPath, parseFileHref } from '$lib/fileRefs';
 	import AgentRunsPanel from '$lib/AgentRunsPanel.svelte';
 	import NetworkIcon from '@lucide/svelte/icons/network';
@@ -626,13 +626,6 @@
 		{#if onChanges}<button class="back" onclick={onChanges} aria-label={t('shell.remote.changes')}><GitCompareIcon size={16} /></button>{/if}
 	</header>
 
-	<TaskStrip
-		{chat}
-		onStop={(id) => send({ op: 'stop_task', task_id: id })}
-		onOutput={(id) => send({ op: 'task_output', task_id: id })}
-		onTrace={bcaps.agentTrace ? openTrace : undefined}
-		agents={false}
-	/>
 	{#if traceOpen}
 		<!-- The agent trace, full screen over the session. -->
 		<div class="trace-sheet" role="dialog" aria-label={t('dock.agents.title')}>
@@ -713,7 +706,15 @@
 			</div>
 		{/if}
 
-		<ProgressTray {chat} sessionId={sid || 'draft'} rows={turnAgents} onOpen={bcaps.agentTrace ? openAgent : undefined} onStop={(id) => send({ op: 'stop_task', task_id: id })} />
+		<SideAnswers {chat} />
+		<ProgressTray
+			{chat}
+			sessionId={sid || 'draft'}
+			rows={turnAgents}
+			onOpen={bcaps.agentTrace ? openAgent : undefined}
+			onStop={(id) => send({ op: 'stop_task', task_id: id })}
+			onOutput={(id) => send({ op: 'task_output', task_id: id })}
+		/>
 		<div class="composer-wrap">
 			{#if chat.approvalPending && chat.busy}
 				<div class="queued">
