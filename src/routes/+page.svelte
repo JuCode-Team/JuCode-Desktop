@@ -521,6 +521,13 @@
 			store.shownSessions.map((s) => s.id),
 			store.activeId || null
 		);
+		// The conversation in front when the app closed comes back in front:
+		// restore() picks the sidebar's first session, and activating one the
+		// layout does not show in front would open or raise its tab.
+		const front = leavesOf(tiles.root)
+			.map((l) => (l.active ? chatSessionOf(l.active) : null))
+			.find((sid) => sid != null);
+		if (front) store.activeId = front;
 		const activeLeaf = store.activeId ? leafOfTab(tiles.root, chatPanel(store.activeId)) : null;
 		focusedLeaf = activeLeaf?.id ?? leavesOf(tiles.root)[0]?.id ?? null;
 		tilesReady = true;
