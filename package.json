@@ -1,6 +1,6 @@
 {
   "name": "desktop",
-  "version": "0.4.20",
+  "version": "0.4.21",
   "description": "",
   "type": "module",
   "packageManager": "pnpm@11.5.1",
