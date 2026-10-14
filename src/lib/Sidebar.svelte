@@ -24,7 +24,7 @@
 	import Collapse from '$lib/ui/Collapse.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import { t } from '$lib/i18n';
-	import { withShortcut } from '$lib/shortcuts';
+	import { shortcutLabel, withShortcut } from '$lib/shortcuts';
 	import { BACKEND_LABELS } from '$lib/backends';
 	import BackendIcon from '$lib/BackendIcon.svelte';
 	import TabGlyph from '$lib/workbench/TabGlyph.svelte';
@@ -149,20 +149,18 @@
 
 	// Session filter: case-insensitive substring over session title + project
 	// name; empty project groups are hidden while a query is set.
-	let searchOpen = $state(false);
 	let searchQuery = $state('');
 	let searchEl = $state<HTMLInputElement | null>(null);
 	const query = $derived(searchQuery.trim().toLowerCase());
-	function toggleSearch() {
-		searchOpen = !searchOpen;
-		if (searchOpen) tick().then(() => searchEl?.focus());
-		else searchQuery = '';
+	/** ⌘K: into the filter, its text selected. */
+	export function focusSearch() {
+		tick().then(() => searchEl?.select());
 	}
 	function searchKey(e: KeyboardEvent) {
 		if (e.key === 'Escape') {
 			e.preventDefault();
 			searchQuery = '';
-			searchOpen = false;
+			searchEl?.blur();
 		}
 	}
 	const sessionMatches = (p: Project, s: Project['sessions'][number]) =>
@@ -285,24 +283,26 @@
 <!-- The content keeps the open width while the panel animates, so it slides
      out of view instead of re-wrapping at every intermediate width. -->
 <div class="sb-inner" style:width="{openWidth}px">
-	<!-- Header: the wordmark, or the session filter in its place while searching. -->
 	<div class="brand" data-tauri-drag-region>
-		{#if searchOpen}
-			<SearchIcon size={16} />
-			<input
-				class="filter"
-				bind:this={searchEl}
-				bind:value={searchQuery}
-				placeholder={t('shell.searchSessions')}
-				onkeydown={searchKey}
-				onblur={() => !searchQuery && toggleSearch()}
-			/>
-			<button class="head-act" onclick={toggleSearch} aria-label={t('shell.closeSearch')} title={t('shell.closeSearch')}><XIcon size={16} /></button>
-		{:else}
-			<span class="word">JuCode</span>
-			<button class="head-act" onclick={toggleSearch} aria-label={t('shell.searchSessions')} title={t('shell.searchSessions')}><SearchIcon size={16} /></button>
-		{/if}
+		<span class="word">JuCode</span>
 	</div>
+	<!-- The session filter, a row of its own under the wordmark. -->
+	<label class="search">
+		<SearchIcon size={16} />
+		<input
+			class="filter"
+			bind:this={searchEl}
+			bind:value={searchQuery}
+			placeholder={t('shell.searchSessions')}
+			aria-label={t('shell.searchSessions')}
+			onkeydown={searchKey}
+		/>
+		{#if searchQuery}
+			<button class="clear" onclick={() => ((searchQuery = ''), searchEl?.focus())} aria-label={t('shell.closeSearch')} title={t('shell.closeSearch')}><XIcon size={14} /></button>
+		{:else}
+			<kbd>{shortcutLabel('searchSessions')}</kbd>
+		{/if}
+	</label>
 
 	<nav class="primary">
 		<button class="row" onclick={newHere}><SquarePenIcon size={16} /><span>{t('shell.newChat')}</span></button>
@@ -624,9 +624,43 @@
 		padding: 0 4px 0 10px;
 		flex-shrink: 0;
 	}
-	.brand > :global(svg) {
+	.search {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		height: 36px;
+		margin: 0 10px 8px;
+		padding: 0 8px 0 12px;
+		border-radius: var(--r);
+		background: var(--surface2);
+		flex-shrink: 0;
+		cursor: text;
+	}
+	.search > :global(svg) {
 		color: var(--dim);
 		flex-shrink: 0;
+	}
+	.search kbd {
+		flex-shrink: 0;
+		padding: 1px 6px;
+		border-radius: var(--r);
+		background: var(--surface2);
+		color: var(--dim2);
+		font-family: var(--font-sans);
+		font-size: var(--fs-2xs);
+	}
+	.clear {
+		display: inline-flex;
+		flex-shrink: 0;
+		padding: 3px;
+		border: none;
+		border-radius: var(--r);
+		background: none;
+		color: var(--dim2);
+		cursor: pointer;
+	}
+	.clear:hover {
+		color: var(--text);
 	}
 	.filter {
 		flex: 1;
@@ -695,13 +729,13 @@
 		flex: none;
 		width: 7px;
 		height: 7px;
-		border-radius: var(--r);
+		border-radius: 50%;
 	}
 	.count {
 		flex: none !important;
 		min-width: 20px;
 		padding: 1px 7px;
-		border-radius: 50%;
+		border-radius: var(--r);
 		background: var(--accent);
 		color: var(--on-accent);
 		font-size: var(--fs-2xs);

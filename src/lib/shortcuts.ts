@@ -4,6 +4,7 @@
 
 export type ShortcutId =
 	| 'palette'
+	| 'searchSessions'
 	| 'newSession'
 	| 'settings'
 	| 'sidebar'
@@ -37,7 +38,8 @@ export interface Shortcut {
 }
 
 export const SHORTCUTS: Record<ShortcutId, Shortcut> = {
-	palette: { key: 'k', mod: true, group: 'general' },
+	palette: { key: 'p', mod: true, shift: true, group: 'general' },
+	searchSessions: { key: 'k', mod: true, group: 'general' },
 	quickOpen: { key: 'p', mod: true, group: 'general' },
 	sidebar: { key: 'b', mod: true, group: 'general' },
 	settings: { key: ',', mod: true, group: 'general' },

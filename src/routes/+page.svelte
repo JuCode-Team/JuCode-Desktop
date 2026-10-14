@@ -369,6 +369,14 @@
 	let showSidebar = $state(true);
 	let sbResizing = $state(false);
 
+	let sidebar = $state<ReturnType<typeof Sidebar>>();
+	/** ⌘K: the sidebar's session filter, opening the sidebar if it is hidden. */
+	function searchSessions() {
+		if (showSettings) closeSettings();
+		showDesk = false;
+		if (!showSidebar) toggleSidebar();
+		sidebar?.focusSearch();
+	}
 	function toggleSidebar() {
 		showSidebar = !showSidebar;
 		localStorage.setItem('jucode-sidebar-visible', showSidebar ? '1' : '0');
@@ -1132,6 +1140,7 @@
 		};
 		const pane = panes.get(activeId);
 		if (matches(e, 'palette')) return act(() => (showPalette = !showPalette));
+		if (matches(e, 'searchSessions')) return act(searchSessions);
 		if (matches(e, 'shortcuts')) return act(() => (showShortcuts = !showShortcuts));
 		if (matches(e, 'zoomIn')) return act(() => prefs.stepZoom(1));
 		if (matches(e, 'zoomOut')) return act(() => prefs.stepZoom(-1));
@@ -1452,6 +1461,7 @@
 			<!-- LEFT: the navigator — workspace / projects / sessions. Clicking a session
 			     opens or focuses its chat tile on the canvas. -->
 			<Sidebar
+				bind:this={sidebar}
 				{projects}
 				{activeId}
 				width={showSidebar ? sidebarWidth : 0}

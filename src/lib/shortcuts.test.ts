@@ -7,10 +7,10 @@ const key = (init: Partial<KeyboardEvent>) =>
 
 describe('shortcuts', () => {
 	it('match ⌘ on macOS and Ctrl elsewhere', () => {
-		expect(matches(key({ key: 'k', metaKey: true }), 'palette', true)).toBe(true);
-		expect(matches(key({ key: 'k', ctrlKey: true }), 'palette', true)).toBe(false);
-		expect(matches(key({ key: 'k', ctrlKey: true }), 'palette', false)).toBe(true);
-		expect(matches(key({ key: 'k', metaKey: true, shiftKey: true }), 'palette', true)).toBe(false);
+		expect(matches(key({ key: 'k', metaKey: true }), 'searchSessions', true)).toBe(true);
+		expect(matches(key({ key: 'k', ctrlKey: true }), 'searchSessions', true)).toBe(false);
+		expect(matches(key({ key: 'k', ctrlKey: true }), 'searchSessions', false)).toBe(true);
+		expect(matches(key({ key: 'k', metaKey: true, shiftKey: true }), 'searchSessions', true)).toBe(false);
 	});
 
 	it('read shifted punctuation by its key, and digits as their number', () => {
