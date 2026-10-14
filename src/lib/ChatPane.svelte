@@ -1173,7 +1173,8 @@
 
 	<div class="mainwrap" bind:clientWidth={wrapW}>
 	<main bind:this={scroller} onscroll={onScroll} onwheel={onWheel}>
-		<div bind:this={contentEl}>
+		<!-- Pressing inside the conversation (opening a card, selecting text) stops following the end: what was pressed stays under the pointer instead of being pushed up as the reply grows. -->
+		<div bind:this={contentEl} onpointerdowncapture={() => (atBottom = false)} role="presentation">
 			<MessageList bind:this={messageList} bind:mark messages={chat.messages} busy={chat.busy} foldTurns={prefs.foldTurns} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onNote={noteRequirement} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} traceOf={traceable ? traceOf : undefined} agents={allAgents} onOpenAgent={traceable ? openAgent : undefined} onPlan={planAction} {planMode} onOpenPlan={(id) => planPages.open(session.id, id)} />
 		</div>
 		{#if chat.booting && chat.engineState !== 'exited'}

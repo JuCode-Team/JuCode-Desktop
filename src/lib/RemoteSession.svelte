@@ -651,7 +651,8 @@
 		ontouchstart={(e) => (touchY = e.touches[0]?.clientY ?? 0)}
 		ontouchmove={onTouchMove}
 	>
-		<div class="thread" bind:this={contentEl}>
+		<!-- Pressing inside the conversation (opening a card, selecting text) stops following the end: what was pressed stays under the finger instead of being pushed up as the reply grows. -->
+		<div class="thread" bind:this={contentEl} onclickcapture={() => (atBottom = false)} role="presentation">
 			<MessageList
 				messages={chat.messages}
 				busy={chat.busy}
