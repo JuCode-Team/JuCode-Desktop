@@ -3,7 +3,6 @@
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import XIcon from '@lucide/svelte/icons/x';
-	import { untrack } from 'svelte';
 	import Collapse from '$lib/ui/Collapse.svelte';
 	import { t } from '$lib/i18n';
 	import Notice from '$lib/ui/Notice.svelte';
@@ -41,17 +40,9 @@
 
 	const took = $derived(startedAt ? Math.max(0, (endedAt ?? (running ? now : startedAt)) - startedAt) : null);
 
-	// Auto-expand while the tool runs, auto-collapse once it finishes. Starts in
-	// that state (a card remounting — windowed back in, its group reopened — must
-	// not flash open) and follows only flips of `running`, so a manual toggle on a
-	// finished card still sticks.
-	let collapsed = $state(untrack(() => !running));
-	let wasRunning = untrack(() => running);
-	$effect(() => {
-		if (running === wasRunning) return;
-		wasRunning = running;
-		collapsed = !running;
-	});
+	// Folded until opened: a running call shows its spinner and time, and the
+	// conversation does not grow and shrink with each call's output.
+	let collapsed = $state(true);
 
 	const parsed = $derived(parseToolOutput(output));
 	const s = (v: unknown) => (typeof v === 'string' ? v : '');
