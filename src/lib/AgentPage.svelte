@@ -4,13 +4,13 @@
 	// session), brief and memory, and settings (scheduled tasks have their
 	// own page).
 	import { onMount } from 'svelte';
-	import XIcon from 'phosphor-svelte/lib/XIcon';
-	import ShuffleIcon from 'phosphor-svelte/lib/ShuffleIcon';
-	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import FolderPlusIcon from 'phosphor-svelte/lib/FolderPlusIcon';
-	import PaperPlaneRightIcon from 'phosphor-svelte/lib/PaperPlaneRightIcon';
-	import TrashIcon from 'phosphor-svelte/lib/TrashIcon';
+	import XIcon from '@lucide/svelte/icons/x';
+	import ShuffleIcon from '@lucide/svelte/icons/shuffle';
+	import PlusIcon from '@lucide/svelte/icons/plus';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import FolderPlusIcon from '@lucide/svelte/icons/folder-plus';
+	import SendHorizontalIcon from '@lucide/svelte/icons/send-horizontal';
+	import TrashIcon from '@lucide/svelte/icons/trash';
 	import { open } from '@tauri-apps/plugin-dialog';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -256,7 +256,7 @@
 <div class="page">
 	{#if error}<div class="err"><Notice>{error}</Notice></div>{/if}
 	{#if !detail}
-		{#if !error}<div class="loading"><CircleNotchIcon size={18} class="spin" /></div>{/if}
+		{#if !error}<div class="loading"><LoaderCircleIcon size={16} class="spin" /></div>{/if}
 	{:else}
 		{@const agent = live ?? detail.agent}
 		<header class="head">
@@ -270,7 +270,7 @@
 					{#if !agent.enabled}
 						<span class="state">{t('shell.desk.statusOff')}</span>
 					{:else if working.length}
-						<span class="state live"><CircleNotchIcon size={13} class="spin" />{t('shell.desk.statusWorking')}</span>
+						<span class="state live"><LoaderCircleIcon size={14} class="spin" />{t('shell.desk.statusWorking')}</span>
 						{#each working as s (s.session)}
 							<button class="fact-link" onclick={() => onOpenSession(s.session)}>{s.title || t('shell.agentPage.untitled')}</button>
 						{/each}
@@ -321,7 +321,7 @@
 							onmousedown={(e: MouseEvent) => e.preventDefault()}
 							onclick={assign}
 						>
-							{#if sending}<CircleNotchIcon size={13} class="spin" />{:else}<PaperPlaneRightIcon size={13} />{/if}
+							{#if sending}<LoaderCircleIcon size={14} class="spin" />{:else}<SendHorizontalIcon size={14} />{/if}
 							{t('shell.agentPage.taskSend')}
 						</Button>
 					</div>
@@ -383,7 +383,7 @@
 						</div>
 						{#if memoryOpen}
 							<div class="file-text memory-text">
-								{#if memoryText === null}<CircleNotchIcon size={14} class="spin" />{:else}{memoryText.trim() || t('shell.agentPage.empty')}{/if}
+								{#if memoryText === null}<LoaderCircleIcon size={14} class="spin" />{:else}{memoryText.trim() || t('shell.agentPage.empty')}{/if}
 							</div>
 						{/if}
 					{/if}
@@ -441,7 +441,7 @@
 
 				<SettingsSection title={t('shell.agentPage.directories')} description={t('shell.agentPage.directoriesHint')}>
 					{#snippet action()}
-						<Button size="sm" onclick={addDirectory}><FolderPlusIcon size={13} /> {t('shell.agentPage.addDirectory')}</Button>
+						<Button size="sm" onclick={addDirectory}><FolderPlusIcon size={14} /> {t('shell.agentPage.addDirectory')}</Button>
 					{/snippet}
 					{#each detail.agent.directories as dir, index (dir.path)}
 						<div class="item">
@@ -460,7 +460,7 @@
 								label={t('shell.agentPage.remove')}
 								onclick={() => change({ directories: detail!.agent.directories.filter((_, i) => i !== index) })}
 							>
-								<XIcon size={13} />
+								<XIcon size={14} />
 							</IconButton>
 						</div>
 					{:else}
@@ -471,7 +471,7 @@
 				<SettingsSection title={t('shell.agentPage.rules')} description={t('shell.agentPage.rulesHint')}>
 					{#snippet action()}
 						<Button size="sm" onclick={() => (rules = [...rules, { prefix: '', action: 'ask' }])}>
-							<PlusIcon size={13} /> {t('shell.agentPage.addRule')}
+							<PlusIcon size={14} /> {t('shell.agentPage.addRule')}
 						</Button>
 					{/snippet}
 					{#each rules as rule, index (index)}
@@ -494,7 +494,7 @@
 									saveRules();
 								}}
 							>
-								<XIcon size={13} />
+								<XIcon size={14} />
 							</IconButton>
 						</div>
 					{:else}
@@ -505,7 +505,7 @@
 				<SettingsSection>
 					<SettingsRow title={t('shell.agentPage.deleteAgent')} description={t('shell.agentPage.deleteHint')}>
 						<Button size="sm" variant="danger" onclick={deleteAgent}>
-							<TrashIcon size={13} /> {t('shell.agentPage.deleteAgent')}
+							<TrashIcon size={14} /> {t('shell.agentPage.deleteAgent')}
 						</Button>
 					</SettingsRow>
 				</SettingsSection>

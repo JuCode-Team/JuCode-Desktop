@@ -5,12 +5,12 @@
 	// (folded away), and the default backend for new sessions. All preferences
 	// persist to localStorage immediately.
 	import { onMount } from 'svelte';
-	import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon';
-	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
-	import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon';
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import ArrowCircleUpIcon from 'phosphor-svelte/lib/ArrowCircleUpIcon';
+	import RotateCwIcon from '@lucide/svelte/icons/rotate-cw';
+	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
+	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import CircleArrowUpIcon from '@lucide/svelte/icons/circle-arrow-up';
 	import {
 		checkBackend,
 		checkAgentUpdate,
@@ -194,7 +194,7 @@
 				label="refresh shell env"
 				title={t('settings.backend.shellEnvRefresh')}
 			>
-				<ArrowClockwiseIcon size={14} class={refreshing ? 'spin' : ''} />
+				<RotateCwIcon size={14} class={refreshing ? 'spin' : ''} />
 			</IconButton>
 		</SettingsRow>
 	{/if}
@@ -211,14 +211,14 @@
 						{#if st === 'checking'}
 							<span class="bstate dim">{t('settings.backend.checking')}</span>
 						{:else if st?.found}
-							<span class="bstate ok"><CheckCircleIcon size={12} /> {versionLabel(st) || t('settings.backend.found')}</span>
+							<span class="bstate ok"><CircleCheckIcon size={12} /> {versionLabel(st) || t('settings.backend.found')}</span>
 							{#if updates[id]?.available}
 								<span class="bstate up">{t('settings.backend.updateAvailable', { version: updates[id]!.latest })}</span>
 							{:else if id === 'jucode' && appCli(st.path)}
 								<span class="bstate dim">{t('settings.backend.bundled')}</span>
 							{/if}
 						{:else if st}
-							<span class="bstate warn"><WarningCircleIcon size={12} /> {t('settings.backend.notFound')}</span>
+							<span class="bstate warn"><CircleAlertIcon size={12} /> {t('settings.backend.notFound')}</span>
 						{/if}
 					</div>
 					{#if st && st !== 'checking' && st.found && st.path}
@@ -236,22 +236,22 @@
 				{:else if updates[id]?.available}
 					{#if deps.installing[id]}
 						<Button variant="secondary" size="sm" disabled>
-							<CircleNotchIcon size={14} class="spin" /> {t('settings.backend.upgrading')}
+							<LoaderCircleIcon size={14} class="spin" /> {t('settings.backend.upgrading')}
 						</Button>
 					{:else}
 						<Button variant="primary" size="sm" onclick={() => upgrade(id)}>
-							<ArrowCircleUpIcon size={14} /> {t('settings.backend.upgrade')}
+							<CircleArrowUpIcon size={14} /> {t('settings.backend.upgrade')}
 						</Button>
 					{/if}
 				{/if}
 				<IconButton onclick={() => check(id)} label="re-check backend" title={t('settings.backend.recheck')}>
-					<ArrowClockwiseIcon size={14} />
+					<RotateCwIcon size={14} />
 				</IconButton>
 			</div>
 			{#if dep}<div class="bindent"><DepDetails {dep} /></div>{/if}
 			<div class="bindent">
 				<button class="advhead" onclick={() => (advOpen[id] = !advOpen[id])} aria-expanded={!!advOpen[id]}>
-					<span class="chev" class:open={advOpen[id]}><CaretRightIcon size={12} /></span>
+					<span class="chev" class:open={advOpen[id]}><ChevronRightIcon size={12} /></span>
 					{t('settings.backend.advanced')}
 					{#if overrideCount(id)}<span class="envcount">{overrideCount(id)}</span>{/if}
 				</button>

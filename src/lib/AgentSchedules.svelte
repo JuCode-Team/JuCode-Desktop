@@ -3,10 +3,10 @@
 	// runs next, what its latest run concluded (or that it needs the user),
 	// and the controls to switch, run, edit and delete it.
 	import type { Snippet } from 'svelte';
-	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
-	import PlayIcon from 'phosphor-svelte/lib/PlayIcon';
-	import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon';
-	import TrashIcon from 'phosphor-svelte/lib/TrashIcon';
+	import PlusIcon from '@lucide/svelte/icons/plus';
+	import PlayIcon from '@lucide/svelte/icons/play';
+	import PencilIcon from '@lucide/svelte/icons/pencil';
+	import TrashIcon from '@lucide/svelte/icons/trash';
 	import Button from '$lib/ui/Button.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Switch from '$lib/ui/Switch.svelte';
@@ -74,7 +74,7 @@
 <section>
 	<div class="section-head">
 		{#if heading}{@render heading()}{:else}<h3>{t('shell.schedule.title')}</h3>{/if}
-		<Button size="sm" onclick={() => (editing = null)}><PlusIcon size={13} /> {t('shell.schedule.add')}</Button>
+		<Button size="sm" onclick={() => (editing = null)}><PlusIcon size={14} /> {t('shell.schedule.add')}</Button>
 	</div>
 	{#if schedules.length === 0}
 		<p class="empty">{t('shell.schedule.empty')}</p>
@@ -120,7 +120,7 @@
 				{/if}
 			</div>
 			<IconButton size="sm" title={t('shell.schedule.runNow')} disabled={starting[s.id]} onclick={() => run(s)}><PlayIcon size={14} /></IconButton>
-			<IconButton size="sm" title={t('shell.schedule.edit')} onclick={() => (editing = s)}><PencilSimpleIcon size={14} /></IconButton>
+			<IconButton size="sm" title={t('shell.schedule.edit')} onclick={() => (editing = s)}><PencilIcon size={14} /></IconButton>
 			<IconButton size="sm" title={t('shell.schedule.delete')} onclick={() => remove(s)}><TrashIcon size={14} /></IconButton>
 		</div>
 		{#if s.last_run_at}

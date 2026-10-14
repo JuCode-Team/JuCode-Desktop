@@ -1,8 +1,8 @@
 <script lang="ts">
-	import ListBulletsIcon from 'phosphor-svelte/lib/ListBulletsIcon';
-	import CircleIcon from 'phosphor-svelte/lib/CircleIcon';
-	import RecordIcon from 'phosphor-svelte/lib/RecordIcon';
-	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
+	import ListIcon from '@lucide/svelte/icons/list';
+	import CircleIcon from '@lucide/svelte/icons/circle';
+	import CircleDotIcon from '@lucide/svelte/icons/circle-dot';
+	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
 	import type { PlanStep } from '$lib/chat.svelte';
 	import { t } from '$lib/i18n';
 
@@ -10,8 +10,8 @@
 
 	const META: Record<string, { icon: typeof CircleIcon; cls: string }> = {
 		pending: { icon: CircleIcon, cls: 'pending' },
-		in_progress: { icon: RecordIcon, cls: 'active' },
-		completed: { icon: CheckCircleIcon, cls: 'done' }
+		in_progress: { icon: CircleDotIcon, cls: 'active' },
+		completed: { icon: CircleCheckIcon, cls: 'done' }
 	};
 	const metaOf = (s: string) => META[s] ?? META.pending;
 	const done = $derived(plan.filter((p) => p.status === 'completed').length);
@@ -34,7 +34,7 @@
 		</ol>
 	{:else}
 		<div class="empty">
-			<ListBulletsIcon size={26} />
+			<ListIcon size={28} />
 			<p>{t('dock.plan.empty')}</p>
 			<span>{t('dock.plan.emptyHint')}</span>
 		</div>

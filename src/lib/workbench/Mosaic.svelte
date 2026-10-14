@@ -1,9 +1,9 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import XIcon from 'phosphor-svelte/lib/XIcon';
-	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
-	import ArrowsOutIcon from 'phosphor-svelte/lib/ArrowsOutIcon';
-	import ArrowsInIcon from 'phosphor-svelte/lib/ArrowsInIcon';
+	import XIcon from '@lucide/svelte/icons/x';
+	import PlusIcon from '@lucide/svelte/icons/plus';
+	import MaximizeIcon from '@lucide/svelte/icons/maximize';
+	import MinimizeIcon from '@lucide/svelte/icons/minimize';
 	import { t } from '$lib/i18n';
 	import {
 		activateTab,
@@ -324,7 +324,7 @@
 							onclick={(e) => {
 								e.stopPropagation();
 								onchange(closeTab(layout, tab.id));
-							}}><XIcon size={11} /></button
+							}}><XIcon size={12} /></button
 						>
 					</div>
 				{/each}
@@ -338,7 +338,7 @@
 					<button
 						class="lbtn"
 						aria-label="add panel"
-						onclick={() => (addMenuFor = addMenuFor === leaf.id ? null : leaf.id)}><PlusIcon size={13} /></button
+						onclick={() => (addMenuFor = addMenuFor === leaf.id ? null : leaf.id)}><PlusIcon size={14} /></button
 					>
 				{/if}
 				<button
@@ -347,7 +347,7 @@
 					aria-label={layout.maximized === leaf.id ? t('dock.mosaic.restore') : t('dock.mosaic.maximize')}
 					onclick={() => onchange(toggleMaximize(layout, leaf.id))}
 				>
-					{#if layout.maximized === leaf.id}<ArrowsInIcon size={12} />{:else}<ArrowsOutIcon size={12} />{/if}
+					{#if layout.maximized === leaf.id}<MinimizeIcon size={12} />{:else}<MaximizeIcon size={12} />{/if}
 				</button>
 			</div>
 			{#if addMenuFor === leaf.id}

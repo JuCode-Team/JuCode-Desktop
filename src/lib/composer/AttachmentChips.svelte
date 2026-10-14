@@ -1,8 +1,8 @@
 <script lang="ts">
-	import XIcon from 'phosphor-svelte/lib/XIcon';
-	import FileTextIcon from 'phosphor-svelte/lib/FileTextIcon';
-	import FilmStripIcon from 'phosphor-svelte/lib/FilmStripIcon';
-	import GlobeIcon from 'phosphor-svelte/lib/GlobeIcon';
+	import XIcon from '@lucide/svelte/icons/x';
+	import FileTextIcon from '@lucide/svelte/icons/file-text';
+	import FilmIcon from '@lucide/svelte/icons/film';
+	import GlobeIcon from '@lucide/svelte/icons/globe';
 	import { convertFileSrc } from '@tauri-apps/api/core';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import type { WebRef } from '$lib/browser.svelte';
@@ -44,7 +44,7 @@
 	{/each}
 	{#each videos as v, i (v.path)}
 		<span class="chip videochip">
-			{#if v.frames.length}<img class="chip-thumb" src={convertFileSrc(v.frames[0])} alt="" />{:else}<FilmStripIcon size={12} />{/if}
+			{#if v.frames.length}<img class="chip-thumb" src={convertFileSrc(v.frames[0])} alt="" />{:else}<FilmIcon size={12} />{/if}
 			<span class="chip-name">{base(v.path)}</span>
 			<span class="chip-meta">{t('chat.videoMeta', { s: v.duration.toFixed(0), n: v.frames.length })}</span>
 			<IconButton size="xs" onclick={() => onRemoveVideo?.(i)} label="remove"><XIcon size={12} /></IconButton>

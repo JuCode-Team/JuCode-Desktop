@@ -8,8 +8,8 @@
 	// title and two lines of it; the plan itself reads in a page of its own
 	// beside the chat (ProposalPane), opened from here. While it waits and is
 	// the latest message, the approve / revise actions follow.
-	import ClipboardTextIcon from 'phosphor-svelte/lib/ClipboardTextIcon';
-	import ArrowSquareOutIcon from 'phosphor-svelte/lib/ArrowSquareOutIcon';
+	import ClipboardListIcon from '@lucide/svelte/icons/clipboard-list';
+	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 	import { t } from '$lib/i18n';
 	import PlanActions from '$lib/PlanActions.svelte';
 
@@ -48,7 +48,7 @@
 
 <article class="plan" aria-label={t('chat.planCard.label')}>
 	<button class="row" onclick={() => onOpen?.(id)} title={t('chat.planCard.openPage')}>
-		<span class="ico"><ClipboardTextIcon size={16} /></span>
+		<span class="ico"><ClipboardListIcon size={16} /></span>
 		<span class="txt">
 			<span class="head">
 				<span class="ptitle">{title || t('chat.planCard.label')}</span>
@@ -58,7 +58,7 @@
 			</span>
 			{#if gist}<span class="gist">{gist}</span>{/if}
 		</span>
-		<span class="open"><ArrowSquareOutIcon size={15} /></span>
+		<span class="open"><ExternalLinkIcon size={16} /></span>
 	</button>
 </article>
 {#if actionable && status === 'pending' && onAction}

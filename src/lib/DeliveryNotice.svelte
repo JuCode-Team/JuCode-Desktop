@@ -1,5 +1,5 @@
 <script lang="ts">
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import { slide } from 'svelte/transition';
 	import ToolCard from '$lib/ToolCard.svelte';
 	import { t } from '$lib/i18n';
@@ -16,7 +16,7 @@
 		<button class="dhead" class:open onclick={() => (open = !open)} disabled={!delivery.body.trim()}>
 			<span class="dlabel">{delivery.label}</span>
 			{#if !open && preview}<span class="dpreview">{preview}</span>{/if}
-			{#if delivery.body.trim()}<span class="rchev"><CaretRightIcon size={13} /></span>{/if}
+			{#if delivery.body.trim()}<span class="rchev"><ChevronRightIcon size={14} /></span>{/if}
 		</button>
 		{#if open}
 			<div class="dbody" transition:slide={{ duration: 180 }}>{delivery.body}</div>

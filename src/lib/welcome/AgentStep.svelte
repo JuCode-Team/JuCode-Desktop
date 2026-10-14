@@ -1,8 +1,8 @@
 <script lang="ts">
 	// Choose an installed coding agent. Installation is on the environment step.
 	import { onMount } from 'svelte';
-	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
-	import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon';
+	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
+	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
 	import { checkBackend, type BackendStatus } from '$lib/protocol';
 	import { NATIVE_BACKEND_IDS, BACKEND_LABELS, type BackendId } from '$lib/backends';
 	import { loadBackendSettings, saveBackendSettings, versionLabel } from '$lib/backends/settings';
@@ -68,9 +68,9 @@
 					{#if !st || st === 'checking'}
 						<span class="dim">{t('settings.backend.checking')}</span>
 					{:else if st.found}
-						<span class="ok"><CheckCircleIcon size={13} /> {versionLabel(st) || t('settings.backend.found')}</span>
+						<span class="ok"><CircleCheckIcon size={14} /> {versionLabel(st) || t('settings.backend.found')}</span>
 					{:else}
-						<span class="warn"><WarningCircleIcon size={13} /> {t('settings.backend.notFound')}</span>
+						<span class="warn"><CircleAlertIcon size={14} /> {t('settings.backend.notFound')}</span>
 					{/if}
 				</span>
 			</button>

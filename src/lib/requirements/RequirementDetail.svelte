@@ -5,12 +5,12 @@
 	// user's notes, sent together to the last session, or to a new one that
 	// starts from the progress). The user changes its state by hand; while it
 	// is open, its status follows the sessions.
-	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
-	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
-	import TrashIcon from 'phosphor-svelte/lib/TrashIcon';
-	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import ArrowBendDownRightIcon from 'phosphor-svelte/lib/ArrowBendDownRightIcon';
+	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
+	import CheckIcon from '@lucide/svelte/icons/check';
+	import TrashIcon from '@lucide/svelte/icons/trash';
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import CornerDownRightIcon from '@lucide/svelte/icons/corner-down-right';
 	import PopMenu, { type PopMenuItem } from '$lib/ui/PopMenu.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import RequirementTag from './RequirementTag.svelte';
@@ -170,7 +170,7 @@
 
 <div class="detail">
 	<header>
-		<button class="back" onclick={onBack} aria-label={t('shell.desk.back')} title={t('shell.desk.back')}><ArrowLeftIcon size={17} /></button>
+		<button class="back" onclick={onBack} aria-label={t('shell.desk.back')} title={t('shell.desk.back')}><ArrowLeftIcon size={16} /></button>
 		<div class="heading">
 			<RequirementTag id={r.id} />
 			<h1>{r.title}</h1>
@@ -178,7 +178,7 @@
 		<div class="actions">
 			<span class="state">
 				<button class="state-btn" onclick={() => (stateOpen = !stateOpen)} aria-haspopup="menu" aria-expanded={stateOpen}>
-					<span class="dot {r.status}"></span>{statusLabel(r.status)}<CaretDownIcon size={11} />
+					<span class="dot {r.status}"></span>{statusLabel(r.status)}<ChevronDownIcon size={12} />
 				</button>
 				{#if stateOpen}
 					<PopMenu items={stateItems} placement="down-left" onSelect={(k) => ((stateOpen = false), setState(k as RequirementState))} onClose={() => (stateOpen = false)} />
@@ -188,9 +188,9 @@
 				<Button size="sm" onclick={() => setState(r.sessions.length ? 'open' : 'idea')}>{t('shell.requirement.reopen')}</Button>
 			{:else}
 				<Button size="sm" variant="ghost" onclick={() => setState('parked')}>{t('shell.requirement.park')}</Button>
-				<Button size="sm" variant="primary" onclick={() => setState('done')}><CheckIcon size={13} />{t('shell.requirement.done')}</Button>
+				<Button size="sm" variant="primary" onclick={() => setState('done')}><CheckIcon size={14} />{t('shell.requirement.done')}</Button>
 			{/if}
-			<button class="icon" onclick={remove} aria-label={t('shell.requirement.delete')} title={t('shell.requirement.delete')}><TrashIcon size={15} /></button>
+			<button class="icon" onclick={remove} aria-label={t('shell.requirement.delete')} title={t('shell.requirement.delete')}><TrashIcon size={16} /></button>
 		</div>
 	</header>
 
@@ -277,7 +277,7 @@
 					{#each [...sessions].reverse() as s (s.id)}
 						<button class="sess" onclick={() => onOpenSession(s.id)}>
 							<span class="mark {s.state ?? 'idle'}">
-								{#if s.state === 'running'}<CircleNotchIcon size={12} class="spin" />{/if}
+								{#if s.state === 'running'}<LoaderCircleIcon size={12} class="spin" />{/if}
 							</span>
 							<span class="sess-main">
 								<span class="sess-title">{s.title}</span>
@@ -293,7 +293,7 @@
 				<div class="again">
 					<textarea bind:value={notes} rows="3" placeholder={t('shell.requirement.againPlaceholder')} onkeydown={onNotesKey}></textarea>
 					<div class="again-foot">
-						<ArrowBendDownRightIcon size={13} />
+						<CornerDownRightIcon size={14} />
 						<span class="target">{toNew ? t('shell.requirement.againNew') : t('shell.requirement.againTo')}</span>
 						<button class="link" onclick={() => (chosenNew = !toNew)}>{toNew ? t('shell.requirement.toLatest') : t('shell.requirement.toNew')}</button>
 						<span class="grow"></span>

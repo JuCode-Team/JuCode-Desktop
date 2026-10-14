@@ -1,13 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import TreeStructureIcon from 'phosphor-svelte/lib/TreeStructureIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
-	import XIcon from 'phosphor-svelte/lib/XIcon';
-	import MinusIcon from 'phosphor-svelte/lib/MinusIcon';
-	import CircleDashedIcon from 'phosphor-svelte/lib/CircleDashedIcon';
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
-	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
+	import NetworkIcon from '@lucide/svelte/icons/network';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import CheckIcon from '@lucide/svelte/icons/check';
+	import XIcon from '@lucide/svelte/icons/x';
+	import MinusIcon from '@lucide/svelte/icons/minus';
+	import CircleDashedIcon from '@lucide/svelte/icons/circle-dashed';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
 	import { t } from '$lib/i18n';
 	import AgentDetail from '$lib/agents/AgentDetail.svelte';
 	import type { AgentRun, ChatState, WorkflowRun } from '$lib/chat.svelte';
@@ -86,7 +86,7 @@
 	}
 
 	const ICONS: Record<RunState, typeof CheckIcon> = {
-		running: CircleNotchIcon,
+		running: LoaderCircleIcon,
 		done: CheckIcon,
 		failed: XIcon,
 		stopped: MinusIcon,
@@ -97,7 +97,7 @@
 {#snippet stateIcon(state: string)}
 	{@const s = runState(state)}
 	{@const Icon = ICONS[s]}
-	<span class="st {s}" title={t(`dock.agents.state.${s}`)}><Icon size={13} class={s === 'running' ? 'spin' : ''} /></span>
+	<span class="st {s}" title={t(`dock.agents.state.${s}`)}><Icon size={14} class={s === 'running' ? 'spin' : ''} /></span>
 {/snippet}
 
 {#snippet agentRow(a: AgentRun, bar: { left: number; width: number } | undefined)}
@@ -147,7 +147,7 @@
 			{@const expanded = isOpen(w, i)}
 			<section class="run">
 				<button class="run-head" onclick={() => (open[w.id] = !expanded)} aria-expanded={expanded}>
-					<span class="caret" class:open={expanded}><CaretRightIcon size={12} /></span>
+					<span class="caret" class:open={expanded}><ChevronRightIcon size={12} /></span>
 					{@render stateIcon(w.status)}
 					<span class="rname">
 						<span class="rtitle">{w.name || w.description || w.id}</span>
@@ -203,7 +203,7 @@
 		{/if}
 	{:else}
 		<div class="empty">
-			<TreeStructureIcon size={26} />
+			<NetworkIcon size={28} />
 			<p>{t('dock.agents.empty')}</p>
 			<span>{t('dock.agents.emptyHint')}</span>
 		</div>

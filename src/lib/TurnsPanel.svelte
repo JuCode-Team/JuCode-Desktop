@@ -1,6 +1,6 @@
 <script lang="ts">
-	import ClockCounterClockwiseIcon from 'phosphor-svelte/lib/ClockCounterClockwiseIcon';
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
+	import RotateCcwClockIcon from '@lucide/svelte/icons/rotate-ccw-clock';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import { t } from '$lib/i18n';
 	import type { TurnDiff } from '$lib/chat.svelte';
 
@@ -25,7 +25,7 @@
 			{#each turns as turn (turn.index)}
 				<div class="turn">
 					<button class="thead" onclick={() => (collapsed[turn.index] = !collapsed[turn.index])} aria-expanded={!collapsed[turn.index]}>
-						<span class="chev" class:open={!collapsed[turn.index]}><CaretRightIcon size={13} /></span>
+						<span class="chev" class:open={!collapsed[turn.index]}><ChevronRightIcon size={14} /></span>
 						<span class="tnum">{t('dock.turns.turnN', { n: turn.index + 1 })}</span>
 						<span class="tprompt" title={turn.text}>{turn.text}</span>
 						<span class="tstat">
@@ -48,7 +48,7 @@
 	{/if}
 </div>
 
-<div class="foot"><ClockCounterClockwiseIcon size={12} /> {t('dock.turns.foot', { n: turns.length })}</div>
+<div class="foot"><RotateCcwClockIcon size={12} /> {t('dock.turns.foot', { n: turns.length })}</div>
 
 <style>
 	.turns {

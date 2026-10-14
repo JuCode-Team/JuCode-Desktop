@@ -4,14 +4,14 @@
 	// JuCode session; the live view (connection state, tools) comes from the
 	// active session's engine when there is one.
 	import { onMount } from 'svelte';
-	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
-	import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon';
-	import TrashIcon from 'phosphor-svelte/lib/TrashIcon';
-	import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon';
-	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
-	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
-	import XCircleIcon from 'phosphor-svelte/lib/XCircleIcon';
-	import CircleDashedIcon from 'phosphor-svelte/lib/CircleDashedIcon';
+	import PlusIcon from '@lucide/svelte/icons/plus';
+	import PencilIcon from '@lucide/svelte/icons/pencil';
+	import TrashIcon from '@lucide/svelte/icons/trash';
+	import RotateCwIcon from '@lucide/svelte/icons/rotate-cw';
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
+	import CircleXIcon from '@lucide/svelte/icons/circle-x';
+	import CircleDashedIcon from '@lucide/svelte/icons/circle-dashed';
 	import { changeMcpServers, readConfig, type Op } from '$lib/protocol';
 	import { dispatch } from '$lib/backends/router';
 	import type { ChatState } from '$lib/chat.svelte';
@@ -181,7 +181,7 @@
 						<span
 							class="state {stateOf(row)}"
 							title={row.view?.error ?? t(`settings.mcp.state.${stateOf(row)}`)}
-						>{#if stateOf(row) === 'connected'}<CheckCircleIcon size={14} />{:else if stateOf(row) === 'failed'}<XCircleIcon size={14} />{:else}<CircleDashedIcon size={14} />{/if}</span>
+						>{#if stateOf(row) === 'connected'}<CircleCheckIcon size={14} />{:else if stateOf(row) === 'failed'}<CircleXIcon size={14} />{:else}<CircleDashedIcon size={14} />{/if}</span>
 						<span class="sname">{row.name}</span>
 						<span class="tchip">{row.transport}</span>
 						<span class="scount">
@@ -193,14 +193,14 @@
 								{t('settings.mcp.state.unknown')}
 							{/if}
 						</span>
-						<span class="chev" class:up={expanded === row.name}><CaretDownIcon size={14} /></span>
+						<span class="chev" class:up={expanded === row.name}><ChevronDownIcon size={14} /></span>
 					</button>
 					<span class="sacts">
 						{#if live && row.view?.needsAuth}
 							<Button size="sm" onclick={() => signIn(row)}>{t('settings.mcp.signIn')}</Button>
 						{:else if live && stateOf(row) === 'failed' && (row.entry || owned)}
 							<IconButton size="sm" title={t('settings.mcp.reconnect')} onclick={() => reconnect(row)}>
-								<ArrowClockwiseIcon size={14} />
+								<RotateCwIcon size={14} />
 							</IconButton>
 						{/if}
 						<span class="swwrap">
@@ -208,7 +208,7 @@
 						</span>
 						{#if !owned}
 							<IconButton size="sm" title={t('settings.mcp.edit')} onclick={() => openEdit(row)}>
-								<PencilSimpleIcon size={14} />
+								<PencilIcon size={14} />
 							</IconButton>
 							<IconButton
 								size="sm"
@@ -318,7 +318,7 @@
 		</div>
 	{:else if rows.length > 0 && !owned}
 		<button class="addsrv" onclick={openCreate}>
-			<PlusIcon size={15} /> {t('settings.mcp.addServer')}
+			<PlusIcon size={16} /> {t('settings.mcp.addServer')}
 		</button>
 	{/if}
 </SettingsSection>

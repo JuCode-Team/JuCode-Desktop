@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
-	import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon';
-	import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon';
-	import FolderOpenIcon from 'phosphor-svelte/lib/FolderOpenIcon';
+	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
+	import DownloadIcon from '@lucide/svelte/icons/download';
+	import RotateCwIcon from '@lucide/svelte/icons/rotate-cw';
+	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
 	import { aboutApp, openLogsFolder, type AboutApp } from '$lib/about';
 	import { toast } from '$lib/ui/toast.svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -27,7 +27,7 @@
 	<SettingsRow id="app-version" title={t('settings.update.currentVersion')} description={current ? `v${current}` : '…'}>
 		{#snippet detail()}
 			{#if updater.phase === 'latest'}
-				<p class="status ok"><CheckCircleIcon size={13} /> {t('settings.update.latest')}</p>
+				<p class="status ok"><CircleCheckIcon size={14} /> {t('settings.update.latest')}</p>
 			{:else if updater.available}
 				<p class="status accent">{t('settings.update.found', { version: updater.version })}</p>
 			{:else if updater.phase === 'error'}
@@ -37,17 +37,17 @@
 				<div class="bar"><div class="fill" style:width="{updater.progress}%"></div></div>
 			{/if}
 			{#if updater.phase === 'ready'}
-				<p class="status ok"><CheckCircleIcon size={13} /> {t('settings.update.readyHint')}</p>
+				<p class="status ok"><CircleCheckIcon size={14} /> {t('settings.update.readyHint')}</p>
 			{/if}
 		{/snippet}
 		{#if updater.phase === 'checking'}
 			<Button variant="secondary" size="sm" disabled>{t('settings.update.checking')}</Button>
 		{:else if updater.phase === 'available'}
-			<Button variant="primary" size="sm" onclick={() => updater.download()}><DownloadSimpleIcon size={14} /> {t('settings.update.download')}</Button>
+			<Button variant="primary" size="sm" onclick={() => updater.download()}><DownloadIcon size={14} /> {t('settings.update.download')}</Button>
 		{:else if updater.phase === 'downloading'}
 			<Button variant="primary" size="sm" disabled>{t('settings.update.downloading', { pct: updater.progress })}</Button>
 		{:else if updater.phase === 'ready'}
-			<Button variant="primary" size="sm" onclick={() => updater.restart()}><ArrowClockwiseIcon size={14} /> {t('settings.update.restart')}</Button>
+			<Button variant="primary" size="sm" onclick={() => updater.restart()}><RotateCwIcon size={14} /> {t('settings.update.restart')}</Button>
 		{:else}
 			<Button variant="secondary" size="sm" onclick={() => updater.check()}>{t('settings.update.check')}</Button>
 		{/if}

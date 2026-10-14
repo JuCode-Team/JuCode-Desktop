@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
-	import ArrowCounterClockwiseIcon from 'phosphor-svelte/lib/ArrowCounterClockwiseIcon';
-	import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon';
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
-	import CaretLeftIcon from 'phosphor-svelte/lib/CaretLeftIcon';
+	import CheckIcon from '@lucide/svelte/icons/check';
+	import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
+	import SearchIcon from '@lucide/svelte/icons/search';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import SessionSwitches, { type SessionSwitch } from '$lib/composer/SessionSwitches.svelte';
 	import Vendor from '$lib/Vendor.svelte';
@@ -166,7 +166,7 @@
 					<span class="pop-ico"><Vendor model={chat.model || modelName} size={16} /></span>
 					<span class="pop-txt"><span class="pop-label">{modelName}</span></span>
 					{#if activeRow?.detail}<span class="ctx" title={activeRow.detail}>{activeRow.detail}</span>{/if}
-					<span class="pop-ico caret"><CaretRightIcon size={14} /></span>
+					<span class="pop-ico caret"><ChevronRightIcon size={14} /></span>
 				</button>
 			{:else}
 				<div class="pop-row static">
@@ -189,7 +189,7 @@
 						disabled={effortDisabled || !def || shownEffort === def}
 						onclick={() => onEffort(def)}
 					>
-						<ArrowCounterClockwiseIcon size={14} />
+						<RotateCcwIcon size={14} />
 					</IconButton>
 				</div>
 				<EffortSlider efforts={chat.efforts} effort={chat.effort} disabled={effortDisabled} {onEffort} {accent} bind:current={shownEffort} />
@@ -237,7 +237,7 @@
 		<section class="models">
 			<div class="mhead">
 				<IconButton size="sm" label={t('shell.remote.back')} title={t('shell.remote.back')} onclick={() => (page = 'main')}>
-					<CaretLeftIcon size={14} />
+					<ChevronLeftIcon size={14} />
 				</IconButton>
 				<span class="mtitle">{t('chat.pickModel')}</span>
 				{#if chat.backendId === 'jucode'}
@@ -253,7 +253,7 @@
 			</div>
 			{#if showSearch}
 				<label class="search">
-					<MagnifyingGlassIcon size={15} />
+					<SearchIcon size={16} />
 					<!-- svelte-ignore a11y_autofocus -->
 					<input bind:value={query} placeholder={t('shell.pickerSearchPlaceholder')} autofocus />
 				</label>

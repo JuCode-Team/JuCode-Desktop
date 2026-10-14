@@ -1,6 +1,6 @@
 <script lang="ts">
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import { untrack } from 'svelte';
 	import Collapse from '$lib/ui/Collapse.svelte';
 	import { t } from '$lib/i18n';
@@ -146,9 +146,9 @@
 			<span class="fail">{t('chat.toolError')}</span>
 		{/if}
 		{#if running}
-			<CircleNotchIcon size={12} class="spin" />
+			<LoaderCircleIcon size={12} class="spin" />
 		{:else if !isRead}
-			<span class="chev" class:open={!collapsed}><CaretRightIcon size={13} /></span>
+			<span class="chev" class:open={!collapsed}><ChevronRightIcon size={14} /></span>
 		{/if}
 	</button>
 

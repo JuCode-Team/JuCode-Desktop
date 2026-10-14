@@ -1,8 +1,8 @@
 <script lang="ts">
 	// A project's uncommitted changes: the branch, changed files, and one
 	// file's diff at a time.
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import RotateCwIcon from '@lucide/svelte/icons/rotate-cw';
 	import Notice from '$lib/ui/Notice.svelte';
 	import RemoteScreen from './RemoteScreen.svelte';
 	import type { GitFile, GitStatus } from './store.svelte';
@@ -68,7 +68,7 @@
 {#snippet refreshAction()}
 	{#if !file}
 		<button class="act" onclick={refresh} disabled={loading} aria-label={t('shell.remote.refresh')}>
-			<span class="refresh" class:spin={loading && !pending}><ArrowClockwiseIcon size={16} /></span>
+			<span class="refresh" class:spin={loading && !pending}><RotateCwIcon size={16} /></span>
 		</button>
 	{/if}
 {/snippet}
@@ -91,7 +91,7 @@
 			<div class="view">
 			{#each status.files as f (f.path)}
 				<button class="row" class:pending={pending === f.path} disabled={loading} onclick={() => show(f)}>
-					<span class="code">{#if pending === f.path}<CircleNotchIcon size={13} class="spin" />{:else}{f.status.trim() || '·'}{/if}</span>
+					<span class="code">{#if pending === f.path}<LoaderCircleIcon size={14} class="spin" />{:else}{f.status.trim() || '·'}{/if}</span>
 					<span class="path">{f.path}</span>
 				</button>
 			{:else}
@@ -100,7 +100,7 @@
 			</div>
 		{/if}
 	{/if}
-	{#if loading && !status}<p class="empty"><CircleNotchIcon size={14} class="spin" /></p>{/if}
+	{#if loading && !status}<p class="empty"><LoaderCircleIcon size={14} class="spin" /></p>{/if}
 </RemoteScreen>
 
 <style>

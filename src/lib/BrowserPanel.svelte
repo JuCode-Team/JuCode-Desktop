@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
-	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
-	import ArrowRightIcon from 'phosphor-svelte/lib/ArrowRightIcon';
-	import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon';
-	import GlobeIcon from 'phosphor-svelte/lib/GlobeIcon';
-	import SelectionIcon from 'phosphor-svelte/lib/SelectionIcon';
+	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
+	import ArrowRightIcon from '@lucide/svelte/icons/arrow-right';
+	import RotateCwIcon from '@lucide/svelte/icons/rotate-cw';
+	import GlobeIcon from '@lucide/svelte/icons/globe';
+	import SquareDashedIcon from '@lucide/svelte/icons/square-dashed';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import { browser } from '$lib/browser.svelte';
 	import { t } from '$lib/i18n';
@@ -57,7 +57,7 @@
 		<IconButton size="sm" type="button" onclick={() => browser.goBack()} label="back" title={t('dock.browser.back')}><ArrowLeftIcon size={14} /></IconButton>
 		<IconButton size="sm" type="button" onclick={() => browser.goForward()} label="forward" title={t('dock.browser.forward')}><ArrowRightIcon size={14} /></IconButton>
 		<IconButton size="sm" type="button" onclick={() => browser.reload()} label="reload" title={t('dock.browser.reload')}>
-			<ArrowClockwiseIcon size={13} class={browser.loading ? 'spin' : undefined} />
+			<RotateCwIcon size={14} class={browser.loading ? 'spin' : undefined} />
 		</IconButton>
 		<input
 			class="url"
@@ -75,7 +75,7 @@
 			title={t('dock.browser.pick')}
 			onclick={() => browser.setPicking(!browser.picking)}
 		>
-			<SelectionIcon size={14} />
+			<SquareDashedIcon size={14} />
 		</button>
 	</form>
 	{#if browser.picking}
@@ -84,7 +84,7 @@
 	<div class="ph" bind:this={placeholder}>
 		{#if !browser.created}
 			<div class="empty">
-				<GlobeIcon size={22} />
+				<GlobeIcon size={20} />
 				<p>{t('dock.browser.empty')}</p>
 				<span>{t('dock.browser.emptyHint')}</span>
 			</div>

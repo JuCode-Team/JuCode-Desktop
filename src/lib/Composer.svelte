@@ -2,24 +2,24 @@
 	import type { Snippet } from 'svelte';
 	import { prefs } from '$lib/prefs.svelte';
 	import { costText } from '$lib/sessionCost';
-	import ArrowUpIcon from 'phosphor-svelte/lib/ArrowUpIcon';
-	import SquareIcon from 'phosphor-svelte/lib/SquareIcon';
-	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
-	import PaperclipIcon from 'phosphor-svelte/lib/PaperclipIcon';
-	import TargetIcon from 'phosphor-svelte/lib/TargetIcon';
-	import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon';
-	import FastForwardIcon from 'phosphor-svelte/lib/FastForwardIcon';
-	import ShieldCheckIcon from 'phosphor-svelte/lib/ShieldCheckIcon';
-	import ShieldWarningIcon from 'phosphor-svelte/lib/ShieldWarningIcon';
-	import HandIcon from 'phosphor-svelte/lib/HandIcon';
-	import ClipboardTextIcon from 'phosphor-svelte/lib/ClipboardTextIcon';
-	import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon';
-	import StopCircleIcon from 'phosphor-svelte/lib/StopCircleIcon';
-	import MicrophoneIcon from 'phosphor-svelte/lib/MicrophoneIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon';
+	import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
+	import SquareIcon from '@lucide/svelte/icons/square';
+	import PlusIcon from '@lucide/svelte/icons/plus';
+	import PaperclipIcon from '@lucide/svelte/icons/paperclip';
+	import TargetIcon from '@lucide/svelte/icons/target';
+	import ListChecksIcon from '@lucide/svelte/icons/list-checks';
+	import FastForwardIcon from '@lucide/svelte/icons/fast-forward';
+	import ShieldCheckIcon from '@lucide/svelte/icons/shield-check';
+	import ShieldAlertIcon from '@lucide/svelte/icons/shield-alert';
+	import HandIcon from '@lucide/svelte/icons/hand';
+	import ClipboardListIcon from '@lucide/svelte/icons/clipboard-list';
+	import SquarePenIcon from '@lucide/svelte/icons/square-pen';
+	import CircleStopIcon from '@lucide/svelte/icons/circle-stop';
+	import MicIcon from '@lucide/svelte/icons/mic';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import GitBranchIcon from '@lucide/svelte/icons/git-branch';
 	import BranchMenu from '$lib/composer/BranchMenu.svelte';
-	import CommandIcon from 'phosphor-svelte/lib/CommandIcon';
+	import CommandIcon from '@lucide/svelte/icons/command';
 	import { toast } from '$lib/ui/toast.svelte';
 	import BackendIcon from '$lib/BackendIcon.svelte';
 	import PopMenu, { type PopMenuItem } from '$lib/ui/PopMenu.svelte';
@@ -346,10 +346,10 @@
 	// (extendedApprovalModes); JuCode adds plan to the shared three.
 	const APPROVAL_MODES: Record<string, PopMenuItem> = {
 		ask: { key: 'ask', label: t('chat.approvalAsk'), desc: t('chat.approvalAskDesc'), icon: HandIcon },
-		plan: { key: 'plan', label: t('chat.approvalPlan'), desc: t('chat.approvalPlanDesc'), icon: ClipboardTextIcon },
+		plan: { key: 'plan', label: t('chat.approvalPlan'), desc: t('chat.approvalPlanDesc'), icon: ClipboardListIcon },
 		auto: { key: 'auto', label: t('chat.approvalAuto'), desc: t('chat.approvalAutoDesc'), icon: ShieldCheckIcon },
-		edits: { key: 'edits', label: t('chat.approvalEdits'), desc: t('chat.approvalEditsDesc'), icon: NotePencilIcon },
-		all: { key: 'all', label: t('chat.approvalAll'), desc: t('chat.approvalAllDesc'), icon: ShieldWarningIcon, tone: 'warn' }
+		edits: { key: 'edits', label: t('chat.approvalEdits'), desc: t('chat.approvalEditsDesc'), icon: SquarePenIcon },
+		all: { key: 'all', label: t('chat.approvalAll'), desc: t('chat.approvalAllDesc'), icon: ShieldAlertIcon, tone: 'warn' }
 	};
 	// An agent's session shows the agent's four modes, read-only: they are
 	// changed on its Agent page.
@@ -879,7 +879,7 @@
 				title={t('chat.addTitle')}
 				aria-expanded={showAdd}
 			>
-				<PlusIcon size={15} />
+				<PlusIcon size={16} />
 			</button>
 			{#if bcaps.approvalModes}
 				<div class="footsel">
@@ -912,7 +912,7 @@
 					<!-- Model changes slide the name in; the top effort sweeps in the model's colour. -->
 					{#key chat.model}
 						<span class="mswap">
-							{#if chat.backendId === 'jucode' && chat.model}<Vendor model={chat.model} size={15} />{:else}<BackendIcon backend={chat.backendId} size={15} />{/if}
+							{#if chat.backendId === 'jucode' && chat.model}<Vendor model={chat.model} size={15} mono />{:else}<BackendIcon backend={chat.backendId} size={15} mono />{/if}
 							<span class="m">{chat.modelLabel || chat.model || backendLabel}</span>
 						</span>
 					{/key}
@@ -924,7 +924,7 @@
 					{#if chat.ultracode}<span class="e">· Ultracode</span>{/if}
 				</button>
 			{:else if chat.model}
-				<span class="flatbtn model static"><BackendIcon backend={chat.backendId} size={15} /><span>{chat.modelLabel || chat.model}</span></span>
+				<span class="flatbtn model static"><BackendIcon backend={chat.backendId} size={15} mono /><span>{chat.modelLabel || chat.model}</span></span>
 			{/if}
 			{#if modelPopoverVisible}
 				<ModelMenu
@@ -956,12 +956,12 @@
 				aria-label="voice input"
 				title={voice === 'rec' ? t('chat.voiceStopTitle') : voice === 'busy' ? t('chat.voiceBusyTitle') : t('chat.voiceTitle')}
 			>
-				{#if voice === 'busy'}<CircleNotchIcon size={15} class="spin" />{:else if voice === 'rec'}<StopCircleIcon size={15} />{:else}<MicrophoneIcon size={15} />{/if}
+				{#if voice === 'busy'}<LoaderCircleIcon size={16} class="spin" />{:else if voice === 'rec'}<CircleStopIcon size={16} />{:else}<MicIcon size={16} />{/if}
 			</button>
 			{#if chat.busy && !currentQ}
-				<button class="cact stop" onclick={onStop} aria-label="stop" title={withShortcut(t('chat.stopTitle'), 'stop')}><SquareIcon size={13} /></button>
+				<button class="cact stop" onclick={onStop} aria-label="stop" title={withShortcut(t('chat.stopTitle'), 'stop')}><SquareIcon size={14} /></button>
 			{:else}
-				<button class="cact send" onclick={submit} disabled={!input.trim() && !attachments.length && !videos.length} aria-label="send" title={t('chat.sendTitle')}><ArrowUpIcon size={15} /></button>
+				<button class="cact send" onclick={submit} disabled={!input.trim() && !attachments.length && !videos.length} aria-label="send" title={t('chat.sendTitle')}><ArrowUpIcon size={16} /></button>
 			{/if}
 		</div>
 	</div>
@@ -1099,9 +1099,14 @@
 		mask: var(--quote-mask) center / contain no-repeat;
 	}
 	.rich :global(.refchip:not(.imgchip):not(.quotechip))::before {
-		content: '🌐';
-		margin-right: 3px;
-		font-size: var(--fs-2xs);
+		content: '';
+		display: inline-block;
+		width: 11px;
+		height: 11px;
+		margin-right: 5px;
+		vertical-align: -1px;
+		background: var(--dim2);
+		mask: var(--globe-mask) center / contain no-repeat;
 	}
 	.composer-bar {
 		display: flex;

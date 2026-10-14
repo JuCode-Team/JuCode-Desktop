@@ -3,9 +3,9 @@
 	// Agent) as the agent it started — name, the task's first line, its state
 	// and its latest action — and a wait as the agents it waits on with
 	// theirs. A click shows the agent's own conversation.
-	import RobotIcon from 'phosphor-svelte/lib/RobotIcon';
-	import HourglassMediumIcon from 'phosphor-svelte/lib/HourglassMediumIcon';
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
+	import BotIcon from '@lucide/svelte/icons/bot';
+	import HourglassIcon from '@lucide/svelte/icons/hourglass';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import { t } from '$lib/i18n';
 	import {
 		agentOfCall,
@@ -84,7 +84,7 @@
 {#if wait}
 	<div class="sa wait">
 		<div class="head">
-			<span class="ico"><HourglassMediumIcon size={14} /></span>
+			<span class="ico"><HourglassIcon size={14} /></span>
 			<span class="title">{waitingOn.length ? t('chat.subagentCard.waitN', { n: waitingOn.length }) : t('chat.subagentCard.wait')}</span>
 			{#if timedOut}<span class="tag">{t('chat.subagentCard.timedOut')}</span>{/if}
 			{#if running}<StateIcon state="running" size={12} />{/if}
@@ -102,7 +102,7 @@
 	</div>
 {:else}
 	<button class="sa spawn" class:link={!!onOpen && !!agent} disabled={!onOpen || !agent} onclick={(e) => agent && onOpen?.(agent, e.metaKey || e.ctrlKey ? 'other' : 'default')} aria-label={t('chat.progress.open', { name: label })}>
-		<span class="ico"><RobotIcon size={15} /></span>
+		<span class="ico"><BotIcon size={16} /></span>
 		<span class="col">
 			<span class="line">
 				<span class="name">{label}</span>
@@ -114,7 +114,7 @@
 			{#if task}<span class="task">{task}</span>{/if}
 			{#if activity}<span class="act" class:err={state === 'failed'}>{activity}</span>{/if}
 		</span>
-		{#if onOpen && agent}<span class="go"><CaretRightIcon size={13} /></span>{/if}
+		{#if onOpen && agent}<span class="go"><ChevronRightIcon size={14} /></span>{/if}
 	</button>
 {/if}
 

@@ -3,7 +3,7 @@
 	// agent, with the reminders each agent set itself.
 	import AgentAvatar from '$lib/AgentAvatar.svelte';
 	import AgentSchedules from '$lib/AgentSchedules.svelte';
-	import TrashIcon from 'phosphor-svelte/lib/TrashIcon';
+	import TrashIcon from '@lucide/svelte/icons/trash';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import { confirm } from '$lib/ui/confirm.svelte';
 	import { toast } from '$lib/ui/toast.svelte';

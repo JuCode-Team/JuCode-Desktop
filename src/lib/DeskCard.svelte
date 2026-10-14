@@ -4,9 +4,9 @@
 	// deny. Either can be closed as no longer needed (nothing is sent to the
 	// agent; the desk offers to undo it). Shown in the desk's list
 	// (DeskContent) and on the remote page.
-	import QuestionIcon from 'phosphor-svelte/lib/QuestionIcon';
-	import ShieldCheckIcon from 'phosphor-svelte/lib/ShieldCheckIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
+	import CircleQuestionMarkIcon from '@lucide/svelte/icons/circle-question-mark';
+	import ShieldCheckIcon from '@lucide/svelte/icons/shield-check';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import AgentAvatar from '$lib/AgentAvatar.svelte';
@@ -72,7 +72,7 @@
 {#if question}
 	<article class="card" class:high={question.importance === 'high'}>
 		<div class="card-head">
-			<QuestionIcon size={14} />
+			<CircleQuestionMarkIcon size={14} />
 			<span class="kind">{t('shell.desk.question')}</span>
 			{@render who(question.agent, agentDirectory.agentName(question.agent), question.asked_at)}
 			{#if question.due_at}<span class="due">{t('shell.desk.due', { time: when(question.due_at) })}</span>{/if}
@@ -96,7 +96,7 @@
 			<Button size="sm" variant="ghost" disabled={busy} onclick={() => run(() => agentDirectory.close('question', question.id))}>{t('shell.desk.close')}</Button>
 			<Button size="sm" onclick={() => onOpenSession(question.session)}>{t('shell.desk.openSession')}</Button>
 			<Button size="sm" variant="primary" disabled={!answer.trim() || busy} onclick={reply}>
-				{#if busy}<CircleNotchIcon size={13} class="spin" />{/if}
+				{#if busy}<LoaderCircleIcon size={14} class="spin" />{/if}
 				{t('shell.desk.answer')}
 			</Button>
 		</div>

@@ -6,13 +6,13 @@
 	// the main column shows the overview (DeskContent), the requirements (one
 	// of them, or the list), the scheduled tasks, one agent's page, or one of
 	// its sessions (`chatView`, rendered by the page).
-	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
-	import TrayIcon from 'phosphor-svelte/lib/TrayIcon';
-	import CalendarBlankIcon from 'phosphor-svelte/lib/CalendarBlankIcon';
-	import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon';
-	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import ClockIcon from 'phosphor-svelte/lib/ClockIcon';
+	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
+	import InboxIcon from '@lucide/svelte/icons/inbox';
+	import CalendarIcon from '@lucide/svelte/icons/calendar';
+	import ListChecksIcon from '@lucide/svelte/icons/list-checks';
+	import PlusIcon from '@lucide/svelte/icons/plus';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import ClockIcon from '@lucide/svelte/icons/clock';
 	import type { Snippet } from 'svelte';
 	import AgentAvatar from '$lib/AgentAvatar.svelte';
 	import AgentPage from '$lib/AgentPage.svelte';
@@ -175,23 +175,23 @@
 	<nav class="nav" style:width="{navWidth}px" aria-label={t('shell.desk.title')}>
 		<div class="nav-head">
 			<button class="back" title={t('shell.desk.back')} aria-label={t('shell.desk.back')} onclick={onClose}>
-				<ArrowLeftIcon size={18} />
+				<ArrowLeftIcon size={16} />
 			</button>
 			<h2>{t('shell.desk.title')}</h2>
 		</div>
 		<div class="nav-list">
 			<button class="item" class:on={onOverview} aria-current={onOverview ? 'page' : undefined} onclick={() => openPage('overview')}>
-				<TrayIcon size={18} weight={onOverview ? 'fill' : 'regular'} />
+				<InboxIcon size={16} strokeWidth={onOverview ? 2 : undefined} />
 				<span class="label">{t('shell.desk.overview')}</span>
 				{#if pending}<span class="badge">{pending}</span>{/if}
 			</button>
 			<button class="item" class:on={onRequirements} aria-current={onRequirements ? 'page' : undefined} onclick={() => openPage('requirements')}>
-				<ListChecksIcon size={18} weight={onRequirements ? 'fill' : 'regular'} />
+				<ListChecksIcon size={16} strokeWidth={onRequirements ? 2 : undefined} />
 				<span class="label">{t('shell.requirement.title')}</span>
 				{#if yourTurn.length}<span class="badge">{yourTurn.length}</span>{/if}
 			</button>
 			<button class="item" class:on={onSchedules} aria-current={onSchedules ? 'page' : undefined} onclick={() => openPage('schedules')}>
-				<CalendarBlankIcon size={18} weight={onSchedules ? 'fill' : 'regular'} />
+				<CalendarIcon size={16} strokeWidth={onSchedules ? 2 : undefined} />
 				<span class="label">{t('shell.schedule.title')}</span>
 				{#if scheduleCount}<span class="count">{scheduleCount}</span>{/if}
 			</button>
@@ -212,7 +212,7 @@
 						<span class="sub" class:live={a.busy && a.enabled}>{[showAll ? workspaceName(a) : '', projectName(a.project), status(a)].filter(Boolean).join(' · ')}</span>
 					</span>
 					{#if waiting}<span class="badge" title={t('shell.desk.pendingFor', { n: waiting })}>{waiting}</span>
-					{:else if a.busy && a.enabled}<CircleNotchIcon size={14} class="spin busy" />{/if}
+					{:else if a.busy && a.enabled}<LoaderCircleIcon size={14} class="spin busy" />{/if}
 				</button>
 				{#if shown?.id === a.id}
 					{#each shownTasks as task (task.id)}
@@ -220,7 +220,7 @@
 						<button class="item sess" class:on={!!sessionId && !!session && openSid === session} onclick={() => openTask(task, a.id)}>
 							{#if task.trigger.kind !== 'manual'}<ClockIcon size={12} />{/if}
 							<span class="label">{task.title || t('shell.agentPage.untitled')}</span>
-							{#if task.state === 'running'}<CircleNotchIcon size={12} class="spin busy" />
+							{#if task.state === 'running'}<LoaderCircleIcon size={12} class="spin busy" />
 							{:else if task.state === 'needs_you'}<span class="needs" title={t('shell.activity.stateNeedsYou')}></span>{/if}
 						</button>
 					{/each}
@@ -292,7 +292,7 @@
 									{#if waiting}<span class="badge">{waiting}</span>{/if}
 								</span>
 								<span class="card-status" class:live={a.busy && a.enabled}>
-									{#if a.busy && a.enabled}<CircleNotchIcon size={12} class="spin" />{/if}{status(a, false)}
+									{#if a.busy && a.enabled}<LoaderCircleIcon size={12} class="spin" />{/if}{status(a, false)}
 								</span>
 								{#if a.summary}<span class="card-role">{a.summary}</span>{/if}
 							</button>

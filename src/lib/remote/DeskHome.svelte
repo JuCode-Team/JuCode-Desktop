@@ -2,9 +2,9 @@
 	// The Desk tab's pane on a wide page, with nothing opened from the list:
 	// everything waiting for the user, answerable in place, then which agents
 	// are working and the next scheduled runs.
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import ClockIcon from 'phosphor-svelte/lib/ClockIcon';
-	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import ClockIcon from '@lucide/svelte/icons/clock';
+	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
 	import AgentAvatar from '$lib/AgentAvatar.svelte';
 	import DeskCard from '$lib/DeskCard.svelte';
 	import { useAgents } from '$lib/agentScope';
@@ -37,7 +37,7 @@
 			<h2>{t('shell.desk.pending')}</h2>
 			{#if pending === 0}
 				<div class="clear">
-					<CheckCircleIcon size={20} />
+					<CircleCheckIcon size={20} />
 					<span>{t('shell.desk.nothingPending')}</span>
 				</div>
 			{:else}
@@ -57,7 +57,7 @@
 				<h2>{t('shell.desk.working')}</h2>
 				{#each working as agent (agent.id)}
 					<button class="line" onclick={() => onOpenAgent(agent.id)}>
-						<CircleNotchIcon size={14} class="spin" />
+						<LoaderCircleIcon size={14} class="spin" />
 						<AgentAvatar {agent} size={14} />
 						<span class="name">{agent.name}</span>
 					</button>

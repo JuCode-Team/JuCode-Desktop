@@ -1,8 +1,8 @@
 <script lang="ts">
-	import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon';
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
-	import ArrowCounterClockwiseIcon from 'phosphor-svelte/lib/ArrowCounterClockwiseIcon';
-	import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon';
+	import PencilIcon from '@lucide/svelte/icons/pencil';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
+	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
 	import { fade } from 'svelte/transition';
 	import Markdown from '$lib/Markdown.svelte';
 	import Collapse from '$lib/ui/Collapse.svelte';
@@ -27,9 +27,9 @@
 	import { fmtDur, turnParts } from '$lib/turnStats';
 	import { SvelteSet } from 'svelte/reactivity';
 	import UserImage from '$lib/UserImage.svelte';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import QuotesIcon from 'phosphor-svelte/lib/QuotesIcon';
-	import ListPlusIcon from 'phosphor-svelte/lib/ListPlusIcon';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import QuoteIcon from '@lucide/svelte/icons/quote';
+	import ListPlusIcon from '@lucide/svelte/icons/list-plus';
 
 	let {
 		messages,
@@ -470,16 +470,16 @@
 			{:else}
 			<div class="row user">
 				<button class="uedit rewind" onclick={() => onRewind(m.text, userOrdinal.get(m) ?? 0)} aria-label="rewind" title={t('chat.rewindTitleN', { n: drop })}>
-					<ArrowCounterClockwiseIcon size={12} />{#if drop > 1}<span class="rwn">{drop}</span>{/if}
+					<RotateCcwIcon size={12} />{#if drop > 1}<span class="rwn">{drop}</span>{/if}
 				</button>
-				<button class="uedit" onclick={() => onEdit(m.text)} aria-label="quote" title={t('chat.quoteTitle')}><PencilSimpleIcon size={12} /></button>
+				<button class="uedit" onclick={() => onEdit(m.text)} aria-label="quote" title={t('chat.quoteTitle')}><PencilIcon size={12} /></button>
 				<div class="ucol">
 					<!-- One line: the bubble is pre-wrap, so template whitespace would show. -->
 					<div class="bubble" class:pending={m.state === 'sending'}>{#if m.images?.length}<div class="uimgs">{#each m.images as p (p)}<UserImage path={p} load={loadImage} group={m.images} />{/each}</div>{/if}{#each userBlocks(m.text) as block, b (b)}{#if block.quote}<span class="uquote">{block.text}</span>{:else}<span class="utext">{#each userSegments(block.text) as seg, j (j)}{#if seg.image}<span class="utoken">{t('chat.imageToken', { n: seg.image })}</span>{:else}{seg.text}{/if}{/each}</span>{/if}{/each}</div>
 					{#if m.state}
 						{#key m.state}
 							<div class="sendstate {m.state}" in:fade={{ duration: 160 }}>
-								{#if m.state === 'failed'}<WarningCircleIcon size={13} />{:else}<span class="sdot"></span>{/if}
+								{#if m.state === 'failed'}<CircleAlertIcon size={14} />{:else}<span class="sdot"></span>{/if}
 								<span>{t(`chat.send.${m.state}`)}</span>
 								{#if call && (m.state === 'connecting' || m.state === 'waiting')}<CallTimer since={call.since} />{/if}
 							</div>
@@ -516,7 +516,7 @@
 			<div class="reason" class:open={!m.collapsed}>
 				<button class="reason-head" onclick={() => (m.collapsed = !m.collapsed)}>
 					<span>{t('chat.reasoning')}</span>
-					<span class="rchev"><CaretRightIcon size={13} /></span>
+					<span class="rchev"><ChevronRightIcon size={14} /></span>
 				</button>
 				<Collapse open={!m.collapsed}>
 					<div class="reason-body">
@@ -548,8 +548,8 @@
 							{#if g.latest.target}<span class="tg-target">{g.latest.target}</span>{/if}
 						</span>
 					{/if}
-					{#if g.running}<CircleNotchIcon size={12} class="spin" />{/if}
-					<span class="rchev"><CaretRightIcon size={13} /></span>
+					{#if g.running}<LoaderCircleIcon size={12} class="spin" />{/if}
+					<span class="rchev"><ChevronRightIcon size={14} /></span>
 				</button>
 				{#if open}
 					<div class="tg-list">
@@ -584,11 +584,11 @@
 	<!-- mousedown would clear the selection before the click lands. -->
 	<div class="cite" class:below style:left="{cite.x}px" style:top="{below ? cite.bottom + 8 : cite.top - 8}px">
 		<button onmousedown={(e) => e.preventDefault()} onclick={() => takeCite()}>
-			<QuotesIcon size={13} />{t('chat.cite')}
+			<QuoteIcon size={14} />{t('chat.cite')}
 		</button>
 		{#if onNote}
 			<button onmousedown={(e) => e.preventDefault()} onclick={() => takeCite(onNote)}>
-				<ListPlusIcon size={13} />{t('shell.requirement.note')}
+				<ListPlusIcon size={14} />{t('shell.requirement.note')}
 			</button>
 		{/if}
 	</div>

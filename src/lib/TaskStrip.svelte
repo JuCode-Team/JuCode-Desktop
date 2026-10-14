@@ -1,7 +1,7 @@
 <script lang="ts">
-	import XIcon from 'phosphor-svelte/lib/XIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
+	import XIcon from '@lucide/svelte/icons/x';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import { t } from '$lib/i18n';
 	import { taskKindLabel, type ChatState } from '$lib/chat.svelte';
@@ -112,8 +112,8 @@
 	<div class="strip">
 		{#if rows.length}
 			<button class="head" aria-expanded={!collapsed} aria-label={t('chat.task.list')} onclick={() => (folded = !collapsed)}>
-				<span class="caret" class:open={!collapsed}><CaretRightIcon size={11} /></span>
-				<CircleNotchIcon size={12} class="spin" />
+				<span class="caret" class:open={!collapsed}><ChevronRightIcon size={12} /></span>
+				<LoaderCircleIcon size={12} class="spin" />
 				<span>{counts}</span>
 			</button>
 		{/if}
@@ -167,11 +167,11 @@
 					<span class="q">{a.question}</span>
 					<span class="grow"></span>
 					<IconButton size="sm" label={t('chat.btw.dismiss')} title={t('chat.btw.dismiss')} onclick={() => chat.sideAnswers.splice(i, 1)}>
-						<XIcon size={13} />
+						<XIcon size={14} />
 					</IconButton>
 				</div>
 				{#if a.pending}
-					<span class="dim"><CircleNotchIcon size={12} class="spin" /> {t('chat.btw.pending')}</span>
+					<span class="dim"><LoaderCircleIcon size={12} class="spin" /> {t('chat.btw.pending')}</span>
 				{:else if a.error}
 					<span class="dim">{a.error}</span>
 				{:else}

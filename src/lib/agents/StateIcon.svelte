@@ -1,23 +1,23 @@
 <script lang="ts">
 	// A subagent's (or a plan step's) state as one small icon.
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
-	import XCircleIcon from 'phosphor-svelte/lib/XCircleIcon';
-	import MinusCircleIcon from 'phosphor-svelte/lib/MinusCircleIcon';
-	import CircleDashedIcon from 'phosphor-svelte/lib/CircleDashedIcon';
-	import CircleIcon from 'phosphor-svelte/lib/CircleIcon';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
+	import CircleXIcon from '@lucide/svelte/icons/circle-x';
+	import CircleMinusIcon from '@lucide/svelte/icons/circle-minus';
+	import CircleDashedIcon from '@lucide/svelte/icons/circle-dashed';
+	import CircleIcon from '@lucide/svelte/icons/circle';
 	import type { RunState } from '$lib/agentTrace';
 	import type { StepState } from '$lib/agentProgress';
 
 	let { state, size = 14, label = '' }: { state: RunState | StepState | 'unknown'; size?: number; label?: string } = $props();
 
 	const ICON = {
-		running: CircleNotchIcon,
-		active: CircleNotchIcon,
-		done: CheckCircleIcon,
-		failed: XCircleIcon,
-		stopped: MinusCircleIcon,
-		skipped: MinusCircleIcon,
+		running: LoaderCircleIcon,
+		active: LoaderCircleIcon,
+		done: CircleCheckIcon,
+		failed: CircleXIcon,
+		stopped: CircleMinusIcon,
+		skipped: CircleMinusIcon,
 		queued: CircleDashedIcon,
 		pending: CircleIcon,
 		unknown: CircleDashedIcon
@@ -27,7 +27,7 @@
 </script>
 
 <span class="si {state}" title={label || undefined} aria-label={label || undefined} role={label ? 'img' : undefined}>
-	<Icon {size} weight={state === 'done' ? 'fill' : 'regular'} class={spinning ? 'spin' : ''} />
+	<Icon {size} class={spinning ? 'spin' : ''} />
 </span>
 
 <style>

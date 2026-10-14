@@ -1,9 +1,9 @@
 <script lang="ts">
 	// Adds a project from the remote app: browse folders under the computer's
 	// home directory, then add the one shown or make a new folder inside it.
-	import ArrowUpIcon from 'phosphor-svelte/lib/ArrowUpIcon';
-	import FolderIcon from 'phosphor-svelte/lib/FolderIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
+	import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
+	import FolderIcon from '@lucide/svelte/icons/folder';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import RemoteScreen from './RemoteScreen.svelte';
@@ -56,7 +56,7 @@
 <RemoteScreen title={t('shell.remote.addProject')} subtitle={listing?.path} {onBack}>
 	{#if error}<Notice tone="error">{error}</Notice>{/if}
 	{#if !listing}
-		<p class="empty"><CircleNotchIcon size={14} class="spin" /></p>
+		<p class="empty"><LoaderCircleIcon size={14} class="spin" /></p>
 	{:else}
 		<div class="here">
 			<Button variant="primary" disabled={busy} onclick={() => run(() => remoteProjects.addProject(listing!.path, workspaceName()))}>

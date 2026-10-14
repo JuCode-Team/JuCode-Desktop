@@ -7,8 +7,8 @@
 	// the gateway has not configured, or raises the advertised (smallest-account)
 	// window up to the gateway's largest.
 	import { onMount } from 'svelte';
-	import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
+	import SearchIcon from '@lucide/svelte/icons/search';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import Modal from '$lib/ui/Modal.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import Checkbox from '$lib/ui/Checkbox.svelte';
@@ -153,7 +153,7 @@
 
 <Modal title={t('shell.modelSetup.title')} width={600} dismissible={!saving} {onClose}>
 	{#if loading}
-		<div class="state"><CircleNotchIcon size={22} class="spin" /></div>
+		<div class="state"><LoaderCircleIcon size={20} class="spin" /></div>
 	{:else if error}
 		<Notice>{t('shell.modelSetup.loadFailed', { error })}</Notice>
 		<div><Button size="sm" onclick={load}>{t('shell.modelSetup.retry')}</Button></div>
@@ -161,7 +161,7 @@
 		<p class="intro">{t('shell.modelSetup.intro', { n: models.length })} {t('shell.modelSetup.windowHint')}</p>
 		{#if problems.length}<Notice>{problems[0]}</Notice>{/if}
 		<label class="search">
-			<MagnifyingGlassIcon size={16} />
+			<SearchIcon size={16} />
 			<input bind:value={query} placeholder={t('shell.modelSetup.search')} />
 		</label>
 		<div class="list">

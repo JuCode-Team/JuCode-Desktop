@@ -34,8 +34,8 @@
 	// tool's own login or config) or the gateway, on a group of its own that
 	// the daemon's local gateway applies to its next request.
 	import { onMount } from 'svelte';
-	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
-	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
+	import CheckIcon from '@lucide/svelte/icons/check';
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import { readConfig, writeConfig } from '$lib/protocol';
 	import { toast } from '$lib/ui/toast.svelte';
 	import { t } from '$lib/i18n';
@@ -119,7 +119,7 @@
 			{#if !local && served.length}
 				<span class="mult">{mult(current ? current.rate_multiplier : served[0].rate_multiplier)}</span>
 			{/if}
-			<span class="caret" class:open><CaretDownIcon size={13} /></span>
+			<span class="caret" class:open><ChevronDownIcon size={14} /></span>
 		</button>
 		{#if open}
 			<div class="list" role="listbox" aria-label={tool ? t('chat.provider') : t('chat.groupTitle')}>

@@ -1,32 +1,32 @@
 <script lang="ts">
-	import ChatCircleTextIcon from 'phosphor-svelte/lib/ChatCircleTextIcon';
+	import MessageSquareTextIcon from '@lucide/svelte/icons/message-square-text';
 	import { tick } from 'svelte';
-	import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon';
-	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
-	import FolderPlusIcon from 'phosphor-svelte/lib/FolderPlusIcon';
-	import CpuIcon from 'phosphor-svelte/lib/CpuIcon';
-	import ArrowCounterClockwiseIcon from 'phosphor-svelte/lib/ArrowCounterClockwiseIcon';
-	import ClockCounterClockwiseIcon from 'phosphor-svelte/lib/ClockCounterClockwiseIcon';
-	import StackIcon from 'phosphor-svelte/lib/StackIcon';
-	import GaugeIcon from 'phosphor-svelte/lib/GaugeIcon';
-	import PulseIcon from 'phosphor-svelte/lib/PulseIcon';
-	import StethoscopeIcon from 'phosphor-svelte/lib/StethoscopeIcon';
-	import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon';
-	import GitForkIcon from 'phosphor-svelte/lib/GitForkIcon';
-	import TerminalWindowIcon from 'phosphor-svelte/lib/TerminalWindowIcon';
-	import StorefrontIcon from 'phosphor-svelte/lib/StorefrontIcon';
-	import SettingsIcon from 'phosphor-svelte/lib/GearIcon';
-	import SidebarSimpleIcon from 'phosphor-svelte/lib/SidebarSimpleIcon';
-	import SquaresFourIcon from 'phosphor-svelte/lib/SquaresFourIcon';
-	import CircleHalfIcon from 'phosphor-svelte/lib/CircleHalfIcon';
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
-	import WrenchIcon from 'phosphor-svelte/lib/WrenchIcon';
+	import SearchIcon from '@lucide/svelte/icons/search';
+	import PlusIcon from '@lucide/svelte/icons/plus';
+	import FolderPlusIcon from '@lucide/svelte/icons/folder-plus';
+	import CpuIcon from '@lucide/svelte/icons/cpu';
+	import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
+	import RotateCcwClockIcon from '@lucide/svelte/icons/rotate-ccw-clock';
+	import LayersIcon from '@lucide/svelte/icons/layers';
+	import GaugeIcon from '@lucide/svelte/icons/gauge';
+	import ActivityIcon from '@lucide/svelte/icons/activity';
+	import StethoscopeIcon from '@lucide/svelte/icons/stethoscope';
+	import GitBranchIcon from '@lucide/svelte/icons/git-branch';
+	import GitForkIcon from '@lucide/svelte/icons/git-fork';
+	import SquareTerminalIcon from '@lucide/svelte/icons/square-terminal';
+	import StoreIcon from '@lucide/svelte/icons/store';
+	import SettingsIcon from '@lucide/svelte/icons/settings';
+	import PanelLeftIcon from '@lucide/svelte/icons/panel-left';
+	import LayoutGridIcon from '@lucide/svelte/icons/layout-grid';
+	import ContrastIcon from '@lucide/svelte/icons/contrast';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import WrenchIcon from '@lucide/svelte/icons/wrench';
 	import type { ChatState } from '$lib/chat.svelte';
 	import { caps, type BackendCaps } from '$lib/backends';
 	import Modal from '$lib/ui/Modal.svelte';
 	import { t } from '$lib/i18n';
 	import { shortcutLabel } from '$lib/shortcuts';
-	import KeyboardIcon from 'phosphor-svelte/lib/KeyboardIcon';
+	import KeyboardIcon from '@lucide/svelte/icons/keyboard';
 
 	let {
 		chat,
@@ -110,36 +110,36 @@
 			{ id: 'new-project', label: t('shell.cmd.newProject'), icon: FolderPlusIcon, keywords: t('shell.cmd.newProjectKw'), run: wrap(onNewProject) },
 			{ id: 'new-task', label: t('shell.cmd.newTask'), hint: t('shell.cmd.newTaskHint'), icon: GitForkIcon, keywords: t('shell.cmd.newTaskKw'), disabled: !canNewTask, run: wrap(onNewTask) },
 			{ id: 'model', label: t('shell.cmd.model'), keys: shortcutLabel('model'), icon: CpuIcon, keywords: t('shell.cmd.modelKw'), cap: 'modelPicker', run: wrap(() => onRun('/model')) },
-			{ id: 'rewind', label: t('shell.cmd.rewind'), hint: t('shell.cmd.rewindHint'), icon: ArrowCounterClockwiseIcon, keywords: t('shell.cmd.rewindKw'), cap: 'checkpoints', run: wrap(() => onRun('/rewind')) },
-			{ id: 'tui', label: t('chat.tuiContinue'), hint: t('shell.cmd.tuiHint'), icon: TerminalWindowIcon, keywords: t('shell.cmd.tuiKw'), disabled: !canOpenTui || !onOpenTui, run: wrap(() => onOpenTui?.()) },
-			{ id: 'history', label: t('shell.history'), keys: shortcutLabel('history'), icon: ClockCounterClockwiseIcon, keywords: t('shell.cmd.resumeKw'), disabled: !hasProject, run: wrap(onHistory) },
-			{ id: 'resume', label: t('shell.cmd.resume'), icon: ClockCounterClockwiseIcon, keywords: t('shell.cmd.resumeKw'), cap: 'resume', run: wrap(() => onRun('/resume')) },
+			{ id: 'rewind', label: t('shell.cmd.rewind'), hint: t('shell.cmd.rewindHint'), icon: RotateCcwIcon, keywords: t('shell.cmd.rewindKw'), cap: 'checkpoints', run: wrap(() => onRun('/rewind')) },
+			{ id: 'tui', label: t('chat.tuiContinue'), hint: t('shell.cmd.tuiHint'), icon: SquareTerminalIcon, keywords: t('shell.cmd.tuiKw'), disabled: !canOpenTui || !onOpenTui, run: wrap(() => onOpenTui?.()) },
+			{ id: 'history', label: t('shell.history'), keys: shortcutLabel('history'), icon: RotateCcwClockIcon, keywords: t('shell.cmd.resumeKw'), disabled: !hasProject, run: wrap(onHistory) },
+			{ id: 'resume', label: t('shell.cmd.resume'), icon: RotateCcwClockIcon, keywords: t('shell.cmd.resumeKw'), cap: 'resume', run: wrap(() => onRun('/resume')) },
 			{ id: 'tree', label: t('shell.cmd.tree'), icon: GitBranchIcon, keywords: t('shell.cmd.treeKw'), cap: 'branchTree', run: wrap(() => onRun('/tree')) },
-			{ id: 'compact', label: t('shell.cmd.compact'), icon: StackIcon, keywords: t('shell.cmd.compactKw'), cap: 'compact', run: wrap(() => onRun('/compact')) },
+			{ id: 'compact', label: t('shell.cmd.compact'), icon: LayersIcon, keywords: t('shell.cmd.compactKw'), cap: 'compact', run: wrap(() => onRun('/compact')) },
 			{ id: 'context', label: t('shell.cmd.context'), icon: GaugeIcon, keywords: t('shell.cmd.contextKw'), cap: 'slashCommands', run: wrap(() => onRun('/context')) },
-			{ id: 'stats', label: t('shell.cmd.stats'), icon: PulseIcon, keywords: t('shell.cmd.statsKw'), cap: 'slashCommands', run: wrap(() => onRun('/stats')) },
+			{ id: 'stats', label: t('shell.cmd.stats'), icon: ActivityIcon, keywords: t('shell.cmd.statsKw'), cap: 'slashCommands', run: wrap(() => onRun('/stats')) },
 			{ id: 'doctor', label: t('shell.cmd.doctor'), icon: StethoscopeIcon, keywords: t('shell.cmd.doctorKw'), cap: 'slashCommands', run: wrap(() => onRun('/doctor')) },
-			{ id: 'market', label: t('shell.cmd.market'), icon: StorefrontIcon, keywords: t('shell.cmd.marketKw'), cap: 'skills', run: wrap(onMarket) },
+			{ id: 'market', label: t('shell.cmd.market'), icon: StoreIcon, keywords: t('shell.cmd.marketKw'), cap: 'skills', run: wrap(onMarket) },
 			// Tool tiles on the canvas: Git, Terminal, Files, Browser, Plan, …
 			...panelOptions.map((p): Action => ({
 				id: `panel-${p.key}`,
 				label: t('shell.cmd.openPanel', { name: p.label }),
 				hint: t('shell.cmd.openPanelHint'),
-				icon: SquaresFourIcon,
+				icon: LayoutGridIcon,
 				keys: p.key === 'terminal' ? shortcutLabel('terminal') : undefined,
 				keywords: `${t('shell.cmd.openPanelKw')} ${p.key} ${p.label}`,
 				run: wrap(() => onOpenPanel(p.key))
 			})),
 			{ id: 'settings', label: t('shell.cmd.settings'), keys: shortcutLabel('settings'), icon: SettingsIcon, keywords: t('shell.cmd.settingsKw'), run: wrap(onSettings) },
-			{ id: 'feedback', label: t('shell.cmd.feedback'), icon: ChatCircleTextIcon, keywords: t('shell.cmd.feedbackKw'), run: wrap(onFeedback) },
+			{ id: 'feedback', label: t('shell.cmd.feedback'), icon: MessageSquareTextIcon, keywords: t('shell.cmd.feedbackKw'), run: wrap(onFeedback) },
 			{ id: 'setup', label: t('shell.cmd.setup'), hint: t('shell.cmd.setupHint'), icon: WrenchIcon, keywords: t('shell.cmd.setupKw'), run: wrap(() => onSetup()) },
 			// Debug builds only: VITE_JUCODE_DEBUG=1 when running or building.
 			...(import.meta.env.VITE_JUCODE_DEBUG === '1'
 				? [{ id: 'setup-login', label: t('shell.cmd.setupLogin'), hint: t('shell.cmd.setupLoginHint'), icon: WrenchIcon, keywords: t('shell.cmd.setupLoginKw'), run: wrap(() => onSetup('login')) }]
 				: []),
-			{ id: 'sidebar', label: t('shell.cmd.sidebar'), keys: shortcutLabel('sidebar'), icon: SidebarSimpleIcon, keywords: t('shell.cmd.sidebarKw'), run: wrap(onToggleSidebar) },
+			{ id: 'sidebar', label: t('shell.cmd.sidebar'), keys: shortcutLabel('sidebar'), icon: PanelLeftIcon, keywords: t('shell.cmd.sidebarKw'), run: wrap(onToggleSidebar) },
 			{ id: 'shortcuts', label: t('shell.shortcuts.title'), keys: shortcutLabel('shortcuts'), icon: KeyboardIcon, keywords: t('shell.shortcuts.keywords'), run: wrap(onShortcuts) },
-			{ id: 'theme', label: t('shell.cmd.theme'), icon: CircleHalfIcon, keywords: t('shell.cmd.themeKw'), run: wrap(onToggleTheme) }
+			{ id: 'theme', label: t('shell.cmd.theme'), icon: ContrastIcon, keywords: t('shell.cmd.themeKw'), run: wrap(onToggleTheme) }
 		];
 		const known = new Set(['/model', '/rewind', '/undo', '/resume', '/tree', '/compact', '/context', '/stats', '/doctor', '/new']);
 		const gated = curated.filter((a) => !a.cap || bcaps[a.cap]);
@@ -150,7 +150,7 @@
 				id: `cmd${c.command}`,
 				label: c.command,
 				hint: c.description,
-				icon: CaretRightIcon,
+				icon: ChevronRightIcon,
 				keywords: `${c.command} ${c.description ?? ''}`,
 				run: wrap(() => onRun(c.command))
 			}));
@@ -192,7 +192,7 @@
 
 <Modal label={t('shell.paletteLabel')} width={560} placement="top" padded={false} {onClose}>
 	<div class="search">
-		<MagnifyingGlassIcon size={16} />
+		<SearchIcon size={16} />
 		<input bind:this={inputEl} bind:value={query} onkeydown={onKey} placeholder={t('shell.paletteSearch')} />
 	</div>
 	<div class="rows">

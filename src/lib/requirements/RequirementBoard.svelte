@@ -3,13 +3,13 @@
 	// whose turn it is (the user's first, then work in progress, then ideas;
 	// done and parked folded), all projects' or one's. A row opens the
 	// requirement. A project's page shows its own (`project`).
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
-	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import LightbulbIcon from 'phosphor-svelte/lib/LightbulbIcon';
-	import ImageIcon from 'phosphor-svelte/lib/ImageIcon';
-	import ArrowRightIcon from 'phosphor-svelte/lib/ArrowRightIcon';
-	import ChatCircleTextIcon from 'phosphor-svelte/lib/ChatCircleTextIcon';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import LightbulbIcon from '@lucide/svelte/icons/lightbulb';
+	import ImageIcon from '@lucide/svelte/icons/image';
+	import ArrowRightIcon from '@lucide/svelte/icons/arrow-right';
+	import MessageSquareTextIcon from '@lucide/svelte/icons/message-square-text';
 	import RequirementCapture from './RequirementCapture.svelte';
 	import RequirementTag from './RequirementTag.svelte';
 	import StartButton, { type StartHow } from './StartButton.svelte';
@@ -87,7 +87,7 @@
 			<span class="main">
 				<span class="tt">
 					<span class="title">{r.title}</span>
-					{#if r.images.length}<ImageIcon size={13} class="dim2" />{/if}
+					{#if r.images.length}<ImageIcon size={14} class="dim2" />{/if}
 					{#if project === undefined && r.project}<span class="chip">{projectLabel(r.project, projects)}</span>{/if}
 					{#if r.status === 'approval' || r.status === 'failed'}
 						<span class="chip {r.status}">{statusLabel(r.status)}</span>
@@ -98,12 +98,12 @@
 						<span class="q">{statusLabel(r.status)}{r.proposal?.reason ? ` · ${r.proposal.reason}` : ''}</span>
 					{:else if r.status === 'review' || r.status === 'failed' || r.status === 'confirm'}
 						{#if r.status === 'confirm'}<span class="q-lead">{statusLabel(r.status)}</span>{/if}
-						{#if r.last_reply}<ChatCircleTextIcon size={13} /><span class="q">{r.last_reply.replace(/\s+/g, ' ')}</span>{/if}
+						{#if r.last_reply}<MessageSquareTextIcon size={14} /><span class="q">{r.last_reply.replace(/\s+/g, ' ')}</span>{/if}
 					{:else if r.status === 'approval'}
 						<span class="q">{statusLabel(r.status)}</span>
 					{:else if r.status === 'running'}
 						{@const now = step(r)}
-						{#if now}<ArrowRightIcon size={13} /><span class="q">{now}</span>{:else}<span class="q">{statusLabel(r.status)}</span>{/if}
+						{#if now}<ArrowRightIcon size={14} /><span class="q">{now}</span>{:else}<span class="q">{statusLabel(r.status)}</span>{/if}
 					{:else}
 						<span class="q">
 							{r.source === 'session'
@@ -141,20 +141,20 @@
 {/if}
 {#if groups.active.length}
 	<section>
-		<h3><CircleNotchIcon size={12} class="spin" />{t('shell.requirement.groupActive')}<span class="n">{groups.active.length}</span></h3>
+		<h3><LoaderCircleIcon size={12} class="spin" />{t('shell.requirement.groupActive')}<span class="n">{groups.active.length}</span></h3>
 		{#each groups.active as r (r.id)}{@render row(r)}{/each}
 	</section>
 {/if}
 {#if groups.idea.length}
 	<section>
-		<h3><LightbulbIcon size={13} />{t('shell.requirement.groupIdea')}<span class="n">{groups.idea.length}</span></h3>
+		<h3><LightbulbIcon size={14} />{t('shell.requirement.groupIdea')}<span class="n">{groups.idea.length}</span></h3>
 		{#each groups.idea as r (r.id)}{@render row(r)}{/each}
 	</section>
 {/if}
 {#if groups.closed.length}
 	<section>
 		<button class="fold" onclick={() => (showClosed = !showClosed)} aria-expanded={showClosed}>
-			{#if showClosed}<CaretDownIcon size={12} />{:else}<CaretRightIcon size={12} />{/if}
+			{#if showClosed}<ChevronDownIcon size={12} />{:else}<ChevronRightIcon size={12} />{/if}
 			{t('shell.requirement.groupClosed', counts)}
 		</button>
 		{#if showClosed}

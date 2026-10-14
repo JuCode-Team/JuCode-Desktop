@@ -3,7 +3,7 @@
 	// optional actions over a scrolling body. Pages stack on top of each other.
 	// Without `onBack` it is a tab's own page in the wide pane (nothing under it).
 	import type { Snippet } from 'svelte';
-	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
+	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
 	import { t } from '$lib/i18n';
 
 	let {
@@ -24,7 +24,7 @@
 <div class="screen">
 	<header>
 		{#if onBack}
-			<button class="back" onclick={onBack} aria-label={t('shell.remote.back')}><ArrowLeftIcon size={18} /></button>
+			<button class="back" onclick={onBack} aria-label={t('shell.remote.back')}><ArrowLeftIcon size={16} /></button>
 		{/if}
 		<span class="heading">
 			<span class="title">{title}</span>

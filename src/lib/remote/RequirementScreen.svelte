@@ -6,9 +6,9 @@
 	// sessions. An agent's proposal is accepted or rejected here, and the
 	// start's confirmation given. An idea starts here too: in its project or
 	// another, on a chosen backend, with a plan first if the user wants.
-	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import PaperPlaneTiltIcon from 'phosphor-svelte/lib/PaperPlaneTiltIcon';
+	import CheckIcon from '@lucide/svelte/icons/check';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import SendIcon from '@lucide/svelte/icons/send';
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import Select from '$lib/ui/Select.svelte';
@@ -204,7 +204,7 @@
 							<label class="plan"><Switch bind:checked={planFirst} label={t('shell.requirement.planFirst')} />{t('shell.requirement.planFirst')}</label>
 						{/if}
 						<Button size="sm" variant="primary" disabled={!notes.trim() || busy} onclick={send}>
-							{#if busy}<CircleNotchIcon size={13} class="spin" />{:else}<PaperPlaneTiltIcon size={13} />{/if}{t('shell.requirement.send')}
+							{#if busy}<LoaderCircleIcon size={14} class="spin" />{:else}<SendIcon size={14} />{/if}{t('shell.requirement.send')}
 						</Button>
 					</div>
 					{#if sentTo}
@@ -221,7 +221,7 @@
 						<Select bind:value={engine} options={engines} />
 						<label class="plan"><Switch bind:checked={planFirst} label={t('shell.requirement.planFirst')} />{t('shell.requirement.planFirst')}</label>
 						<Button variant="primary" full disabled={busy || !startProject} onclick={start}>
-							{#if busy}<CircleNotchIcon size={15} class="spin" />{/if}{t('shell.requirement.start')}
+							{#if busy}<LoaderCircleIcon size={16} class="spin" />{/if}{t('shell.requirement.start')}
 						</Button>
 					{:else}
 						<p class="muted">{t('shell.requirement.pickProject')}</p>
@@ -235,7 +235,7 @@
 				{#if r.state === 'done' || r.state === 'parked'}
 					<Button size="sm" onclick={() => setState(r.sessions.length ? 'open' : 'idea')}>{t('shell.requirement.reopen')}</Button>
 				{:else}
-					<Button size="sm" onclick={() => setState('done')}><CheckIcon size={13} />{t('shell.requirement.done')}</Button>
+					<Button size="sm" onclick={() => setState('done')}><CheckIcon size={14} />{t('shell.requirement.done')}</Button>
 					<Button size="sm" variant="ghost" onclick={() => setState('parked')}>{t('shell.requirement.park')}</Button>
 				{/if}
 			</div>

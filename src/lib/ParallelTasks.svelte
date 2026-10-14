@@ -2,14 +2,14 @@
 	// 并行任务（git worktree）区块，嵌在 Git 面板里，两种形态：
 	//  · 当前项目是任务 worktree：展示分支/基于/领先落后 + 合并回主仓库 / 完成并清理 / 放弃任务；
 	//  · 当前项目是主仓库：列出容器目录下的所有任务 worktree（脏标记、打开、快捷合并/清理）。
-	import GitMergeIcon from 'phosphor-svelte/lib/GitMergeIcon';
-	import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon';
-	import TrashIcon from 'phosphor-svelte/lib/TrashIcon';
-	import ArrowsClockwiseIcon from 'phosphor-svelte/lib/ArrowsClockwiseIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import FolderOpenIcon from 'phosphor-svelte/lib/FolderOpenIcon';
-	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
-	import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon';
+	import GitMergeIcon from '@lucide/svelte/icons/git-merge';
+	import GitBranchIcon from '@lucide/svelte/icons/git-branch';
+	import TrashIcon from '@lucide/svelte/icons/trash';
+	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
+	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
+	import SquarePenIcon from '@lucide/svelte/icons/square-pen';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
@@ -263,7 +263,7 @@
 				<span class="mline dim2">{t('dock.tasks.vsBase', { base: resolvedBase, ahead, behind })}</span>
 				<span class="mline" class:warn={dirty} class:okc={!dirty}>{dirty ? t('dock.tasks.dirty') : t('dock.tasks.clean')}</span>
 				{#if ahead === 0}
-					<span class="mline okc"><CheckCircleIcon size={12} />{t('dock.tasks.merged', { base: resolvedBase })}</span>
+					<span class="mline okc"><CircleCheckIcon size={12} />{t('dock.tasks.merged', { base: resolvedBase })}</span>
 				{/if}
 			{/if}
 		</div>
@@ -278,7 +278,7 @@
 		{/if}
 		<div class="acts">
 			<Button size="sm" variant="primary" onclick={mergeBack} disabled={busy || !!blocker}>
-				{#if busy}<CircleNotchIcon size={13} class="spin" />{:else}<GitMergeIcon size={13} />{/if}
+				{#if busy}<LoaderCircleIcon size={14} class="spin" />{:else}<GitMergeIcon size={14} />{/if}
 				{t('dock.tasks.merge')}
 			</Button>
 			<Button size="sm" onclick={finishTask} disabled={busy || !finishable} title={finishable ? '' : t('dock.tasks.finishBlocked')}>
@@ -296,7 +296,7 @@
 	<div class="sec">
 		{t('dock.tasks.title')} <span class="count">{rows.length}</span>
 		<span class="grow"></span>
-		<IconButton size="sm" onclick={refresh} label="refresh tasks" title={t('dock.tasks.refresh')}><ArrowsClockwiseIcon size={12} /></IconButton>
+		<IconButton size="sm" onclick={refresh} label="refresh tasks" title={t('dock.tasks.refresh')}><RefreshCwIcon size={12} /></IconButton>
 	</div>
 	{#each rows as r (r.path)}
 		<div class="trow">
@@ -310,14 +310,14 @@
 				<Button size="sm" onclick={prune} disabled={busy}>{t('dock.tasks.prune')}</Button>
 			{:else}
 				{#if r.dirty}
-					<span class="state" title={t('dock.tasks.dirty')}><NotePencilIcon size={14} /></span>
+					<span class="state" title={t('dock.tasks.dirty')}><SquarePenIcon size={14} /></span>
 				{:else if r.dirty === false}
-					<span class="state" title={t('dock.tasks.clean')}><CheckCircleIcon size={14} /></span>
+					<span class="state" title={t('dock.tasks.clean')}><CircleCheckIcon size={14} /></span>
 				{/if}
 				<div class="racts">
-					<IconButton size="sm" onclick={() => openRow(r)} disabled={busy || !r.branch} label="open task" title={t('dock.tasks.open')}><FolderOpenIcon size={13} /></IconButton>
-					<IconButton size="sm" onclick={() => mergeRow(r)} disabled={busy || r.dirty !== false || !r.branch} label="merge task" title={t('dock.tasks.merge')}><GitMergeIcon size={13} /></IconButton>
-					<IconButton size="sm" onclick={() => removeRow(r)} disabled={busy} label="remove task" title={t('dock.tasks.finish')}><TrashIcon size={13} /></IconButton>
+					<IconButton size="sm" onclick={() => openRow(r)} disabled={busy || !r.branch} label="open task" title={t('dock.tasks.open')}><FolderOpenIcon size={14} /></IconButton>
+					<IconButton size="sm" onclick={() => mergeRow(r)} disabled={busy || r.dirty !== false || !r.branch} label="merge task" title={t('dock.tasks.merge')}><GitMergeIcon size={14} /></IconButton>
+					<IconButton size="sm" onclick={() => removeRow(r)} disabled={busy} label="remove task" title={t('dock.tasks.finish')}><TrashIcon size={14} /></IconButton>
 				</div>
 			{/if}
 		</div>

@@ -6,16 +6,16 @@
 	// and their sessions keep streaming while another computer is shown.
 	import { cubicOut } from 'svelte/easing';
 	import type { Component, Snippet } from 'svelte';
-	import TrayIcon from 'phosphor-svelte/lib/TrayIcon';
-	import ListIcon from 'phosphor-svelte/lib/ListIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import QrCodeIcon from 'phosphor-svelte/lib/QrCodeIcon';
-	import DesktopIcon from 'phosphor-svelte/lib/DesktopIcon';
-	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
-	import PaperPlaneTiltIcon from 'phosphor-svelte/lib/PaperPlaneTiltIcon';
-	import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon';
-	import ChatCircleTextIcon from 'phosphor-svelte/lib/ChatCircleTextIcon';
-	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
+	import InboxIcon from '@lucide/svelte/icons/inbox';
+	import MenuIcon from '@lucide/svelte/icons/menu';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import QrCodeIcon from '@lucide/svelte/icons/qr-code';
+	import MonitorIcon from '@lucide/svelte/icons/monitor';
+	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
+	import SendIcon from '@lucide/svelte/icons/send';
+	import ListChecksIcon from '@lucide/svelte/icons/list-checks';
+	import MessageSquareTextIcon from '@lucide/svelte/icons/message-square-text';
+	import PlusIcon from '@lucide/svelte/icons/plus';
 	import RequirementList from './RequirementList.svelte';
 	import RequirementCompose from './RequirementCompose.svelte';
 	import RequirementScreen from './RequirementScreen.svelte';
@@ -235,7 +235,7 @@
 		<div class="pair">
 			<div class="corner">{@render switcher()}</div>
 			<span class="hero" class:warn={conn.state.tone === 'off'}>
-				{#if conn.state.tone === 'wait'}<CircleNotchIcon size={28} class="spin" />{:else}<DesktopIcon size={28} />{/if}
+				{#if conn.state.tone === 'wait'}<LoaderCircleIcon size={28} class="spin" />{:else}<MonitorIcon size={28} />{/if}
 			</span>
 			<h1>{name}</h1>
 			{#key conn.state.text}<p class="status">{t(conn.state.text)}</p>{/key}
@@ -247,26 +247,26 @@
 			<nav>
 				{#if wide && chatHref}
 					<a class="chat" href={chatHref}>
-						<ChatCircleTextIcon size={18} />
+						<MessageSquareTextIcon size={16} />
 						<span class="label">{t('shell.remote.backToChat')}</span>
 					</a>
 				{/if}
 				<button class:on={tab === 'projects'} onclick={() => (tab = 'projects')}>
-					<ListIcon size={18} weight={tab === 'projects' ? 'fill' : 'regular'} />
+					<MenuIcon size={16} strokeWidth={tab === 'projects' ? 2 : undefined} />
 					<span class="label">{t('shell.remote.sessions')}</span>
 				</button>
 				<button class:on={tab === 'requirements'} onclick={() => (tab = 'requirements')}>
-					<ListChecksIcon size={18} weight={tab === 'requirements' ? 'fill' : 'regular'} />
+					<ListChecksIcon size={16} strokeWidth={tab === 'requirements' ? 2 : undefined} />
 					<span class="label">{t('shell.requirement.title')}</span>
 					{#if conn.requirements.pending > 0}<span class="badge">{conn.requirements.pending}</span>{/if}
 				</button>
 				<button class:on={tab === 'dispatch'} onclick={() => (tab = 'dispatch')}>
-					<PaperPlaneTiltIcon size={18} weight={tab === 'dispatch' ? 'fill' : 'regular'} />
+					<SendIcon size={16} strokeWidth={tab === 'dispatch' ? 2 : undefined} />
 					<span class="label">{t('shell.dispatch.title')}</span>
 					{#if conn.dispatches.pending > 0}<span class="badge">{conn.dispatches.pending}</span>{/if}
 				</button>
 				<button class:on={tab === 'desk'} onclick={() => (tab = 'desk')}>
-					<TrayIcon size={18} weight={tab === 'desk' ? 'fill' : 'regular'} />
+					<InboxIcon size={16} strokeWidth={tab === 'desk' ? 2 : undefined} />
 					<span class="label">{t('shell.desk.title')}</span>
 					{#if conn.agents.pending > 0}<span class="badge">{conn.agents.pending}</span>{/if}
 				</button>
@@ -449,10 +449,10 @@
 {#snippet loadingPage(title: string)}
 	<div class="loading-page">
 		<header>
-			<button class="back" onclick={pop} aria-label={t('shell.remote.back')}><ArrowLeftIcon size={18} /></button>
+			<button class="back" onclick={pop} aria-label={t('shell.remote.back')}><ArrowLeftIcon size={16} /></button>
 			<span class="title">{title}</span>
 		</header>
-		<div class="loading-body"><CircleNotchIcon size={22} class="spin" /></div>
+		<div class="loading-body"><LoaderCircleIcon size={20} class="spin" /></div>
 	</div>
 {/snippet}
 

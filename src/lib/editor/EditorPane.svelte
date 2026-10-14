@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { onDestroy, tick, untrack } from 'svelte';
-	import XIcon from 'phosphor-svelte/lib/XIcon';
-	import FloppyDiskIcon from 'phosphor-svelte/lib/FloppyDiskIcon';
-	import SparkleIcon from 'phosphor-svelte/lib/SparkleIcon';
-	import SidebarSimpleIcon from 'phosphor-svelte/lib/SidebarSimpleIcon';
+	import XIcon from '@lucide/svelte/icons/x';
+	import SaveIcon from '@lucide/svelte/icons/save';
+	import SparklesIcon from '@lucide/svelte/icons/sparkles';
+	import PanelLeftIcon from '@lucide/svelte/icons/panel-left';
 	import {
 		EditorView,
 		keymap,
@@ -380,8 +380,8 @@
 			{/each}
 		</div>
 		<div class="eactions">
-			<IconButton size="sm" label={t('editor.save')} title="{t('editor.save')} ⌘S" disabled={!active?.dirty} onclick={saveActive}><FloppyDiskIcon size={14} /></IconButton>
-			<IconButton size="sm" label={t('editor.closePane')} title={t('editor.closePane')} onclick={() => (store.visible = false)}><SidebarSimpleIcon size={14} /></IconButton>
+			<IconButton size="sm" label={t('editor.save')} title="{t('editor.save')} ⌘S" disabled={!active?.dirty} onclick={saveActive}><SaveIcon size={14} /></IconButton>
+			<IconButton size="sm" label={t('editor.closePane')} title={t('editor.closePane')} onclick={() => (store.visible = false)}><PanelLeftIcon size={14} /></IconButton>
 		</div>
 	</div>
 
@@ -404,7 +404,7 @@
 		<div class="ehost" bind:this={host}>
 			{#if aiPrompt}
 				<div class="ai-prompt" style:top="{aiPrompt.top}px" style:left="{aiPrompt.left}px">
-					<SparkleIcon size={13} class="ai-ico" />
+					<SparklesIcon size={14} class="ai-ico" />
 					<input
 						bind:this={aiInputEl}
 						bind:value={aiInput}
@@ -420,7 +420,7 @@
 		<div class="estatus">
 			<span class="spath" title={active.path}>{active.rel}</span>
 			{#if active.aiRange}
-				<span class="sai pulse"><SparkleIcon size={11} /> {t('editor.aiPending')}</span>
+				<span class="sai pulse"><SparklesIcon size={12} /> {t('editor.aiPending')}</span>
 			{/if}
 			<span class="sflex"></span>
 			{#if active.dirty}

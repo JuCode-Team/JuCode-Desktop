@@ -1,6 +1,6 @@
 <script lang="ts">
-	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
-	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+	import CheckIcon from '@lucide/svelte/icons/check';
 	import type { Snippet } from 'svelte';
 	import { t } from '$lib/i18n';
 
@@ -39,7 +39,7 @@
 				<span class="ph">{placeholder || t('common.select')}</span>
 			{/if}
 		</span>
-		<span class="chev" class:up={open}><CaretDownIcon size={15} /></span>
+		<span class="chev" class:up={open}><ChevronDownIcon size={16} /></span>
 	</button>
 	{#if open}
 		<button class="backdrop" aria-label="close" onclick={() => (open = false)}></button>

@@ -34,14 +34,14 @@
 	import AgentAvatar from '$lib/AgentAvatar.svelte';
 	import { agentDirectory } from '$lib/agents.svelte';
 	import { onDestroy, onMount, tick, untrack } from 'svelte';
-	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import { open } from '@tauri-apps/plugin-dialog';
 	import { treeRows } from '$lib/tree';
 	import { buildSetApprovalModeOp, needsClaudeYoloRespawn, toEngineMode, type ApprovalMode, type ApproveOp } from '$lib/approval';
 	import type { PlanAction } from '$lib/PlanCard.svelte';
-	import XIcon from 'phosphor-svelte/lib/XIcon';
-	import ClipboardTextIcon from 'phosphor-svelte/lib/ClipboardTextIcon';
+	import XIcon from '@lucide/svelte/icons/x';
+	import ClipboardListIcon from '@lucide/svelte/icons/clipboard-list';
 	import {
 		processVideo,
 		sessionHistory,
@@ -1185,7 +1185,7 @@
 		</div>
 		{#if chat.booting && chat.engineState !== 'exited'}
 			<div class="welcome spawning">
-				<span class="spawn-spin"><CircleNotchIcon size={26} class="spin" /></span>
+				<span class="spawn-spin"><LoaderCircleIcon size={28} class="spin" /></span>
 				<p class="welcome-tip">{t('shell.spawning')}</p>
 			</div>
 		{:else if starting && chat.messages.length === 0}
@@ -1209,7 +1209,7 @@
 	{/if}
 	</div>
 	{#if !atBottom}
-		<button class="jump" style:bottom="{bottomH + 14}px" onclick={jumpToBottom} aria-label="scroll to bottom"><CaretDownIcon size={18} /></button>
+		<button class="jump" style:bottom="{bottomH + 14}px" onclick={jumpToBottom} aria-label="scroll to bottom"><ChevronDownIcon size={16} /></button>
 	{/if}
 
 	<div class="bottom" bind:clientHeight={bottomH}>
@@ -1243,10 +1243,10 @@
 		{#if chat.planRevising}
 			<div class="approval-wrap">
 				<div class="revising">
-					<ClipboardTextIcon size={14} />
+					<ClipboardListIcon size={14} />
 					<span class="rv-label">{t('chat.planCard.revising')}</span>
 					<span class="rv-hint">{t('chat.planCard.revisingHint')}</span>
-					<button class="rv-x" onclick={() => (chat.planRevising = null)} aria-label={t('chat.planCard.cancelRevise')} title={t('chat.planCard.cancelRevise')}><XIcon size={13} /></button>
+					<button class="rv-x" onclick={() => (chat.planRevising = null)} aria-label={t('chat.planCard.cancelRevise')} title={t('chat.planCard.cancelRevise')}><XIcon size={14} /></button>
 				</div>
 			</div>
 		{/if}

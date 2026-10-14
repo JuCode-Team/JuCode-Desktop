@@ -1,6 +1,6 @@
 <script lang="ts">
-	import FileIcon from 'phosphor-svelte/lib/FileIcon';
-	import FolderIcon from 'phosphor-svelte/lib/FolderIcon';
+	import FileIcon from '@lucide/svelte/icons/file';
+	import FolderIcon from '@lucide/svelte/icons/folder';
 	import { fuzzyPositions, type AtEntry } from '$lib/mention';
 	import { t } from '$lib/i18n';
 
@@ -43,7 +43,7 @@
 <div class="slash" id="composer-menu" role="listbox" aria-label={t('chat.atMenuLabel')}>
 	{#each matches as e, i (e.path)}
 		<button class="slash-item" id="cmp-opt-{i}" role="option" aria-selected={i === selected} class:sel={i === selected} onclick={() => onSelect(e)} onmouseenter={() => onHover(i)}>
-			{#if e.dir}<FolderIcon size={13} class="atfolder" />{:else}<FileIcon size={13} />{/if}
+			{#if e.dir}<FolderIcon size={14} class="atfolder" />{:else}<FileIcon size={14} />{/if}
 			<span class="at-name">{#each hlSegments(base(e.path), query) as seg}{#if seg.hit}<b class="hl">{seg.text}</b>{:else}{seg.text}{/if}{/each}{#if e.dir}/{/if}</span>
 			<span class="at-path">{e.path}</span>
 		</button>

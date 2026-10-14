@@ -4,11 +4,11 @@
 	// With `status` (a phone, where the list is the whole tab), which agents
 	// are working and the next scheduled runs too; a wide page shows those
 	// beside the queue (DeskHome).
-	import QuestionIcon from 'phosphor-svelte/lib/QuestionIcon';
-	import ShieldCheckIcon from 'phosphor-svelte/lib/ShieldCheckIcon';
-	import FileTextIcon from 'phosphor-svelte/lib/FileTextIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import ClockIcon from 'phosphor-svelte/lib/ClockIcon';
+	import CircleQuestionMarkIcon from '@lucide/svelte/icons/circle-question-mark';
+	import ShieldCheckIcon from '@lucide/svelte/icons/shield-check';
+	import FileTextIcon from '@lucide/svelte/icons/file-text';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import ClockIcon from '@lucide/svelte/icons/clock';
 	import Notice from '$lib/ui/Notice.svelte';
 	import DeskClosed from '$lib/DeskClosed.svelte';
 	import { useAgents } from '$lib/agentScope';
@@ -49,7 +49,7 @@
 		{#each agentDirectory.questions as q (q.id)}
 			{@const key = deskKey('question', q.id)}
 			<button class="row" class:on={current === key} class:high={q.importance === 'high'} onclick={() => onOpen(key)}>
-				<QuestionIcon size={16} />
+				<CircleQuestionMarkIcon size={16} />
 				<span class="text">
 					<span class="title">{q.title}</span>
 					<span class="meta">{agentDirectory.agentName(q.agent)} · {when(q.asked_at)}</span>
@@ -76,7 +76,7 @@
 			<div class="head"><span>{t('shell.desk.working')}</span></div>
 			{#each working as agent (agent.id)}
 				<button class="row" onclick={() => onOpenAgent(agent.id)}>
-					<CircleNotchIcon size={16} class="spin" />
+					<LoaderCircleIcon size={16} class="spin" />
 					<span class="text"><span class="title">{agent.name}</span></span>
 				</button>
 			{:else}

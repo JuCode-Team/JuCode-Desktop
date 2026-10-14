@@ -1,8 +1,8 @@
 <script lang="ts">
 	// The project a requirement belongs to, as a chip that opens the list:
 	// the workspace's projects, then 未归属.
-	import FolderIcon from 'phosphor-svelte/lib/FolderIcon';
-	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
+	import FolderIcon from '@lucide/svelte/icons/folder';
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import PopMenu, { type PopMenuItem } from '$lib/ui/PopMenu.svelte';
 	import { projectLabel } from './labels';
 	import { t } from '$lib/i18n';
@@ -36,7 +36,7 @@
 		aria-expanded={open}
 		onclick={(e) => (e.stopPropagation(), (open = !open))}
 	>
-		<FolderIcon size={12} /><span class="name">{projectLabel(value, projects)}</span><CaretDownIcon size={10} />
+		<FolderIcon size={12} /><span class="name">{projectLabel(value, projects)}</span><ChevronDownIcon size={12} />
 	</button>
 	{#if open}
 		<PopMenu {items} {placement} onSelect={(k) => ((open = false), onChange(k))} onClose={() => (open = false)} />

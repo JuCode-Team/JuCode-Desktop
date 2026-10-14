@@ -3,9 +3,9 @@
 	// photos) and its project (the one last noted in, or none). The words
 	// and that project are kept on this device. A page of its own on a phone; the Requirements tab's
 	// pane on a wide page.
-	import ImageIcon from 'phosphor-svelte/lib/ImageIcon';
-	import XIcon from 'phosphor-svelte/lib/XIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
+	import ImageIcon from '@lucide/svelte/icons/image';
+	import XIcon from '@lucide/svelte/icons/x';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import Select from '$lib/ui/Select.svelte';
@@ -132,7 +132,7 @@
 		{/if}
 		{#if error}<Notice tone="error">{error}</Notice>{/if}
 		<Button variant="primary" full disabled={!text.trim() || busy} onclick={note}>
-			{#if busy}<CircleNotchIcon size={15} class="spin" />{/if}{progress
+			{#if busy}<LoaderCircleIcon size={16} class="spin" />{/if}{progress
 				? t('shell.upload.progress', { percent: Math.round((progress.sent / Math.max(progress.total, 1)) * 100) })
 				: t('shell.requirement.add')}
 		</Button>

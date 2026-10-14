@@ -4,10 +4,10 @@
 	// the choices are kept on this device. A page of its own on a phone; the
 	// Dispatch tab's pane on a wide page. Also where notifications are turned
 	// on, since they report on dispatches.
-	import PaperPlaneTiltIcon from 'phosphor-svelte/lib/PaperPlaneTiltIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import BellIcon from 'phosphor-svelte/lib/BellIcon';
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
+	import SendIcon from '@lucide/svelte/icons/send';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import BellIcon from '@lucide/svelte/icons/bell';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import Switch from '$lib/ui/Switch.svelte';
@@ -129,7 +129,7 @@
 			<div class="send">
 				<span class="keys">⌘ / Ctrl + Enter</span>
 				<Button variant="primary" disabled={!text.trim() || sending} onclick={send}>
-					{#if sending}<CircleNotchIcon size={15} class="spin" />{:else}<PaperPlaneTiltIcon size={15} />{/if}
+					{#if sending}<LoaderCircleIcon size={16} class="spin" />{:else}<SendIcon size={16} />{/if}
 					{sending ? t('shell.dispatch.sending') : t('shell.dispatch.send')}
 				</Button>
 			</div>
@@ -146,7 +146,7 @@
 					<span class="notify-title">{t('shell.dispatch.notify')}</span>
 					<span class="notify-hint">{t('shell.dispatch.notifyHint')}</span>
 				</span>
-				<CaretRightIcon size={12} />
+				<ChevronRightIcon size={12} />
 			</button>
 		{/if}
 		{#if notifyError}<p class="note err">{notifyError}</p>{/if}

@@ -1,9 +1,9 @@
 <script lang="ts">
-	import StackIcon from 'phosphor-svelte/lib/StackIcon';
-	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
-	import UserCircleIcon from 'phosphor-svelte/lib/UserCircleIcon';
-	import GearIcon from 'phosphor-svelte/lib/GearIcon';
-	import ArrowCircleDownIcon from 'phosphor-svelte/lib/ArrowCircleDownIcon';
+	import LayersIcon from '@lucide/svelte/icons/layers';
+	import PlusIcon from '@lucide/svelte/icons/plus';
+	import CircleUserIcon from '@lucide/svelte/icons/circle-user';
+	import SettingsIcon from '@lucide/svelte/icons/settings';
+	import CircleArrowDownIcon from '@lucide/svelte/icons/circle-arrow-down';
 	import { t } from '$lib/i18n';
 	import { withShortcut } from '$lib/shortcuts';
 	import type { TabIcon } from './tabChrome';
@@ -109,7 +109,7 @@
 					{#if w.icon || w.isDefault}
 						<TabGlyph icon={w.icon ?? { kind: 'builtin', id: 'home' }} color={w.color} active={w.id === activeId} size={20} />
 					{:else}
-						<StackIcon size={20} weight={w.id === activeId ? 'fill' : 'regular'} />
+						<LayersIcon size={20} strokeWidth={w.id === activeId ? 2 : undefined} />
 					{/if}
 				</span>
 			</button>
@@ -122,7 +122,7 @@
 	<div class="foot">
 		{#if updateAvailable}
 			<button class="ws" title={t('shell.updateAvailable')} aria-label={t('shell.updateAvailable')} onclick={onUpdate}>
-				<span class="tile"><ArrowCircleDownIcon size={20} /></span>
+				<span class="tile"><CircleArrowDownIcon size={20} /></span>
 			</button>
 		{/if}
 		<button
@@ -136,10 +136,10 @@
 			onmouseleave={hideCardSoon}
 			onclick={toggleCard}
 		>
-			<span class="tile"><UserCircleIcon size={20} weight={card ? 'fill' : 'regular'} /></span>
+			<span class="tile"><CircleUserIcon size={20} strokeWidth={card ? 2 : undefined} /></span>
 		</button>
 		<button class="ws" class:on={settingsOpen} title={withShortcut(t('shell.settings'), 'settings')} aria-label={t('shell.settings')} aria-pressed={settingsOpen} onclick={onSettings}>
-			<span class="tile"><GearIcon size={20} weight={settingsOpen ? 'fill' : 'regular'} /></span>
+			<span class="tile"><SettingsIcon size={20} strokeWidth={settingsOpen ? 2 : undefined} /></span>
 		</button>
 	</div>
 </nav>

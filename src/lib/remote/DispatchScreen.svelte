@@ -3,9 +3,9 @@
 	// confirm (plan mode), each task with where it runs and the end of its
 	// session's reply, and the summary once done. The dispatcher's own
 	// conversation is one tap away.
-	import ChatTeardropTextIcon from 'phosphor-svelte/lib/ChatTeardropTextIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
+	import MessageSquareTextIcon from '@lucide/svelte/icons/message-square-text';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import Markdown from '$lib/Markdown.svelte';
@@ -59,7 +59,7 @@
 	{#snippet actions()}
 		{#if d}
 			<button class="act" onclick={onOpenProcess} aria-label={t('shell.dispatch.process')} title={t('shell.dispatch.process')}>
-				<ChatTeardropTextIcon size={18} />
+				<MessageSquareTextIcon size={16} />
 			</button>
 		{/if}
 	{/snippet}
@@ -92,7 +92,7 @@
 				</h2>
 				{#if d.tasks.length === 0}
 					<p class="waiting">
-						{#if d.status === 'planning'}<CircleNotchIcon size={14} class="spin" />{t('shell.dispatch.planning')}{:else}—{/if}
+						{#if d.status === 'planning'}<LoaderCircleIcon size={14} class="spin" />{t('shell.dispatch.planning')}{:else}—{/if}
 					</p>
 				{/if}
 				<ol class="tasks">
@@ -100,11 +100,11 @@
 						<li class="task">
 							<button class="task-head" disabled={!task.session} onclick={() => task.session && onOpenSession(task.session, task.title)}>
 								<span class="mark {task.status}">
-									{#if task.status === 'sent' || task.status === 'running'}<CircleNotchIcon size={14} class="spin" />{:else}<span class="dot"></span>{/if}
+									{#if task.status === 'sent' || task.status === 'running'}<LoaderCircleIcon size={14} class="spin" />{:else}<span class="dot"></span>{/if}
 								</span>
 								<span class="name">{task.title}</span>
 								<span class="state {task.status}">{t(`shell.dispatch.task.${task.status}`)}</span>
-								{#if task.session}<CaretRightIcon size={12} />{/if}
+								{#if task.session}<ChevronRightIcon size={12} />{/if}
 							</button>
 							<div class="where">{where(task)}{task.session ? '' : ` · ${t('shell.dispatch.newSession')}`}</div>
 							{#if task.reply}<p class="reply">{task.reply}</p>{/if}

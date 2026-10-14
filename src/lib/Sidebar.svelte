@@ -1,24 +1,24 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
-	import ClockCounterClockwiseIcon from 'phosphor-svelte/lib/ClockCounterClockwiseIcon';
-	import XIcon from 'phosphor-svelte/lib/XIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon';
-	import GitForkIcon from 'phosphor-svelte/lib/GitForkIcon';
-	import ArchiveIcon from 'phosphor-svelte/lib/ArchiveIcon';
-	import BoxArrowUpIcon from 'phosphor-svelte/lib/BoxArrowUpIcon';
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
-	import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon';
-	import TrayIcon from 'phosphor-svelte/lib/TrayIcon';
-	import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon';
-	import FolderIcon from 'phosphor-svelte/lib/FolderIcon';
-	import FolderOpenIcon from 'phosphor-svelte/lib/FolderOpenIcon';
-	import ChatsIcon from 'phosphor-svelte/lib/ChatsIcon';
-	import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon';
-	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
-	import PushPinIcon from 'phosphor-svelte/lib/PushPinIcon';
-	import PushPinSlashIcon from 'phosphor-svelte/lib/PushPinSlashIcon';
+	import PlusIcon from '@lucide/svelte/icons/plus';
+	import RotateCcwClockIcon from '@lucide/svelte/icons/rotate-ccw-clock';
+	import XIcon from '@lucide/svelte/icons/x';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import GitBranchIcon from '@lucide/svelte/icons/git-branch';
+	import GitForkIcon from '@lucide/svelte/icons/git-fork';
+	import ArchiveIcon from '@lucide/svelte/icons/archive';
+	import ArchiveRestoreIcon from '@lucide/svelte/icons/archive-restore';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import SearchIcon from '@lucide/svelte/icons/search';
+	import InboxIcon from '@lucide/svelte/icons/inbox';
+	import SquarePenIcon from '@lucide/svelte/icons/square-pen';
+	import FolderIcon from '@lucide/svelte/icons/folder';
+	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
+	import MessagesSquareIcon from '@lucide/svelte/icons/messages-square';
+	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
+	import CheckIcon from '@lucide/svelte/icons/check';
+	import PinIcon from '@lucide/svelte/icons/pin';
+	import PinOffIcon from '@lucide/svelte/icons/pin-off';
 	import { rowIn } from '$lib/ui/motion';
 	import Collapse from '$lib/ui/Collapse.svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -287,7 +287,7 @@
 	<!-- Header: the wordmark, or the session filter in its place while searching. -->
 	<div class="brand" data-tauri-drag-region>
 		{#if searchOpen}
-			<MagnifyingGlassIcon size={18} />
+			<SearchIcon size={16} />
 			<input
 				class="filter"
 				bind:this={searchEl}
@@ -296,18 +296,18 @@
 				onkeydown={searchKey}
 				onblur={() => !searchQuery && toggleSearch()}
 			/>
-			<button class="head-act" onclick={toggleSearch} aria-label={t('shell.closeSearch')} title={t('shell.closeSearch')}><XIcon size={18} /></button>
+			<button class="head-act" onclick={toggleSearch} aria-label={t('shell.closeSearch')} title={t('shell.closeSearch')}><XIcon size={16} /></button>
 		{:else}
 			<span class="word">JuCode</span>
-			<button class="head-act" onclick={toggleSearch} aria-label={t('shell.searchSessions')} title={t('shell.searchSessions')}><MagnifyingGlassIcon size={18} /></button>
+			<button class="head-act" onclick={toggleSearch} aria-label={t('shell.searchSessions')} title={t('shell.searchSessions')}><SearchIcon size={16} /></button>
 		{/if}
 	</div>
 
 	<nav class="primary">
-		<button class="row" onclick={newHere}><NotePencilIcon size={18} /><span>{t('shell.newChat')}</span></button>
+		<button class="row" onclick={newHere}><SquarePenIcon size={16} /><span>{t('shell.newChat')}</span></button>
 		{#if agentsStatus !== 'off'}
 			<button class="row" onclick={onDesk}>
-				<TrayIcon size={18} /><span>{t('shell.desk.title')}</span>
+				<InboxIcon size={16} /><span>{t('shell.desk.title')}</span>
 				{#if pendingCount > 0}<span class="count">{pendingCount}</span>{/if}
 			</button>
 		{/if}
@@ -338,7 +338,7 @@
 		>
 			{#if selectable}
 				<span class="pick" class:on={picked.includes(s.id)} aria-hidden="true">
-					{#if picked.includes(s.id)}<CheckIcon size={12} weight="bold" />{/if}
+					{#if picked.includes(s.id)}<CheckIcon size={12} />{/if}
 				</span>
 			{/if}
 			{#if s.icon}
@@ -375,7 +375,7 @@
 			{#if s.backendId && s.backendId !== 'jucode' && !s.draft}
 				<span class="backend-chip" title={BACKEND_LABELS[s.backendId]}><BackendIcon backend={s.backendId} size={12} /></span>
 			{/if}
-			{#if s.pinned && !s.archived}<span class="pin-mark" title={t('shell.pin')}><PushPinIcon size={12} weight="fill" /></span>{/if}
+			{#if s.pinned && !s.archived}<span class="pin-mark" title={t('shell.pin')}><PinIcon size={12} fill="currentColor" /></span>{/if}
 			<SessionMark status={status} />
 			{#if !selectable}
 			{#if !s.archived}
@@ -391,7 +391,7 @@
 					aria-label={s.pinned ? t('shell.unpin') : t('shell.pin')}
 					title={s.pinned ? t('shell.unpin') : t('shell.pin')}
 				>
-					{#if s.pinned}<PushPinSlashIcon size={16} />{:else}<PushPinIcon size={16} />{/if}
+					{#if s.pinned}<PinOffIcon size={16} />{:else}<PinIcon size={16} />{/if}
 				</span>
 			{/if}
 			<span
@@ -406,7 +406,7 @@
 				aria-label={s.archived ? 'unarchive' : 'archive'}
 				title={s.archived ? t('shell.unarchive') : t('shell.archive')}
 			>
-				{#if s.archived}<BoxArrowUpIcon size={16} />{:else}<ArchiveIcon size={16} />{/if}
+				{#if s.archived}<ArchiveRestoreIcon size={16} />{:else}<ArchiveIcon size={16} />{/if}
 			</span>
 			<span
 				class="act"
@@ -429,7 +429,7 @@
 			{@const sel = selecting === p.id && open}
 			<div class="more-line" class:nested>
 				<button class="more" onclick={() => (showArchived[p.id] = !showArchived[p.id])}>
-					<span class="chev" class:open={showArchived[p.id]}><CaretRightIcon size={16} /></span>
+					<span class="chev" class:open={showArchived[p.id]}><ChevronRightIcon size={16} /></span>
 					<span>{t('shell.archived')} · {arch.length}</span>
 				</button>
 				{#if open && arch.length > 1}
@@ -482,7 +482,7 @@
 						{#if a.summary}<span class="agent-summary">{a.summary}</span>{/if}
 					</span>
 					{#if waiting}<span class="count">{waiting}</span>
-					{:else if a.busy}<CircleNotchIcon size={16} class="spin state" />{/if}
+					{:else if a.busy}<LoaderCircleIcon size={16} class="spin state" />{/if}
 					{#if !a.enabled}<span class="tag">{t('shell.agents.disabled')}</span>
 					{:else}
 						<span
@@ -495,7 +495,7 @@
 							}}
 							onkeydown={(e) => e.key === 'Enter' && (e.stopPropagation(), onAgentSession(a))}
 							aria-label={t('shell.agents.open', { name: a.name })}
-							title={t('shell.agents.open', { name: a.name })}><ChatsIcon size={16} /></span
+							title={t('shell.agents.open', { name: a.name })}><MessagesSquareIcon size={16} /></span
 						>
 					{/if}
 				</button>
@@ -510,7 +510,7 @@
 				<section>
 					<div class="head">
 						<span>{chats.name}</span>
-						<button class="head-act" onclick={() => onHistory(chats)} aria-label="history" title={t('shell.history')}><ClockCounterClockwiseIcon size={16} /></button>
+						<button class="head-act" onclick={() => onHistory(chats)} aria-label="history" title={t('shell.history')}><RotateCcwClockIcon size={16} /></button>
 						<button class="head-act" onclick={onNewChat} aria-label={t('shell.newChat')} title={t('shell.newChat')}><PlusIcon size={16} /></button>
 					</div>
 					{#each showAll[chats.id] || query ? active : firstSessions(active) as s (s.id)}{@render sessRow(s, false, false, chats)}{/each}
@@ -532,7 +532,7 @@
 				{@const active = listedSessions(p).filter((s) => sessionMatches(p, s))}
 				{@const arch = p.sessions.filter((s) => s.archived && sessionMatches(p, s))}
 				{@const open = !collapsed[p.id] || !!query}
-				{@const w = p.sessions.some((s) => s.id === activeId) ? 'fill' : 'regular'}
+				{@const holdsActive = p.sessions.some((s) => s.id === activeId)}
 				{#if !query || active.length || arch.length}
 					<div
 						class="project"
@@ -549,16 +549,16 @@
 								aria-expanded={open}
 								aria-label={t('shell.projectPage.toggle')}
 								title={t('shell.projectPage.toggle')}
-								onclick={() => (collapsed[p.id] = !collapsed[p.id])}><CaretRightIcon size={11} /></button
+								onclick={() => (collapsed[p.id] = !collapsed[p.id])}><ChevronRightIcon size={12} /></button
 							>
 							<button class="folder-row" onpointerdown={(e) => rowDown(e, p)} onclick={() => onOpenProject(p)} oncontextmenu={(e) => onProjectMenu(p, e)} title={p.worktree ? t('shell.task.worktreeTip', { branch: p.worktree.branch, base: p.worktree.baseBranch || '?' }) : p.path}>
-								{#if p.icon}<TabGlyph icon={p.icon} color={p.color ?? 'var(--dim)'} active={w === 'fill'} size={16} />{:else if p.worktree}<GitBranchIcon size={18} weight={w} color={p.color} />{:else if open}<FolderOpenIcon size={18} weight={w} color={p.color} />{:else}<FolderIcon size={18} weight={w} color={p.color} />{/if}
+								{#if p.icon}<TabGlyph icon={p.icon} color={p.color ?? 'var(--dim)'} active={holdsActive} size={16} />{:else if p.worktree}<GitBranchIcon size={16} strokeWidth={holdsActive ? 2 : undefined} color={p.color} />{:else if open}<FolderOpenIcon size={16} strokeWidth={holdsActive ? 2 : undefined} color={p.color} />{:else}<FolderIcon size={16} strokeWidth={holdsActive ? 2 : undefined} color={p.color} />{/if}
 								<span class="folder-name">{p.name}</span>
 							</button>
 							{#if p.stale}
 								<span class="tag" title={p.path}>{t('shell.task.stale')}</span>
 							{:else}
-								<button class="act" onclick={() => onHistory(p)} aria-label="history" title={withShortcut(t('shell.history'), 'history')}><ClockCounterClockwiseIcon size={16} /></button>
+								<button class="act" onclick={() => onHistory(p)} aria-label="history" title={withShortcut(t('shell.history'), 'history')}><RotateCcwClockIcon size={16} /></button>
 								{#if !p.worktree}
 									<button class="act" onclick={() => onNewTask(p)} aria-label="new parallel task" title={t('shell.newTask')}><GitForkIcon size={16} /></button>
 								{/if}

@@ -2,11 +2,11 @@
 	// Onboarding requires an explicit, successfully confirmed model choice.
 	// A configured default is deliberately not a choice made in this wizard.
 	import { untrack } from 'svelte';
-	import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon';
-	import SignInIcon from 'phosphor-svelte/lib/SignInIcon';
-	import KeyIcon from 'phosphor-svelte/lib/KeyIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
+	import ListChecksIcon from '@lucide/svelte/icons/list-checks';
+	import LogInIcon from '@lucide/svelte/icons/log-in';
+	import KeyIcon from '@lucide/svelte/icons/key';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
 	import { fetchJucodeModels, readConfig, writeConfig } from '$lib/protocol';
 	import { refreshJucodeModels } from '$lib/jucodeModels';
 	import type { BackendId } from '$lib/backends';
@@ -203,7 +203,7 @@
 	<div class="note"><Notice tone="error">{error}</Notice></div>
 {/if}
 {#if loading}
-	<div class="state"><CircleNotchIcon size={20} class="spin" /></div>
+	<div class="state"><LoaderCircleIcon size={20} class="spin" /></div>
 {:else if !models.length}
 	<div class="empty">
 		<p>{backend !== 'jucode' && !loggedIn ? t('setup.welcome.model.nativeHint', { name: BACKEND_LABELS[backend] }) : loggedIn ? t('setup.welcome.model.emptyLoggedIn') : t('setup.welcome.model.empty')}</p>
@@ -211,7 +211,7 @@
 			{#if loggedIn && backend === 'jucode'}
 				<Button variant="primary" size="sm" onclick={() => (modelSetup.open = true)}><ListChecksIcon size={14} /> {t('setup.welcome.model.pick')}</Button>
 			{:else if !loggedIn}
-				<Button variant="primary" size="sm" onclick={onLogin}><SignInIcon size={14} /> {t('setup.loginOauth.loginBtn')}</Button>
+				<Button variant="primary" size="sm" onclick={onLogin}><LogInIcon size={14} /> {t('setup.loginOauth.loginBtn')}</Button>
 			{/if}
 			<Button variant="ghost" size="sm" onclick={onOpenProviders}><KeyIcon size={14} /> {t('setup.welcome.model.providers')}</Button>
 			<Button size="sm" onclick={() => load(backend, loggedIn)}>{t('common.retry')}</Button>
@@ -243,10 +243,10 @@
 
 	<div class="row confirmation">
 		<Button variant="primary" size="sm" disabled={!model || saving || ready || (backend !== 'jucode' && !onSelected)} onclick={confirm}>
-			{#if saving}<CircleNotchIcon size={14} class="spin" />{/if}
+			{#if saving}<LoaderCircleIcon size={14} class="spin" />{/if}
 			{saving ? t('setup.welcome.model.saving') : t('setup.welcome.model.confirm')}
 		</Button>
-		{#if ready}<span class="confirmed"><CheckCircleIcon size={14} /> {t('setup.welcome.model.confirmed')}</span>{/if}
+		{#if ready}<span class="confirmed"><CircleCheckIcon size={14} /> {t('setup.welcome.model.confirmed')}</span>{/if}
 	</div>
 	<div class="row actions">
 		{#if loggedIn && backend === 'jucode' && provider === 'jucode'}

@@ -2,10 +2,10 @@
 	// A session's status mark (sessionStatus.ts), for sidebar rows and canvas
 	// tabs. Each state has its own shape; colour only where it carries meaning
 	// (a failure). The dot is kept for one thing: a reply not seen yet.
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import HandIcon from 'phosphor-svelte/lib/HandIcon';
-	import ChatCircleDotsIcon from 'phosphor-svelte/lib/ChatCircleDotsIcon';
-	import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import HandIcon from '@lucide/svelte/icons/hand';
+	import MessageCircleMoreIcon from '@lucide/svelte/icons/message-circle-more';
+	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
 	import { t } from '$lib/i18n';
 	import type { SessionStatus } from '$lib/sessionStatus';
 	import { describeError, stripEngineHint } from '$lib/errorInfo';
@@ -18,18 +18,18 @@
 {#if status?.kind === 'input'}
 	{@const label = status.ask === 'answer' ? t('shell.status.answer') : t('shell.status.approve')}
 	<span class="mark input" class:compact title={label} aria-label={label}>
-		{#if status.ask === 'answer'}<ChatCircleDotsIcon size={size - 1} weight="bold" />{:else}<HandIcon size={size - 1} weight="bold" />{/if}
+		{#if status.ask === 'answer'}<MessageCircleMoreIcon size={size - 1} />{:else}<HandIcon size={size - 1} />{/if}
 		{#if !compact}<span>{label}</span>{/if}
 	</span>
 {:else if status?.kind === 'failed'}
 	{@const known = describeError(status.message)}
 	{@const tip = known ? t(`chat.err.${known.kind}.title`, { subject: known.subject ?? t('chat.err.thisTool') }) : stripEngineHint(status.message)}
 	<span class="mark failed" title={tip || t('shell.status.failed')} aria-label={t('shell.status.failed')}>
-		<WarningCircleIcon {size} weight="bold" />
+		<CircleAlertIcon {size} />
 	</span>
 {:else if status?.kind === 'running'}
 	<span class="mark running" title={t('shell.status.running')} aria-label={t('shell.status.running')}>
-		<CircleNotchIcon {size} class="spin" />
+		<LoaderCircleIcon {size} class="spin" />
 	</span>
 {:else if status?.kind === 'unread'}
 	<span class="mark unread" class:compact title={t('shell.unread')} aria-label={t('shell.unread')}></span>

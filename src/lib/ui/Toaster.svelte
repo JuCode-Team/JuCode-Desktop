@@ -2,18 +2,18 @@
 	// Renders ui/toast.svelte.ts: a stack centred under the title bar. The
 	// newest notice is in front; older ones tuck in behind it and fan out while
 	// the pointer is over the stack.
-	import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon';
-	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
-	import InfoIcon from 'phosphor-svelte/lib/InfoIcon';
-	import WarningIcon from 'phosphor-svelte/lib/WarningIcon';
-	import XIcon from 'phosphor-svelte/lib/XIcon';
+	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
+	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
+	import InfoIcon from '@lucide/svelte/icons/info';
+	import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
+	import XIcon from '@lucide/svelte/icons/x';
 	import { fly } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
 	import { T_FAST, T_MED, motionMs } from './motion';
 	import { toast, type ToastTone } from './toast.svelte';
 	import { t } from '$lib/i18n';
 
-	const ICONS: Record<ToastTone, typeof InfoIcon> = { info: InfoIcon, success: CheckCircleIcon, warn: WarningIcon, error: WarningCircleIcon };
+	const ICONS: Record<ToastTone, typeof InfoIcon> = { info: InfoIcon, success: CircleCheckIcon, warn: TriangleAlertIcon, error: CircleAlertIcon };
 	/** Offset of each stacked notice (collapsed) and the gap when fanned out. */
 	const PEEK = 8;
 	const GAP = 8;
@@ -49,7 +49,7 @@
 				in:fly={{ y: -8, duration: motionMs(T_MED), easing: cubicOut }}
 				out:fly={{ y: -6, duration: motionMs(T_FAST), easing: cubicOut }}
 			>
-				<span class="ico"><Icon size={18} /></span>
+				<span class="ico"><Icon size={16} /></span>
 				<span class="msg selectable">{it.message}</span>
 				{#if it.action}
 					<button

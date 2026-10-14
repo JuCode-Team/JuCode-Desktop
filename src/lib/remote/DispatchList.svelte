@@ -2,8 +2,8 @@
 	// The Dispatch tab's list on the remote page: a new dispatch, then the
 	// dispatches on this computer, newest first, each opened as a page
 	// (DispatchScreen).
-	import PencilSimpleLineIcon from 'phosphor-svelte/lib/PencilSimpleLineIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
+	import PenLineIcon from '@lucide/svelte/icons/pen-line';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import { t } from '$lib/i18n';
 	import { useHost } from './connection.svelte';
 	import type { DispatchView } from './dispatch.svelte';
@@ -30,7 +30,7 @@
 
 <div class="list">
 	<button class="new" class:on={composing} onclick={onNew}>
-		<PencilSimpleLineIcon size={16} />
+		<PenLineIcon size={16} />
 		<span>{t('shell.dispatch.new')}</span>
 	</button>
 
@@ -39,7 +39,7 @@
 		{#each conn.dispatches.list as d (d.id)}
 			<button class="row" class:on={current === d.id} onclick={() => onOpen(d)}>
 				<span class="mark {d.status}">
-					{#if d.status === 'planning' || d.status === 'running'}<CircleNotchIcon size={14} class="spin" />{:else}<span class="dot"></span>{/if}
+					{#if d.status === 'planning' || d.status === 'running'}<LoaderCircleIcon size={14} class="spin" />{:else}<span class="dot"></span>{/if}
 				</span>
 				<span class="text">
 					<span class="title">{firstLine(d.text)}</span>

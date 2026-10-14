@@ -1,5 +1,5 @@
 <script lang="ts">
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import { fetchAccountInfo, fetchUsage, type AccountInfo, type PlanUsage } from '$lib/protocol';
 	import { t } from '$lib/i18n';
 	import { fmtBalance } from '$lib/money';
@@ -77,10 +77,10 @@
 			<div class="name">{t('shell.notLoggedIn')}</div>
 			<div class="sub">{t('shell.account.signInHint')}</div>
 		</div>
-		<button class="pop-row manage" onclick={onManage}>{t('shell.account.signIn')}<CaretRightIcon size={14} /></button>
+		<button class="pop-row manage" onclick={onManage}>{t('shell.account.signIn')}<ChevronRightIcon size={14} /></button>
 	{:else if !account}
 		<div class="sec"><div class="sub">{error ?? t('common.loading')}</div></div>
-		<button class="pop-row manage" onclick={onManage}>{t('shell.account.manage')}<CaretRightIcon size={14} /></button>
+		<button class="pop-row manage" onclick={onManage}>{t('shell.account.manage')}<ChevronRightIcon size={14} /></button>
 	{:else}
 		<div class="sec">
 			<div class="name">{account.nickname || account.email || 'JuCode'}</div>
@@ -109,7 +109,7 @@
 				{@render bar(t('settings.usage.monthly'), usage.used_monthly, usage.quota_monthly)}
 			</div>
 		{/if}
-		<button class="pop-row manage" onclick={onManage}>{t('shell.account.manage')}<CaretRightIcon size={14} /></button>
+		<button class="pop-row manage" onclick={onManage}>{t('shell.account.manage')}<ChevronRightIcon size={14} /></button>
 	{/if}
 </div>
 

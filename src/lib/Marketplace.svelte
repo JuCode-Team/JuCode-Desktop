@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import XIcon from 'phosphor-svelte/lib/XIcon';
-	import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon';
-	import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import ArrowsClockwiseIcon from 'phosphor-svelte/lib/ArrowsClockwiseIcon';
-	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
+	import XIcon from '@lucide/svelte/icons/x';
+	import SearchIcon from '@lucide/svelte/icons/search';
+	import DownloadIcon from '@lucide/svelte/icons/download';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
+	import CheckIcon from '@lucide/svelte/icons/check';
 	import { fetchMarketplace, installMarketplaceSkill, type MarketSkill } from '$lib/protocol';
 	import type { BackendId } from '$lib/backends';
 	import IconButton from '$lib/ui/IconButton.svelte';
@@ -83,15 +83,15 @@
 				<h2>{t('settings.marketplace.title')}</h2>
 				<p>{t('settings.marketplace.subtitle')}</p>
 			</div>
-			<IconButton onclick={onClose} label="close"><XIcon size={18} /></IconButton>
+			<IconButton onclick={onClose} label="close"><XIcon size={16} /></IconButton>
 		</div>
 
 		<div class="toolbar">
 			<div class="search">
-				<MagnifyingGlassIcon size={15} />
+				<SearchIcon size={16} />
 				<input bind:value={query} placeholder={t('settings.marketplace.search')} />
 			</div>
-			<Button variant="secondary" size="icon" onclick={load} title={t('settings.usage.refresh')}><ArrowsClockwiseIcon size={14} /></Button>
+			<Button variant="secondary" size="icon" onclick={load} title={t('settings.usage.refresh')}><RefreshCwIcon size={14} /></Button>
 		</div>
 
 		<div class="chips sources" aria-label={t('settings.marketplace.sourceFilter')}>
@@ -113,7 +113,7 @@
 
 		<div class="body">
 			{#if loading}
-				<div class="state"><CircleNotchIcon size={20} class="spin" /> {t('common.loading')}</div>
+				<div class="state"><LoaderCircleIcon size={20} class="spin" /> {t('common.loading')}</div>
 			{:else}
 				{#if error}<Notice>{t('settings.marketplace.loadFailed', { error })}</Notice>{/if}
 				{#each warnings as warning (warning)}
@@ -143,7 +143,7 @@
 										disabled={s.installed || !s.redistributable || installing[`${s.source}:${s.id}`]}
 										onclick={() => install(s)}
 									>
-										{#if !s.redistributable && !s.installed}{t('settings.marketplace.notOffered')}{:else if installing[`${s.source}:${s.id}`]}<CircleNotchIcon size={14} class="spin" /> {t('settings.marketplace.installing')}{:else if s.installed}<CheckIcon size={14} /> {t('settings.marketplace.installed')}{:else}<DownloadSimpleIcon size={14} /> {t('settings.marketplace.install')}{/if}
+										{#if !s.redistributable && !s.installed}{t('settings.marketplace.notOffered')}{:else if installing[`${s.source}:${s.id}`]}<LoaderCircleIcon size={14} class="spin" /> {t('settings.marketplace.installing')}{:else if s.installed}<CheckIcon size={14} /> {t('settings.marketplace.installed')}{:else}<DownloadIcon size={14} /> {t('settings.marketplace.install')}{/if}
 									</Button>
 								</div>
 							</div>

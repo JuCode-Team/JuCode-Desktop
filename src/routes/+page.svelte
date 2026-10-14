@@ -4,22 +4,22 @@
 	import { listen } from '@tauri-apps/api/event';
 	import { invoke } from '@tauri-apps/api/core';
 	import { getCurrentWebview } from '@tauri-apps/api/webview';
-	import TerminalWindowIcon from 'phosphor-svelte/lib/TerminalWindowIcon';
-	import ChatCircleTextIcon from 'phosphor-svelte/lib/ChatCircleTextIcon';
+	import SquareTerminalIcon from '@lucide/svelte/icons/square-terminal';
+	import MessageSquareTextIcon from '@lucide/svelte/icons/message-square-text';
 	import SessionMark from '$lib/SessionMark.svelte';
 	import { sessionStatus } from '$lib/sessionStatus';
 	import { joinPath, parseFileHref, pathExt } from '$lib/fileRefs';
-	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
-	import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon';
-	import TargetIcon from 'phosphor-svelte/lib/TargetIcon';
-	import GitDiffIcon from 'phosphor-svelte/lib/GitDiffIcon';
-	import ClockCounterClockwiseIcon from 'phosphor-svelte/lib/ClockCounterClockwiseIcon';
-	import FilesIcon from 'phosphor-svelte/lib/FilesIcon';
-	import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon';
-	import FolderIcon from 'phosphor-svelte/lib/FolderIcon';
-	import GlobeIcon from 'phosphor-svelte/lib/GlobeIcon';
-	import PulseIcon from 'phosphor-svelte/lib/PulseIcon';
-	import TreeStructureIcon from 'phosphor-svelte/lib/TreeStructureIcon';
+	import PlusIcon from '@lucide/svelte/icons/plus';
+	import ListChecksIcon from '@lucide/svelte/icons/list-checks';
+	import TargetIcon from '@lucide/svelte/icons/target';
+	import GitCompareIcon from '@lucide/svelte/icons/git-compare';
+	import RotateCcwClockIcon from '@lucide/svelte/icons/rotate-ccw-clock';
+	import FilesIcon from '@lucide/svelte/icons/files';
+	import GitBranchIcon from '@lucide/svelte/icons/git-branch';
+	import FolderIcon from '@lucide/svelte/icons/folder';
+	import GlobeIcon from '@lucide/svelte/icons/globe';
+	import ActivityIcon from '@lucide/svelte/icons/activity';
+	import NetworkIcon from '@lucide/svelte/icons/network';
 	import Toaster from '$lib/ui/Toaster.svelte';
 	import ModelSetup from '$lib/ModelSetup.svelte';
 	import { modelSetup } from '$lib/modelSetupState.svelte';
@@ -421,11 +421,11 @@
 	// session (model popup), never at tab creation. Persisted `tui:*` tabs
 	// still render, but TUI tabs are no longer offered as new options.
 	const PANEL_ICONS: Record<(typeof ALL_PANELS)[number], typeof PlusIcon> = {
-		plan: ListChecksIcon, goal: TargetIcon, agents: TreeStructureIcon, changes: GitDiffIcon, turns: ClockCounterClockwiseIcon,
-		files: FilesIcon, git: GitBranchIcon, term: TerminalWindowIcon, browser: GlobeIcon, diag: PulseIcon
+		plan: ListChecksIcon, goal: TargetIcon, agents: NetworkIcon, changes: GitCompareIcon, turns: RotateCcwClockIcon,
+		files: FilesIcon, git: GitBranchIcon, term: SquareTerminalIcon, browser: GlobeIcon, diag: ActivityIcon
 	};
 	const addOptions = $derived([
-		{ key: 'chat', label: t('shell.agentSession'), icon: ChatCircleTextIcon, primary: true },
+		{ key: 'chat', label: t('shell.agentSession'), icon: MessageSquareTextIcon, primary: true },
 		...panelKeys.map((k) => ({ key: k, label: t(`dock.tabs.${k}`), icon: PANEL_ICONS[k] }))
 	]);
 
@@ -1412,7 +1412,7 @@
 		{#snippet actions()}
 			{#if !showSettings && !showDesk && active && active.surface === 'tui'}
 				<button class="tile-action" title={t('dock.tui.backToGui')} aria-label={t('dock.tui.backToGui')} onclick={() => active && tuiPanels[active.id]?.backToGui()}>
-					<ChatCircleTextIcon size={16} />
+					<MessageSquareTextIcon size={16} />
 				</button>
 			{:else if !showSettings && !showDesk && active && canHandOffToTui(active.backendId)}
 				<button
@@ -1422,7 +1422,7 @@
 					aria-label={t('chat.tuiContinue')}
 					onclick={() => active && continueInTui(active.id)}
 				>
-					<TerminalWindowIcon size={16} />
+					<SquareTerminalIcon size={16} />
 				</button>
 			{/if}
 		{/snippet}
@@ -1537,7 +1537,7 @@
 									{@const session = sid ? sessionMap.get(sid) : undefined}
 									{#if sid && session?.surface === 'tui'}
 										<button class="tile-action" title={t('dock.tui.backToGui')} aria-label={t('dock.tui.backToGui')} onclick={() => tuiPanels[sid]?.backToGui()}>
-											<ChatCircleTextIcon size={13} />
+											<MessageSquareTextIcon size={14} />
 										</button>
 									{:else if sid && session && canHandOffToTui(session.backendId)}
 										<button
@@ -1547,7 +1547,7 @@
 											aria-label={t('chat.tuiContinue')}
 											onclick={() => continueInTui(sid)}
 										>
-											<TerminalWindowIcon size={13} />
+											<SquareTerminalIcon size={14} />
 										</button>
 									{/if}
 								{/snippet}

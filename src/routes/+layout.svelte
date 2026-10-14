@@ -5,7 +5,7 @@
 	import { initTheme } from '$lib/theme.svelte';
 	import { prefs, applyPlatformClass } from '$lib/prefs.svelte';
 	import { getLocale, setLocale } from '$lib/i18n';
-	import IconContext from 'phosphor-svelte/lib/IconContext';
+	import { setLucideProps } from '@lucide/svelte/context';
 	import ContextMenuHost from '$lib/ui/ContextMenuHost.svelte';
 	import TooltipHost from '$lib/ui/TooltipHost.svelte';
 	import ImageViewerHost from '$lib/ui/ImageViewerHost.svelte';
@@ -16,6 +16,11 @@
 	if (browser) applyPlatformClass();
 
 	let { children } = $props();
+
+	// Icon defaults (lucide): a fixed 1.5px stroke at every size, so 12px and
+	// 20px icons read as the same weight. Icons are aria-hidden unless labelled.
+	setLucideProps({ strokeWidth: 1.5, nonScalingStroke: true });
+
 	onMount(() => {
 		initTheme();
 		// prefs.init() also reflects the macOS sidebar-vibrancy choice onto the root.
@@ -39,13 +44,8 @@
 	});
 </script>
 
-<!-- Icon defaults (Phosphor): 24px unless a size is given; icons sit next to
-     their label, so screen readers skip them. Selected navigation items switch
-     to weight="fill". -->
-<IconContext values={{ size: 24, weight: 'regular', 'aria-hidden': 'true' }}>
-	{@render children()}
-	<!-- App-drawn replacements for the WebView's context menu and title tooltips. -->
-	<ContextMenuHost />
-	<TooltipHost />
-	<ImageViewerHost />
-</IconContext>
+{@render children()}
+<!-- App-drawn replacements for the WebView's context menu and title tooltips. -->
+<ContextMenuHost />
+<TooltipHost />
+<ImageViewerHost />

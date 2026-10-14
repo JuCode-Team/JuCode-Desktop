@@ -4,10 +4,10 @@
 	// git itself refuses a switch that would lose uncommitted changes; its
 	// message is shown as is.
 	import { onMount } from 'svelte';
-	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
-	import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon';
-	import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon';
-	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
+	import CheckIcon from '@lucide/svelte/icons/check';
+	import GitBranchIcon from '@lucide/svelte/icons/git-branch';
+	import SearchIcon from '@lucide/svelte/icons/search';
+	import PlusIcon from '@lucide/svelte/icons/plus';
 	import { git } from '$lib/protocol';
 	import { isValidBranchName, parseBranches } from '$lib/gitops';
 	import { t } from '$lib/i18n';
@@ -98,7 +98,7 @@
 <div class="pop bm" role="dialog" aria-label={t('chat.branchMenu.title')}>
 	{#if creating}
 		<label class="field">
-			<GitBranchIcon size={15} />
+			<GitBranchIcon size={16} />
 			<!-- svelte-ignore a11y_autofocus -->
 			<input bind:value={newName} placeholder={t('dock.git.newBranchPlaceholder')} onkeydown={onCreateKey} disabled={busy} spellcheck="false" autofocus />
 		</label>
@@ -108,7 +108,7 @@
 		</button>
 	{:else}
 		<label class="field">
-			<MagnifyingGlassIcon size={15} />
+			<SearchIcon size={16} />
 			<!-- svelte-ignore a11y_autofocus -->
 			<input bind:value={query} placeholder={t('chat.branchMenu.search', { repo })} onkeydown={onSearchKey} spellcheck="false" autofocus />
 		</label>

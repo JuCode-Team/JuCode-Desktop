@@ -1,5 +1,5 @@
 <script lang="ts">
-	import ChatCircleTextIcon from 'phosphor-svelte/lib/ChatCircleTextIcon';
+	import MessageSquareTextIcon from '@lucide/svelte/icons/message-square-text';
 	// The remote control page for a phone's browser: pair once, then the desk,
 	// the agents and their sessions. Two ways to reach a computer:
 	// - LAN: the daemon served this page; pair with a code for a device token.
@@ -9,21 +9,21 @@
 	// view (HostView), and the switcher in the list header picks the one shown.
 	import { onMount, type Component } from 'svelte';
 	import { dev } from '$app/environment';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import QrCodeIcon from 'phosphor-svelte/lib/QrCodeIcon';
-	import DesktopIcon from 'phosphor-svelte/lib/DesktopIcon';
-	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
-	import CaretUpDownIcon from 'phosphor-svelte/lib/CaretUpDownIcon';
-	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
-	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
-	import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon';
-	import SignOutIcon from 'phosphor-svelte/lib/SignOutIcon';
-	import ScrollIcon from 'phosphor-svelte/lib/ScrollIcon';
-	import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon';
-	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
-	import DeviceMobileIcon from 'phosphor-svelte/lib/DeviceMobileIcon';
-	import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon';
-	import BellIcon from 'phosphor-svelte/lib/BellIcon';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import QrCodeIcon from '@lucide/svelte/icons/qr-code';
+	import MonitorIcon from '@lucide/svelte/icons/monitor';
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+	import ChevronsUpDownIcon from '@lucide/svelte/icons/chevrons-up-down';
+	import CheckIcon from '@lucide/svelte/icons/check';
+	import PlusIcon from '@lucide/svelte/icons/plus';
+	import PencilIcon from '@lucide/svelte/icons/pencil';
+	import LogOutIcon from '@lucide/svelte/icons/log-out';
+	import ScrollTextIcon from '@lucide/svelte/icons/scroll-text';
+	import RotateCwIcon from '@lucide/svelte/icons/rotate-cw';
+	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
+	import SmartphoneIcon from '@lucide/svelte/icons/smartphone';
+	import DownloadIcon from '@lucide/svelte/icons/download';
+	import BellIcon from '@lucide/svelte/icons/bell';
 	import { enablePush, pushOn, pushSupported } from '$lib/remote/push';
 	import { forgetLists } from '$lib/remote/cache';
 	import { toast } from '$lib/ui/toast.svelte';
@@ -453,10 +453,10 @@
 						<span class="conn-text">{nameOf(active)}</span>
 						<span class="conn-state">{t(active.state.short)}</span>
 					</span>
-					<CaretUpDownIcon size={14} />
+					<ChevronsUpDownIcon size={14} />
 				{:else}
 					<span class="conn-text">{nameOf(active)}</span>
-					<CaretDownIcon size={12} />
+					<ChevronDownIcon size={12} />
 				{/if}
 			</button>
 			{#if switchMenu}
@@ -465,7 +465,7 @@
 					{#if relayOrigin && !foot}
 						<!-- app.jucode.net: the remote computers are one part of the web app. -->
 						<a class="pop-row" role="menuitem" href="/chat">
-							<span class="pop-ico"><ChatCircleTextIcon size={18} /></span>
+							<span class="pop-ico"><MessageSquareTextIcon size={16} /></span>
 							<span class="pop-txt"><span class="pop-label">{t('shell.remote.backToChat')}</span></span>
 						</a>
 						<div class="sep"></div>
@@ -489,36 +489,36 @@
 					{/each}
 					<div class="sep"></div>
 					<button class="pop-row" role="menuitem" onclick={startAdding}>
-						<span class="pop-ico"><PlusIcon size={18} /></span>
+						<span class="pop-ico"><PlusIcon size={16} /></span>
 						<span class="pop-txt"><span class="pop-label">{t('shell.remote.addComputer')}</span></span>
 					</button>
 					{#if active.kind === 'relay'}
 						<button class="pop-row" role="menuitem" onclick={() => rename(active)}>
-							<span class="pop-ico"><PencilSimpleIcon size={18} /></span>
+							<span class="pop-ico"><PencilIcon size={16} /></span>
 							<span class="pop-txt"><span class="pop-label">{t('shell.remote.renameComputer', { name: nameOf(active) })}</span></span>
 						</button>
 						<button class="pop-row warn" role="menuitem" onclick={() => forget(active)}>
-							<span class="pop-ico"><SignOutIcon size={18} /></span>
+							<span class="pop-ico"><LogOutIcon size={16} /></span>
 							<span class="pop-txt"><span class="pop-label">{t('shell.remote.forget')}</span></span>
 						</button>
 					{:else}
 						<button class="pop-row warn" role="menuitem" onclick={() => ((switchMenu = false), repair())}>
-							<span class="pop-ico"><ArrowClockwiseIcon size={18} /></span>
+							<span class="pop-ico"><RotateCwIcon size={16} /></span>
 							<span class="pop-txt"><span class="pop-label">{t('shell.remote.repair')}</span></span>
 						</button>
 					{/if}
 					{#if canInstall}
 						<button class="pop-row" role="menuitem" onclick={install}>
-							<span class="pop-ico"><DownloadSimpleIcon size={18} /></span>
+							<span class="pop-ico"><DownloadIcon size={16} /></span>
 							<span class="pop-txt"><span class="pop-label">{t('shell.remote.install')}</span></span>
 						</button>
 					{/if}
 					<button class="pop-row" role="menuitem" onclick={testPush}>
-						<span class="pop-ico"><BellIcon size={18} /></span>
+						<span class="pop-ico"><BellIcon size={16} /></span>
 						<span class="pop-txt"><span class="pop-label">{t('shell.remote.pushTest')}</span></span>
 					</button>
 					<button class="pop-row" role="menuitem" onclick={openLicenses}>
-						<span class="pop-ico"><ScrollIcon size={18} /></span>
+						<span class="pop-ico"><ScrollTextIcon size={16} /></span>
 						<span class="pop-txt"><span class="pop-label">{t('shell.remote.licenses')}</span></span>
 					</button>
 				</div>
@@ -547,7 +547,7 @@
 {#snippet linkEntry()}
 	<div class="entry">
 		<Button variant="primary" disabled={scanning} onclick={openScanner}>
-			{#if scanning}<CircleNotchIcon size={16} class="spin" />{:else}<QrCodeIcon size={16} />{/if}
+			{#if scanning}<LoaderCircleIcon size={16} class="spin" />{:else}<QrCodeIcon size={16} />{/if}
 			{t('shell.remote.scanQr')}
 		</Button>
 		<form class="paste" onsubmit={(e) => (e.preventDefault(), acceptLink(pasted))}>
@@ -561,7 +561,7 @@
 {#snippet backToApp()}
 	{#if conns.length}
 		<button class="cancel" onclick={() => ((adding = false), (lanPairing = false), (scanning = false))} aria-label={t('shell.remote.back')}>
-			<ArrowLeftIcon size={18} />
+			<ArrowLeftIcon size={16} />
 		</button>
 	{/if}
 {/snippet}
@@ -571,7 +571,7 @@
 <div class="remote" class:wide class:resizing style:--side-w="{sideWidth}px">
 	{#if view === 'install'}
 		<div class="pair">
-			<span class="hero"><DeviceMobileIcon size={28} /></span>
+			<span class="hero"><SmartphoneIcon size={28} /></span>
 			<h1>{t('shell.remote.installTitle')}</h1>
 			<ol class="steps">
 				<li>{t('shell.remote.installStep1')}</li>
@@ -595,7 +595,7 @@
 	{:else if view === 'lan'}
 		<div class="pair">
 			{@render backToApp()}
-			<span class="hero"><DesktopIcon size={28} /></span>
+			<span class="hero"><MonitorIcon size={28} /></span>
 			<h1>{t('shell.remote.pairTitle')}</h1>
 			<p>{t('shell.remote.pairHint')}</p>
 			<form onsubmit={(e) => (e.preventDefault(), pair())}>
@@ -604,7 +604,7 @@
 					<input class="code" bind:value={code} autocapitalize="characters" autocomplete="one-time-code" />
 				</label>
 				<Button variant="primary" disabled={!code.trim() || pairing}>
-					{#if pairing}<CircleNotchIcon size={14} class="spin" /> {t('shell.remote.pairing')}{:else}{t('shell.remote.pair')}{/if}
+					{#if pairing}<LoaderCircleIcon size={14} class="spin" /> {t('shell.remote.pairing')}{:else}{t('shell.remote.pair')}{/if}
 				</Button>
 			</form>
 			{#if pairError}<div class="err"><Notice>{pairError}</Notice></div>{/if}

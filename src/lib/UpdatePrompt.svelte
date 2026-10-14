@@ -4,7 +4,7 @@
 	// (updater.required) blocks the app until the update is in: it downloads,
 	// then only offers the restart.
 	import { openUrl } from '@tauri-apps/plugin-opener';
-	import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon';
+	import RotateCwIcon from '@lucide/svelte/icons/rotate-cw';
 	import Button from '$lib/ui/Button.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
 	import { readConfig } from '$lib/protocol';
@@ -57,7 +57,7 @@
 						<Button variant="secondary" onclick={() => updater.dismiss()}>{t('shell.updatePrompt.later')}</Button>
 					{/if}
 					<Button variant="primary" onclick={() => updater.restart()}>
-						<ArrowClockwiseIcon size={14} />
+						<RotateCwIcon size={14} />
 						{t('shell.updatePrompt.restart')}
 					</Button>
 				{:else if required && !busy}

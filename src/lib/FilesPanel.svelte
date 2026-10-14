@@ -4,12 +4,12 @@
 	// and open the focused folder, ↑ ↓ move between rows. Refresh reads every
 	// open folder again.
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
-	import FolderIcon from 'phosphor-svelte/lib/FolderIcon';
-	import FolderOpenIcon from 'phosphor-svelte/lib/FolderOpenIcon';
-	import FileTextIcon from 'phosphor-svelte/lib/FileTextIcon';
-	import ArrowsClockwiseIcon from 'phosphor-svelte/lib/ArrowsClockwiseIcon';
-	import ArrowsInLineVerticalIcon from 'phosphor-svelte/lib/ArrowsInLineVerticalIcon';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import FolderIcon from '@lucide/svelte/icons/folder';
+	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
+	import FileTextIcon from '@lucide/svelte/icons/file-text';
+	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
+	import FoldVerticalIcon from '@lucide/svelte/icons/fold-vertical';
 	import { projectRoot, listDir, type FsEntry } from '$lib/protocol';
 	import { editorStore } from '$lib/editor/editorStore.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
@@ -111,8 +111,8 @@
 <div class="files">
 	<div class="bar">
 		<span class="crumb" title={root}>{name}</span>
-		<IconButton size="sm" onclick={() => open.clear()} disabled={!open.size} label={t('dock.files.collapseAll')}><ArrowsInLineVerticalIcon size={13} /></IconButton>
-		<IconButton size="sm" onclick={refresh} label={t('dock.files.refresh')}><ArrowsClockwiseIcon size={13} /></IconButton>
+		<IconButton size="sm" onclick={() => open.clear()} disabled={!open.size} label={t('dock.files.collapseAll')}><FoldVerticalIcon size={14} /></IconButton>
+		<IconButton size="sm" onclick={refresh} label={t('dock.files.refresh')}><RefreshCwIcon size={14} /></IconButton>
 	</div>
 	{#if error}
 		<div class="err"><Notice mono>{error}</Notice></div>
@@ -134,10 +134,10 @@
 						onkeydown={(ev) => onKey(ev, e)}
 					>
 						{#each { length: r.depth } as _, g (g)}<span class="guide" style:--g={g}></span>{/each}
-						<span class="caret" class:open={isOpen} class:none={!e.is_dir}><CaretRightIcon size={11} /></span>
+						<span class="caret" class:open={isOpen} class:none={!e.is_dir}><ChevronRightIcon size={12} /></span>
 						{#if e.is_dir}
-							{#if isOpen}<FolderOpenIcon size={15} class="fcol" />{:else}<FolderIcon size={15} class="fcol" />{/if}
-						{:else}<FileTextIcon size={15} />{/if}
+							{#if isOpen}<FolderOpenIcon size={16} class="fcol" />{:else}<FolderIcon size={16} class="fcol" />{/if}
+						{:else}<FileTextIcon size={16} />{/if}
 						<span class="ename">{e.name}</span>
 					</button>
 				{:else}

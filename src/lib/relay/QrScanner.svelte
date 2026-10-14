@@ -4,7 +4,7 @@
 	// so pairing from inside the installed app needs its own scanner.
 	import { onMount } from 'svelte';
 	import jsQR from 'jsqr';
-	import XIcon from 'phosphor-svelte/lib/XIcon';
+	import XIcon from '@lucide/svelte/icons/x';
 	import Notice from '$lib/ui/Notice.svelte';
 	import { t } from '$lib/i18n';
 
@@ -63,7 +63,7 @@
 	<!-- svelte-ignore a11y_media_has_caption -->
 	<video bind:this={video} playsinline muted></video>
 	<div class="frame" aria-hidden="true"></div>
-	<button class="close" aria-label={t('common.close')} onclick={onClose}><XIcon size={22} /></button>
+	<button class="close" aria-label={t('common.close')} onclick={onClose}><XIcon size={20} /></button>
 	<p class="hint">{t('shell.remote.scanAim')}</p>
 	{#if error}<div class="err"><Notice>{error}</Notice></div>{/if}
 </div>

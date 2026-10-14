@@ -1,20 +1,20 @@
 // A tool call's one-line summary — icon, verb and target — shared by the tool
 // card and the header of a run of calls (which shows the latest one).
-import TerminalWindowIcon from 'phosphor-svelte/lib/TerminalWindowIcon';
-import FileTextIcon from 'phosphor-svelte/lib/FileTextIcon';
-import FilePlusIcon from 'phosphor-svelte/lib/FilePlusIcon';
-import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon';
-import FolderOpenIcon from 'phosphor-svelte/lib/FolderOpenIcon';
-import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon';
-import ListBulletsIcon from 'phosphor-svelte/lib/ListBulletsIcon';
-import GlobeIcon from 'phosphor-svelte/lib/GlobeIcon';
-import LinkIcon from 'phosphor-svelte/lib/LinkIcon';
-import BrowserIcon from 'phosphor-svelte/lib/BrowserIcon';
-import RobotIcon from 'phosphor-svelte/lib/RobotIcon';
-import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon';
-import PlugIcon from 'phosphor-svelte/lib/PlugIcon';
-import WrenchIcon from 'phosphor-svelte/lib/WrenchIcon';
-import ImageIcon from 'phosphor-svelte/lib/ImageIcon';
+import SquareTerminalIcon from '@lucide/svelte/icons/square-terminal';
+import FileTextIcon from '@lucide/svelte/icons/file-text';
+import FilePlusIcon from '@lucide/svelte/icons/file-plus';
+import PencilIcon from '@lucide/svelte/icons/pencil';
+import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
+import SearchIcon from '@lucide/svelte/icons/search';
+import ListIcon from '@lucide/svelte/icons/list';
+import GlobeIcon from '@lucide/svelte/icons/globe';
+import LinkIcon from '@lucide/svelte/icons/link';
+import AppWindowMacIcon from '@lucide/svelte/icons/app-window-mac';
+import BotIcon from '@lucide/svelte/icons/bot';
+import ListChecksIcon from '@lucide/svelte/icons/list-checks';
+import PlugIcon from '@lucide/svelte/icons/plug';
+import WrenchIcon from '@lucide/svelte/icons/wrench';
+import ImageIcon from '@lucide/svelte/icons/image';
 
 const VERBS: Record<string, string> = {
 	read: 'Read',
@@ -47,28 +47,28 @@ const VERBS: Record<string, string> = {
 
 // One glyph per kind of tool, so a run of calls scans at a glance.
 const ICONS: Record<string, typeof WrenchIcon> = {
-	bash: TerminalWindowIcon,
-	exec_command: TerminalWindowIcon,
-	write_stdin: TerminalWindowIcon,
+	bash: SquareTerminalIcon,
+	exec_command: SquareTerminalIcon,
+	write_stdin: SquareTerminalIcon,
 	read: FileTextIcon,
 	write: FilePlusIcon,
-	str_replace: PencilSimpleIcon,
-	hashline_edit: PencilSimpleIcon,
-	apply_patch: PencilSimpleIcon,
+	str_replace: PencilIcon,
+	hashline_edit: PencilIcon,
+	apply_patch: PencilIcon,
 	ls: FolderOpenIcon,
-	ripgrep: MagnifyingGlassIcon,
-	outline: ListBulletsIcon,
+	ripgrep: SearchIcon,
+	outline: ListIcon,
 	web_search: GlobeIcon,
 	web_fetch: LinkIcon,
 	generate_image: ImageIcon,
-	Task: RobotIcon,
-	Agent: RobotIcon,
-	spawn_agent: RobotIcon,
-	wait_agent: RobotIcon,
-	list_agents: RobotIcon,
-	send_message: RobotIcon,
-	close_agent: RobotIcon,
-	agent_wait: RobotIcon,
+	Task: BotIcon,
+	Agent: BotIcon,
+	spawn_agent: BotIcon,
+	wait_agent: BotIcon,
+	list_agents: BotIcon,
+	send_message: BotIcon,
+	close_agent: BotIcon,
+	agent_wait: BotIcon,
 	TodoWrite: ListChecksIcon,
 	update_plan: ListChecksIcon
 };
@@ -78,7 +78,7 @@ export const toolVerb = (name: string) => VERBS[name] ?? name;
 export function toolIcon(name: string): typeof WrenchIcon {
 	return (
 		ICONS[name] ??
-		(name.startsWith('browser_') ? BrowserIcon : name.startsWith('mcp__') || name.includes('.') ? PlugIcon : WrenchIcon)
+		(name.startsWith('browser_') ? AppWindowMacIcon : name.startsWith('mcp__') || name.includes('.') ? PlugIcon : WrenchIcon)
 	);
 }
 

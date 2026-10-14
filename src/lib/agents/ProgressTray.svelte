@@ -5,11 +5,11 @@
 	// to-dos and the subagents side by side (stacked when narrow), each
 	// subagent a click away from its own conversation. Open or not is kept
 	// per session; the bar stays until the next turn.
-	import CaretUpIcon from 'phosphor-svelte/lib/CaretUpIcon';
-	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
-	import SquareSplitHorizontalIcon from 'phosphor-svelte/lib/SquareSplitHorizontalIcon';
-	import AppWindowIcon from 'phosphor-svelte/lib/AppWindowIcon';
-	import StopIcon from 'phosphor-svelte/lib/StopIcon';
+	import ChevronUpIcon from '@lucide/svelte/icons/chevron-up';
+	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
+	import Columns2Icon from '@lucide/svelte/icons/columns-2';
+	import AppWindowIcon from '@lucide/svelte/icons/app-window';
+	import SquareIcon from '@lucide/svelte/icons/square';
 	import { t } from '$lib/i18n';
 	import { pillParts, planShown, planSummary, trayMode, type AgentRow } from '$lib/agentProgress';
 	import { formatCount, shortModel } from '$lib/agentTrace';
@@ -139,9 +139,9 @@
 									</button>
 									{#if (onOpen && !r.workflow) || stoppable(r)}
 										<span class="aacts">
-											{#if stoppable(r)}<button onclick={() => onStop?.(r.id)} title={t('chat.task.stop')} aria-label={t('chat.task.stop')}><StopIcon size={14} /></button>{/if}
+											{#if stoppable(r)}<button onclick={() => onStop?.(r.id)} title={t('chat.task.stop')} aria-label={t('chat.task.stop')}><SquareIcon size={14} /></button>{/if}
 											{#if onOpen && !r.workflow}
-											<button onclick={() => onOpen?.(r, 'side')} title={t('chat.progress.openSide')} aria-label={t('chat.progress.openSide')}><SquareSplitHorizontalIcon size={14} /></button>
+											<button onclick={() => onOpen?.(r, 'side')} title={t('chat.progress.openSide')} aria-label={t('chat.progress.openSide')}><Columns2Icon size={14} /></button>
 											<button onclick={() => onOpen?.(r, 'tab')} title={t('chat.progress.openTab')} aria-label={t('chat.progress.openTab')}><AppWindowIcon size={14} /></button>
 											{/if}
 										</span>
@@ -162,7 +162,7 @@
 		>
 			{#if showPlan}
 				{#if allDone}
-					<span class="ring done"><CheckCircleIcon size={16} weight="fill" /></span>
+					<span class="ring done"><CircleCheckIcon size={16} /></span>
 				{:else}
 					<svg class="ring" width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
 						<circle class="track" cx="9" cy="9" r={R} />
@@ -180,7 +180,7 @@
 					<span>{counts.running ? t('chat.progress.runningN', { n: counts.running }) : t('chat.progress.agentsN', { n: counts.agents })}</span>
 				</span>
 			{/if}
-			<span class="chev"><CaretUpIcon size={13} /></span>
+			<span class="chev"><ChevronUpIcon size={14} /></span>
 		</button>
 	</div>
 {/if}

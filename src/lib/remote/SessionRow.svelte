@@ -1,8 +1,8 @@
 <script lang="ts">
 	// One session in a remote list: its title, when it last changed, and
 	// whether the daemon is running it now.
-	import ArchiveIcon from 'phosphor-svelte/lib/ArchiveIcon';
-	import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon';
+	import ArchiveIcon from '@lucide/svelte/icons/archive';
+	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import { t } from '$lib/i18n';
 	import { when } from '$lib/time';
 
@@ -34,11 +34,11 @@
 		<span class="meta">{when(at)}{#if detail} · {detail}{/if}</span>
 	</button>
 	{#if onRename}
-		<button class="mini" onclick={onRename} aria-label={t('shell.remote.rename')}><PencilSimpleIcon size={15} /></button>
+		<button class="mini" onclick={onRename} aria-label={t('shell.remote.rename')}><PencilIcon size={16} /></button>
 	{/if}
 	{#if onArchive}
 		<button class="mini" onclick={onArchive} aria-label={archived ? t('shell.remote.unarchive') : t('shell.remote.archive')}>
-			<ArchiveIcon size={15} weight={archived ? 'fill' : 'regular'} />
+			<ArchiveIcon size={16} strokeWidth={archived ? 2 : undefined} />
 		</button>
 	{/if}
 </div>

@@ -1,7 +1,7 @@
 <script lang="ts">
 	// A pending plan's actions, on its chat card and on its page: approve and
 	// run in a chosen approval mode, or revise it with the next message.
-	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import type { ApprovalMode } from '$lib/approval';
 	import type { PlanAction } from '$lib/PlanCard.svelte';
 	import { t } from '$lib/i18n';
@@ -45,7 +45,7 @@
 		</Button>
 		<span class="anchor">
 			<button class="pick" onclick={() => (menuOpen = !menuOpen)} aria-haspopup="menu" aria-expanded={menuOpen} aria-label={t('chat.planCard.modeTitle')} title={t('chat.planCard.modeTitle')}>
-				<CaretDownIcon size={13} />
+				<ChevronDownIcon size={14} />
 			</button>
 			{#if menuOpen}
 				<PopMenu

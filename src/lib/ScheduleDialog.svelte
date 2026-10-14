@@ -2,8 +2,8 @@
 	// Create or edit one of an agent's scheduled tasks. 立即运行 saves first,
 	// then runs the saved task, so a new task can be tried right away.
 	import { onMount, tick, untrack } from 'svelte';
-	import ClockIcon from 'phosphor-svelte/lib/ClockIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
+	import ClockIcon from '@lucide/svelte/icons/clock';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import Button from '$lib/ui/Button.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
@@ -91,7 +91,7 @@
 	dismissible={!busy}
 	{onClose}
 >
-	{#snippet icon()}<ClockIcon size={15} />{/snippet}
+	{#snippet icon()}<ClockIcon size={16} />{/snippet}
 	<label class="field">
 		<span>{t('shell.schedule.name')}</span>
 		<input bind:this={nameEl} bind:value={draft.name} placeholder={t('shell.schedule.namePlaceholder')} />
@@ -153,7 +153,7 @@
 		<span class="grow"></span>
 		<Button size="sm" onclick={onClose} disabled={busy}>{t('common.cancel')}</Button>
 		<Button size="sm" variant="primary" disabled={busy} onclick={() => save(false)}>
-			{#if busy}<CircleNotchIcon size={13} class="spin" />{/if}
+			{#if busy}<LoaderCircleIcon size={14} class="spin" />{/if}
 			{t('shell.schedule.save')}
 		</Button>
 	{/snippet}

@@ -1,7 +1,7 @@
 <script lang="ts">
-	import XIcon from 'phosphor-svelte/lib/XIcon';
-	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
-	import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon';
+	import XIcon from '@lucide/svelte/icons/x';
+	import CheckIcon from '@lucide/svelte/icons/check';
+	import SearchIcon from '@lucide/svelte/icons/search';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
 	import { t } from '$lib/i18n';
@@ -56,7 +56,7 @@
 	{#if anchored}
 		<div class="modal-head">
 			<span>{title}</span>
-			<IconButton onclick={onClose} label="close"><XIcon size={15} /></IconButton>
+			<IconButton onclick={onClose} label="close"><XIcon size={16} /></IconButton>
 		</div>
 	{/if}
 	{#if chat.picker?.kind === 'model' && activeModel}
@@ -70,7 +70,7 @@
 	{#if header}<div class="pheader">{@render header()}</div>{/if}
 	{#if showSearch}
 		<div class="psearch">
-			<MagnifyingGlassIcon size={14} />
+			<SearchIcon size={14} />
 			<!-- svelte-ignore a11y_autofocus -->
 			<input bind:value={query} placeholder={t('shell.pickerSearchPlaceholder')} autofocus />
 		</div>

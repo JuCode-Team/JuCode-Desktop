@@ -1,6 +1,7 @@
 // Brand marks for models and providers, from @lobehub/icons (the maintained
-// AI-brand icon set). Colour variants where the set has one; monochrome marks
-// use currentColor. Only the brands referenced below are bundled.
+// AI-brand icon set). Lists show the colour variant where the set has one;
+// controls ask for the monochrome one (currentColor). Only the brands
+// referenced below are bundled.
 import i_openai from '@lobehub/icons-static-svg/icons/openai.svg?raw';
 import i_claude from '@lobehub/icons-static-svg/icons/claude-color.svg?raw';
 import i_anthropic from '@lobehub/icons-static-svg/icons/anthropic.svg?raw';
@@ -63,6 +64,49 @@ import i_siliconcloud from '@lobehub/icons-static-svg/icons/siliconcloud-color.s
 import i_perplexity from '@lobehub/icons-static-svg/icons/perplexity-color.svg?raw';
 import i_codex from '@lobehub/icons-static-svg/icons/codex-color.svg?raw';
 import i_xiaomimimo from '@lobehub/icons-static-svg/icons/xiaomimimo.svg?raw';
+import m_claude from '@lobehub/icons-static-svg/icons/claude.svg?raw';
+import m_gemini from '@lobehub/icons-static-svg/icons/gemini.svg?raw';
+import m_google from '@lobehub/icons-static-svg/icons/google.svg?raw';
+import m_vertexai from '@lobehub/icons-static-svg/icons/vertexai.svg?raw';
+import m_mistral from '@lobehub/icons-static-svg/icons/mistral.svg?raw';
+import m_meta from '@lobehub/icons-static-svg/icons/meta.svg?raw';
+import m_deepseek from '@lobehub/icons-static-svg/icons/deepseek.svg?raw';
+import m_qwen from '@lobehub/icons-static-svg/icons/qwen.svg?raw';
+import m_zhipu from '@lobehub/icons-static-svg/icons/zhipu.svg?raw';
+import m_kimi from '@lobehub/icons-static-svg/icons/kimi.svg?raw';
+import m_doubao from '@lobehub/icons-static-svg/icons/doubao.svg?raw';
+import m_volcengine from '@lobehub/icons-static-svg/icons/volcengine.svg?raw';
+import m_bytedance from '@lobehub/icons-static-svg/icons/bytedance.svg?raw';
+import m_minimax from '@lobehub/icons-static-svg/icons/minimax.svg?raw';
+import m_hunyuan from '@lobehub/icons-static-svg/icons/hunyuan.svg?raw';
+import m_wenxin from '@lobehub/icons-static-svg/icons/wenxin.svg?raw';
+import m_baidu from '@lobehub/icons-static-svg/icons/baidu.svg?raw';
+import m_spark from '@lobehub/icons-static-svg/icons/spark.svg?raw';
+import m_yi from '@lobehub/icons-static-svg/icons/yi.svg?raw';
+import m_baichuan from '@lobehub/icons-static-svg/icons/baichuan.svg?raw';
+import m_stepfun from '@lobehub/icons-static-svg/icons/stepfun.svg?raw';
+import m_longcat from '@lobehub/icons-static-svg/icons/longcat.svg?raw';
+import m_cohere from '@lobehub/icons-static-svg/icons/cohere.svg?raw';
+import m_hailuo from '@lobehub/icons-static-svg/icons/hailuo.svg?raw';
+import m_kling from '@lobehub/icons-static-svg/icons/kling.svg?raw';
+import m_openrouter from '@lobehub/icons-static-svg/icons/openrouter.svg?raw';
+import m_alibabacloud from '@lobehub/icons-static-svg/icons/alibabacloud.svg?raw';
+import m_bailian from '@lobehub/icons-static-svg/icons/bailian.svg?raw';
+import m_sakana from '@lobehub/icons-static-svg/icons/sakana.svg?raw';
+import m_cerebras from '@lobehub/icons-static-svg/icons/cerebras.svg?raw';
+import m_fireworks from '@lobehub/icons-static-svg/icons/fireworks.svg?raw';
+import m_together from '@lobehub/icons-static-svg/icons/together.svg?raw';
+import m_nvidia from '@lobehub/icons-static-svg/icons/nvidia.svg?raw';
+import m_novita from '@lobehub/icons-static-svg/icons/novita.svg?raw';
+import m_deepinfra from '@lobehub/icons-static-svg/icons/deepinfra.svg?raw';
+import m_huggingface from '@lobehub/icons-static-svg/icons/huggingface.svg?raw';
+import m_venice from '@lobehub/icons-static-svg/icons/venice.svg?raw';
+import m_cloudflare from '@lobehub/icons-static-svg/icons/cloudflare.svg?raw';
+import m_azure from '@lobehub/icons-static-svg/icons/azure.svg?raw';
+import m_bedrock from '@lobehub/icons-static-svg/icons/bedrock.svg?raw';
+import m_siliconcloud from '@lobehub/icons-static-svg/icons/siliconcloud.svg?raw';
+import m_perplexity from '@lobehub/icons-static-svg/icons/perplexity.svg?raw';
+import m_codex from '@lobehub/icons-static-svg/icons/codex.svg?raw';
 
 const SVG: Record<string, string> = {
 	openai: i_openai,
@@ -127,6 +171,54 @@ const SVG: Record<string, string> = {
 	perplexity: i_perplexity,
 	codex: i_codex,
 	xiaomimimo: i_xiaomimimo,
+};
+
+/** Monochrome (currentColor) marks for the brands whose default above is coloured. */
+const MONO: Record<string, string> = {
+	...SVG,
+	claude: m_claude,
+	gemini: m_gemini,
+	google: m_google,
+	vertexai: m_vertexai,
+	mistral: m_mistral,
+	meta: m_meta,
+	deepseek: m_deepseek,
+	qwen: m_qwen,
+	zhipu: m_zhipu,
+	kimi: m_kimi,
+	doubao: m_doubao,
+	volcengine: m_volcengine,
+	bytedance: m_bytedance,
+	minimax: m_minimax,
+	hunyuan: m_hunyuan,
+	wenxin: m_wenxin,
+	baidu: m_baidu,
+	spark: m_spark,
+	yi: m_yi,
+	baichuan: m_baichuan,
+	stepfun: m_stepfun,
+	longcat: m_longcat,
+	cohere: m_cohere,
+	hailuo: m_hailuo,
+	kling: m_kling,
+	openrouter: m_openrouter,
+	alibabacloud: m_alibabacloud,
+	bailian: m_bailian,
+	sakana: m_sakana,
+	cerebras: m_cerebras,
+	fireworks: m_fireworks,
+	together: m_together,
+	nvidia: m_nvidia,
+	novita: m_novita,
+	deepinfra: m_deepinfra,
+	huggingface: m_huggingface,
+	venice: m_venice,
+	cloudflare: m_cloudflare,
+	azure: m_azure,
+	bedrock: m_bedrock,
+	siliconcloud: m_siliconcloud,
+	perplexity: m_perplexity,
+	codex: m_codex,
 };
 
 /** Model name → brand, first match wins (vendor prefixes and family names). */
@@ -202,10 +294,11 @@ const PROVIDER_RULES: [RegExp, string][] = [
 	[/^volcengine|^ark/, 'volcengine']
 ];
 
-const find = (rules: [RegExp, string][], s: string) => {
+const find = (rules: [RegExp, string][], s: string, mono: boolean) => {
 	const key = rules.find(([re]) => re.test(s))?.[1];
-	return key ? SVG[key] : undefined;
+	return key ? (mono ? MONO : SVG)[key] : undefined;
 };
 
-export const modelBrand = (model: string) => find(MODEL_RULES, model);
-export const providerBrand = (id: string) => find(PROVIDER_RULES, id.toLowerCase());
+/** `mono` for marks inside controls (buttons, triggers); lists keep the colour. */
+export const modelBrand = (model: string, mono = false) => find(MODEL_RULES, model, mono);
+export const providerBrand = (id: string, mono = false) => find(PROVIDER_RULES, id.toLowerCase(), mono);

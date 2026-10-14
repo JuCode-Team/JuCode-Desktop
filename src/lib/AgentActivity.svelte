@@ -4,11 +4,11 @@
 	// state, how it is triggered and what its latest run concluded; its runs
 	// unfold below it. Done and closed tasks are folded away at the end, with
 	// the items closed lately and the sessions from before tasks existed.
-	import UserIcon from 'phosphor-svelte/lib/UserIcon';
-	import ClockIcon from 'phosphor-svelte/lib/ClockIcon';
-	import AlarmIcon from 'phosphor-svelte/lib/AlarmIcon';
-	import ArrowBendDownRightIcon from 'phosphor-svelte/lib/ArrowBendDownRightIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
+	import UserIcon from '@lucide/svelte/icons/user';
+	import ClockIcon from '@lucide/svelte/icons/clock';
+	import AlarmClockIcon from '@lucide/svelte/icons/alarm-clock';
+	import CornerDownRightIcon from '@lucide/svelte/icons/corner-down-right';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import AgentAvatar from '$lib/AgentAvatar.svelte';
@@ -182,17 +182,17 @@
 	<li class="entry" class:attention={task.state === 'needs_you'}>
 		<span class="mark">
 			{#if task.trigger.kind === 'repeat'}<ClockIcon size={14} />
-			{:else if task.trigger.kind === 'once'}<AlarmIcon size={14} />
+			{:else if task.trigger.kind === 'once'}<AlarmClockIcon size={14} />
 			{:else if task.origin.startsWith('agent:')}
 				{@const from = agentDirectory.agents.find((a) => a.id === task.origin.slice('agent:'.length))}
-				{#if from}<AgentAvatar agent={from} size={14} />{:else}<ArrowBendDownRightIcon size={14} />{/if}
+				{#if from}<AgentAvatar agent={from} size={14} />{:else}<CornerDownRightIcon size={14} />{/if}
 			{:else}<UserIcon size={14} />{/if}
 		</span>
 		<div class="content">
 			<div class="line">
 				<span class="title">{task.title || t('shell.agentPage.untitled')}</span>
 				<span class="state {task.state}">
-					{#if task.state === 'running'}<CircleNotchIcon size={12} class="spin" />{:else}<span class="dot"></span>{/if}
+					{#if task.state === 'running'}<LoaderCircleIcon size={12} class="spin" />{:else}<span class="dot"></span>{/if}
 					{stateText(task)}
 				</span>
 				<span class="at">{when(task.updated_at)}</span>
@@ -295,7 +295,7 @@
 						<span class="grow"></span>
 						<Button variant="ghost" size="sm" onclick={() => (replyTo = null)}>{t('common.cancel')}</Button>
 						<Button variant="primary" size="sm" disabled={!replyText.trim() || replying} onclick={() => sendReply(task.id)}>
-							{#if replying}<CircleNotchIcon size={13} class="spin" />{/if}{t('shell.activity.replySend')}
+							{#if replying}<LoaderCircleIcon size={14} class="spin" />{/if}{t('shell.activity.replySend')}
 						</Button>
 					</div>
 				</div>

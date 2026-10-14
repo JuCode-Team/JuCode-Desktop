@@ -6,28 +6,28 @@
 	// Config fields apply as they change (debounced writeConfig); keys, logins
 	// and new providers keep their explicit buttons.
 	import { onDestroy, onMount, tick } from 'svelte';
-	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
-	import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon';
-	import GearSixIcon from 'phosphor-svelte/lib/GearSixIcon';
-	import UserCircleIcon from 'phosphor-svelte/lib/UserCircleIcon';
-	import ChartBarIcon from 'phosphor-svelte/lib/ChartBarIcon';
-	import MicrophoneIcon from 'phosphor-svelte/lib/MicrophoneIcon';
-	import PlugsIcon from 'phosphor-svelte/lib/PlugsIcon';
-	import BrainIcon from 'phosphor-svelte/lib/BrainIcon';
-	import GlobeIcon from 'phosphor-svelte/lib/GlobeIcon';
-	import HardDrivesIcon from 'phosphor-svelte/lib/HardDrivesIcon';
-	import StorefrontIcon from 'phosphor-svelte/lib/StorefrontIcon';
-	import RobotIcon from 'phosphor-svelte/lib/RobotIcon';
-	import PlugsConnectedIcon from 'phosphor-svelte/lib/PlugsConnectedIcon';
-	import TrayArrowDownIcon from 'phosphor-svelte/lib/TrayArrowDownIcon';
-	import InfoIcon from 'phosphor-svelte/lib/InfoIcon';
-	import DesktopTowerIcon from 'phosphor-svelte/lib/DesktopTowerIcon';
-	import SignInIcon from 'phosphor-svelte/lib/SignInIcon';
-	import SignOutIcon from 'phosphor-svelte/lib/SignOutIcon';
-	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
-	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
-	import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon';
-	import CopyIcon from 'phosphor-svelte/lib/CopyIcon';
+	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
+	import SearchIcon from '@lucide/svelte/icons/search';
+	import SettingsIcon from '@lucide/svelte/icons/settings';
+	import CircleUserIcon from '@lucide/svelte/icons/circle-user';
+	import ChartColumnIcon from '@lucide/svelte/icons/chart-column';
+	import MicIcon from '@lucide/svelte/icons/mic';
+	import UnplugIcon from '@lucide/svelte/icons/unplug';
+	import BrainIcon from '@lucide/svelte/icons/brain';
+	import GlobeIcon from '@lucide/svelte/icons/globe';
+	import ServerIcon from '@lucide/svelte/icons/server';
+	import StoreIcon from '@lucide/svelte/icons/store';
+	import BotIcon from '@lucide/svelte/icons/bot';
+	import PlugZapIcon from '@lucide/svelte/icons/plug-zap';
+	import InboxIcon from '@lucide/svelte/icons/inbox';
+	import InfoIcon from '@lucide/svelte/icons/info';
+	import PcCaseIcon from '@lucide/svelte/icons/pc-case';
+	import LogInIcon from '@lucide/svelte/icons/log-in';
+	import LogOutIcon from '@lucide/svelte/icons/log-out';
+	import PlusIcon from '@lucide/svelte/icons/plus';
+	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
+	import ListChecksIcon from '@lucide/svelte/icons/list-checks';
+	import CopyIcon from '@lucide/svelte/icons/copy';
 	import {
 		readConfig,
 		writeConfig,
@@ -109,20 +109,20 @@
 		onAddFolders?: (paths: string[]) => number;
 	} = $props();
 
-	const ICONS: Record<SectionKey, typeof GearSixIcon> = {
-		general: GearSixIcon,
-		account: UserCircleIcon,
-		usage: ChartBarIcon,
-		voice: MicrophoneIcon,
-		providers: PlugsIcon,
+	const ICONS: Record<SectionKey, typeof SettingsIcon> = {
+		general: SettingsIcon,
+		account: CircleUserIcon,
+		usage: ChartColumnIcon,
+		voice: MicIcon,
+		providers: UnplugIcon,
 		models: BrainIcon,
 		network: GlobeIcon,
-		mcp: HardDrivesIcon,
-		market: StorefrontIcon,
-		agents: RobotIcon,
-		acp: PlugsConnectedIcon,
-		import: TrayArrowDownIcon,
-		daemon: DesktopTowerIcon,
+		mcp: ServerIcon,
+		market: StoreIcon,
+		agents: BotIcon,
+		acp: PlugZapIcon,
+		import: InboxIcon,
+		daemon: PcCaseIcon,
 		updates: InfoIcon
 	};
 	const current = $derived(resolveSection(section));
@@ -554,12 +554,12 @@
 	<nav class="nav" style:width="{navWidth}px" aria-label={t('settings.title')}>
 		<div class="nav-head">
 			<button class="back" title={t('settings.page.back')} aria-label={t('settings.page.back')} onclick={onClose}>
-				<ArrowLeftIcon size={18} />
+				<ArrowLeftIcon size={16} />
 			</button>
 			<h2>{t('settings.title')}</h2>
 		</div>
 		<label class="search">
-			<MagnifyingGlassIcon size={16} />
+			<SearchIcon size={16} />
 			<input bind:value={query} placeholder={t('settings.page.search')} spellcheck="false" onkeydown={onSearchKey} />
 		</label>
 		<div class="nav-list">
@@ -567,7 +567,7 @@
 				{#each hits as r (r.id)}
 					{@const Icon = ICONS[r.section]}
 					<button class="item hit" class:on={current === r.section} onclick={() => goTo(r)}>
-						<Icon size={18} />
+						<Icon size={16} />
 						<span class="hit-txt">
 							<span class="label">{t(r.titleKey)}</span>
 							<span class="where">{t(`settings.section.${r.section}`)}</span>
@@ -582,7 +582,7 @@
 					{#each g.sections as key (key)}
 						{@const Icon = ICONS[key]}
 						<button class="item" class:on={current === key} aria-current={current === key ? 'page' : undefined} onclick={() => (section = key)}>
-							<Icon size={18} weight={current === key ? 'fill' : 'regular'} />
+							<Icon size={16} strokeWidth={current === key ? 2 : undefined} />
 							<span class="label">{t(`settings.section.${key}`)}</span>
 						</button>
 					{/each}
@@ -664,7 +664,7 @@
 									{:else}
 										<span class="sp-none">{t('settings.behavior.turnStatsNone')}</span>
 									{/each}
-									<span class="sp-copy"><CopyIcon size={13} /> {t('common.copy')}</span>
+									<span class="sp-copy"><CopyIcon size={14} /> {t('common.copy')}</span>
 								</div>
 							</div>
 							<div class="stat-picks">
@@ -720,12 +720,12 @@
 							description={jucodeAuthed ? t('settings.page.jucodeLoggedInDesc') : t('settings.page.jucodeAccountDesc')}
 						>
 							{#if jucodeAuthed}
-								<Button size="sm" onclick={login}><SignInIcon size={14} /> {t('settings.account.relogin')}</Button>
-								<Button variant="danger" size="sm" onclick={() => logout('jucode')}><SignOutIcon size={14} /> {t('settings.account.logout')}</Button>
+								<Button size="sm" onclick={login}><LogInIcon size={14} /> {t('settings.account.relogin')}</Button>
+								<Button variant="danger" size="sm" onclick={() => logout('jucode')}><LogOutIcon size={14} /> {t('settings.account.logout')}</Button>
 							{:else if loggingIn}
 								<Button variant="primary" size="sm" disabled>{t('settings.account.authorizing')}</Button>
 							{:else}
-								<Button variant="primary" size="sm" onclick={login}><SignInIcon size={14} /> {t('settings.page.login')}</Button>
+								<Button variant="primary" size="sm" onclick={login}><LogInIcon size={14} /> {t('settings.page.login')}</Button>
 							{/if}
 						</SettingsRow>
 						{#if jucodeAuthed}
@@ -766,7 +766,7 @@
 						</SettingsRow>
 						<SettingsRow id="voice-key" title={t('settings.page.voiceKey')} description={t('settings.page.voiceKeyDesc')}>
 							{#snippet detail()}
-								{#if keyed.includes(selectedAsr.authKey)}<span class="keyok"><CheckCircleIcon size={13} /> {t('settings.account.keyed')}</span>{/if}
+								{#if keyed.includes(selectedAsr.authKey)}<span class="keyok"><CircleCheckIcon size={14} /> {t('settings.account.keyed')}</span>{/if}
 							{/snippet}
 							<div class="w-md"><TextField bind:value={asrKey} type="password" placeholder={t('settings.voice.keyPlaceholder', { provider: selectedAsr.name })} /></div>
 							<Button variant="primary" size="sm" disabled={!asrKey.trim()} onclick={saveAsrKey}>{t('settings.account.saveKey')}</Button>
@@ -925,7 +925,7 @@
 				{:else if current === 'market'}
 					<SettingsSection>
 						<SettingsRow id="market-open" title={t('settings.market.groupLabel')} description={t('settings.market.hint')}>
-							<Button size="sm" disabled={!onMarket} onclick={() => onMarket?.()}><StorefrontIcon size={14} /> {t('settings.market.open')}</Button>
+							<Button size="sm" disabled={!onMarket} onclick={() => onMarket?.()}><StoreIcon size={14} /> {t('settings.market.open')}</Button>
 						</SettingsRow>
 					</SettingsSection>
 				{:else if current === 'agents'}

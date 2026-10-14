@@ -3,9 +3,9 @@
 	// comes in one block at a time, as if written in front of the reader; an
 	// approved or older one shows whole. The actions stay at the bottom.
 	import { untrack } from 'svelte';
-	import ClipboardTextIcon from 'phosphor-svelte/lib/ClipboardTextIcon';
-	import CopyIcon from 'phosphor-svelte/lib/CopyIcon';
-	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
+	import ClipboardListIcon from '@lucide/svelte/icons/clipboard-list';
+	import CopyIcon from '@lucide/svelte/icons/copy';
+	import CheckIcon from '@lucide/svelte/icons/check';
 	import type { ApprovalMode } from '$lib/approval';
 	import type { PlanAction } from '$lib/PlanCard.svelte';
 	import { t } from '$lib/i18n';
@@ -51,7 +51,7 @@
 <div class="page">
 	{#if plan}
 		<header>
-			<span class="ico"><ClipboardTextIcon size={15} /></span>
+			<span class="ico"><ClipboardListIcon size={16} /></span>
 			<span class="label">{t('chat.planCard.label')}</span>
 			{#if plan.status === 'approved' || plan.status === 'revising' || plan.status === 'drafting'}
 				<span class="tag {plan.status}">{t(`chat.planCard.status.${plan.status}`)}</span>

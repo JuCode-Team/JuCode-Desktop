@@ -5,12 +5,12 @@
 	// writing the same settings as the Settings page. Shown on first run and
 	// from the command palette.
 	import { onMount, untrack } from 'svelte';
-	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
-	import SignInIcon from 'phosphor-svelte/lib/SignInIcon';
-	import KeyIcon from 'phosphor-svelte/lib/KeyIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import UserCircleIcon from 'phosphor-svelte/lib/UserCircleIcon';
-	import ArrowRightIcon from 'phosphor-svelte/lib/ArrowRightIcon';
+	import CheckIcon from '@lucide/svelte/icons/check';
+	import LogInIcon from '@lucide/svelte/icons/log-in';
+	import KeyIcon from '@lucide/svelte/icons/key';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import CircleUserIcon from '@lucide/svelte/icons/circle-user';
+	import ArrowRightIcon from '@lucide/svelte/icons/arrow-right';
 	import { deps, recheckDeps } from '$lib/deps.svelte';
 	import { STEPS, canVisitStep, canFinishSetup, requiredDepsReady, type StepKey } from './flow';
 	import { dispatch } from '$lib/backends/router';
@@ -186,15 +186,15 @@
 
 				<div class="actions">
 					<Button variant="primary" onclick={login} disabled={loggingIn}>
-						{#if loggingIn}<CircleNotchIcon size={15} class="spin" /> {t('setup.loginOauth.waiting')}{:else}<SignInIcon size={15} /> {t('setup.loginOauth.loginBtn')}{/if}
+						{#if loggingIn}<LoaderCircleIcon size={16} class="spin" /> {t('setup.loginOauth.waiting')}{:else}<LogInIcon size={16} /> {t('setup.loginOauth.loginBtn')}{/if}
 					</Button>
-					<Button variant="secondary" onclick={() => openSettings('providers')}><KeyIcon size={15} /> {t('setup.welcome.login.apiKey')}</Button>
+					<Button variant="secondary" onclick={() => openSettings('providers')}><KeyIcon size={16} /> {t('setup.welcome.login.apiKey')}</Button>
 				</div>
 				{#if loggingIn}<p class="hint">{t('setup.loginOauth.browserOpened')}</p>{/if}
 				{#if loginError}<div class="err"><Notice onDismiss={() => (loginError = '')}>{loginError}</Notice></div>{/if}
 
 				<button class="later" onclick={() => (view = 'guide')}>
-					{t('setup.welcome.login.later')} <ArrowRightIcon size={13} />
+					{t('setup.welcome.login.later')} <ArrowRightIcon size={14} />
 				</button>
 			</div>
 
@@ -217,7 +217,7 @@
 				<nav class="steps" aria-label={t('setup.welcome.guide.title')}>
 					{#each STEPS as key (key)}
 						<button class="step" class:on={step === key} disabled={!canVisitStep(key, done)} aria-current={step === key ? 'step' : undefined} onclick={() => (step = key)}>
-							<span class="mark" class:done={done[key]} aria-hidden="true">{#if done[key]}<CheckIcon size={11} weight="bold" />{/if}</span>
+							<span class="mark" class:done={done[key]} aria-hidden="true">{#if done[key]}<CheckIcon size={12} />{/if}</span>
 							<span class="stitle">{t(`setup.welcome.${key}.title`)}</span>
 						</button>
 					{/each}
@@ -235,13 +235,13 @@
 
 							{#if step === 'account'}
 								{#if loggedIn}
-									<div class="okline"><span class="okico"><UserCircleIcon size={20} /></span>{t('setup.welcome.account.loggedIn')}</div>
+									<div class="okline"><span class="okico"><CircleUserIcon size={20} /></span>{t('setup.welcome.account.loggedIn')}</div>
 									<div class="row"><Button size="sm" onclick={() => openSettings('account')}>{t('setup.welcome.account.manage')}</Button></div>
 								{:else}
-									{#if configured}<div class="okline"><span class="okico"><KeyIcon size={18} /></span>{t('setup.welcome.account.byok')}</div>{/if}
+									{#if configured}<div class="okline"><span class="okico"><KeyIcon size={16} /></span>{t('setup.welcome.account.byok')}</div>{/if}
 									<div class="row">
 										<Button variant="primary" size="sm" onclick={login} disabled={loggingIn}>
-											{#if loggingIn}<CircleNotchIcon size={14} class="spin" /> {t('setup.loginOauth.waiting')}{:else}<SignInIcon size={14} /> {t('setup.loginOauth.loginBtn')}{/if}
+											{#if loggingIn}<LoaderCircleIcon size={14} class="spin" /> {t('setup.loginOauth.waiting')}{:else}<LogInIcon size={14} /> {t('setup.loginOauth.loginBtn')}{/if}
 										</Button>
 										<Button variant="ghost" size="sm" onclick={() => openSettings('providers')}><KeyIcon size={14} /> {t('setup.welcome.login.apiKey')}</Button>
 									</div>
@@ -292,9 +292,9 @@
 				{#if finishError}<Notice>{finishError}</Notice>{/if}
 				<div class="spacer"></div>
 				{#if step === STEPS[STEPS.length - 1]}
-					<Button variant="primary" onclick={finish} disabled={!canFinish || finishing}>{#if finishing}<CircleNotchIcon size={14} class="spin" />{/if}{t('setup.nav.start')}</Button>
+					<Button variant="primary" onclick={finish} disabled={!canFinish || finishing}>{#if finishing}<LoaderCircleIcon size={14} class="spin" />{/if}{t('setup.nav.start')}</Button>
 				{:else}
-					<Button variant="primary" onclick={next} disabled={!done[step]}>{t('setup.nav.next')} <ArrowRightIcon size={13} /></Button>
+					<Button variant="primary" onclick={next} disabled={!done[step]}>{t('setup.nav.next')} <ArrowRightIcon size={14} /></Button>
 				{/if}
 			</footer>
 		</section>

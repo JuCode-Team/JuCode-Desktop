@@ -1,10 +1,10 @@
 <script lang="ts">
 	// One project on the remote app: its sessions (every saved one, whoever
 	// ran it), a new session, and the ways into its files and changes.
-	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
-	import FilesIcon from 'phosphor-svelte/lib/FilesIcon';
-	import GitDiffIcon from 'phosphor-svelte/lib/GitDiffIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
+	import PlusIcon from '@lucide/svelte/icons/plus';
+	import FilesIcon from '@lucide/svelte/icons/files';
+	import GitCompareIcon from '@lucide/svelte/icons/git-compare';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import RemoteScreen from './RemoteScreen.svelte';
@@ -108,13 +108,13 @@
 		<Button variant="primary" onclick={onNewSession}><PlusIcon size={14} /> {t('shell.remote.newSession')}</Button>
 		{#if !project.chats}
 			<Button onclick={onFiles}><FilesIcon size={14} /> {t('shell.remote.files')}</Button>
-			<Button onclick={onChanges}><GitDiffIcon size={14} /> {t('shell.remote.changes')}</Button>
+			<Button onclick={onChanges}><GitCompareIcon size={14} /> {t('shell.remote.changes')}</Button>
 		{/if}
 	</div>
 
 	{#if error}<Notice tone="error">{error}</Notice>{/if}
 	{#if loading}
-		<p class="empty"><CircleNotchIcon size={14} class="spin" /></p>
+		<p class="empty"><LoaderCircleIcon size={14} class="spin" /></p>
 	{:else}
 		{#each active as item (item.session)}
 			<SessionRow

@@ -2,7 +2,7 @@
 	// The app's checkbox: a rounded box that fills with the accent and a check.
 	// Wraps a real (visually hidden) input, so labels, keyboard and forms work.
 	import type { Snippet } from 'svelte';
-	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
+	import CheckIcon from '@lucide/svelte/icons/check';
 
 	let {
 		checked = $bindable(false),
@@ -19,7 +19,7 @@
 
 <label class="cb" class:disabled>
 	<input type="checkbox" bind:checked {disabled} onchange={() => onchange?.(checked)} />
-	<span class="box" aria-hidden="true">{#if checked}<CheckIcon size={12} weight="bold" />{/if}</span>
+	<span class="box" aria-hidden="true">{#if checked}<CheckIcon size={12} />{/if}</span>
 	{#if children}<span class="txt">{@render children()}</span>{/if}
 </label>
 

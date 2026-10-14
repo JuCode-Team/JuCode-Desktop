@@ -2,9 +2,9 @@
 	// An engine error in the conversation: what went wrong and what to do
 	// (errorInfo.ts), with the one action that fixes it and the raw text on
 	// demand. Errors it does not recognise show as they came.
-	import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon';
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
-	import XIcon from 'phosphor-svelte/lib/XIcon';
+	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import XIcon from '@lucide/svelte/icons/x';
 	import { slide } from 'svelte/transition';
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
@@ -31,7 +31,7 @@
 {#if info}
 	<div class="err" role="alert">
 		<div class="head">
-			<span class="ico"><WarningCircleIcon size={16} weight="bold" /></span>
+			<span class="ico"><CircleAlertIcon size={16} /></span>
 			<span class="title">{t(`chat.err.${info.kind}.title`, { subject })}</span>
 			{#if info.status}<span class="code">{info.status}</span>{/if}
 			{#if onDismiss}
@@ -44,7 +44,7 @@
 				<Button size="sm" onclick={() => onAction(info.action!)}>{t(`chat.err.action.${info.action}`)}</Button>
 			{/if}
 			<button class="raw-toggle" class:open={showRaw} onclick={() => (showRaw = !showRaw)}>
-				<CaretRightIcon size={12} />{showRaw ? t('chat.err.hideRaw') : t('chat.err.raw')}
+				<ChevronRightIcon size={12} />{showRaw ? t('chat.err.hideRaw') : t('chat.err.raw')}
 			</button>
 		</div>
 		{#if showRaw}

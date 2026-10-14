@@ -2,9 +2,9 @@
 	// Noting an idea: a line of words (Enter notes it, Shift+Enter breaks the
 	// line), screenshots pasted, dropped or picked, and its project (the
 	// default one unless the user picks another, or none).
-	import ImageIcon from 'phosphor-svelte/lib/ImageIcon';
-	import XIcon from 'phosphor-svelte/lib/XIcon';
-	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
+	import ImageIcon from '@lucide/svelte/icons/image';
+	import XIcon from '@lucide/svelte/icons/x';
+	import PlusIcon from '@lucide/svelte/icons/plus';
 	import { MAX_IMAGES, useRequirements } from '$lib/requirements.svelte';
 	import { sendFile } from '$lib/upload';
 	import { daemon } from '$lib/protocol';
@@ -125,7 +125,7 @@
 				{#each images as image, i (image.url)}
 					<span class="shot">
 						<img src={image.url} alt="" />
-						<button aria-label={t('shell.requirement.removeImage')} onclick={() => URL.revokeObjectURL(images.splice(i, 1)[0].url)}><XIcon size={11} /></button>
+						<button aria-label={t('shell.requirement.removeImage')} onclick={() => URL.revokeObjectURL(images.splice(i, 1)[0].url)}><XIcon size={12} /></button>
 					</span>
 				{/each}
 			</div>
@@ -135,7 +135,7 @@
 		<span class="where"><ProjectPick value={target} {projects} placement="down-left" onChange={(p) => (picked = p)} /></span>
 	{/if}
 	<button class="icon" title={t('shell.requirement.addImage')} aria-label={t('shell.requirement.addImage')} onclick={() => picker?.click()}>
-		<ImageIcon size={17} />
+		<ImageIcon size={16} />
 	</button>
 	<input
 		bind:this={picker}

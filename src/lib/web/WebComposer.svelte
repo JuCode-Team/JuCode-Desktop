@@ -2,13 +2,13 @@
 	// The web chat's message box: text (Enter sends; Shift+Enter, or Enter on a
 	// touch screen, is a new line), images by picker, paste or drop, web search
 	// or deep research, the model and its effort, send / stop.
-	import ArrowUpIcon from 'phosphor-svelte/lib/ArrowUpIcon';
-	import StopIcon from 'phosphor-svelte/lib/StopIcon';
-	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
-	import GlobeIcon from 'phosphor-svelte/lib/GlobeIcon';
-	import BinocularsIcon from 'phosphor-svelte/lib/BinocularsIcon';
-	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
-	import XIcon from 'phosphor-svelte/lib/XIcon';
+	import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
+	import SquareIcon from '@lucide/svelte/icons/square';
+	import PlusIcon from '@lucide/svelte/icons/plus';
+	import GlobeIcon from '@lucide/svelte/icons/globe';
+	import BinocularsIcon from '@lucide/svelte/icons/binoculars';
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+	import XIcon from '@lucide/svelte/icons/x';
 	import { t } from '$lib/i18n';
 	import PopMenu from '$lib/ui/PopMenu.svelte';
 	import Vendor from '$lib/Vendor.svelte';
@@ -135,7 +135,7 @@
 					<button class="open" onclick={() => imageViewer.open(files.map((x) => ({ path: x.file.name, load: () => Promise.resolve(x.url) })), i)} aria-label={t('common.image.open')}>
 						<img src={f.url} alt={f.file.name} />
 					</button>
-					<button class="x" onclick={() => drop(i)} aria-label={t('common.close')}><XIcon size={11} weight="bold" /></button>
+					<button class="x" onclick={() => drop(i)} aria-label={t('common.close')}><XIcon size={12} /></button>
 				</span>
 			{/each}
 		</div>
@@ -150,21 +150,21 @@
 		onpaste={onPaste}
 	></textarea>
 	<div class="bar">
-		<button class="tool" onclick={() => picker?.click()} title={t('web.chat.attach')} aria-label={t('web.chat.attach')}><PlusIcon size={17} /></button>
+		<button class="tool" onclick={() => picker?.click()} title={t('web.chat.attach')} aria-label={t('web.chat.attach')}><PlusIcon size={16} /></button>
 		<input bind:this={picker} type="file" accept="image/*" multiple hidden onchange={(e) => (add((e.currentTarget as HTMLInputElement).files ?? []), ((e.currentTarget as HTMLInputElement).value = ''))} />
 		<button class="chip" class:on={chatPrefs.search} aria-pressed={chatPrefs.search} onclick={() => chatPrefs.setSearch(!chatPrefs.search)}>
-			<GlobeIcon size={15} /><span>{t('web.chat.search')}</span>
+			<GlobeIcon size={16} /><span>{t('web.chat.search')}</span>
 		</button>
 		<button class="chip" class:on={chatPrefs.research} aria-pressed={chatPrefs.research} title={t('web.chat.researchHint')} onclick={() => chatPrefs.setResearch(!chatPrefs.research)}>
-			<BinocularsIcon size={15} /><span>{t('web.chat.research')}</span>
+			<BinocularsIcon size={16} /><span>{t('web.chat.research')}</span>
 		</button>
 		<span class="grow"></span>
 		{#if models.list.length}
 			<span class="anchor">
 				<button class="pick" onclick={() => (menu = menu === 'model' ? null : 'model')} aria-haspopup="menu" aria-expanded={menu === 'model'} title={t('web.chat.model')}>
-					<Vendor model={chatPrefs.current} size={14} />
+					<Vendor model={chatPrefs.current} size={14} mono />
 					<span class="pname">{model?.name ?? chatPrefs.current}</span>
-					<CaretDownIcon size={11} />
+					<ChevronDownIcon size={12} />
 				</button>
 				{#if menu === 'model'}
 					<PopMenu
@@ -183,7 +183,7 @@
 				<span class="anchor">
 					<button class="pick dim" onclick={() => (menu = menu === 'effort' ? null : 'effort')} aria-haspopup="menu" aria-expanded={menu === 'effort'} title={t('web.chat.effort')}>
 						<span>{effortName(chatPrefs.effort)}</span>
-						<CaretDownIcon size={11} />
+						<ChevronDownIcon size={12} />
 					</button>
 					{#if menu === 'effort'}
 						<PopMenu
@@ -201,9 +201,9 @@
 			{/if}
 		{/if}
 		{#if busy}
-			<button class="send stop" onclick={onStop} title={t('web.chat.stop')} aria-label={t('web.chat.stop')}><StopIcon size={15} weight="fill" /></button>
+			<button class="send stop" onclick={onStop} title={t('web.chat.stop')} aria-label={t('web.chat.stop')}><SquareIcon size={16} fill="currentColor" /></button>
 		{:else}
-			<button class="send" disabled={!canSend} onclick={send} title={t('web.chat.send')} aria-label={t('web.chat.send')}><ArrowUpIcon size={17} weight="bold" /></button>
+			<button class="send" disabled={!canSend} onclick={send} title={t('web.chat.send')} aria-label={t('web.chat.send')}><ArrowUpIcon size={16} /></button>
 		{/if}
 	</div>
 </div>

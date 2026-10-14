@@ -3,8 +3,8 @@
 	// and subagent notices), kept out of the conversation: a small bell on the
 	// strip under the composer, with a count of the ones not seen yet. Opening
 	// the list marks them seen; the bell stays, quiet, to look again.
-	import BellSimpleIcon from 'phosphor-svelte/lib/BellSimpleIcon';
-	import XIcon from 'phosphor-svelte/lib/XIcon';
+	import BellIcon from '@lucide/svelte/icons/bell';
+	import XIcon from '@lucide/svelte/icons/x';
 	import { t } from '$lib/i18n';
 	import type { ChatState } from '$lib/chat.svelte';
 	import { sheet } from '$lib/ui/motion';
@@ -56,14 +56,14 @@
 			aria-label={unread ? `${t('chat.statusTitle')} · ${t('chat.statusUnread', { n: unread })}` : t('chat.statusTitle')}
 			title={unread ? t('chat.statusUnread', { n: unread }) : t('chat.statusTitle')}
 		>
-			<BellSimpleIcon size={13} />
+			<BellIcon size={14} />
 			{#if unread}<span class="badge">{unread > 99 ? '99+' : unread}</span>{/if}
 		</button>
 		{#if open}
 			<div class="panel" role="dialog" aria-label={t('chat.statusTitle')} transition:sheet={{ y: 6 }}>
 				<div class="phead">
 					<span class="ptitle">{t('chat.statusTitle')} · {items.length}</span>
-					<button class="pclose" onclick={() => (open = false)} aria-label={t('common.close')}><XIcon size={13} /></button>
+					<button class="pclose" onclick={() => (open = false)} aria-label={t('common.close')}><XIcon size={14} /></button>
 				</div>
 				<div class="plist" bind:this={list}>
 					{#each items as it, i (i)}

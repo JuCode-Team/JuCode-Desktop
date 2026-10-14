@@ -4,8 +4,8 @@
 	// (DeskContent), at the foot of an agent's tasks and on the remote page's
 	// desk list. Approvals that lapsed with their run (`superseded`) are left
 	// out: there is nothing left to approve them for.
-	import QuestionIcon from 'phosphor-svelte/lib/QuestionIcon';
-	import ShieldCheckIcon from 'phosphor-svelte/lib/ShieldCheckIcon';
+	import CircleQuestionMarkIcon from '@lucide/svelte/icons/circle-question-mark';
+	import ShieldCheckIcon from '@lucide/svelte/icons/shield-check';
 	import { useAgents } from '$lib/agentScope';
 	import type { ItemKind } from '$lib/agents.svelte';
 	import { t } from '$lib/i18n';
@@ -60,7 +60,7 @@
 		<div class="head">{t('shell.desk.closed')}</div>
 		{#each shown as item (item.id)}
 			<div class="row">
-				{#if item.kind === 'question'}<QuestionIcon size={13} />{:else}<ShieldCheckIcon size={13} />{/if}
+				{#if item.kind === 'question'}<CircleQuestionMarkIcon size={14} />{:else}<ShieldCheckIcon size={14} />{/if}
 				<span class="text">
 					<span class="title">{item.title}</span>
 					<span class="meta">{closedBy(item.by)}{item.reason && item.by !== 'superseded' ? `：${item.reason}` : ''} · {when(item.at)}</span>

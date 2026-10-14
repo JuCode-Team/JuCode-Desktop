@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { costText } from '$lib/sessionCost';
-	import PulseIcon from 'phosphor-svelte/lib/PulseIcon';
-	import CopyIcon from 'phosphor-svelte/lib/CopyIcon';
-	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
+	import ActivityIcon from '@lucide/svelte/icons/activity';
+	import CopyIcon from '@lucide/svelte/icons/copy';
+	import CheckIcon from '@lucide/svelte/icons/check';
 	import Button from '$lib/ui/Button.svelte';
 	import { t } from '$lib/i18n';
 	import type { ChatState } from '$lib/chat.svelte';
@@ -107,7 +107,7 @@
 			{#if copied}<CheckIcon size={12} />{t('dock.diag.copied')}{:else}<CopyIcon size={12} />{t('dock.diag.copy')}{/if}
 		</Button>
 		<span class="spacer"></span>
-		<PulseIcon size={12} />
+		<ActivityIcon size={12} />
 	</div>
 </div>
 

@@ -4,10 +4,10 @@
 	// directories (the main one and extra ones the user adds), its
 	// requirements (the workbench's list, this project's only; one opens in
 	// place) and the agents that belong to it.
-	import XIcon from 'phosphor-svelte/lib/XIcon';
-	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
-	import FolderIcon from 'phosphor-svelte/lib/FolderIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
+	import XIcon from '@lucide/svelte/icons/x';
+	import PlusIcon from '@lucide/svelte/icons/plus';
+	import FolderIcon from '@lucide/svelte/icons/folder';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import { open } from '@tauri-apps/plugin-dialog';
 	import Button from '$lib/ui/Button.svelte';
 	import AgentAvatar from '$lib/AgentAvatar.svelte';
@@ -76,7 +76,7 @@
 		<div class="col">
 			<header>
 				<h1>{project.name}</h1>
-				<button class="close" onclick={onClose} aria-label={t('common.close')} title={t('common.close')}><XIcon size={17} /></button>
+				<button class="close" onclick={onClose} aria-label={t('common.close')} title={t('common.close')}><XIcon size={16} /></button>
 			</header>
 
 			<section>
@@ -84,24 +84,24 @@
 				<p class="hint">{t('shell.projectPage.dirsHint')}</p>
 				<div class="dirs">
 					<div class="dir">
-						<FolderIcon size={15} />
+						<FolderIcon size={16} />
 						<span class="path">{project.path}</span>
 						<span class="tag">{t('shell.projectPage.main')}</span>
 					</div>
 					{#each dirs as dir (dir)}
 						<div class="dir">
-							<FolderIcon size={15} />
+							<FolderIcon size={16} />
 							<span class="path">{dir}</span>
 							<button
 								class="icon"
 								aria-label={t('shell.projectPage.removeDir')}
 								title={t('shell.projectPage.removeDir')}
-								onclick={() => onDirs(dirs.filter((d) => d !== dir))}><XIcon size={13} /></button
+								onclick={() => onDirs(dirs.filter((d) => d !== dir))}><XIcon size={14} /></button
 							>
 						</div>
 					{/each}
 				</div>
-				<Button size="sm" onclick={addDir}><PlusIcon size={13} />{t('shell.projectPage.addDir')}</Button>
+				<Button size="sm" onclick={addDir}><PlusIcon size={14} />{t('shell.projectPage.addDir')}</Button>
 			</section>
 
 			<section>
@@ -119,7 +119,7 @@
 			<section>
 				<div class="h3-row">
 					<h3>{t('shell.projectPage.agents')}</h3>
-					<Button size="sm" variant="ghost" onclick={onNewAgent}><PlusIcon size={13} />{t('shell.projectPage.newAgent')}</Button>
+					<Button size="sm" variant="ghost" onclick={onNewAgent}><PlusIcon size={14} />{t('shell.projectPage.newAgent')}</Button>
 				</div>
 				{#if agents.length}
 					<div class="agents">
@@ -130,7 +130,7 @@
 									<span class="name">{a.name}</span>
 									{#if a.summary}<span class="sub">{a.summary}</span>{/if}
 								</span>
-								{#if a.busy && a.enabled}<CircleNotchIcon size={13} class="spin" />{/if}
+								{#if a.busy && a.enabled}<LoaderCircleIcon size={14} class="spin" />{/if}
 							</button>
 						{/each}
 					</div>

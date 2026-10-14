@@ -6,7 +6,7 @@
 	import { auth } from '$lib/web/auth.svelte';
 	import { t } from '$lib/i18n';
 	import Button from '$lib/ui/Button.svelte';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 
 	let error = $state('');
 
@@ -27,7 +27,7 @@
 		<p class="msg">{t('web.signIn.failed', { msg: error })}</p>
 		<Button variant="primary" onclick={() => auth.signIn('/chat')}>{t('web.signIn.retry')}</Button>
 	{:else}
-		<p class="msg"><CircleNotchIcon size={16} class="spin" /> {t('web.signIn.working')}</p>
+		<p class="msg"><LoaderCircleIcon size={16} class="spin" /> {t('web.signIn.working')}</p>
 	{/if}
 </div>
 

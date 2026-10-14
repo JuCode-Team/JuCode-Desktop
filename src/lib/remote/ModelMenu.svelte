@@ -6,11 +6,11 @@
 	// pick is shown right away (the caller marks it pending until the engine
 	// confirms).
 	import { onMount, tick, untrack } from 'svelte';
-	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
-	import CaretLeftIcon from 'phosphor-svelte/lib/CaretLeftIcon';
-	import ArrowCounterClockwiseIcon from 'phosphor-svelte/lib/ArrowCounterClockwiseIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
+	import CheckIcon from '@lucide/svelte/icons/check';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
+	import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import SessionSwitches, { type SessionSwitch } from '$lib/composer/SessionSwitches.svelte';
 	import Vendor from '$lib/Vendor.svelte';
@@ -141,7 +141,7 @@
 				<span class="pop-ico"><Vendor model={currentRow?.vendor ?? current} size={16} /></span>
 				<span class="pop-txt"><span class="pop-label">{modelName}</span></span>
 				{#if currentRow?.context_window}<span class="ctx">{fmtContext(currentRow.context_window)}</span>{/if}
-				<span class="pop-ico caret"><CaretRightIcon size={14} /></span>
+				<span class="pop-ico caret"><ChevronRightIcon size={14} /></span>
 			</button>
 		</section>
 		<section class="effort">
@@ -156,7 +156,7 @@
 					disabled={!!pendingModel || !def || shownEffort === def}
 					onclick={() => onEffort(def)}
 				>
-					<ArrowCounterClockwiseIcon size={14} />
+					<RotateCcwIcon size={14} />
 				</IconButton>
 			</div>
 			<EffortSlider efforts={chat.efforts} effort={chat.effort} disabled={!!pendingModel} {onEffort} {accent} bind:current={shownEffort} />
@@ -198,15 +198,15 @@
 			{#if chat.efforts.length}
 				<div class="mhead">
 					<IconButton size="sm" label={t('shell.remote.back')} title={t('shell.remote.back')} onclick={() => (page = 'main')}>
-						<CaretLeftIcon size={14} />
+						<ChevronLeftIcon size={14} />
 					</IconButton>
 					<span class="mtitle">{t('chat.switchModel')}</span>
-					{#if !fresh && models.length}<span class="refreshing"><CircleNotchIcon size={13} class="spin" /></span>{/if}
+					{#if !fresh && models.length}<span class="refreshing"><LoaderCircleIcon size={14} class="spin" /></span>{/if}
 				</div>
 			{:else}
 				<div class="pop-head">
 					{t('chat.switchModel')}
-					{#if !fresh && models.length}<span class="refreshing"><CircleNotchIcon size={13} class="spin" /></span>{/if}
+					{#if !fresh && models.length}<span class="refreshing"><LoaderCircleIcon size={14} class="spin" /></span>{/if}
 				</div>
 			{/if}
 			<div class="list" role="listbox" aria-label={t('chat.switchModel')}>
@@ -231,12 +231,12 @@
 						<span class="pop-txt"><span class="pop-label">{m.label || m.model}</span></span>
 						{#if m.context_window}<span class="ctx">{fmtContext(m.context_window)}</span>{/if}
 						<span class="pop-check" class:off={m.model !== current}>
-							{#if m.model === pendingModel}<CircleNotchIcon size={16} class="spin" />{:else}<CheckIcon size={16} />{/if}
+							{#if m.model === pendingModel}<LoaderCircleIcon size={16} class="spin" />{:else}<CheckIcon size={16} />{/if}
 						</span>
 					</button>
 				{:else}
 					<div class="empty">
-						{#if fresh}{t('shell.remote.noModels')}{:else}<CircleNotchIcon size={14} class="spin" /> {t('shell.remote.loadingModels')}{/if}
+						{#if fresh}{t('shell.remote.noModels')}{:else}<LoaderCircleIcon size={14} class="spin" /> {t('shell.remote.loadingModels')}{/if}
 					</div>
 				{/each}
 				{/if}

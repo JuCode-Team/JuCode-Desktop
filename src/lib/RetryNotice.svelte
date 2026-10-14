@@ -3,8 +3,8 @@
 	// many (one segment each), the countdown to it, and why the last one
 	// failed, in words (errorInfo) with the provider's text folded under it.
 	// Replaces the turn's phase indicator until output flows again.
-	import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon';
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
+	import RotateCwIcon from '@lucide/svelte/icons/rotate-cw';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import { describeError, stripEngineHint } from '$lib/errorInfo';
 	import type { RetryState } from '$lib/chat.svelte';
 	import { t } from '$lib/i18n';
@@ -38,7 +38,7 @@
 
 <div class="retry" role="status">
 	<div class="head">
-		<span class="ico" class:spin={left === 0}><ArrowClockwiseIcon size={15} /></span>
+		<span class="ico" class:spin={left === 0}><RotateCwIcon size={16} /></span>
 		<span class="title">{t(onCancel ? 'chat.autoRetry.title' : 'chat.retry.title')}</span>
 		<span class="count">{t('chat.retry.attempt', { n: retry.attempt, max: retry.max })}</span>
 		<span class="when">{left > 0 ? t('chat.retry.in', { s: left }) : t('chat.retry.now')}</span>
@@ -59,7 +59,7 @@
 			{#if info?.status}<span class="code">{info.status}</span>{/if}
 			{#if info}
 				<button class="raw-toggle" class:open={showRaw} onclick={() => (showRaw = !showRaw)}>
-					<CaretRightIcon size={11} />{showRaw ? t('chat.err.hideRaw') : t('chat.err.raw')}
+					<ChevronRightIcon size={12} />{showRaw ? t('chat.err.hideRaw') : t('chat.err.raw')}
 				</button>
 			{/if}
 		</div>

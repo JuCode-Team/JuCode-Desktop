@@ -4,32 +4,32 @@
 	// Composer). Watching it makes the session attended, so approvals prompt
 	// here; leaving only unwatches it.
 	import { onDestroy, onMount, tick, untrack } from 'svelte';
-	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
-	import ArrowUpIcon from 'phosphor-svelte/lib/ArrowUpIcon';
-	import SquareIcon from 'phosphor-svelte/lib/SquareIcon';
-	import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon';
-	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import FilesIcon from 'phosphor-svelte/lib/FilesIcon';
-	import GitDiffIcon from 'phosphor-svelte/lib/GitDiffIcon';
-	import DesktopIcon from 'phosphor-svelte/lib/DesktopIcon';
-	import FastForwardIcon from 'phosphor-svelte/lib/FastForwardIcon';
-	import HandIcon from 'phosphor-svelte/lib/HandIcon';
-	import ClipboardTextIcon from 'phosphor-svelte/lib/ClipboardTextIcon';
-	import ShieldCheckIcon from 'phosphor-svelte/lib/ShieldCheckIcon';
-	import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon';
-	import ShieldWarningIcon from 'phosphor-svelte/lib/ShieldWarningIcon';
+	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
+	import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
+	import SquareIcon from '@lucide/svelte/icons/square';
+	import RotateCwIcon from '@lucide/svelte/icons/rotate-cw';
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import FilesIcon from '@lucide/svelte/icons/files';
+	import GitCompareIcon from '@lucide/svelte/icons/git-compare';
+	import MonitorIcon from '@lucide/svelte/icons/monitor';
+	import FastForwardIcon from '@lucide/svelte/icons/fast-forward';
+	import HandIcon from '@lucide/svelte/icons/hand';
+	import ClipboardListIcon from '@lucide/svelte/icons/clipboard-list';
+	import ShieldCheckIcon from '@lucide/svelte/icons/shield-check';
+	import SquarePenIcon from '@lucide/svelte/icons/square-pen';
+	import ShieldAlertIcon from '@lucide/svelte/icons/shield-alert';
 	import PopMenu, { type PopMenuItem } from '$lib/ui/PopMenu.svelte';
-	import PaperclipIcon from 'phosphor-svelte/lib/PaperclipIcon';
-	import FileIcon from 'phosphor-svelte/lib/FileIcon';
-	import XIcon from 'phosphor-svelte/lib/XIcon';
+	import PaperclipIcon from '@lucide/svelte/icons/paperclip';
+	import FileIcon from '@lucide/svelte/icons/file';
+	import XIcon from '@lucide/svelte/icons/x';
 	import { sendFile, type Uploaded } from '$lib/upload';
 	import { loadSession, saveSession } from '$lib/remote/cache';
 	import ModelMenu from '$lib/remote/ModelMenu.svelte';
 	import TaskStrip from '$lib/TaskStrip.svelte';
 	import { joinPath, parseFileHref } from '$lib/fileRefs';
 	import AgentRunsPanel from '$lib/AgentRunsPanel.svelte';
-	import TreeStructureIcon from 'phosphor-svelte/lib/TreeStructureIcon';
+	import NetworkIcon from '@lucide/svelte/icons/network';
 	import type { Msg } from '$lib/chat.svelte';
 	import type { SessionSwitch } from '$lib/composer/SessionSwitches.svelte';
 	import MessageList from '$lib/MessageList.svelte';
@@ -412,10 +412,10 @@
 	// agent's session follows the agent (changed on its page).
 	const APPROVAL_MODES: Record<string, PopMenuItem> = {
 		ask: { key: 'ask', label: t('chat.approvalAsk'), desc: t('chat.approvalAskDesc'), icon: HandIcon },
-		plan: { key: 'plan', label: t('chat.approvalPlan'), desc: t('chat.approvalPlanDesc'), icon: ClipboardTextIcon },
+		plan: { key: 'plan', label: t('chat.approvalPlan'), desc: t('chat.approvalPlanDesc'), icon: ClipboardListIcon },
 		auto: { key: 'auto', label: t('chat.approvalAuto'), desc: t('chat.approvalAutoDesc'), icon: ShieldCheckIcon },
-		edits: { key: 'edits', label: t('chat.approvalEdits'), desc: t('chat.approvalEditsDesc'), icon: NotePencilIcon },
-		all: { key: 'all', label: t('chat.approvalAll'), desc: t('chat.approvalAllDesc'), icon: ShieldWarningIcon, tone: 'warn' }
+		edits: { key: 'edits', label: t('chat.approvalEdits'), desc: t('chat.approvalEditsDesc'), icon: SquarePenIcon },
+		all: { key: 'all', label: t('chat.approvalAll'), desc: t('chat.approvalAllDesc'), icon: ShieldAlertIcon, tone: 'warn' }
 	};
 	const isAgent = $derived(!!(agent || chat.agent || view?.agent));
 	/** Picked before the first message: applied once the session is open. */
@@ -590,15 +590,15 @@
 
 <div class="session">
 	<header>
-		{#if onBack}<button class="back" onclick={onBack} aria-label={t('shell.remote.back')}><ArrowLeftIcon size={18} /></button>{/if}
+		{#if onBack}<button class="back" onclick={onBack} aria-label={t('shell.remote.back')}><ArrowLeftIcon size={16} /></button>{/if}
 		<span class="heading">
 			<span class="title">{title}</span>
-			{#if hostName}<span class="host"><DesktopIcon size={11} /><span>{hostName}</span></span>{/if}
+			{#if hostName}<span class="host"><MonitorIcon size={12} /><span>{hostName}</span></span>{/if}
 		</span>
 		{#if chat.busy}<span class="busy pulse"></span>{/if}
-		{#if bcaps.agentTrace && connected}<button class="back" onclick={() => openTrace(null)} aria-label={t('dock.agents.title')}><TreeStructureIcon size={18} /></button>{/if}
-		{#if onFiles}<button class="back" onclick={onFiles} aria-label={t('shell.remote.files')}><FilesIcon size={18} /></button>{/if}
-		{#if onChanges}<button class="back" onclick={onChanges} aria-label={t('shell.remote.changes')}><GitDiffIcon size={18} /></button>{/if}
+		{#if bcaps.agentTrace && connected}<button class="back" onclick={() => openTrace(null)} aria-label={t('dock.agents.title')}><NetworkIcon size={16} /></button>{/if}
+		{#if onFiles}<button class="back" onclick={onFiles} aria-label={t('shell.remote.files')}><FilesIcon size={16} /></button>{/if}
+		{#if onChanges}<button class="back" onclick={onChanges} aria-label={t('shell.remote.changes')}><GitCompareIcon size={16} /></button>{/if}
 	</header>
 
 	<TaskStrip
@@ -612,7 +612,7 @@
 		<!-- The agent trace, full screen over the session. -->
 		<div class="trace-sheet" role="dialog" aria-label={t('dock.agents.title')}>
 			<header>
-				<button class="back" onclick={() => (traceOpen = false)} aria-label={t('shell.remote.back')}><ArrowLeftIcon size={18} /></button>
+				<button class="back" onclick={() => (traceOpen = false)} aria-label={t('shell.remote.back')}><ArrowLeftIcon size={16} /></button>
 				<span class="heading"><span class="title">{t('dock.agents.title')}</span></span>
 			</header>
 			<div class="trace-body"><AgentRunsPanel {chat} onOp={send} /></div>
@@ -649,7 +649,7 @@
 		</div>
 		{#if opening && chat.messages.length === 0}
 			<div class="welcome">
-				<span class="spawn-spin"><CircleNotchIcon size={26} class="spin" /></span>
+				<span class="spawn-spin"><LoaderCircleIcon size={28} class="spin" /></span>
 				<p class="welcome-tip">{t('shell.remote.openingSession')}</p>
 			</div>
 		{:else if (draft || connected) && chat.messages.length === 0 && !chat.busy}
@@ -659,7 +659,7 @@
 
 	<div class="bottom">
 		{#if !atBottom}
-			<button class="jump" onclick={jumpToBottom} aria-label={t('shell.remote.back')}><CaretDownIcon size={18} /></button>
+			<button class="jump" onclick={jumpToBottom} aria-label={t('shell.remote.back')}><ChevronDownIcon size={16} /></button>
 		{/if}
 		{#if chat.inTerminal}
 			<p class="interm">{t('chat.inTerminal')}</p>
@@ -684,7 +684,7 @@
 		{:else if exited}
 			<div class="exit">
 				<div class="exit-msg"><Notice tone={error ? 'error' : 'warn'}>{error || t('shell.remote.disconnected')}</Notice></div>
-				<Button size="sm" onclick={connect}><ArrowClockwiseIcon size={13} /> {t('shell.remote.reconnect')}</Button>
+				<Button size="sm" onclick={connect}><RotateCwIcon size={14} /> {t('shell.remote.reconnect')}</Button>
 			</div>
 		{/if}
 
@@ -727,14 +727,14 @@
 								<span class="att-name">{a.name}</span>
 								{#if a.error}<span class="att-state">{t('shell.upload.failed')}</span>
 								{:else if !a.done}<span class="att-state">{Math.round((a.sent / Math.max(a.total, 1)) * 100)}%</span>{/if}
-								<button type="button" aria-label={t('shell.upload.remove')} onclick={() => detach(a.key)}><XIcon size={11} /></button>
+								<button type="button" aria-label={t('shell.upload.remove')} onclick={() => detach(a.key)}><XIcon size={12} /></button>
 							</span>
 						{/each}
 					</div>
 				{/if}
 				<div class="composer-bar">
 					<button type="button" class="flatbtn attach" onclick={() => picker?.click()} title={t('shell.upload.attach')} aria-label={t('shell.upload.attach')}>
-						<PaperclipIcon size={17} />
+						<PaperclipIcon size={16} />
 					</button>
 					<input
 						bind:this={picker}
@@ -789,7 +789,7 @@
 						>
 							{#key shownModel.id}
 								<span class="mswap">
-									{#if !engine || engine === 'jucode'}<Vendor model={shownModel.id} size={15} />{:else}<BackendIcon backend={engine as 'claude'} size={15} />{/if}
+									{#if !engine || engine === 'jucode'}<Vendor model={shownModel.id} size={15} mono />{:else}<BackendIcon backend={engine as 'claude'} size={15} mono />{/if}
 									<span class="m">{shownModel.label}</span>
 								</span>
 							{/key}
@@ -802,13 +802,13 @@
 					{/if}
 					{#if chat.busy}
 						<button type="button" class="cact stop" disabled={stopping} onclick={stop} aria-label={t('chat.stopTitle')} title={t('chat.stopTitle')}>
-							{#if stopping}<CircleNotchIcon size={15} class="spin" />{:else}<SquareIcon size={15} weight="fill" />{/if}
+							{#if stopping}<LoaderCircleIcon size={16} class="spin" />{:else}<SquareIcon size={16} fill="currentColor" />{/if}
 						</button>
 					{/if}
 					<!-- Mid-turn, sending queues the message (插话). -->
 					{#if !chat.busy || text.trim() || attached.length}
 						<button type="submit" class="cact send" disabled={(!text.trim() && !attached.length) || uploading || (!connected && !draft)} aria-label={t('chat.sendTitle')} title={t('chat.sendTitle')}>
-							{#if opening && text.trim()}<CircleNotchIcon size={15} class="spin" />{:else}<ArrowUpIcon size={17} />{/if}
+							{#if opening && text.trim()}<LoaderCircleIcon size={16} class="spin" />{:else}<ArrowUpIcon size={16} />{/if}
 						</button>
 					{/if}
 				</div>

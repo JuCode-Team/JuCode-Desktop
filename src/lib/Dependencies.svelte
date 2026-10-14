@@ -3,8 +3,8 @@
 	// (settings shows only the non-engine tools; the engine rows carry their
 	// own install button).
 	import { onMount } from 'svelte';
-	import ArrowsClockwiseIcon from 'phosphor-svelte/lib/ArrowsClockwiseIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
+	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import BackendIcon from '$lib/BackendIcon.svelte';
 	import DepAction from '$lib/DepAction.svelte';
 	import DepDetails from '$lib/DepDetails.svelte';
@@ -37,7 +37,7 @@
 			</div>
 		{/if}
 		<Button variant="ghost" size="sm" onclick={recheckDeps} disabled={deps.loading}>
-			{#if deps.loading}<CircleNotchIcon size={14} class="spin" />{:else}<ArrowsClockwiseIcon size={14} />{/if}
+			{#if deps.loading}<LoaderCircleIcon size={14} class="spin" />{:else}<RefreshCwIcon size={14} />{/if}
 			{t('setup.deps.recheck')}
 		</Button>
 	</div>

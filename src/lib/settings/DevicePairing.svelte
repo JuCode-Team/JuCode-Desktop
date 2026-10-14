@@ -5,11 +5,11 @@
 	// the relay is off), the paired devices with revoke, and the LAN/Tailscale
 	// address as an advanced alternative.
 	import { onDestroy, onMount } from 'svelte';
-	import DeviceMobileIcon from 'phosphor-svelte/lib/DeviceMobileIcon';
-	import XIcon from 'phosphor-svelte/lib/XIcon';
-	import CopyIcon from 'phosphor-svelte/lib/CopyIcon';
-	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
+	import SmartphoneIcon from '@lucide/svelte/icons/smartphone';
+	import XIcon from '@lucide/svelte/icons/x';
+	import CopyIcon from '@lucide/svelte/icons/copy';
+	import CheckIcon from '@lucide/svelte/icons/check';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import { renderSVG } from 'uqr';
 	import Button from '$lib/ui/Button.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
@@ -175,7 +175,7 @@
 
 <SettingsRow id="devices" title={t('settings.backend.devices')} description={t('settings.backend.devicesHint')}>
 	{#if !pairing}
-		<Button size="sm" onclick={addDevice}><DeviceMobileIcon size={13} /> {t('settings.backend.addDevice')}</Button>
+		<Button size="sm" onclick={addDevice}><SmartphoneIcon size={14} /> {t('settings.backend.addDevice')}</Button>
 	{/if}
 </SettingsRow>
 
@@ -202,7 +202,7 @@
 					<div class="link-row">
 						<code class="link" title={pairing.link}>{pairing.link}</code>
 						<Button size="sm" onclick={copyLink}>
-							{#if copied}<CheckIcon size={13} /> {t('settings.backend.copied')}{:else}<CopyIcon size={13} /> {t('settings.backend.copyLink')}{/if}
+							{#if copied}<CheckIcon size={14} /> {t('settings.backend.copied')}{:else}<CopyIcon size={14} /> {t('settings.backend.copyLink')}{/if}
 						</Button>
 					</div>
 				{/if}
@@ -219,7 +219,7 @@
 		{/if}
 		{#each devices as device (device.id)}
 			<div class="device">
-				<DeviceMobileIcon size={14} />
+				<SmartphoneIcon size={14} />
 				<span class="name">{device.name}</span>
 				<span class="when">{new Date(device.paired_at).toLocaleDateString()}</span>
 				<Button size="sm" variant="ghost" onclick={() => revoke(device)}>{t('settings.backend.revoke')}</Button>
@@ -231,7 +231,7 @@
 
 <SettingsRow stacked>
 	<button class="adv" onclick={() => (lanOpen = !lanOpen)}>
-		<span class="chev" class:open={lanOpen}><CaretRightIcon size={12} /></span>
+		<span class="chev" class:open={lanOpen}><ChevronRightIcon size={12} /></span>
 		{t('settings.backend.lanAdvanced')}
 	</button>
 	{#if lanOpen}

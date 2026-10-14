@@ -1,11 +1,11 @@
 <script lang="ts">
-	import TargetIcon from 'phosphor-svelte/lib/TargetIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import PauseIcon from 'phosphor-svelte/lib/PauseIcon';
-	import WarningOctagonIcon from 'phosphor-svelte/lib/WarningOctagonIcon';
-	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
-	import ClockIcon from 'phosphor-svelte/lib/ClockIcon';
-	import CoinsIcon from 'phosphor-svelte/lib/CoinsIcon';
+	import TargetIcon from '@lucide/svelte/icons/target';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import PauseIcon from '@lucide/svelte/icons/pause';
+	import OctagonAlertIcon from '@lucide/svelte/icons/octagon-alert';
+	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
+	import ClockIcon from '@lucide/svelte/icons/clock';
+	import CoinsIcon from '@lucide/svelte/icons/coins';
 	import type { Goal } from '$lib/chat.svelte';
 	import { t } from '$lib/i18n';
 
@@ -19,14 +19,14 @@
 	);
 
 	const META: Record<string, { key: string; cls: string; icon: typeof TargetIcon }> = {
-		active: { key: 'active', cls: 'active', icon: CircleNotchIcon },
+		active: { key: 'active', cls: 'active', icon: LoaderCircleIcon },
 		paused: { key: 'paused', cls: 'paused', icon: PauseIcon },
 		blocked: {
 			key: 'blocked',
 			cls: 'blocked',
-			icon: WarningOctagonIcon
+			icon: OctagonAlertIcon
 		},
-		complete: { key: 'complete', cls: 'complete', icon: CheckCircleIcon }
+		complete: { key: 'complete', cls: 'complete', icon: CircleCheckIcon }
 	};
 	const meta = $derived.by(() => {
 		const m = META[goal?.status ?? ''];
@@ -48,14 +48,14 @@
 
 			<div class="stats">
 				<div class="stat">
-					<span class="stat-ico"><CoinsIcon size={13} /></span>
+					<span class="stat-ico"><CoinsIcon size={14} /></span>
 					<div>
 						<div class="stat-val">{fmt(goal.tokens_used)}{#if goal.token_budget} / {fmt(goal.token_budget)}{/if}</div>
 						<div class="stat-lab">tokens{#if !goal.token_budget} · {t('dock.goal.noBudget')}{/if}</div>
 					</div>
 				</div>
 				<div class="stat">
-					<span class="stat-ico"><ClockIcon size={13} /></span>
+					<span class="stat-ico"><ClockIcon size={14} /></span>
 					<div>
 						<div class="stat-val">{fmtTime(goal.time_used_seconds)}</div>
 						<div class="stat-lab">{t('dock.goal.timeUsed')}</div>
@@ -72,7 +72,7 @@
 		</div>
 	{:else}
 		<div class="empty">
-			<TargetIcon size={26} />
+			<TargetIcon size={28} />
 			<p>{t('dock.goal.empty')}</p>
 			<span>{t('dock.goal.emptyHintPre')} <code>/goal &lt;{t('dock.goal.goalPlaceholder')}&gt;</code> {t('dock.goal.emptyHintPost')}</span>
 		</div>

@@ -4,18 +4,18 @@
 	// menu), and the account at the bottom.
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon';
-	import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon';
-	import DesktopIcon from 'phosphor-svelte/lib/DesktopIcon';
-	import SidebarSimpleIcon from 'phosphor-svelte/lib/SidebarSimpleIcon';
-	import DotsThreeIcon from 'phosphor-svelte/lib/DotsThreeIcon';
-	import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon';
-	import TrashIcon from 'phosphor-svelte/lib/TrashIcon';
-	import SignOutIcon from 'phosphor-svelte/lib/SignOutIcon';
-	import SunIcon from 'phosphor-svelte/lib/SunIcon';
-	import MoonIcon from 'phosphor-svelte/lib/MoonIcon';
-	import DesktopTowerIcon from 'phosphor-svelte/lib/DesktopTowerIcon';
-	import ArrowSquareOutIcon from 'phosphor-svelte/lib/ArrowSquareOutIcon';
+	import SquarePenIcon from '@lucide/svelte/icons/square-pen';
+	import SearchIcon from '@lucide/svelte/icons/search';
+	import MonitorIcon from '@lucide/svelte/icons/monitor';
+	import PanelLeftIcon from '@lucide/svelte/icons/panel-left';
+	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
+	import PencilIcon from '@lucide/svelte/icons/pencil';
+	import TrashIcon from '@lucide/svelte/icons/trash';
+	import LogOutIcon from '@lucide/svelte/icons/log-out';
+	import SunIcon from '@lucide/svelte/icons/sun';
+	import MoonIcon from '@lucide/svelte/icons/moon';
+	import PcCaseIcon from '@lucide/svelte/icons/pc-case';
+	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 	import { t } from '$lib/i18n';
 	import PopMenu from '$lib/ui/PopMenu.svelte';
 	import { confirm } from '$lib/ui/confirm.svelte';
@@ -113,14 +113,14 @@
 	<div class="top">
 		<a class="brand" href="/chat" onclick={(e) => (e.preventDefault(), newChat())}>{t('web.brand')}</a>
 		<span class="grow"></span>
-		<button class="icon" onclick={() => shell.toggle()} title={t('web.side.collapse')} aria-label={t('web.side.collapse')}><SidebarSimpleIcon size={18} /></button>
+		<button class="icon" onclick={() => shell.toggle()} title={t('web.side.collapse')} aria-label={t('web.side.collapse')}><PanelLeftIcon size={16} /></button>
 	</div>
 
 	<div class="actions">
-		<button class="row strong" onclick={newChat}><NotePencilIcon size={17} /><span>{t('web.side.newChat')}</span></button>
-		<a class="row" href="/remote" title={t('web.side.remoteHint')}><DesktopIcon size={17} /><span>{t('web.side.remote')}</span></a>
+		<button class="row strong" onclick={newChat}><SquarePenIcon size={16} /><span>{t('web.side.newChat')}</span></button>
+		<a class="row" href="/remote" title={t('web.side.remoteHint')}><MonitorIcon size={16} /><span>{t('web.side.remote')}</span></a>
 		<label class="search">
-			<MagnifyingGlassIcon size={15} />
+			<SearchIcon size={16} />
 			<input type="search" bind:value={query} placeholder={t('web.side.search')} aria-label={t('web.side.search')} />
 		</label>
 	</div>
@@ -145,12 +145,12 @@
 					{:else}
 						<a class="title" href="/c/{c.id}" title={c.title}>{c.title || t('web.chat.untitled')}</a>
 						<span class="more-anchor">
-							<button class="more" onclick={() => (menuFor = menuFor === c.id ? null : c.id)} aria-label={t('web.side.rename')}><DotsThreeIcon size={16} weight="bold" /></button>
+							<button class="more" onclick={() => (menuFor = menuFor === c.id ? null : c.id)} aria-label={t('web.side.rename')}><EllipsisIcon size={16} /></button>
 							{#if menuFor === c.id}
 								<PopMenu
 									placement="down-right"
 									items={[
-										{ key: 'rename', label: t('web.side.rename'), icon: PencilSimpleIcon },
+										{ key: 'rename', label: t('web.side.rename'), icon: PencilIcon },
 										{ key: 'delete', label: t('web.side.delete'), icon: TrashIcon, tone: 'warn' }
 									]}
 									onSelect={(k) => (k === 'rename' ? startRename(c) : remove(c))}
@@ -185,9 +185,9 @@
 					items={[
 						{ key: 'light', label: t('web.account.themeLight'), icon: SunIcon, checked: themeState.pref === 'light' },
 						{ key: 'dark', label: t('web.account.themeDark'), icon: MoonIcon, checked: themeState.pref === 'dark' },
-						{ key: 'system', label: t('web.account.themeSystem'), icon: DesktopTowerIcon, checked: themeState.pref === 'system' },
-						{ key: 'console', label: t('web.account.console'), icon: ArrowSquareOutIcon },
-						{ key: 'signout', label: t('web.account.signOut'), icon: SignOutIcon }
+						{ key: 'system', label: t('web.account.themeSystem'), icon: PcCaseIcon, checked: themeState.pref === 'system' },
+						{ key: 'console', label: t('web.account.console'), icon: ExternalLinkIcon },
+						{ key: 'signout', label: t('web.account.signOut'), icon: LogOutIcon }
 					]}
 					onSelect={accountPick}
 					onClose={() => (accountMenu = false)}

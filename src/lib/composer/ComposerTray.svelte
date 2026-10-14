@@ -1,5 +1,5 @@
 <script lang="ts" module>
-	import type PlusIcon from 'phosphor-svelte/lib/PlusIcon';
+	import type PlusIcon from '@lucide/svelte/icons/plus';
 
 	export interface TrayItem {
 		id: string;
@@ -26,7 +26,7 @@
 </script>
 
 <script lang="ts">
-	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
+	import CheckIcon from '@lucide/svelte/icons/check';
 	import { trayNav, type TrayTab } from './tray';
 
 	// The composer's in-box selection list, shared by the "+" menu, "/" command
@@ -115,7 +115,7 @@
 						onclick={() => pick(i)}
 					>
 						{#if item.box}
-							<span class="box" class:on={item.checked}>{#if item.checked}<CheckIcon size={11} />{/if}</span>
+							<span class="box" class:on={item.checked}>{#if item.checked}<CheckIcon size={12} />{/if}</span>
 						{:else if Icon}
 							<span class="ico"><Icon size={16} /></span>
 						{/if}

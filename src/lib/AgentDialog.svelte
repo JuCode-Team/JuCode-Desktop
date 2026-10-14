@@ -3,9 +3,9 @@
 	// Created in the local jucode daemon; the parent opens its first session.
 	// With a project, it works in the project's main directory.
 	import { onMount, tick } from 'svelte';
-	import RobotIcon from 'phosphor-svelte/lib/RobotIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import ShuffleIcon from 'phosphor-svelte/lib/ShuffleIcon';
+	import BotIcon from '@lucide/svelte/icons/bot';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import ShuffleIcon from '@lucide/svelte/icons/shuffle';
 	import { open } from '@tauri-apps/plugin-dialog';
 	import Button from '$lib/ui/Button.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
@@ -113,7 +113,7 @@
 <svelte:window onkeydown={onKey} />
 
 <Modal title={t('shell.agents.dialogTitle')} width={480} dismissible={!busy} {onClose}>
-	{#snippet icon()}<RobotIcon size={15} />{/snippet}
+	{#snippet icon()}<BotIcon size={16} />{/snippet}
 	<p class="hint">{t('shell.agents.dialogHint')}</p>
 	<div class="field">
 		<span>{t('shell.agents.nameLabel')}</span>
@@ -121,7 +121,7 @@
 			<AgentAvatar agent={{ id, avatar_seed: seed }} size={30} />
 			<input bind:this={nameEl} bind:value={name} aria-label={t('shell.agents.nameLabel')} />
 			<Button size="sm" onclick={() => (seed = newAvatarSeed())}>
-				<ShuffleIcon size={13} />{t('shell.chrome.shuffle')}
+				<ShuffleIcon size={14} />{t('shell.chrome.shuffle')}
 			</Button>
 		</div>
 	</div>
@@ -159,7 +159,7 @@
 	{#snippet footer()}
 		<Button size="sm" onclick={onClose} disabled={busy}>{t('common.cancel')}</Button>
 		<Button size="sm" variant="primary" onclick={create} disabled={!canCreate}>
-			{#if busy}<CircleNotchIcon size={13} class="spin" />
+			{#if busy}<LoaderCircleIcon size={14} class="spin" />
 				{t('shell.agents.creating')}{:else}{t('shell.agents.create')}{/if}
 		</Button>
 	{/snippet}

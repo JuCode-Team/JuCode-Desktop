@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { tick, type Snippet } from 'svelte';
-	import ProhibitIcon from 'phosphor-svelte/lib/ProhibitIcon';
-	import TrashIcon from 'phosphor-svelte/lib/TrashIcon';
-	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
-	import PushPinIcon from 'phosphor-svelte/lib/PushPinIcon';
-	import PushPinSlashIcon from 'phosphor-svelte/lib/PushPinSlashIcon';
+	import BanIcon from '@lucide/svelte/icons/ban';
+	import TrashIcon from '@lucide/svelte/icons/trash';
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import PinIcon from '@lucide/svelte/icons/pin';
+	import PinOffIcon from '@lucide/svelte/icons/pin-off';
 	import { t } from '$lib/i18n';
 	import { PICKER_ICONS, parseTabIcon, sanitizeSvg, TAB_COLORS, type TabIcon } from './tabChrome';
 	import TabGlyph from './TabGlyph.svelte';
@@ -138,7 +138,7 @@
 			class:on={!color}
 			title={t('shell.chrome.noColor')}
 			aria-label={t('shell.chrome.noColor')}
-			onclick={() => onColor(null)}><ProhibitIcon size={11} /></button
+			onclick={() => onColor(null)}><BanIcon size={12} /></button
 		>
 		{#each TAB_COLORS as c (c)}
 			<button
@@ -161,7 +161,7 @@
 			aria-label={defaultIcon ? t('shell.chrome.defaultIcon') : t('shell.chrome.clearIcon')}
 			onclick={() => onIcon(null)}
 		>
-			{#if defaultIcon}{@render defaultIcon()}{:else}<ProhibitIcon size={13} />{/if}
+			{#if defaultIcon}{@render defaultIcon()}{:else}<BanIcon size={14} />{/if}
 		</button>
 		{#each PICKER_ICONS as id (id)}
 			<button
@@ -177,7 +177,7 @@
 	</div>
 
 	<button class="more" onclick={() => (custom = !custom)} aria-expanded={custom}>
-		{#if custom}<CaretDownIcon size={11} />{:else}<CaretRightIcon size={11} />{/if}{t('shell.chrome.custom')}
+		{#if custom}<ChevronDownIcon size={12} />{:else}<ChevronRightIcon size={12} />{/if}{t('shell.chrome.custom')}
 	</button>
 	{#if custom}
 	<label class="field">
@@ -213,7 +213,7 @@
 
 	{#if onPin}
 		<Button size="sm" full onclick={() => onPin(!pinned)}>
-			{#if pinned}<PushPinSlashIcon size={12} />{t('shell.unpin')}{:else}<PushPinIcon size={12} />{t('shell.pin')}{/if}
+			{#if pinned}<PinOffIcon size={12} />{t('shell.unpin')}{:else}<PinIcon size={12} />{t('shell.pin')}{/if}
 		</Button>
 	{/if}
 	{#if onDelete}

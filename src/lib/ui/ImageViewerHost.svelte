@@ -3,11 +3,11 @@
 	// on it (or the size button) shows it at its own size, scrollable; ← → go
 	// through the set it came from; Escape or a click beside it closes.
 	import { convertFileSrc } from '@tauri-apps/api/core';
-	import XIcon from 'phosphor-svelte/lib/XIcon';
-	import CaretLeftIcon from 'phosphor-svelte/lib/CaretLeftIcon';
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
-	import ArrowsOutSimpleIcon from 'phosphor-svelte/lib/ArrowsOutSimpleIcon';
-	import ArrowsInSimpleIcon from 'phosphor-svelte/lib/ArrowsInSimpleIcon';
+	import XIcon from '@lucide/svelte/icons/x';
+	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import Maximize2Icon from '@lucide/svelte/icons/maximize-2';
+	import Minimize2Icon from '@lucide/svelte/icons/minimize-2';
 	import { t } from '$lib/i18n';
 	import { focusTrap } from '$lib/focusTrap';
 	import { imageViewer } from './imageViewer.svelte';
@@ -86,7 +86,7 @@
 						aria-label={actual ? t('common.image.fit') : t('common.image.actual')}
 						title={actual ? t('common.image.fit') : t('common.image.actual')}
 					>
-						{#if actual}<ArrowsInSimpleIcon size={16} />{:else}<ArrowsOutSimpleIcon size={16} />{/if}
+						{#if actual}<Minimize2Icon size={16} />{:else}<Maximize2Icon size={16} />{/if}
 					</button>
 				{/if}
 				<button class="ctl" onclick={() => imageViewer.close()} aria-label={t('common.close')} title={t('common.close')}><XIcon size={16} /></button>
@@ -109,8 +109,8 @@
 				{/if}
 			</div>
 			{#if count > 1}
-				<button class="nav prev" onclick={() => imageViewer.step(-1)} aria-label={t('common.image.prev')} title={t('common.image.prev')}><CaretLeftIcon size={18} /></button>
-				<button class="nav next" onclick={() => imageViewer.step(1)} aria-label={t('common.image.next')} title={t('common.image.next')}><CaretRightIcon size={18} /></button>
+				<button class="nav prev" onclick={() => imageViewer.step(-1)} aria-label={t('common.image.prev')} title={t('common.image.prev')}><ChevronLeftIcon size={16} /></button>
+				<button class="nav next" onclick={() => imageViewer.step(1)} aria-label={t('common.image.next')} title={t('common.image.next')}><ChevronRightIcon size={16} /></button>
 			{/if}
 		</div>
 	</div>

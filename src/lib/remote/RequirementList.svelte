@@ -3,10 +3,10 @@
 	// requirements on this computer by whose turn it is (the user's first),
 	// each with its project; done and parked folded. A row opens the
 	// requirement as a page.
-	import PencilSimpleLineIcon from 'phosphor-svelte/lib/PencilSimpleLineIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
-	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
+	import PenLineIcon from '@lucide/svelte/icons/pen-line';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import RequirementTag from '$lib/requirements/RequirementTag.svelte';
 	import { grouped, type Requirement, type RequirementGroup } from '$lib/requirements.svelte';
 	import { projectLabel, statusLabel, when } from '$lib/requirements/labels';
@@ -53,7 +53,7 @@
 {#snippet row(r: Requirement)}
 	<button class="row" class:on={current === r.id} onclick={() => onOpen(r.id)}>
 		<span class="mark {r.status}">
-			{#if r.status === 'running'}<CircleNotchIcon size={14} class="spin" />{:else}<span class="dot"></span>{/if}
+			{#if r.status === 'running'}<LoaderCircleIcon size={14} class="spin" />{:else}<span class="dot"></span>{/if}
 		</span>
 		<span class="text">
 			<span class="title"><RequirementTag id={r.id} /><span class="name">{r.title}</span></span>
@@ -64,7 +64,7 @@
 
 <div class="list">
 	<button class="new" class:on={composing} onclick={onNew}>
-		<PencilSimpleLineIcon size={16} />
+		<PenLineIcon size={16} />
 		<span>{t('shell.requirement.capture')}</span>
 	</button>
 
@@ -79,7 +79,7 @@
 	{#if groups.closed.length}
 		<section>
 			<button class="head fold" onclick={() => (showClosed = !showClosed)} aria-expanded={showClosed}>
-				{#if showClosed}<CaretDownIcon size={12} />{:else}<CaretRightIcon size={12} />{/if}
+				{#if showClosed}<ChevronDownIcon size={12} />{:else}<ChevronRightIcon size={12} />{/if}
 				{t('shell.requirement.groupClosed', counts)}
 			</button>
 			{#if showClosed}

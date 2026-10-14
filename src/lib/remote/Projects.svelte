@@ -3,19 +3,19 @@
 	// then projects with their sessions nested and an archived section each.
 	// Sessions come from the daemon's list, the one the desktop shows too, so
 	// titles, archive state and removals are the same on every device.
-	import FolderIcon from 'phosphor-svelte/lib/FolderIcon';
-	import FolderOpenIcon from 'phosphor-svelte/lib/FolderOpenIcon';
-	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
-	import ArchiveIcon from 'phosphor-svelte/lib/ArchiveIcon';
-	import BoxArrowUpIcon from 'phosphor-svelte/lib/BoxArrowUpIcon';
-	import DotsThreeIcon from 'phosphor-svelte/lib/DotsThreeIcon';
-	import ClockCounterClockwiseIcon from 'phosphor-svelte/lib/ClockCounterClockwiseIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import FilesIcon from 'phosphor-svelte/lib/FilesIcon';
-	import GitDiffIcon from 'phosphor-svelte/lib/GitDiffIcon';
-	import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon';
-	import XIcon from 'phosphor-svelte/lib/XIcon';
+	import FolderIcon from '@lucide/svelte/icons/folder';
+	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
+	import PlusIcon from '@lucide/svelte/icons/plus';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import ArchiveIcon from '@lucide/svelte/icons/archive';
+	import ArchiveRestoreIcon from '@lucide/svelte/icons/archive-restore';
+	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
+	import RotateCcwClockIcon from '@lucide/svelte/icons/rotate-ccw-clock';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import FilesIcon from '@lucide/svelte/icons/files';
+	import GitCompareIcon from '@lucide/svelte/icons/git-compare';
+	import PencilIcon from '@lucide/svelte/icons/pencil';
+	import XIcon from '@lucide/svelte/icons/x';
 	import Button from '$lib/ui/Button.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
@@ -156,10 +156,10 @@
 			aria-label={s.archived ? t('shell.unarchive') : t('shell.archive')}
 			title={s.archived ? t('shell.unarchive') : t('shell.archive')}
 		>
-			{#if s.archived}<BoxArrowUpIcon size={16} />{:else}<ArchiveIcon size={16} />{/if}
+			{#if s.archived}<ArchiveRestoreIcon size={16} />{:else}<ArchiveIcon size={16} />{/if}
 		</button>
 		<button class="act" onclick={() => openMenu({ session: s })} aria-label={t('shell.remote.more')}>
-			<DotsThreeIcon size={16} weight="bold" />
+			<EllipsisIcon size={16} />
 		</button>
 	</div>
 {/snippet}
@@ -179,7 +179,7 @@
 	{/if}
 	{#if arch.length}
 		<button class="more" class:nested onclick={() => (showArchived[p.id] = !showArchived[p.id])}>
-			<span class="chev" class:open={showArchived[p.id]}><CaretRightIcon size={14} /></span>
+			<span class="chev" class:open={showArchived[p.id]}><ChevronRightIcon size={14} /></span>
 			{t('shell.archived')} · {arch.length}
 		</button>
 		{#if showArchived[p.id]}
@@ -205,7 +205,7 @@
 			{#each agentDirectory.agents as a (a.id)}
 				<div class="sess">
 					<button class="sess-main" onclick={() => onOpenAgent(a)}>
-						{#if a.busy}<CircleNotchIcon size={16} class="spin" />{:else}<AgentAvatar agent={a} size={16} />{/if}
+						{#if a.busy}<LoaderCircleIcon size={16} class="spin" />{:else}<AgentAvatar agent={a} size={16} />{/if}
 						<span class="agent-text">
 							<span class="sess-title">{a.name}</span>
 							{#if a.summary}<span class="summary">{a.summary}</span>{/if}
@@ -221,7 +221,7 @@
 			<div class="head">
 				<span>{t('shell.chats')}</span>
 				<button class="act" onclick={() => onHistory(chats)} aria-label={t('shell.history')} title={t('shell.history')}>
-					<ClockCounterClockwiseIcon size={16} />
+					<RotateCcwClockIcon size={16} />
 				</button>
 				<button class="act" onclick={() => onNewSession(chats)} aria-label={t('shell.newChat')} title={t('shell.newChat')}>
 					<PlusIcon size={16} />
@@ -240,19 +240,19 @@
 		</div>
 		{#each code as p (p.id)}
 			{@const open = !collapsed[p.id]}
-			{@const w = sessionsOf(p).some((s) => s.session === current) ? 'fill' : 'regular'}
+			{@const holdsActive = sessionsOf(p).some((s) => s.session === current)}
 			{@const icon = parseTabIcon(p.icon)}
 			{@const color = normalizeColor(p.color)}
 			<div class="folder">
 				<button class="folder-row" onclick={() => (collapsed[p.id] = !collapsed[p.id])} title={p.path}>
-					{#if icon}<TabGlyph {icon} color={color ?? 'var(--dim)'} active={w === 'fill'} size={16} />{:else if open}<FolderOpenIcon size={18} weight={w} {color} />{:else}<FolderIcon size={18} weight={w} {color} />{/if}
+					{#if icon}<TabGlyph {icon} color={color ?? 'var(--dim)'} active={holdsActive} size={16} />{:else if open}<FolderOpenIcon size={16} strokeWidth={holdsActive ? 2 : undefined} {color} />{:else}<FolderIcon size={16} strokeWidth={holdsActive ? 2 : undefined} {color} />{/if}
 					<span class="folder-name">{p.name}</span>
 				</button>
 				<button class="act" onclick={() => onNewSession(p)} aria-label={t('shell.remote.newSession')} title={t('shell.remote.newSession')}>
 					<PlusIcon size={16} />
 				</button>
 				<button class="act" onclick={() => openMenu({ project: p })} aria-label={t('shell.remote.more')}>
-					<DotsThreeIcon size={16} weight="bold" />
+					<EllipsisIcon size={16} />
 				</button>
 			</div>
 			{#if open}{@render group(p, true)}{/if}
@@ -281,9 +281,9 @@
 			</form>
 		{:else}
 			<div class="menu">
-				<button onclick={() => ((name = s.title ?? ''), (renaming = true))}><PencilSimpleIcon size={16} />{t('shell.remote.rename')}</button>
+				<button onclick={() => ((name = s.title ?? ''), (renaming = true))}><PencilIcon size={16} />{t('shell.remote.rename')}</button>
 				<button onclick={() => closeThen(setMeta, s, { archived: !s.archived })}>
-					{#if s.archived}<BoxArrowUpIcon size={16} />{t('shell.unarchive')}{:else}<ArchiveIcon size={16} />{t('shell.archive')}{/if}
+					{#if s.archived}<ArchiveRestoreIcon size={16} />{t('shell.unarchive')}{:else}<ArchiveIcon size={16} />{t('shell.archive')}{/if}
 				</button>
 				<button class="danger" onclick={() => remove(s)}><XIcon size={16} />{t('shell.remote.removeSession')}</button>
 			</div>
@@ -295,8 +295,8 @@
 		<p class="path">{p.path}</p>
 		<div class="menu">
 			<button onclick={() => closeThen(onFiles, p)}><FilesIcon size={16} />{t('shell.remote.files')}</button>
-			<button onclick={() => closeThen(onChanges, p)}><GitDiffIcon size={16} />{t('shell.remote.changes')}</button>
-			<button onclick={() => closeThen(onHistory, p)}><ClockCounterClockwiseIcon size={16} />{t('shell.history')}</button>
+			<button onclick={() => closeThen(onChanges, p)}><GitCompareIcon size={16} />{t('shell.remote.changes')}</button>
+			<button onclick={() => closeThen(onHistory, p)}><RotateCcwClockIcon size={16} />{t('shell.history')}</button>
 			<button class="danger" onclick={() => removeProject(p)}><XIcon size={16} />{t('shell.remote.removeProject')}</button>
 		</div>
 	</Modal>

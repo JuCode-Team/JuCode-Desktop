@@ -5,10 +5,10 @@
 	// daemon's logs: listed with their sizes and previewable, redacted and
 	// gzipped before they leave (feedback.ts).
 	import { onMount } from 'svelte';
-	import ChatCircleTextIcon from 'phosphor-svelte/lib/ChatCircleTextIcon';
-	import ImageIcon from 'phosphor-svelte/lib/ImageIcon';
-	import XIcon from 'phosphor-svelte/lib/XIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
+	import MessageSquareTextIcon from '@lucide/svelte/icons/message-square-text';
+	import ImageIcon from '@lucide/svelte/icons/image';
+	import XIcon from '@lucide/svelte/icons/x';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import { appVersion } from '$lib/about';
 	import Modal from '$lib/ui/Modal.svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -119,7 +119,7 @@
 </script>
 
 <Modal title={t('shell.feedback.title')} dismissible={!sending} width={560} {onClose}>
-	{#snippet icon()}<ChatCircleTextIcon size={15} />{/snippet}
+	{#snippet icon()}<MessageSquareTextIcon size={16} />{/snippet}
 	<p class="hint">{t('shell.feedback.hint')}</p>
 	<Segmented
 		bind:value={kind}
@@ -145,11 +145,11 @@
 		{#each shots as shot, i (shot.url)}
 			<span class="shot">
 				<img src={shot.url} alt="" />
-				<button aria-label={t('shell.requirement.removeImage')} onclick={() => shots.splice(i, 1)}><XIcon size={11} /></button>
+				<button aria-label={t('shell.requirement.removeImage')} onclick={() => shots.splice(i, 1)}><XIcon size={12} /></button>
 			</span>
 		{/each}
 		{#if shots.length < MAX_SHOTS}
-			<button class="add" onclick={() => picker?.click()}><ImageIcon size={15} />{t('shell.feedback.addShot')}</button>
+			<button class="add" onclick={() => picker?.click()}><ImageIcon size={16} />{t('shell.feedback.addShot')}</button>
 		{/if}
 		<input
 			bind:this={picker}
@@ -191,7 +191,7 @@
 	{#snippet footer()}
 		<Button size="sm" onclick={onClose} disabled={sending}>{t('common.cancel')}</Button>
 		<Button size="sm" variant="primary" onclick={send} disabled={!title.trim() || !body.trim() || sending}>
-			{#if sending}<CircleNotchIcon size={13} class="spin" />{/if}{t('shell.feedback.send')}
+			{#if sending}<LoaderCircleIcon size={14} class="spin" />{/if}{t('shell.feedback.send')}
 		</Button>
 	{/snippet}
 </Modal>

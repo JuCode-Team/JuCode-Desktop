@@ -8,10 +8,10 @@
 	// 开始 on a requirement: one click starts in its project on the last
 	// backend; the menu picks another project, a backend or a parallel task
 	// (worktree). With no project yet, the click opens the menu.
-	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
-	import FolderIcon from 'phosphor-svelte/lib/FolderIcon';
-	import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon';
-	import CpuIcon from 'phosphor-svelte/lib/CpuIcon';
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+	import FolderIcon from '@lucide/svelte/icons/folder';
+	import GitBranchIcon from '@lucide/svelte/icons/git-branch';
+	import CpuIcon from '@lucide/svelte/icons/cpu';
 	import PopMenu, { type PopMenuItem } from '$lib/ui/PopMenu.svelte';
 	import { BACKEND_LABELS } from '$lib/backends';
 	import type { Requirement } from '$lib/requirements.svelte';
@@ -71,7 +71,7 @@
 		title={t('shell.requirement.startMore')}
 		aria-haspopup="menu"
 		aria-expanded={open}
-		onclick={(e) => (e.stopPropagation(), (open = !open))}><CaretDownIcon size={11} /></button
+		onclick={(e) => (e.stopPropagation(), (open = !open))}><ChevronDownIcon size={12} /></button
 	>
 	{#if open}
 		<PopMenu {items} placement="down-left" onSelect={pick} onClose={() => (open = false)} />

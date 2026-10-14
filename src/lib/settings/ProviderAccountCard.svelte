@@ -1,10 +1,10 @@
 <script lang="ts">
-	import SignInIcon from 'phosphor-svelte/lib/SignInIcon';
-	import SignOutIcon from 'phosphor-svelte/lib/SignOutIcon';
-	import TrashIcon from 'phosphor-svelte/lib/TrashIcon';
-	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
-	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
-	import WalletIcon from 'phosphor-svelte/lib/WalletIcon';
+	import LogInIcon from '@lucide/svelte/icons/log-in';
+	import LogOutIcon from '@lucide/svelte/icons/log-out';
+	import TrashIcon from '@lucide/svelte/icons/trash';
+	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+	import WalletIcon from '@lucide/svelte/icons/wallet';
 	import { t } from '$lib/i18n';
 	import { fmtBalance } from '$lib/money';
 	import Vendor from '$lib/Vendor.svelte';
@@ -65,7 +65,7 @@
 		onSetDefault: (p: Provider) => void;
 		onDelete: (id: string) => void;
 	} = $props();
-	import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon';
+	import ListChecksIcon from '@lucide/svelte/icons/list-checks';
 	import { modelSetup } from '$lib/modelSetupState.svelte';
 </script>
 
@@ -74,7 +74,7 @@
 		<span class="tile"><Vendor provider={provider.id} size={18} /></span>
 		<span class="pcard-txt">
 			<span class="pcard-id">{provider.name ?? cap(provider.id)}
-				{#if isDefault}<span class="defbadge"><CheckCircleIcon size={11} /> {t('settings.account.default')}</span>{/if}
+				{#if isDefault}<span class="defbadge"><CircleCheckIcon size={12} /> {t('settings.account.default')}</span>{/if}
 				{#if !provider.builtin}<span class="tagx">{provider.source === 'catalog' ? t('settings.account.byok') : t('settings.account.custom')}</span>{/if}
 			</span>
 			<span class="pcard-url">{#if provider.name}{provider.id} · {/if}{provider.base_url}</span>
@@ -92,9 +92,9 @@
 				<span class="stat">{provider.id === 'jucode' ? t('settings.account.notLoggedIn') : t('settings.account.notKeyed')}</span>
 			{/if}
 			{#if provider.id === 'jucode' && !authed}
-				<SignInIcon size={15} class="dimx" />
+				<LogInIcon size={16} class="dimx" />
 			{:else}
-				<CaretDownIcon size={16} class="chev {open ? 'up' : ''}" />
+				<ChevronDownIcon size={16} class="chev {open ? 'up' : ''}" />
 			{/if}
 		</span>
 	</button>
@@ -105,9 +105,9 @@
 				<AccountPanel />
 				<div class="cardact">
 					{#if !isDefault}<Button variant="secondary" size="sm" onclick={() => onSetDefault(provider)}>{t('settings.account.setDefault')}</Button>{/if}
-					<Button size="sm" onclick={() => (modelSetup.open = true)}><ListChecksIcon size={13} /> {t('shell.modelSetup.manage')}</Button>
-					<Button variant="primary" size="sm" onclick={onLogin}><SignInIcon size={13} /> {t('settings.account.relogin')}</Button>
-					<Button variant="danger" size="sm" onclick={() => onLogout('jucode')}><SignOutIcon size={13} /> {t('settings.account.logout')}</Button>
+					<Button size="sm" onclick={() => (modelSetup.open = true)}><ListChecksIcon size={14} /> {t('shell.modelSetup.manage')}</Button>
+					<Button variant="primary" size="sm" onclick={onLogin}><LogInIcon size={14} /> {t('settings.account.relogin')}</Button>
+					<Button variant="danger" size="sm" onclick={() => onLogout('jucode')}><LogOutIcon size={14} /> {t('settings.account.logout')}</Button>
 				</div>
 			{:else}
 				{#if provider.id === 'deepseek' && authed}
@@ -120,8 +120,8 @@
 				{#if authed || !provider.builtin}
 				<div class="erow end">
 					{#if authed && !isDefault}<Button variant="secondary" size="sm" onclick={() => onSetDefault(provider)}>{t('settings.account.setDefault')}</Button>{/if}
-					{#if authed}<Button variant="ghost" size="sm" onclick={() => onLogout(provider.id)}><SignOutIcon size={13} /> {t('settings.account.clearKey')}</Button>{/if}
-					{#if !provider.builtin}<Button variant="danger" size="sm" onclick={() => onDelete(provider.id)}><TrashIcon size={13} /> {t('common.delete')}</Button>{/if}
+					{#if authed}<Button variant="ghost" size="sm" onclick={() => onLogout(provider.id)}><LogOutIcon size={14} /> {t('settings.account.clearKey')}</Button>{/if}
+					{#if !provider.builtin}<Button variant="danger" size="sm" onclick={() => onDelete(provider.id)}><TrashIcon size={14} /> {t('common.delete')}</Button>{/if}
 				</div>
 				{/if}
 			{/if}

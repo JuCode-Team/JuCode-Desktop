@@ -4,12 +4,12 @@
 	// The registry itself is owned and validated by the Rust side
 	// (acp_registry.rs) — this UI only reads it and submits whole entries.
 	import { onMount } from 'svelte';
-	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
-	import TrashIcon from 'phosphor-svelte/lib/TrashIcon';
-	import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon';
-	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
-	import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon';
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
+	import PlusIcon from '@lucide/svelte/icons/plus';
+	import TrashIcon from '@lucide/svelte/icons/trash';
+	import RotateCwIcon from '@lucide/svelte/icons/rotate-cw';
+	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
+	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import {
 		acpAgentCheck,
 		acpAgentRemove,
@@ -139,16 +139,16 @@
 					{#if st === 'checking'}
 						<span class="astate dim">{t('settings.acp.checking')}</span>
 					{:else if st && st.found}
-						<span class="astate ok"><CheckCircleIcon size={12} /> {versionLabel(st) || t('settings.acp.found')}</span>
+						<span class="astate ok"><CircleCheckIcon size={12} /> {versionLabel(st) || t('settings.acp.found')}</span>
 					{:else if st}
-						<span class="astate warn"><WarningCircleIcon size={12} /> {t('settings.acp.notFound')}</span>
+						<span class="astate warn"><CircleAlertIcon size={12} /> {t('settings.acp.notFound')}</span>
 					{/if}
 				</div>
 				<span class="acmd" title="{agent.command} {formatArgs(agent.args)}">
 					{agent.command} {formatArgs(agent.args)}
 				</span>
 				<button class="edithead" onclick={() => (open[agent.id] = !open[agent.id])}>
-					<span class="chev" class:open={open[agent.id]}><CaretRightIcon size={12} /></span>
+					<span class="chev" class:open={open[agent.id]}><ChevronRightIcon size={12} /></span>
 					{t('settings.acp.edit')}
 				</button>
 				{#if open[agent.id]}
@@ -172,7 +172,7 @@
 				{/if}
 			</div>
 			<IconButton onclick={() => check(agent.id)} label="re-check agent" title={t('settings.acp.recheck')}>
-				<ArrowClockwiseIcon size={14} />
+				<RotateCwIcon size={14} />
 			</IconButton>
 			<IconButton onclick={() => remove(agent.id)} label="remove agent" title={t('settings.acp.remove')}>
 				<TrashIcon size={14} />

@@ -4,8 +4,8 @@
 	// every few seconds while the subagent works. Shared by the agent trace
 	// panel and the conversation's subagent drawer.
 	import { untrack } from 'svelte';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import { t } from '$lib/i18n';
 	import Markdown from '$lib/Markdown.svelte';
 	import MessageList from '$lib/MessageList.svelte';
@@ -51,12 +51,12 @@
 {#if transcript?.error}
 	<p class="empty-line">{transcript.error}</p>
 {:else if !transcript}
-	<p class="empty-line"><CircleNotchIcon size={13} class="spin" /> {t('dock.agents.loading')}</p>
+	<p class="empty-line"><LoaderCircleIcon size={14} class="spin" /> {t('dock.agents.loading')}</p>
 {:else}
 	{#if transcript.task}
 		<section class="task" class:open={taskOpen}>
 			<button class="task-head" onclick={() => (taskOpen = !taskOpen)} aria-expanded={taskOpen}>
-				<span class="caret" class:open={taskOpen}><CaretRightIcon size={12} /></span>
+				<span class="caret" class:open={taskOpen}><ChevronRightIcon size={12} /></span>
 				{t('dock.agents.task')}
 			</button>
 			<div class="task-body"><Markdown text={transcript.task} /></div>

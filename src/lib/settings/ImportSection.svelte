@@ -4,8 +4,8 @@
 	// have, and one button that brings the picked items over. Conversations
 	// and skills are imported on the Rust side (agent_import); MCP servers go
 	// to the daemon with `mcp_set`, the way Settings → MCP adds one.
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import {
 		changeMcpServers,
 		importApply,
@@ -148,7 +148,7 @@
 	<SettingsRow title={t('settings.import.title')} description={t('settings.import.intro')}>
 		<Button size="sm" disabled={scanning || running} onclick={() => scan()}>
 			{#if scanning}
-				<CircleNotchIcon size={14} class="spin" />
+				<LoaderCircleIcon size={14} class="spin" />
 				{t('settings.import.scanning')}
 			{:else}
 				{found ? t('settings.import.rescan') : t('settings.import.scan')}
@@ -169,7 +169,7 @@
 		<button class="gtoggle" aria-expanded={!!open[id]} onclick={() => (open[id] = !open[id])}>
 			<span class="gname">{label(source)}</span>
 			<span class="gcount">{t('settings.import.selected', { n: count(keys), total })}</span>
-			<span class="chev" class:on={open[id]}><CaretRightIcon size={12} /></span>
+			<span class="chev" class:on={open[id]}><ChevronRightIcon size={12} /></span>
 		</button>
 	</div>
 {/snippet}
@@ -269,7 +269,7 @@
 		<SettingsRow description={pickedTotal ? undefined : t('settings.import.pickSome')}>
 			<Button variant="primary" disabled={!pickedTotal || running || scanning} onclick={run}>
 				{#if running}
-					<CircleNotchIcon size={14} class="spin" />
+					<LoaderCircleIcon size={14} class="spin" />
 					{t('settings.import.running')}
 				{:else}
 					{t('settings.import.run')}{pickedTotal ? ` (${pickedTotal})` : ''}

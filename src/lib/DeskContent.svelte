@@ -4,11 +4,11 @@
 	// jucode daemon through agentDirectory. Shown on the desktop's workbench
 	// and on the remote page. With `agent`, only that agent's pending items
 	// (its page shows the rest as activity).
-	import FileTextIcon from 'phosphor-svelte/lib/FileTextIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import ClockIcon from 'phosphor-svelte/lib/ClockIcon';
-	import PauseIcon from 'phosphor-svelte/lib/PauseIcon';
-	import TrashIcon from 'phosphor-svelte/lib/TrashIcon';
+	import FileTextIcon from '@lucide/svelte/icons/file-text';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import ClockIcon from '@lucide/svelte/icons/clock';
+	import PauseIcon from '@lucide/svelte/icons/pause';
+	import TrashIcon from '@lucide/svelte/icons/trash';
 	import Button from '$lib/ui/Button.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import { confirm } from '$lib/ui/confirm.svelte';
@@ -137,7 +137,7 @@
 	{:else}
 		<div class="working">
 			{#each working as agent (agent.id)}
-				<button class="chip" disabled={!onOpenAgent} onclick={() => onOpenAgent?.(agent.id)}><CircleNotchIcon size={14} class="spin" /><AgentAvatar {agent} size={14} />{agent.name}</button>
+				<button class="chip" disabled={!onOpenAgent} onclick={() => onOpenAgent?.(agent.id)}><LoaderCircleIcon size={14} class="spin" /><AgentAvatar {agent} size={14} />{agent.name}</button>
 			{/each}
 		</div>
 	{/if}
@@ -166,7 +166,7 @@
 	{#each reports as r (r.id)}
 		<article class="report" class:unread={!r.read}>
 			<button class="report-head" onclick={() => toggleReport(r)}>
-				<FileTextIcon size={13} />
+				<FileTextIcon size={14} />
 				<span class="title">{r.title}</span>
 				{@render face(agentDirectory.agents.find((x) => x.id === r.agent))}
 				<span class="who">{agentDirectory.agentName(r.agent)} · {when(r.at)}</span>

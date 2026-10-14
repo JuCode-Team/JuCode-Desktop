@@ -3,15 +3,15 @@
 	// edited and asked again. A reply: its thinking (folded, with how long it
 	// took), a research's progress, the searches and sources, the answer, and
 	// what it cost; copied, or (the last one) generated again.
-	import CopyIcon from 'phosphor-svelte/lib/CopyIcon';
-	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
-	import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon';
-	import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon';
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
-	import GlobeIcon from 'phosphor-svelte/lib/GlobeIcon';
-	import InfoIcon from 'phosphor-svelte/lib/InfoIcon';
-	import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon';
+	import CopyIcon from '@lucide/svelte/icons/copy';
+	import CheckIcon from '@lucide/svelte/icons/check';
+	import RotateCwIcon from '@lucide/svelte/icons/rotate-cw';
+	import PencilIcon from '@lucide/svelte/icons/pencil';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import GlobeIcon from '@lucide/svelte/icons/globe';
+	import InfoIcon from '@lucide/svelte/icons/info';
+	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
 	import { getLocale, t } from '$lib/i18n';
 	import Markdown from '$lib/Markdown.svelte';
 	import Vendor from '$lib/Vendor.svelte';
@@ -136,8 +136,8 @@
 		{:else if m.content}
 			<div class="bubble">{m.content}</div>
 			<div class="acts right">
-				<button onclick={copy} title={t('web.chat.copy')} aria-label={t('web.chat.copy')}>{#if copied}<CheckIcon size={15} />{:else}<CopyIcon size={15} />{/if}</button>
-				{#if !busy}<button onclick={startEdit} title={t('web.chat.edit')} aria-label={t('web.chat.edit')}><PencilSimpleIcon size={15} /></button>{/if}
+				<button onclick={copy} title={t('web.chat.copy')} aria-label={t('web.chat.copy')}>{#if copied}<CheckIcon size={16} />{:else}<CopyIcon size={16} />{/if}</button>
+				{#if !busy}<button onclick={startEdit} title={t('web.chat.edit')} aria-label={t('web.chat.edit')}><PencilIcon size={16} /></button>{/if}
 			</div>
 		{/if}
 	</div>
@@ -147,9 +147,9 @@
 		<div class="body">
 			{#if m.reasoning}
 				<button class="thought" onclick={() => (thoughtOpen = !thoughtOpen)} aria-expanded={thoughtOpen}>
-					{#if thinkingNow}<CircleNotchIcon size={13} class="spin" /><span>{t('web.chat.thinking')}</span>
+					{#if thinkingNow}<LoaderCircleIcon size={14} class="spin" /><span>{t('web.chat.thinking')}</span>
 					{:else}<span>{m.thoughtMs ? t('web.chat.thought', { s: secs(m.thoughtMs) }) : t('web.chat.thoughtShort')}</span>{/if}
-					<span class="caret" class:open={thoughtOpen || thinkingNow}><CaretRightIcon size={12} /></span>
+					<span class="caret" class:open={thoughtOpen || thinkingNow}><ChevronRightIcon size={12} /></span>
 				</button>
 				{#if thoughtOpen || thinkingNow}
 					<div class="reasoning"><Markdown text={m.reasoning} /></div>
@@ -159,7 +159,7 @@
 			{#if m.kind === 'research' && m.research}
 				<div class="research">
 					<div class="rhead">
-						{#if streaming}<CircleNotchIcon size={13} class="spin" />{/if}
+						{#if streaming}<LoaderCircleIcon size={14} class="spin" />{/if}
 						<span>{m.research.status === 'queued' ? t('web.chat.research_queued') : streaming ? t('web.chat.research_running') : t('web.chat.research')}</span>
 						{#if m.research.steps.length}<span class="dim">· {t('web.chat.research_steps', { n: m.research.steps.length })}</span>{/if}
 						<span class="grow"></span>
@@ -175,10 +175,10 @@
 
 			{#if m.searches.length || m.sources.length}
 				<button class="thought" onclick={() => (sourcesOpen = !sourcesOpen)} aria-expanded={sourcesOpen}>
-					<GlobeIcon size={13} />
+					<GlobeIcon size={14} />
 					{#if streaming && !m.content && m.searches.length}<span>{t('web.chat.searching', { q: m.searches.at(-1) ?? '' })}</span>
 					{:else}<span>{[m.searches.length ? t('web.chat.searched', { n: m.searches.length }) : '', m.sources.length ? t('web.chat.sources', { n: m.sources.length }) : ''].filter(Boolean).join(' · ')}</span>{/if}
-					<span class="caret" class:open={sourcesOpen}><CaretRightIcon size={12} /></span>
+					<span class="caret" class:open={sourcesOpen}><ChevronRightIcon size={12} /></span>
 				</button>
 				{#if sourcesOpen && m.sources.length}
 					<ol class="sources">
@@ -196,16 +196,16 @@
 			{/if}
 
 			{#if m.status === 'error'}
-				<div class="err"><WarningCircleIcon size={15} /><span>{t('web.chat.error', { msg: m.error || '—' })}</span>{#if last && !busy}<button class="link" onclick={onRegenerate}>{t('web.chat.retry')}</button>{/if}</div>
+				<div class="err"><CircleAlertIcon size={16} /><span>{t('web.chat.error', { msg: m.error || '—' })}</span>{#if last && !busy}<button class="link" onclick={onRegenerate}>{t('web.chat.retry')}</button>{/if}</div>
 			{:else if m.status === 'incomplete'}
 				<div class="note">{t('web.chat.stopped')}</div>
 			{/if}
 
 			{#if !streaming && (m.content || m.status === 'error')}
 				<div class="acts">
-					{#if m.content}<button onclick={copy} title={t('web.chat.copy')} aria-label={t('web.chat.copy')}>{#if copied}<CheckIcon size={15} />{:else}<CopyIcon size={15} />{/if}</button>{/if}
-					{#if last && !busy && m.kind === 'chat'}<button onclick={onRegenerate} title={t('web.chat.regenerate')} aria-label={t('web.chat.regenerate')}><ArrowClockwiseIcon size={15} /></button>{/if}
-					{#if usageLine}<span class="usage" title={usageLine}><InfoIcon size={15} /><span class="utext">{usageLine}</span></span>{/if}
+					{#if m.content}<button onclick={copy} title={t('web.chat.copy')} aria-label={t('web.chat.copy')}>{#if copied}<CheckIcon size={16} />{:else}<CopyIcon size={16} />{/if}</button>{/if}
+					{#if last && !busy && m.kind === 'chat'}<button onclick={onRegenerate} title={t('web.chat.regenerate')} aria-label={t('web.chat.regenerate')}><RotateCwIcon size={16} /></button>{/if}
+					{#if usageLine}<span class="usage" title={usageLine}><InfoIcon size={16} /><span class="utext">{usageLine}</span></span>{/if}
 				</div>
 			{/if}
 		</div>

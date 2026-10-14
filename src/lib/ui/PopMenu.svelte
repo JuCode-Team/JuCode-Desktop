@@ -1,5 +1,5 @@
 <script lang="ts" module>
-	import type IconType from 'phosphor-svelte/lib/CheckIcon';
+	import type IconType from '@lucide/svelte/icons/check';
 
 	export type PopMenuItem = {
 		key: string;
@@ -20,7 +20,7 @@
 	// The app's list popover: an optional gray question on top, then rows of
 	// icon · label (· gray description) with a check on the current choice.
 	// Anchored to its positioned parent; `placement` says which way it opens.
-	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
+	import CheckIcon from '@lucide/svelte/icons/check';
 
 	let {
 		items,

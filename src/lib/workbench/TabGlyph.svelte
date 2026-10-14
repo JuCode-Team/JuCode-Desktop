@@ -1,31 +1,31 @@
 <script lang="ts">
-	import StackIcon from 'phosphor-svelte/lib/StackIcon';
-	import FolderIcon from 'phosphor-svelte/lib/FolderIcon';
-	import CodeIcon from 'phosphor-svelte/lib/CodeIcon';
-	import BugIcon from 'phosphor-svelte/lib/BugIcon';
-	import RocketIcon from 'phosphor-svelte/lib/RocketIcon';
-	import TerminalIcon from 'phosphor-svelte/lib/TerminalIcon';
-	import GlobeIcon from 'phosphor-svelte/lib/GlobeIcon';
-	import StarIcon from 'phosphor-svelte/lib/StarIcon';
-	import HouseIcon from 'phosphor-svelte/lib/HouseIcon';
-	import FileIcon from 'phosphor-svelte/lib/FileIcon';
-	import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon';
-	import RobotIcon from 'phosphor-svelte/lib/RobotIcon';
-	import SparkleIcon from 'phosphor-svelte/lib/SparkleIcon';
-	import LightningIcon from 'phosphor-svelte/lib/LightningIcon';
-	import HeartIcon from 'phosphor-svelte/lib/HeartIcon';
-	import BookmarkSimpleIcon from 'phosphor-svelte/lib/BookmarkSimpleIcon';
-	import CubeIcon from 'phosphor-svelte/lib/CubeIcon';
-	import CpuIcon from 'phosphor-svelte/lib/CpuIcon';
-	import DatabaseIcon from 'phosphor-svelte/lib/DatabaseIcon';
-	import ChatCenteredTextIcon from 'phosphor-svelte/lib/ChatCenteredTextIcon';
-	import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon';
-	import ShieldIcon from 'phosphor-svelte/lib/ShieldIcon';
-	import TargetIcon from 'phosphor-svelte/lib/TargetIcon';
-	import WrenchIcon from 'phosphor-svelte/lib/WrenchIcon';
+	import LayersIcon from '@lucide/svelte/icons/layers';
+	import FolderIcon from '@lucide/svelte/icons/folder';
+	import CodeIcon from '@lucide/svelte/icons/code';
+	import BugIcon from '@lucide/svelte/icons/bug';
+	import RocketIcon from '@lucide/svelte/icons/rocket';
+	import TerminalIcon from '@lucide/svelte/icons/terminal';
+	import GlobeIcon from '@lucide/svelte/icons/globe';
+	import StarIcon from '@lucide/svelte/icons/star';
+	import HouseIcon from '@lucide/svelte/icons/house';
+	import FileIcon from '@lucide/svelte/icons/file';
+	import GitBranchIcon from '@lucide/svelte/icons/git-branch';
+	import BotIcon from '@lucide/svelte/icons/bot';
+	import SparklesIcon from '@lucide/svelte/icons/sparkles';
+	import ZapIcon from '@lucide/svelte/icons/zap';
+	import HeartIcon from '@lucide/svelte/icons/heart';
+	import BookmarkIcon from '@lucide/svelte/icons/bookmark';
+	import BoxIcon from '@lucide/svelte/icons/box';
+	import CpuIcon from '@lucide/svelte/icons/cpu';
+	import DatabaseIcon from '@lucide/svelte/icons/database';
+	import MessageSquareTextIcon from '@lucide/svelte/icons/message-square-text';
+	import SearchIcon from '@lucide/svelte/icons/search';
+	import ShieldIcon from '@lucide/svelte/icons/shield';
+	import TargetIcon from '@lucide/svelte/icons/target';
+	import WrenchIcon from '@lucide/svelte/icons/wrench';
 	import { isEmojiSlug, type TabIcon } from './tabChrome';
 
-	// One tab glyph: builtin icon (filled when active), slug (icon name / emoji / short
+	// One tab glyph: builtin icon (heavier stroke when active), slug (icon name / emoji / short
 	// badge), sanitized SVG, or the plain status dot fallback.
 	let {
 		icon = null,
@@ -40,12 +40,12 @@
 	} = $props();
 
 	// Static map — every builtin is imported above; no dynamic import().
-	const ICONS: Record<string, typeof StackIcon> = {
-		layers: StackIcon, folder: FolderIcon, code: CodeIcon, bug: BugIcon, rocket: RocketIcon,
+	const ICONS: Record<string, typeof LayersIcon> = {
+		layers: LayersIcon, folder: FolderIcon, code: CodeIcon, bug: BugIcon, rocket: RocketIcon,
 		terminal: TerminalIcon, globe: GlobeIcon, star: StarIcon, home: HouseIcon, file: FileIcon,
-		'git-branch': GitBranchIcon, bot: RobotIcon, sparkles: SparkleIcon, zap: LightningIcon,
-		heart: HeartIcon, bookmark: BookmarkSimpleIcon, box: CubeIcon, cpu: CpuIcon, database: DatabaseIcon,
-		'message-square': ChatCenteredTextIcon, search: MagnifyingGlassIcon, shield: ShieldIcon,
+		'git-branch': GitBranchIcon, bot: BotIcon, sparkles: SparklesIcon, zap: ZapIcon,
+		heart: HeartIcon, bookmark: BookmarkIcon, box: BoxIcon, cpu: CpuIcon, database: DatabaseIcon,
+		'message-square': MessageSquareTextIcon, search: SearchIcon, shield: ShieldIcon,
 		target: TargetIcon, wrench: WrenchIcon
 	};
 
@@ -63,7 +63,7 @@
 
 <span class="glyph" style:width="{size + 2}px" style:height="{size + 2}px" style:color={color ?? undefined}>
 	{#if Glyph}
-		<Glyph {size} weight={active ? 'fill' : 'regular'} />
+		<Glyph {size} strokeWidth={active ? 2 : undefined} />
 	{:else if icon?.kind === 'slug' && isEmojiSlug(icon.value)}
 		<span class="emoji" style:font-size="{size}px">{icon.value.trim()}</span>
 	{:else if badge}

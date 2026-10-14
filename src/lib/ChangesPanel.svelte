@@ -1,8 +1,8 @@
 <script lang="ts">
-	import GitDiffIcon from 'phosphor-svelte/lib/GitDiffIcon';
-	import ArrowsClockwiseIcon from 'phosphor-svelte/lib/ArrowsClockwiseIcon';
-	import ArrowUUpLeftIcon from 'phosphor-svelte/lib/ArrowUUpLeftIcon';
-	import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon';
+	import GitCompareIcon from '@lucide/svelte/icons/git-compare';
+	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
+	import Undo2Icon from '@lucide/svelte/icons/undo-2';
+	import SquarePenIcon from '@lucide/svelte/icons/square-pen';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
@@ -146,16 +146,16 @@
 
 <div class="changes">
 	<div class="bar">
-		<GitDiffIcon size={14} class="ccol" />
+		<GitCompareIcon size={14} class="ccol" />
 		<span class="title">{t('dock.changes.title')} <span class="count">{files.length}</span></span>
-		<IconButton size="sm" onclick={refresh} label="refresh"><ArrowsClockwiseIcon size={13} /></IconButton>
+		<IconButton size="sm" onclick={refresh} label="refresh"><RefreshCwIcon size={14} /></IconButton>
 	</div>
 	{#if error}
 		<div class="oerr"><Notice mono onDismiss={() => (error = '')}>{error}</Notice></div>
 	{/if}
 	{#if files.length === 0}
 		<div class="empty">
-			<GitDiffIcon size={26} />
+			<GitCompareIcon size={28} />
 			<p>{t('dock.changes.empty')}</p>
 			<span>{t('dock.changes.emptyHint')}</span>
 		</div>
@@ -169,8 +169,8 @@
 						<span class="rdir">{f}</span>
 					</button>
 					{#if s}<span class="stat"><span class="add">+{s.add}</span> <span class="del">−{s.del}</span></span>{/if}
-					<IconButton size="sm" onclick={() => openInEditor(f)} label={t('editor.openInEditor')} title={t('editor.openInEditor')}><NotePencilIcon size={13} /></IconButton>
-					<IconButton size="sm" onclick={() => revert(f)} disabled={busy} label={t('dock.changes.revert')} title={t('dock.changes.revertFile')}><ArrowUUpLeftIcon size={13} /></IconButton>
+					<IconButton size="sm" onclick={() => openInEditor(f)} label={t('editor.openInEditor')} title={t('editor.openInEditor')}><SquarePenIcon size={14} /></IconButton>
+					<IconButton size="sm" onclick={() => revert(f)} disabled={busy} label={t('dock.changes.revert')} title={t('dock.changes.revertFile')}><Undo2Icon size={14} /></IconButton>
 				</div>
 			{/each}
 		</div>

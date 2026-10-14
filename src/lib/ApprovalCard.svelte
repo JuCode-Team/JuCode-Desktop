@@ -1,12 +1,12 @@
 <script lang="ts">
-	import ShieldWarningIcon from 'phosphor-svelte/lib/ShieldWarningIcon';
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
-	import RobotIcon from 'phosphor-svelte/lib/RobotIcon';
-	import ChatCircleDotsIcon from 'phosphor-svelte/lib/ChatCircleDotsIcon';
-	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
-	import ClipboardTextIcon from 'phosphor-svelte/lib/ClipboardTextIcon';
-	import CopyIcon from 'phosphor-svelte/lib/CopyIcon';
-	import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon';
+	import ShieldAlertIcon from '@lucide/svelte/icons/shield-alert';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import BotIcon from '@lucide/svelte/icons/bot';
+	import MessageCircleMoreIcon from '@lucide/svelte/icons/message-circle-more';
+	import CheckIcon from '@lucide/svelte/icons/check';
+	import ClipboardListIcon from '@lucide/svelte/icons/clipboard-list';
+	import CopyIcon from '@lucide/svelte/icons/copy';
+	import DownloadIcon from '@lucide/svelte/icons/download';
 	import { t } from '$lib/i18n';
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
@@ -189,13 +189,13 @@
 <div class="approval" class:ask={!!questions} class:plan={isPlan}>
 	<div class="approval-head">
 		{#if questions}
-			<ChatCircleDotsIcon size={15} />
+			<MessageCircleMoreIcon size={16} />
 			<span>{t('shell.askQuestion')}</span>
 		{:else if isPlan}
-			<ClipboardTextIcon size={15} />
+			<ClipboardListIcon size={16} />
 			<span>{t('shell.proposePlan')}</span>
 		{:else}
-			<ShieldWarningIcon size={15} />
+			<ShieldAlertIcon size={16} />
 			<span class="aname"
 				>{isShell ? t('shell.approveCommand') : t('shell.approveFile')} · <b>{approval.name}</b
 				></span
@@ -206,7 +206,7 @@
 		{/if}
 		{#if approval.subagentId}
 			<span class="subagent-chip" title={approval.subagentId}
-				><RobotIcon size={11} />{t('chat.subagentChip', { id: approval.subagentId })}</span
+				><BotIcon size={12} />{t('chat.subagentChip', { id: approval.subagentId })}</span
 			>
 		{/if}
 	</div>
@@ -254,9 +254,9 @@
 			>
 			<span class="plan-spacer"></span>
 			<Button variant="ghost" size="sm" onclick={copyPlan}>
-				{#if copied}<CheckIcon size={13} />{t('shell.copiedPlan')}{:else}<CopyIcon size={13} />{t('shell.copyPlan')}{/if}
+				{#if copied}<CheckIcon size={14} />{t('shell.copiedPlan')}{:else}<CopyIcon size={14} />{t('shell.copyPlan')}{/if}
 			</Button>
-			<Button variant="ghost" size="sm" onclick={downloadPlan}><DownloadSimpleIcon size={13} />{t('shell.downloadPlan')}</Button>
+			<Button variant="ghost" size="sm" onclick={downloadPlan}><DownloadIcon size={14} />{t('shell.downloadPlan')}</Button>
 		</div>
 	{:else if multiHunk}
 		<div class="hunks">
@@ -274,7 +274,7 @@
 							title={t('shell.toggleDiff')}
 							onclick={() => (expanded[h.id] = !expanded[h.id])}
 						>
-							<span class="chev" class:open={expanded[h.id]}><CaretRightIcon size={13} /></span>
+							<span class="chev" class:open={expanded[h.id]}><ChevronRightIcon size={14} /></span>
 						</button>
 					</div>
 					{#if expanded[h.id]}

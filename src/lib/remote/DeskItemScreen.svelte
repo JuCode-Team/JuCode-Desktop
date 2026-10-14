@@ -2,7 +2,7 @@
 	// One desk item as a page of the remote app: a question to answer or an
 	// action to allow (DeskCard), or a report to read (marked read when
 	// shown). An item answered meanwhile (here or on another device) says so.
-	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon';
+	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
 	import Button from '$lib/ui/Button.svelte';
 	import Markdown from '$lib/Markdown.svelte';
 	import DeskCard from '$lib/DeskCard.svelte';
@@ -51,7 +51,7 @@
 			</div>
 		{:else}
 			<div class="gone">
-				<CheckCircleIcon size={28} />
+				<CircleCheckIcon size={28} />
 				<p>{item.kind === 'report' ? t('shell.desk.reportGone') : t('shell.desk.handled')}</p>
 				<Button size="sm" onclick={onBack}>{t('shell.desk.back')}</Button>
 			</div>

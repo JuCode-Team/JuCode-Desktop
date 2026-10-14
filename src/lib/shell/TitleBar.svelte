@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { onMount, type Snippet } from 'svelte';
-	import SidebarSimpleIcon from 'phosphor-svelte/lib/SidebarSimpleIcon';
-	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
-	import MinusIcon from 'phosphor-svelte/lib/MinusIcon';
-	import SquareIcon from 'phosphor-svelte/lib/SquareIcon';
-	import CopyIcon from 'phosphor-svelte/lib/CopyIcon';
-	import XIcon from 'phosphor-svelte/lib/XIcon';
+	import PanelLeftIcon from '@lucide/svelte/icons/panel-left';
+	import PlusIcon from '@lucide/svelte/icons/plus';
+	import MinusIcon from '@lucide/svelte/icons/minus';
+	import SquareIcon from '@lucide/svelte/icons/square';
+	import CopyIcon from '@lucide/svelte/icons/copy';
+	import XIcon from '@lucide/svelte/icons/x';
 	import { getCurrentWindow } from '@tauri-apps/api/window';
 	import { t } from '$lib/i18n';
 	import { withShortcut } from '$lib/shortcuts';
@@ -69,7 +69,7 @@
 			title={withShortcut(t('shell.toggleSidebar'), 'sidebar')}
 			aria-label={t('shell.toggleSidebar')}
 			aria-pressed={sidebarOpen}
-			onclick={onToggleSidebar}><SidebarSimpleIcon size={18} /></button
+			onclick={onToggleSidebar}><PanelLeftIcon size={16} /></button
 		>
 	</div>
 	<div class="title" data-tauri-drag-region>
@@ -80,7 +80,7 @@
 		{#if actions}{@render actions()}{/if}
 		{#if addOptions.length}
 			<button class="tb-btn" title={t('shell.addPanel')} aria-label={t('shell.addPanel')} aria-expanded={menuOpen} onclick={() => (menuOpen = !menuOpen)}
-				><PlusIcon size={18} /></button
+				><PlusIcon size={16} /></button
 			>
 			{#if menuOpen}
 				<PopMenu
@@ -96,16 +96,16 @@
 	</div>
 	{#if drawnControls}
 		<div class="winctl">
-			<button class="wc" title={t('shell.window.minimize')} aria-label={t('shell.window.minimize')} onclick={() => win().minimize()}><MinusIcon size={18} /></button>
+			<button class="wc" title={t('shell.window.minimize')} aria-label={t('shell.window.minimize')} onclick={() => win().minimize()}><MinusIcon size={16} /></button>
 			<button
 				class="wc"
 				title={maximized ? t('shell.window.restore') : t('shell.window.maximize')}
 				aria-label={maximized ? t('shell.window.restore') : t('shell.window.maximize')}
 				onclick={() => win().toggleMaximize()}
 			>
-				{#if maximized}<CopyIcon size={14} />{:else}<SquareIcon size={13} />{/if}
+				{#if maximized}<CopyIcon size={14} />{:else}<SquareIcon size={14} />{/if}
 			</button>
-			<button class="wc close" title={t('shell.window.close')} aria-label={t('shell.window.close')} onclick={() => win().close()}><XIcon size={18} /></button>
+			<button class="wc close" title={t('shell.window.close')} aria-label={t('shell.window.close')} onclick={() => win().close()}><XIcon size={16} /></button>
 		</div>
 	{/if}
 </header>

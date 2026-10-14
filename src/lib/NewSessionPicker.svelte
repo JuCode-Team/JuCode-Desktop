@@ -4,9 +4,9 @@
 	// first message starts the engine there (SessionStore.moveDraft /
 	// switchBackend).
 	import { open } from '@tauri-apps/plugin-dialog';
-	import FolderIcon from 'phosphor-svelte/lib/FolderIcon';
-	import FolderPlusIcon from 'phosphor-svelte/lib/FolderPlusIcon';
-	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
+	import FolderIcon from '@lucide/svelte/icons/folder';
+	import FolderPlusIcon from '@lucide/svelte/icons/folder-plus';
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import { t } from '$lib/i18n';
 	import PopMenu from '$lib/ui/PopMenu.svelte';
 	import BackendIcon from '$lib/BackendIcon.svelte';
@@ -48,9 +48,9 @@
 		{#if part === '{project}'}
 			<span class="anchor">
 				<button class="word" class:on={menu === 'project'} onclick={() => (menu = menu === 'project' ? null : 'project')} aria-haspopup="menu" aria-expanded={menu === 'project'} title={current?.path} aria-label={t('shell.startPicker.project')}>
-					<FolderIcon size={15} />
+					<FolderIcon size={16} />
 					<span class="wname">{current?.name ?? ''}</span>
-					<CaretDownIcon size={11} />
+					<ChevronDownIcon size={12} />
 				</button>
 				{#if menu === 'project'}
 					<PopMenu
@@ -69,7 +69,7 @@
 				<button class="word" class:on={menu === 'backend'} onclick={() => (menu = menu === 'backend' ? null : 'backend')} aria-haspopup="menu" aria-expanded={menu === 'backend'} aria-label={t('shell.startPicker.backend')}>
 					<BackendIcon backend={session.backendId} size={14} />
 					<span class="wname">{BACKEND_LABELS[session.backendId]}</span>
-					<CaretDownIcon size={11} />
+					<ChevronDownIcon size={12} />
 				</button>
 				{#if menu === 'backend'}
 					<PopMenu

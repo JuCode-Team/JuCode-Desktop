@@ -4,11 +4,11 @@
 	// a file shows highlighted.
 	import hljs from '$lib/hljs';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
-	import FolderIcon from 'phosphor-svelte/lib/FolderIcon';
-	import FolderOpenIcon from 'phosphor-svelte/lib/FolderOpenIcon';
-	import FileIcon from 'phosphor-svelte/lib/FileIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import FolderIcon from '@lucide/svelte/icons/folder';
+	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
+	import FileIcon from '@lucide/svelte/icons/file';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import Notice from '$lib/ui/Notice.svelte';
 	import RemoteScreen from './RemoteScreen.svelte';
 	import { baseName, type DirListing, type FileContent } from './store.svelte';
@@ -170,15 +170,15 @@
 						disabled={loading}
 						onclick={() => (r.dir ? toggle(r.path) : openFile(r.path))}
 					>
-						<span class="caret" class:open={isOpen} class:none={!r.dir}><CaretRightIcon size={12} /></span>
-						{#if pending === r.path}<CircleNotchIcon size={16} class="spin" />{:else if r.dir}{#if isOpen}<FolderOpenIcon size={16} />{:else}<FolderIcon size={16} />{/if}{:else}<FileIcon size={16} />{/if}
+						<span class="caret" class:open={isOpen} class:none={!r.dir}><ChevronRightIcon size={12} /></span>
+						{#if pending === r.path}<LoaderCircleIcon size={16} class="spin" />{:else if r.dir}{#if isOpen}<FolderOpenIcon size={16} />{:else}<FolderIcon size={16} />{/if}{:else}<FileIcon size={16} />{/if}
 						<span class="name">{r.name}</span>
 						{#if !r.dir}<span class="size">{size(r.size)}</span>{/if}
 					</button>
 				{:else if r.note}
 					<p class="note" class:err={r.err} style:--depth={r.depth}>{r.note}</p>
 				{:else}
-					<p class="note" style:--depth={r.depth}><CircleNotchIcon size={14} class="spin" /></p>
+					<p class="note" style:--depth={r.depth}><LoaderCircleIcon size={14} class="spin" /></p>
 				{/if}
 			{/each}
 		</div>

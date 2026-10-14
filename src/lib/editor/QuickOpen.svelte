@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlassIcon';
-	import FileTextIcon from 'phosphor-svelte/lib/FileTextIcon';
+	import SearchIcon from '@lucide/svelte/icons/search';
+	import FileTextIcon from '@lucide/svelte/icons/file-text';
 	import { listFiles } from '$lib/protocol';
 	import { fuzzyScore } from '$lib/mention';
 	import Modal from '$lib/ui/Modal.svelte';
@@ -62,7 +62,7 @@
 
 <Modal label={t('editor.quickOpenPlaceholder')} width={560} placement="top" padded={false} {onClose}>
 	<div class="qhead">
-		<MagnifyingGlassIcon size={15} class="qico" />
+		<SearchIcon size={16} class="qico" />
 		<input bind:this={inputEl} bind:value={query} placeholder={t('editor.quickOpenPlaceholder')} onkeydown={key} />
 	</div>
 	<div class="qlist">

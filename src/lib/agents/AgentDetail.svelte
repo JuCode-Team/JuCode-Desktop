@@ -52,7 +52,7 @@
 	{@const a = focused.agent}
 	<div class="head">
 		<div class="title">
-			<StateIcon state={status} size={15} label={t(`dock.agents.state.${status}`)} />
+			<StateIcon state={status} size={16} label={t(`dock.agents.state.${status}`)} />
 			<span class="name">{a.label || a.id}</span>
 			{#if a.type}<span class="kind">{a.type}</span>{/if}
 		</div>
@@ -70,7 +70,7 @@
 {:else if life}
 	<div class="head">
 		<div class="title">
-			<StateIcon state={status} size={15} label={t(`dock.agents.state.${status}`)} />
+			<StateIcon state={status} size={16} label={t(`dock.agents.state.${status}`)} />
 			<span class="name">{shortPath(life.label || agentId)}</span>
 		</div>
 		<div class="meta">

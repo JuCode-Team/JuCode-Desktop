@@ -1,8 +1,8 @@
 <script lang="ts">
 	// What an install leaves under its row: the copyable command (Linux sudo),
 	// the live log, and the outcome. Renders nothing while there is none.
-	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
-	import CopyIcon from 'phosphor-svelte/lib/CopyIcon';
+	import CheckIcon from '@lucide/svelte/icons/check';
+	import CopyIcon from '@lucide/svelte/icons/copy';
 	import type { DepReport } from '$lib/protocol';
 	import { deps, planCommand } from '$lib/deps.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';

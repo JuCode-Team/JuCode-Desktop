@@ -5,7 +5,7 @@
 	// every computer (cost from the JuCode gateway); "This computer" is the
 	// daemon's, which also knows the project of each turn.
 	import { onMount } from 'svelte';
-	import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import Segmented from '$lib/ui/Segmented.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import Vendor from '$lib/Vendor.svelte';
@@ -223,7 +223,7 @@
 				{#each channels as g (g.kind)}
 					<button class="tr group" aria-expanded={!!expanded[g.kind]} onclick={() => (expanded[g.kind] = !expanded[g.kind])}>
 						<span class="name">
-							<span class="ico caret" class:open={expanded[g.kind]}><CaretRightIcon size={12} /></span>
+							<span class="ico caret" class:open={expanded[g.kind]}><ChevronRightIcon size={12} /></span>
 							<span class="nm">{t(KIND_KEYS[g.kind])}</span>
 						</span>
 						{@render cells(g.usage)}

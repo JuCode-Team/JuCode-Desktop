@@ -4,10 +4,10 @@
 	// in the middle of an empty page, at the bottom once there is a thread.
 	import { tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
-	import SidebarSimpleIcon from 'phosphor-svelte/lib/SidebarSimpleIcon';
-	import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon';
-	import ArrowDownIcon from 'phosphor-svelte/lib/ArrowDownIcon';
-	import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon';
+	import PanelLeftIcon from '@lucide/svelte/icons/panel-left';
+	import SquarePenIcon from '@lucide/svelte/icons/square-pen';
+	import ArrowDownIcon from '@lucide/svelte/icons/arrow-down';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import { t } from '$lib/i18n';
 	import { toast } from '$lib/ui/toast.svelte';
 	import { chat, contextFull } from './chat.svelte';
@@ -81,13 +81,13 @@
 <div class="view">
 	<header>
 		{#if shell.collapsed}
-			<button class="icon" onclick={() => shell.toggle()} title={t('web.side.expand')} aria-label={t('web.side.expand')}><SidebarSimpleIcon size={18} /></button>
+			<button class="icon" onclick={() => shell.toggle()} title={t('web.side.expand')} aria-label={t('web.side.expand')}><PanelLeftIcon size={16} /></button>
 		{/if}
-		<button class="icon narrow" onclick={() => shell.toggle()} title={t('web.side.expand')} aria-label={t('web.side.expand')}><SidebarSimpleIcon size={18} /></button>
+		<button class="icon narrow" onclick={() => shell.toggle()} title={t('web.side.expand')} aria-label={t('web.side.expand')}><PanelLeftIcon size={16} /></button>
 		<span class="title">{chat.title || ''}</span>
 		<span class="grow"></span>
 		{#if shell.collapsed || !empty}
-			<button class="icon" onclick={() => (chat.fresh(), goto('/chat'))} title={t('web.side.newChat')} aria-label={t('web.side.newChat')}><NotePencilIcon size={18} /></button>
+			<button class="icon" onclick={() => (chat.fresh(), goto('/chat'))} title={t('web.side.newChat')} aria-label={t('web.side.newChat')}><SquarePenIcon size={16} /></button>
 		{/if}
 	</header>
 
@@ -104,7 +104,7 @@
 	{:else}
 		<div class="scroll" bind:this={scroller} onscroll={onScroll}>
 			<div class="col thread">
-				{#if chat.loading}<p class="loading"><CircleNotchIcon size={16} class="spin" /></p>{/if}
+				{#if chat.loading}<p class="loading"><LoaderCircleIcon size={16} class="spin" /></p>{/if}
 				{#each chat.msgs as m, i (m.id)}
 					<MessageItem
 						{m}
@@ -129,7 +129,7 @@
 				{#if full}
 					<div class="full">
 						<span>{t('web.chat.full')}</span>
-						<button onclick={() => (chat.fresh(), goto('/chat'))}><NotePencilIcon size={16} />{t('web.side.newChat')}</button>
+						<button onclick={() => (chat.fresh(), goto('/chat'))}><SquarePenIcon size={16} />{t('web.side.newChat')}</button>
 					</div>
 				{:else}
 					<WebComposer busy={chat.busy} onSend={send} onStop={() => chat.interrupt()} />
