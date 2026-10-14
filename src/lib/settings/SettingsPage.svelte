@@ -676,6 +676,9 @@
 						<SettingsRow id="scroll-on-send" title={t('settings.behavior.scrollOnSend')} description={t('settings.behavior.scrollOnSendHint')}>
 							<Switch checked={prefs.scrollOnSend} label={t('settings.behavior.scrollOnSend')} onChange={(on) => prefs.setScrollOnSend(on)} />
 						</SettingsRow>
+						<SettingsRow id="fold-turns" title={t('settings.behavior.foldTurns')} description={t('settings.behavior.foldTurnsHint')}>
+							<Switch checked={prefs.foldTurns} label={t('settings.behavior.foldTurns')} onChange={(on) => prefs.setFlag('foldTurns', on)} />
+						</SettingsRow>
 						<SettingsRow id="foot-context" title={t('settings.behavior.footContext')} description={t('settings.behavior.footContextHint')}>
 							<Switch checked={prefs.footContext} label={t('settings.behavior.footContext')} onChange={(on) => prefs.setFlag('footContext', on)} />
 						</SettingsRow>

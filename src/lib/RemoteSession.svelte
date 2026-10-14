@@ -654,6 +654,8 @@
 		<div class="thread" bind:this={contentEl}>
 			<MessageList
 				messages={chat.messages}
+				busy={chat.busy}
+				foldTurns={prefs.foldTurns}
 				{streamingMsg}
 				{streamingReasoning}
 				phase={chat.phase}

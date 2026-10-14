@@ -3,6 +3,7 @@
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
 	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
+	import { untrack } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import Markdown from '$lib/Markdown.svelte';
 	import Collapse from '$lib/ui/Collapse.svelte';
@@ -15,6 +16,7 @@
 	import DeliveryNotice from '$lib/DeliveryNotice.svelte';
 	import { parseDelivery } from '$lib/delivery';
 	import { stableBlocks } from '$lib/streamBlocks';
+	import { turnFolds, type TurnFold } from '$lib/turnFold';
 	import Indicator from '$lib/Indicator.svelte';
 	import CallTimer from '$lib/CallTimer.svelte';
 	import RetryNotice from '$lib/RetryNotice.svelte';
@@ -57,6 +59,8 @@
 		onOpenPlan,
 		planMode = 'edits',
 		loadImage,
+		busy = false,
+		foldTurns = false,
 		mark = $bindable(-1)
 	}: {
 		messages: Msg[];
@@ -107,6 +111,10 @@
 		loadImage?: (path: string) => Promise<string>;
 		/** Ordinal of the user message in view: at or above the upper third. */
 		mark?: number;
+		/** A turn is running: the last turn stays unfolded. */
+		busy?: boolean;
+		/** Finished turns fold their work into one line (turnFold.ts). */
+		foldTurns?: boolean;
 	} = $props();
 
 	// ── Virtual list (dynamic-height windowing) ─────────────────────────────
@@ -222,6 +230,9 @@
 	// so scroll the viewport to the row's computed offset (which brings it into range).
 	$effect(() => {
 		if (findActive == null) return;
+		// A hit inside a folded turn opens it.
+		const fold = folds.of.get(messages[findActive]!);
+		if (fold) untrack(() => openFolds.add(fold.key));
 		if (virtual && scroller) {
 			scroller.scrollTo({ top: Math.max(0, offsets[findActive] - viewH / 2), behavior: 'smooth' });
 		} else {
@@ -447,8 +458,31 @@
 	function isAgentCall(m: Msg): boolean {
 		return !!agents && m.kind === 'tool' && (SPAWN_TOOLS.has(m.name) || WAIT_TOOLS.has(m.name));
 	}
+	// Finished turns' work, folded into a line on its first row; a turn's
+	// open state is kept by its user message.
+	const folds = $derived.by(() => {
+		const head = new Map<Msg, TurnFold>();
+		const of = new Map<Msg, TurnFold>();
+		if (foldTurns)
+			for (const f of turnFolds(messages, hasContent, busy)) {
+				head.set(f.members[0]!, f);
+				for (const m of f.members) of.set(m, f);
+			}
+		return { head, of };
+	});
+	const openFolds = new SvelteSet<Msg>();
+	function folded(m: Msg): boolean {
+		const f = folds.of.get(m);
+		return !!f && !openFolds.has(f.key);
+	}
 	function shown(m: Msg): boolean {
-		return hasContent(m) && (!toolGroups.headOf.has(m) || toolGroups.members.has(m));
+		return hasContent(m) && (!toolGroups.headOf.has(m) || toolGroups.members.has(m)) && (!folded(m) || folds.head.has(m));
+	}
+	function foldLine(f: TurnFold): string {
+		const parts = [f.elapsed !== null ? t('chat.fold.worked', { t: fmtDur(f.elapsed) }) : t('chat.fold.steps', { n: f.calls })];
+		if (f.files) parts.push(t('chat.fold.files', { n: f.files }));
+		if (f.commands) parts.push(t('chat.fold.commands', { n: f.commands }));
+		return parts.join(' · ');
 	}
 </script>
 
@@ -459,8 +493,19 @@
 		{@const i = range.first + k}
 		{#if shown(m)}
 			{@const run = toolGroups.members.get(m)}
+			{@const fold = folds.head.get(m)}
 			<div class="mwrap" class:animate={!virtual} class:hit={i === findActive} bind:this={rowEls[i]} use:measure={m}>
-				{#if run}
+				{#if fold}
+					{@const open = openFolds.has(fold.key)}
+					<button class="fold" class:open onclick={() => (open ? openFolds.delete(fold.key) : openFolds.add(fold.key))} aria-expanded={open}>
+						<span class="rchev"><ChevronRightIcon size={14} /></span>
+						<span>{foldLine(fold)}</span>
+						<span class="fold-rule"></span>
+					</button>
+				{/if}
+				{#if fold && folded(m)}
+					<!-- Folded: the line is the whole row. -->
+				{:else if run}
 					<ToolGroup {run} open={openGroups.has(m)} onToggle={() => (openGroups.has(m) ? openGroups.delete(m) : openGroups.add(m))} {onFile} {traceOf} />
 				{:else if m.kind === 'user'}
 			{@const delivery = parseDelivery(m.text)}
@@ -849,8 +894,36 @@
 		color: var(--dim2);
 		transition: transform var(--t-base) var(--ease-base);
 	}
-	.reason.open .rchev {
+	.reason.open .rchev,
+	.fold.open .rchev {
 		transform: rotate(90deg);
+	}
+	.fold {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		width: 100%;
+		min-height: 26px;
+		padding: 2px 0;
+		border: none;
+		background: none;
+		color: var(--dim);
+		font-size: var(--fs-sm);
+		text-align: left;
+		cursor: pointer;
+		transition: color var(--t-fast) var(--ease-out);
+	}
+	.fold:hover {
+		color: var(--text);
+	}
+	.fold-rule {
+		flex: 1;
+		height: 1px;
+		background: var(--hairline);
+	}
+	/* Open, the line heads the work it folds. */
+	.fold.open {
+		margin-bottom: 12px;
 	}
 	.reason-body {
 		margin-top: 4px;

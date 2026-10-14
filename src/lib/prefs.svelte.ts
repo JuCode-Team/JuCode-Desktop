@@ -37,6 +37,9 @@ type PrefsShape = {
 	openElsewhere: 'side' | 'tab';
 	/** Sending a message scrolls the conversation to its end. */
 	scrollOnSend: boolean;
+	/** A finished turn folds its work (tool calls, thinking, interim text)
+	 *  into one line, leaving the question and the final reply. */
+	foldTurns: boolean;
 	/** Under the composer: the context in use (else only once it nears the limit) and the session's cost. */
 	footContext: boolean;
 	footCost: boolean;
@@ -66,6 +69,7 @@ const DEFAULTS: PrefsShape = {
 	defaultSurface: 'gui',
 	openElsewhere: 'side',
 	scrollOnSend: true,
+	foldTurns: true,
 	footContext: true,
 	footCost: true,
 	thinkingSummaries: true,
@@ -127,6 +131,7 @@ class PrefsStore {
 	defaultSurface = $state(DEFAULTS.defaultSurface);
 	openElsewhere = $state(DEFAULTS.openElsewhere);
 	scrollOnSend = $state(DEFAULTS.scrollOnSend);
+	foldTurns = $state(DEFAULTS.foldTurns);
 	footContext = $state(DEFAULTS.footContext);
 	footCost = $state(DEFAULTS.footCost);
 	thinkingSummaries = $state(DEFAULTS.thinkingSummaries);
@@ -148,6 +153,7 @@ class PrefsStore {
 		this.defaultSurface = p.defaultSurface === 'tui' ? 'tui' : 'gui';
 		this.openElsewhere = p.openElsewhere === 'tab' ? 'tab' : 'side';
 		this.scrollOnSend = p.scrollOnSend !== false;
+		this.foldTurns = p.foldTurns !== false;
 		this.footContext = p.footContext !== false;
 		this.footCost = p.footCost !== false;
 		this.thinkingSummaries = p.thinkingSummaries !== false;
@@ -181,6 +187,7 @@ class PrefsStore {
 					defaultSurface: this.defaultSurface,
 					openElsewhere: this.openElsewhere,
 					scrollOnSend: this.scrollOnSend,
+					foldTurns: this.foldTurns,
 					footContext: this.footContext,
 					footCost: this.footCost,
 					thinkingSummaries: this.thinkingSummaries,
@@ -246,7 +253,7 @@ class PrefsStore {
 	}
 
 	/** The switches without side effects of their own. */
-	setFlag(name: 'footContext' | 'footCost' | 'thinkingSummaries' | 'devServerAutoOpen', v: boolean) {
+	setFlag(name: 'foldTurns' | 'footContext' | 'footCost' | 'thinkingSummaries' | 'devServerAutoOpen', v: boolean) {
 		this[name] = v;
 		this.#save();
 	}
