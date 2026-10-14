@@ -159,7 +159,7 @@
 		gap: 10px;
 		padding: 14px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		background: var(--surface);
 	}
 	.decide p {
@@ -170,7 +170,7 @@
 	.decide textarea {
 		padding: 8px 10px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--text);
 		font: inherit;
@@ -275,7 +275,7 @@
 	.reply {
 		margin: 8px 0 0 26px;
 		padding: 8px 10px;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface);
 		color: var(--dim);
 		font-size: var(--fs-xs);
@@ -290,7 +290,7 @@
 	}
 	.summary {
 		padding: 12px 14px;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--surface);
 		font-size: var(--fs-sm);
 	}

@@ -158,7 +158,7 @@
 		justify-content: center;
 		width: 34px;
 		height: 34px;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
 		flex-shrink: 0;
@@ -182,7 +182,7 @@
 		font-weight: 500;
 		color: var(--dim2);
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		padding: 0 5px;
 	}
 	.pcard-url {
@@ -198,7 +198,7 @@
 		color: var(--dim2);
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		padding: 2px 9px;
 		flex-shrink: 0;
 	}
@@ -234,7 +234,7 @@
 		font-weight: 600;
 		color: var(--accent-bright);
 		background: var(--accent-soft);
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		padding: 1px 7px;
 	}
 	:global(.pcard .chev) {

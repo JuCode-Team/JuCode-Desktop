@@ -325,7 +325,7 @@
 		flex: none;
 		padding: 6px;
 		border: none;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		cursor: pointer;
@@ -367,7 +367,7 @@
 		gap: 7px;
 		padding: 5px 10px;
 		border: 1px solid var(--border-strong);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--text);
 		font: inherit;
@@ -377,7 +377,7 @@
 	.dot {
 		width: 7px;
 		height: 7px;
-		border-radius: var(--r-full);
+		border-radius: 50%;
 		background: var(--dim2);
 	}
 	.dot.review,
@@ -436,7 +436,7 @@
 		width: 100%;
 		padding: 8px 10px;
 		border: 1px solid var(--border-strong);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--surface);
 		color: var(--text);
 		font: inherit;
@@ -461,7 +461,7 @@
 		width: 120px;
 		height: 76px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		overflow: hidden;
 	}
 	.shot img {
@@ -481,7 +481,7 @@
 		gap: 10px;
 		padding: 12px 14px;
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		background: var(--panel);
 		box-shadow: var(--shadow-sm);
 	}
@@ -507,7 +507,7 @@
 		margin-top: 22px;
 		padding: 12px 14px 6px;
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		background: var(--panel);
 	}
 	.sec {
@@ -546,7 +546,7 @@
 	}
 	.sessions {
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		background: var(--panel);
 		overflow: hidden;
 	}
@@ -584,7 +584,7 @@
 		content: '';
 		width: 7px;
 		height: 7px;
-		border-radius: var(--r-full);
+		border-radius: 50%;
 		background: var(--dim2);
 	}
 	.mark.waiting::before,

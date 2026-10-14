@@ -120,7 +120,7 @@
 		height: 40px;
 		padding: 0 12px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--text);
 		font-size: var(--fs-lg);

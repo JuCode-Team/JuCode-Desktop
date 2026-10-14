@@ -269,7 +269,7 @@
 	.empty {
 		padding: 18px;
 		border: 1px dashed var(--border-strong);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 	}
 	.empty p {
 		margin: 0 0 14px;

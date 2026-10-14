@@ -110,7 +110,7 @@
 		max-width: 260px;
 		padding: 2px 6px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--text);
 		font: inherit;

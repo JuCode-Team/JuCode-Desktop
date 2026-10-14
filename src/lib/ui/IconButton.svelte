@@ -29,7 +29,7 @@
 		border: none;
 		background: none;
 		color: var(--dim);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		cursor: pointer;
 		flex-shrink: 0;
 		transition:
@@ -48,7 +48,7 @@
 	}
 	.xs {
 		padding: 2px;
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 	}
 	.ib:hover:not(:disabled) {
 		background: var(--surface2);

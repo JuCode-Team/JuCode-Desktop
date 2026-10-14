@@ -222,7 +222,7 @@
 		gap: 8px;
 		height: 36px;
 		padding: 0 12px;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--dim2);
 	}
@@ -269,7 +269,7 @@
 		margin-left: auto;
 		padding: 2px 6px;
 		border: none;
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		font: inherit;
@@ -286,7 +286,7 @@
 		gap: 12px;
 		min-height: 36px;
 		padding: 0 4px;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 	}
 	.row:hover {
 		background: var(--surface2);
@@ -312,7 +312,7 @@
 		height: 26px;
 		padding: 0 8px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		background: none;
 		color: var(--text);
 		font: inherit;

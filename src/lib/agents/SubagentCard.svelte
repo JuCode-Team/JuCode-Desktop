@@ -122,7 +122,7 @@
 	.sa {
 		display: flex;
 		max-width: min(560px, 100%);
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		background: var(--surface);
 		box-shadow: inset 0 0 0 1px var(--hairline);
 		color: var(--text);
@@ -233,7 +233,7 @@
 		gap: 6px;
 		padding: 3px 9px;
 		border: none;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--text);
 		font-size: var(--fs-xs);

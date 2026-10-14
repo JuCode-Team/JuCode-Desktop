@@ -107,7 +107,7 @@
 		min-height: 42px;
 		padding: 0 12px;
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--surface);
 		color: var(--dim);
 		font: inherit;
@@ -149,7 +149,7 @@
 		min-height: 52px;
 		padding: 6px 12px;
 		border: none;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: none;
 		color: var(--text);
 		font: inherit;
@@ -181,7 +181,7 @@
 	.dot {
 		width: 8px;
 		height: 8px;
-		border-radius: var(--r-full);
+		border-radius: 50%;
 		background: var(--dim2);
 	}
 	.mark.review .dot,

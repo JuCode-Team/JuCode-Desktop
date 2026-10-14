@@ -19,7 +19,7 @@
 	.sw {
 		width: 42px;
 		height: 24px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		border: none;
 		background: var(--surface2);
 		box-shadow: inset 0 0 0 1px var(--border);

@@ -140,7 +140,7 @@
 	.field input,
 	.field textarea {
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--text);
 		font-family: var(--font-sans);
@@ -159,7 +159,7 @@
 		gap: 3px;
 		padding: 8px 10px;
 		border: 1px dashed var(--hairline);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		font-size: var(--fs-xs);
 	}
 	.preview.bad {

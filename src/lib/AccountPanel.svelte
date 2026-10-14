@@ -140,7 +140,7 @@
 		justify-content: center;
 		width: 26px;
 		height: 26px;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		border: 1px solid var(--border);
 		background: var(--surface);
 		color: var(--dim);
@@ -166,7 +166,7 @@
 		gap: 2px 10px;
 		padding: 12px 14px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--surface);
 	}
 	.ci {
@@ -201,7 +201,7 @@
 	}
 	.bar-track {
 		height: 6px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--surface);
 		border: 1px solid var(--border);
 		overflow: hidden;
@@ -209,7 +209,7 @@
 	.bar-fill {
 		height: 100%;
 		background: var(--accent);
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 	}
 	.logs {
 		margin-top: 14px;

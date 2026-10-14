@@ -222,7 +222,7 @@
 	.bubble {
 		max-width: min(85%, 640px);
 		padding: 10px 14px;
-		border-radius: var(--r-xl);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--text);
 		font-size: var(--fs-md);
@@ -240,7 +240,7 @@
 		display: inline-flex;
 		padding: 0;
 		border: none;
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		background: none;
 		cursor: zoom-in;
 		overflow: hidden;
@@ -262,7 +262,7 @@
 		width: min(100%, 640px);
 		padding: 10px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-xl);
+		border-radius: var(--r);
 		background: var(--panel);
 	}
 	.edit textarea {
@@ -292,7 +292,7 @@
 		justify-content: center;
 		width: 28px;
 		height: 28px;
-		border-radius: var(--r-full);
+		border-radius: 50%;
 		box-shadow: inset 0 0 0 1px var(--border);
 		color: var(--text);
 	}
@@ -337,7 +337,7 @@
 		gap: 6px;
 		padding: 10px 12px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		font-size: var(--fs-sm);
 	}
 	.rhead {
@@ -372,7 +372,7 @@
 		gap: 2px 8px;
 		padding: 8px 10px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		color: var(--text);
 		text-decoration: none;
 		font-size: var(--fs-xs);
@@ -405,7 +405,7 @@
 		height: 1em;
 		margin-left: 2px;
 		vertical-align: -2px;
-		border-radius: 2px;
+		border-radius: var(--r);
 		background: var(--text);
 		animation: blink 1s steps(2, start) infinite;
 	}
@@ -422,7 +422,7 @@
 	.pending span {
 		width: 6px;
 		height: 6px;
-		border-radius: var(--r-full);
+		border-radius: 50%;
 		background: var(--dim2);
 		animation: dot 1.2s ease-in-out infinite;
 	}
@@ -495,7 +495,7 @@
 		display: inline-flex;
 		padding: 6px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		cursor: pointer;

@@ -343,7 +343,7 @@
 		margin-left: auto;
 		padding: 2px 6px;
 		border: none;
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		font: inherit;
@@ -369,7 +369,7 @@
 		min-height: 32px;
 		padding: 0 10px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		font: inherit;
@@ -429,7 +429,7 @@
 		margin: 0 2px 6px;
 		padding: 0 10px;
 		height: 34px;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--dim2);
 	}

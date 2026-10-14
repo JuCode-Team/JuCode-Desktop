@@ -125,7 +125,7 @@
 		flex-shrink: 0;
 		padding: 2px 6px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		font: inherit;

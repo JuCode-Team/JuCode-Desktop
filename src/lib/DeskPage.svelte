@@ -346,7 +346,7 @@
 		width: 32px;
 		height: 32px;
 		border: none;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		cursor: pointer;
@@ -382,7 +382,7 @@
 		margin-right: 2px;
 		padding: 1px 7px;
 		border: 1px solid transparent;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim2);
 		font: inherit;
@@ -403,7 +403,7 @@
 		width: 24px;
 		height: 24px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		cursor: pointer;
@@ -420,7 +420,7 @@
 		min-height: 36px;
 		padding: 0 12px;
 		border: none;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: none;
 		color: var(--text);
 		font: inherit;
@@ -478,7 +478,7 @@
 		flex: none;
 		min-width: 20px;
 		padding: 0 6px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--accent);
 		color: var(--on-accent);
 		font-family: var(--font-mono);
@@ -509,7 +509,7 @@
 		flex: none;
 		width: 6px;
 		height: 6px;
-		border-radius: var(--r-full);
+		border-radius: 50%;
 		background: var(--warn);
 	}
 	.item :global(.busy) {
@@ -560,7 +560,7 @@
 		gap: 6px;
 		padding: 14px;
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		background: var(--surface);
 		color: var(--text);
 		font: inherit;

@@ -489,7 +489,7 @@
 		min-height: 30px;
 		max-width: 240px;
 		padding: 0 6px 0 12px;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		font-size: var(--fs-sm);
 		color: var(--dim);
 		cursor: pointer;
@@ -519,7 +519,7 @@
 		z-index: 2;
 		width: 2px;
 		margin-left: -1px;
-		border-radius: 1px;
+		border-radius: var(--r);
 		background: var(--brand);
 		pointer-events: none;
 	}
@@ -534,7 +534,7 @@
 		border: none;
 		background: none;
 		color: var(--dim2);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		cursor: pointer;
 		opacity: 0;
 		transition: opacity var(--t-fast) var(--ease-out);
@@ -562,7 +562,7 @@
 		white-space: nowrap;
 		color: var(--accent-bright);
 		background: var(--accent-soft);
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 	}
 	.lbtn {
 		display: inline-flex;
@@ -570,7 +570,7 @@
 		border: none;
 		background: none;
 		color: var(--dim2);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		cursor: pointer;
 		transition:
 			background var(--t-fast) var(--ease-out),
@@ -605,7 +605,7 @@
 		justify-content: center;
 		background: color-mix(in oklab, var(--accent) 6%, transparent);
 		border: 1px solid color-mix(in oklab, var(--accent) 60%, transparent);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 	}
 	.dropzone-label {
 		padding: 3px 9px;
@@ -615,7 +615,7 @@
 		color: var(--text);
 		background: var(--panel);
 		border: 1px solid var(--border);
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		box-shadow: var(--shadow-pop);
 	}
 	.dropzone.center {
@@ -643,7 +643,7 @@
 		color: var(--text);
 		background: var(--panel);
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		box-shadow: var(--shadow-pop);
 	}
 	.mo-empty {
@@ -684,7 +684,7 @@
 		height: 40px;
 		font-size: var(--fs-sm);
 		border: none;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--accent);
 		color: var(--on-accent);
 		cursor: pointer;
@@ -707,7 +707,7 @@
 		padding: 0 12px;
 		font-size: var(--fs-xs);
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface);
 		color: var(--dim);
 		cursor: pointer;

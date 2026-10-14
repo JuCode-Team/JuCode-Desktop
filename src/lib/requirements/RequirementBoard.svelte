@@ -215,7 +215,7 @@
 	.dot {
 		width: 7px;
 		height: 7px;
-		border-radius: var(--r-full);
+		border-radius: 50%;
 		background: var(--warn);
 	}
 	.row {
@@ -223,7 +223,7 @@
 		align-items: center;
 		gap: 10px;
 		padding-right: 10px;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		transition: background var(--t-fast) var(--ease-out);
 	}
 	.row:hover {
@@ -271,7 +271,7 @@
 	.chip {
 		flex: none;
 		padding: 0 7px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--dim);
 		font-size: var(--fs-2xs);

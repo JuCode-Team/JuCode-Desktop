@@ -90,7 +90,7 @@
 		margin: -2px 0;
 		padding: 0 5px;
 		border: none;
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim2);
 		cursor: pointer;
@@ -113,7 +113,7 @@
 	.badge {
 		min-width: 16px;
 		padding: 0 4px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--text);
 		color: var(--bg);
 		font-size: var(--fs-2xs);
@@ -127,7 +127,7 @@
 		bottom: calc(100% + 8px);
 		z-index: 20;
 		width: min(560px, calc(100vw - 48px));
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		background: var(--panel);
 		box-shadow: var(--shadow-pop);
 		overflow: hidden;
@@ -150,7 +150,7 @@
 		display: inline-flex;
 		padding: 3px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		cursor: pointer;

@@ -295,7 +295,7 @@
 		font-size: var(--fs-2xs);
 		color: var(--dim);
 		background: var(--surface2);
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		padding: 0 7px;
 		flex-shrink: 0;
 	}
@@ -339,7 +339,7 @@
 		max-width: 100%;
 		max-height: 320px;
 		margin: 8px 0;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		border: 1px solid var(--border);
 	}
 	.diff {

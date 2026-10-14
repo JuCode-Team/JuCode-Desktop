@@ -71,7 +71,7 @@
 		margin: auto;
 		padding: 16px 18px;
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		background: var(--panel);
 		box-shadow: var(--shadow-sm);
 		text-align: left;
@@ -107,14 +107,14 @@
 		width: 96px;
 		height: 62px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		object-fit: cover;
 	}
 	textarea {
 		width: 100%;
 		padding: 8px 10px;
 		border: 1px solid var(--border-strong);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--surface);
 		color: var(--text);
 		font: inherit;

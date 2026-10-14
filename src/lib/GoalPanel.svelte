@@ -95,7 +95,7 @@
 		font-size: var(--fs-xs);
 		font-weight: 600;
 		padding: 4px 11px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		border: 1px solid transparent;
 	}
 	.badge.active {
@@ -141,7 +141,7 @@
 		gap: 9px;
 		padding: 10px 12px;
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--surface);
 	}
 	.stat-ico {
@@ -174,14 +174,14 @@
 	}
 	.bar {
 		height: 6px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--surface2);
 		overflow: hidden;
 	}
 	.fill {
 		display: block;
 		height: 100%;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: linear-gradient(90deg, var(--accent), var(--accent-bright));
 	}
 	.fill.over {

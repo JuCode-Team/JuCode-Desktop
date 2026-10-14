@@ -101,7 +101,7 @@
 	.list {
 		background: var(--panel);
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 	}
 	:global([data-theme='light']) .list {
 		background: var(--surface);
@@ -127,7 +127,7 @@
 		justify-content: center;
 		width: 30px;
 		height: 30px;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
 		color: var(--text);

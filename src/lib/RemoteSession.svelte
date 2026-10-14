@@ -926,7 +926,7 @@
 		display: inline-flex;
 		padding: 6px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--text);
 		cursor: pointer;
@@ -1082,7 +1082,7 @@
 	}
 	.composer {
 		padding: 12px 12px 10px 16px;
-		border-radius: var(--r-2xl);
+		border-radius: var(--r);
 		background: var(--panel);
 		box-shadow: var(--shadow-float);
 		transition: box-shadow var(--t-med) var(--ease-out);
@@ -1125,7 +1125,7 @@
 		min-width: 0;
 		padding: 5px 8px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--text);
 		font-family: var(--font-sans);
@@ -1202,7 +1202,7 @@
 		height: 36px;
 		flex-shrink: 0;
 		border: none;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		cursor: pointer;
 		transition:
 			transform var(--t-fast) var(--ease-spring),
@@ -1256,7 +1256,7 @@
 		max-width: 220px;
 		padding: 3px 4px 3px 3px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface);
 		font-size: var(--fs-xs);
 		color: var(--dim);
@@ -1276,7 +1276,7 @@
 	.att img {
 		width: 28px;
 		height: 28px;
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		object-fit: cover;
 	}
 	.att-name {
@@ -1325,7 +1325,7 @@
 	.qchip {
 		max-width: 180px;
 		padding: 2px 8px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--text);
 		white-space: nowrap;
@@ -1339,7 +1339,7 @@
 		flex-shrink: 0;
 		padding: 2px 8px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: none;
 		color: var(--text);
 		font-size: var(--fs-xs);

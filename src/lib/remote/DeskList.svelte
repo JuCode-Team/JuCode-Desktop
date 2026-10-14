@@ -137,7 +137,7 @@
 	.count {
 		min-width: 18px;
 		padding: 0 6px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--accent);
 		color: var(--on-accent);
 		font-size: var(--fs-2xs);
@@ -152,7 +152,7 @@
 		min-height: 48px;
 		padding: 6px 12px;
 		border: none;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: none;
 		color: var(--text);
 		font: inherit;

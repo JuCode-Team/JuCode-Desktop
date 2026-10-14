@@ -100,12 +100,12 @@
 	}
 	.go {
 		padding: 3px 10px;
-		border-radius: var(--r-sm) 0 0 var(--r-sm);
+		border-radius: var(--r) 0 0 var(--r);
 	}
 	.more {
 		padding: 3px 5px;
 		border-left: none;
-		border-radius: 0 var(--r-sm) var(--r-sm) 0;
+		border-radius: 0 var(--r) var(--r) 0;
 	}
 	.md .go {
 		padding: 6px 14px;

@@ -602,7 +602,7 @@
 		z-index: 300;
 		transform: translate(-50%, -100%);
 		display: inline-flex;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		border: 1px solid var(--border);
 		background: var(--panel);
 		box-shadow: var(--shadow-pop);
@@ -647,7 +647,7 @@
 		flex-shrink: 0;
 	}
 	.mwrap {
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		transition: background var(--t-slow) var(--ease-out), box-shadow var(--t-slow) var(--ease-out);
 	}
 	/* New rows come in once: unblur and rise over --t-enter. Suppressed under
@@ -675,7 +675,7 @@
 		border: none;
 		background: none;
 		color: var(--dim2);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		cursor: pointer;
 		flex-shrink: 0;
 		transition:
@@ -788,7 +788,7 @@
 	}
 	.bubble {
 		background: var(--surface2);
-		border-radius: var(--r-xl);
+		border-radius: var(--r);
 		padding: 11px 14px;
 		line-height: 1.6;
 		white-space: pre-wrap;
@@ -808,7 +808,7 @@
 	.uquote {
 		position: relative;
 		padding: 5px 10px 5px 29px;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: color-mix(in oklab, var(--text) 5%, transparent);
 		color: var(--dim);
 	}
@@ -829,7 +829,7 @@
 	}
 	.utoken {
 		padding: 0 5px;
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		background: var(--surface2);
 		box-shadow: inset 0 0 0 1px var(--border-strong);
 		font-size: var(--fs-sm);

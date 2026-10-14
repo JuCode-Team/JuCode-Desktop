@@ -594,7 +594,7 @@
 		gap: 6px;
 		padding: 2px;
 		border: none;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: none;
 		color: inherit;
 		font: inherit;
@@ -623,7 +623,7 @@
 		margin-top: 24px;
 		padding: 12px 12px 10px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		background: var(--surface);
 		transition: border-color var(--t-fast) var(--ease-out);
 	}
@@ -651,7 +651,7 @@
 		gap: 4px;
 		max-width: 100%;
 		padding: 2px 4px 2px 10px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--accent-soft);
 		color: var(--text);
 		font-size: var(--fs-xs);
@@ -665,7 +665,7 @@
 		display: inline-flex;
 		padding: 3px;
 		border: none;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		cursor: pointer;
@@ -715,7 +715,7 @@
 		font-size: var(--fs-2xs);
 		font-family: var(--font-mono);
 		padding: 0 6px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--dim);
 	}
@@ -764,7 +764,7 @@
 	}
 	.item input {
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--text);
 		font-family: var(--font-mono);
@@ -789,7 +789,7 @@
 	.file-text {
 		padding: 9px 11px;
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--surface);
 		font-size: var(--fs-sm);
 		line-height: 1.55;
@@ -807,7 +807,7 @@
 	.memory button {
 		padding: 2px 8px;
 		border: 1px solid transparent;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--text);
 		font-family: var(--font-mono);
@@ -861,7 +861,7 @@
 	input.name {
 		width: 180px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--text);
 		font-size: var(--fs-sm);

@@ -347,7 +347,7 @@
 		width: 100%;
 		padding: 10px 12px;
 		border: 1px solid var(--border-strong);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--surface);
 		color: var(--text);
 		font: inherit;
@@ -400,7 +400,7 @@
 		width: 96px;
 		height: 64px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		overflow: hidden;
 	}
 	.shot img {
@@ -412,7 +412,7 @@
 		gap: 6px;
 		padding: 12px 14px;
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--panel);
 		box-shadow: var(--shadow-sm);
 	}
@@ -461,7 +461,7 @@
 		width: 100%;
 		padding: 10px 12px;
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--panel);
 		color: var(--text);
 		font: inherit;

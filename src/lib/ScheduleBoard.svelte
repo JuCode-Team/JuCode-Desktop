@@ -99,7 +99,7 @@
 		padding: 4px 16px 12px;
 		margin-bottom: 12px;
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		background: var(--surface);
 	}
 	.agent {

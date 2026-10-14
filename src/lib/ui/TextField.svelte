@@ -30,7 +30,7 @@
 		min-width: 0;
 		background: var(--surface2);
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		color: var(--text);
 		padding: 9px 11px;
 		font-size: var(--fs-sm);

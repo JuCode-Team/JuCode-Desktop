@@ -1008,7 +1008,7 @@
 	}
 	.composer {
 		background: var(--panel);
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		padding: 10px 12px 8px 14px;
 		box-shadow: var(--shadow-float);
 		transition: box-shadow var(--t-med) var(--ease-out);
@@ -1055,7 +1055,7 @@
 		white-space: normal;
 		color: var(--accent-bright);
 		background: var(--accent-soft);
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		padding: 1px 6px 1px 5px;
 		margin: 0 1px;
 		box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 35%, transparent);
@@ -1077,7 +1077,7 @@
 	.rich :global(.refchip.imgchip img) {
 		width: 18px;
 		height: 18px;
-		border-radius: 3px;
+		border-radius: var(--r);
 		object-fit: cover;
 		cursor: zoom-in;
 	}
@@ -1120,7 +1120,7 @@
 		gap: 6px;
 		padding: 4px 7px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--text);
 		font-size: var(--fs-sm);
@@ -1177,7 +1177,7 @@
 		margin-left: -2px;
 		flex-shrink: 0;
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		cursor: pointer;
@@ -1218,7 +1218,7 @@
 		justify-content: center;
 		width: 30px;
 		height: 30px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		border: none;
 		cursor: pointer;
 		flex-shrink: 0;
@@ -1295,7 +1295,7 @@
 		margin: -2px -6px;
 		padding: 2px 6px;
 		border: none;
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		background: none;
 		font-family: var(--font-mono);
 		font-size: var(--fs-2xs);
@@ -1329,7 +1329,7 @@
 		gap: 5px;
 		padding: 4px 7px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		font-size: var(--fs-sm);
@@ -1367,7 +1367,7 @@
 		font-family: var(--font-mono);
 		color: var(--accent-bright);
 		background: var(--accent-soft);
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		padding: 2px 9px;
 		flex-shrink: 0;
 	}
@@ -1380,7 +1380,7 @@
 		color: var(--dim);
 		background: var(--surface2);
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		padding: 3px 9px;
 		animation: rise var(--t-med) var(--ease-out);
 	}
@@ -1393,7 +1393,7 @@
 		color: var(--accent-bright);
 		background: none;
 		border: 1px solid color-mix(in oklab, var(--accent) 40%, transparent);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		padding: 3px 9px;
 		cursor: pointer;
 		flex-shrink: 0;

@@ -63,7 +63,7 @@
 		font-size: var(--fs-xs);
 		color: var(--dim);
 		background: var(--surface2);
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		padding: 2px 9px;
 	}
 	.steps {
@@ -77,7 +77,7 @@
 		align-items: flex-start;
 		gap: 9px;
 		padding: 7px 8px;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		font-size: var(--fs-sm);
 		line-height: 1.4;
 	}

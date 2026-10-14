@@ -68,7 +68,7 @@
 		padding: 8px 8px 8px 12px;
 		background: var(--sidebar);
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 	}
 	.cmd code {
 		flex: 1;
@@ -80,7 +80,7 @@
 	}
 	.logbox {
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		overflow: hidden;
 		background: var(--sidebar);
 	}

@@ -385,7 +385,7 @@
 		justify-content: center;
 		width: 27px;
 		height: 27px;
-		border-radius: var(--r-full);
+		border-radius: 50%;
 		background: var(--surface2);
 		color: var(--dim);
 		box-shadow: 0 0 0 4px var(--bg);
@@ -429,7 +429,7 @@
 	.dot {
 		width: 6px;
 		height: 6px;
-		border-radius: var(--r-full);
+		border-radius: 50%;
 		background: var(--dim2);
 	}
 	.state.needs_you {
@@ -478,7 +478,7 @@
 	.instruction {
 		margin-top: 8px;
 		padding: 8px 12px;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--surface);
 		font-size: var(--fs-xs);
 		line-height: 1.6;
@@ -589,7 +589,7 @@
 		margin-top: 8px;
 		padding: 8px 10px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--surface);
 	}
 	.reply:focus-within {

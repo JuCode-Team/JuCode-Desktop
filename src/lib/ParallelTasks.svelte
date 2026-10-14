@@ -345,7 +345,7 @@
 	.count {
 		color: var(--dim2);
 		background: var(--surface2);
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		padding: 0 7px;
 		font-size: var(--fs-2xs);
 	}
@@ -356,7 +356,7 @@
 		margin: 0 6px;
 		padding: 10px 11px;
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface);
 		display: flex;
 		flex-direction: column;
@@ -408,7 +408,7 @@
 		align-items: center;
 		gap: 8px;
 		padding: 4px 6px 4px 9px;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		min-width: 0;
 	}
 	.trow:hover {
@@ -454,7 +454,7 @@
 		font-family: var(--font-mono);
 		font-size: var(--fs-2xs);
 		padding: 1px 7px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		flex-shrink: 0;
 	}
 	.badge.warn {

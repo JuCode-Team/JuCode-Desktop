@@ -118,7 +118,7 @@
 		font-family: var(--font-mono);
 		font-size: var(--fs-xs);
 		padding: 3px 5px 3px 9px;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
 	}

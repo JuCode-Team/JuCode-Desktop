@@ -1488,7 +1488,7 @@
 		padding: 10px 14px;
 		background: color-mix(in oklab, var(--err) 10%, var(--panel));
 		border: 1px solid color-mix(in oklab, var(--err) 38%, transparent);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 	}
 	.ed-text {
 		font-size: var(--fs-sm);
@@ -1503,7 +1503,7 @@
 		width: fit-content;
 		max-width: 100%;
 		padding: 5px 6px 5px 12px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--text);
 		font-size: var(--fs-xs);
@@ -1524,7 +1524,7 @@
 		flex: none;
 		padding: 3px;
 		border: none;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		cursor: pointer;
@@ -1598,7 +1598,7 @@
 		color: var(--dim);
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		padding: 1px 6px;
 	}
 
@@ -1622,7 +1622,7 @@
 		color: var(--dim);
 		background: var(--surface2);
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		padding: 8px 10px;
 		word-break: break-all;
 	}

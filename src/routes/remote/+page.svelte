@@ -726,7 +726,7 @@
 		display: inline-flex;
 		padding: 6px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--text);
 		cursor: pointer;
@@ -751,7 +751,7 @@
 	input.code {
 		padding: 11px 12px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--text);
 		font-family: var(--font-mono);
@@ -776,7 +776,7 @@
 		width: 56px;
 		height: 56px;
 		margin-bottom: 8px;
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
 		color: var(--accent-bright);
@@ -798,7 +798,7 @@
 		height: 30px;
 		padding: 0 10px;
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--surface);
 		color: var(--dim);
 		font: inherit;
@@ -895,7 +895,7 @@
 		gap: 10px;
 		padding: 8px 10px;
 		border: none;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: none;
 		color: var(--text);
 		font-size: var(--fs-sm);
@@ -938,7 +938,7 @@
 		flex-shrink: 0;
 		min-width: 16px;
 		padding: 0 4px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--warn);
 		color: #000;
 		font-size: var(--fs-2xs);
@@ -963,7 +963,7 @@
 		height: 40px;
 		padding: 0 12px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--text);
 		font: inherit;

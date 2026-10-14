@@ -189,7 +189,7 @@
 		min-height: 34px;
 		padding: 4px 10px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--text);
 		font-family: var(--font-sans);
@@ -222,7 +222,7 @@
 		margin: 0 1px;
 		flex-shrink: 0;
 		border: 1px solid var(--border-strong);
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		color: var(--panel);
 	}
 	.box.on {
@@ -275,7 +275,7 @@
 		font-size: var(--fs-2xs);
 		color: var(--dim);
 		border: 1px solid var(--border);
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		padding: 1px 5px;
 	}
 	.trail {

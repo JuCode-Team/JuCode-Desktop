@@ -56,7 +56,7 @@
 		max-width: 200px;
 		padding: 2px 8px;
 		border: none;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--dim);
 		font: inherit;

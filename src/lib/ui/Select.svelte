@@ -71,7 +71,7 @@
 		padding: 9px 11px;
 		background: var(--surface2);
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		color: var(--text);
 		font-size: var(--fs-sm);
 		cursor: pointer;
@@ -124,7 +124,7 @@
 		overflow-y: auto;
 		padding: 5px;
 		background: var(--panel);
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		box-shadow: var(--shadow-pop);
 		transform-origin: bottom left;
 		animation: pop-in var(--t-med) var(--ease-out);
@@ -139,7 +139,7 @@
 		background: none;
 		color: var(--text);
 		font-size: var(--fs-sm);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		cursor: pointer;
 		text-align: left;
 	}

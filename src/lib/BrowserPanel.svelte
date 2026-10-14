@@ -135,7 +135,7 @@
 		color: var(--text);
 		background: var(--surface);
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		padding: 5px 8px;
 		outline: none;
 	}
@@ -148,7 +148,7 @@
 		justify-content: center;
 		padding: 5px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		cursor: pointer;
@@ -194,7 +194,7 @@
 		color: var(--dim);
 		background: none;
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		padding: 2px 7px;
 		cursor: pointer;
 	}
@@ -234,7 +234,7 @@
 		color: var(--dim);
 		background: none;
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		padding: 2px 8px;
 		cursor: pointer;
 	}

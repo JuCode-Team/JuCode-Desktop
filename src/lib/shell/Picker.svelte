@@ -132,7 +132,7 @@
 		z-index: 21;
 		width: min(380px, 82vw);
 		max-height: min(60vh, 420px);
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		box-shadow: var(--shadow-pop);
 		transform-origin: bottom left;
 		animation: pop-in var(--t-med) var(--ease-out);
@@ -182,7 +182,7 @@
 		font-family: var(--font-mono);
 		font-size: var(--fs-xs);
 		padding: 3px 10px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		border: 1px solid var(--border);
 		background: var(--surface2);
 		color: var(--dim);
@@ -217,7 +217,7 @@
 		text-align: left;
 		padding: 9px 11px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--text);
 		cursor: pointer;

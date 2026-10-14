@@ -60,7 +60,7 @@
 <style>
 	.err {
 		padding: 10px 12px;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: color-mix(in oklab, var(--err) 7%, transparent);
 		box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--err) 22%, transparent);
 		animation: rise var(--t-fast) var(--ease-out);
@@ -93,7 +93,7 @@
 		flex-shrink: 0;
 		padding: 2px;
 		border: none;
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim2);
 		cursor: pointer;
@@ -139,7 +139,7 @@
 		padding: 8px 10px;
 		max-height: 160px;
 		overflow: auto;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface);
 		color: var(--dim);
 		font-family: var(--font-mono);

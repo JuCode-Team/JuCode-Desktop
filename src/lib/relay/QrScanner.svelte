@@ -90,7 +90,7 @@
 		position: relative;
 		width: min(68vw, 280px);
 		aspect-ratio: 1;
-		border-radius: var(--r-xl);
+		border-radius: var(--r);
 		box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.45);
 		outline: 2px solid rgba(255, 255, 255, 0.85);
 	}
@@ -101,7 +101,7 @@
 		display: inline-flex;
 		padding: 10px;
 		border: none;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: rgba(0, 0, 0, 0.45);
 		color: #fff;
 		cursor: pointer;

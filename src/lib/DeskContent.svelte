@@ -200,7 +200,7 @@
 	.count {
 		font-size: var(--fs-2xs);
 		padding: 0 6px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--text);
 	}
@@ -296,7 +296,7 @@
 		align-items: center;
 		gap: 6px;
 		padding: 3px 10px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--surface2);
 		font-size: var(--fs-xs);
 	}
@@ -346,7 +346,7 @@
 		width: 100%;
 		padding: 11px 13px;
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		background: var(--panel);
 		color: var(--text);
 		font: inherit;

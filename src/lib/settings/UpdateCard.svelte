@@ -82,13 +82,13 @@
 		margin-top: 8px;
 		max-width: 320px;
 		height: 5px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--surface2);
 		overflow: hidden;
 	}
 	.fill {
 		height: 100%;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--accent-bright);
 		transition: width var(--t-med) var(--ease-out);
 	}

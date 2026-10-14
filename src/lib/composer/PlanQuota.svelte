@@ -67,7 +67,7 @@
 		font-size: var(--fs-2xs);
 		color: var(--dim);
 		padding: 1px 6px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		box-shadow: inset 0 0 0 1px var(--border);
 	}
 	.qline {
@@ -91,7 +91,7 @@
 	}
 	.qtrack {
 		height: 4px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--surface2);
 		overflow: hidden;
 	}

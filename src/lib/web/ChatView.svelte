@@ -170,7 +170,7 @@
 		display: inline-flex;
 		padding: 7px;
 		border: none;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		cursor: pointer;
@@ -243,7 +243,7 @@
 		display: inline-flex;
 		padding: 8px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--panel);
 		color: var(--text);
 		box-shadow: var(--shadow-float);
@@ -257,7 +257,7 @@
 		gap: 12px;
 		padding: 12px 12px 12px 16px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		background: var(--panel);
 		font-size: var(--fs-sm);
 		color: var(--dim);
@@ -269,7 +269,7 @@
 		gap: 6px;
 		padding: 7px 12px;
 		border: none;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--text);
 		color: var(--bg);
 		font: inherit;

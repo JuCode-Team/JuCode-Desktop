@@ -112,7 +112,7 @@
 		text-align: left;
 		padding: 7px 9px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		cursor: pointer;

@@ -50,7 +50,7 @@
 		width: 16px;
 		height: 16px;
 		border: 1px solid var(--border-strong);
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		background: var(--surface);
 		color: var(--on-accent);
 		transition:

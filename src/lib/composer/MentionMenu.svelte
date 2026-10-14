@@ -55,7 +55,7 @@
 	.slash {
 		margin-bottom: 8px;
 		background: var(--panel);
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		overflow: hidden;
 		box-shadow: var(--shadow-pop);
 		transform-origin: bottom center;

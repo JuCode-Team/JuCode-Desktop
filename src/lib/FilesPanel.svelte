@@ -188,7 +188,7 @@
 		height: 28px;
 		padding: 0 8px 0 calc(6px + var(--depth) * var(--indent));
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--text);
 		text-align: left;

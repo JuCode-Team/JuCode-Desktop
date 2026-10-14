@@ -241,7 +241,7 @@
 		margin: 6px 12px 10px;
 		padding: 10px 10px 8px;
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--panel);
 	}
 	.run-head {
@@ -324,7 +324,7 @@
 		width: 100%;
 		padding: 5px 6px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--text);
 		text-align: left;
@@ -357,14 +357,14 @@
 	.track {
 		position: relative;
 		height: 8px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--surface2);
 	}
 	.bar {
 		position: absolute;
 		top: 0;
 		bottom: 0;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: color-mix(in oklab, var(--text) 45%, transparent);
 	}
 	.bar.running {
@@ -431,7 +431,7 @@
 		gap: 6px;
 		padding: 4px 8px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		font-size: var(--fs-xs);

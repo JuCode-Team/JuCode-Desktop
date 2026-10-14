@@ -604,7 +604,7 @@
 		cursor: pointer;
 		padding: 3px 6px;
 		margin: -3px -6px;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		text-align: left;
 	}
 	.branchbtn:hover {
@@ -687,7 +687,7 @@
 		flex: 1;
 		min-width: 0;
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--text);
 		font-family: var(--font-mono);
@@ -724,7 +724,7 @@
 		font-family: var(--font-mono);
 		font-size: var(--fs-xs);
 		padding: 1px 7px;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		cursor: pointer;
 	}
 	.cmd:hover {
@@ -742,7 +742,7 @@
 		font-size: var(--fs-2xs);
 		letter-spacing: 0.05em;
 		padding: 1px 7px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		flex-shrink: 0;
 		color: var(--dim);
 		background: var(--surface2);
@@ -792,7 +792,7 @@
 	.pfield input,
 	.pfield textarea {
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--text);
 		font-family: var(--font-sans);
@@ -841,7 +841,7 @@
 	.count {
 		color: var(--dim2);
 		background: var(--surface2);
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		padding: 0 7px;
 		font-size: var(--fs-2xs);
 	}
@@ -853,7 +853,7 @@
 		font-size: var(--fs-2xs);
 		cursor: pointer;
 		padding: 2px 4px;
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 	}
 	.seclink:hover {
 		background: var(--surface2);
@@ -929,7 +929,7 @@
 		align-items: center;
 		gap: 9px;
 		padding: 4px 6px 4px 9px;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 	}
 	.chg:hover {
 		background: var(--surface2);
@@ -1009,7 +1009,7 @@
 		flex: 1;
 		min-width: 0;
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--text);
 		font-family: var(--font-sans);

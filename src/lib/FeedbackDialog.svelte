@@ -213,7 +213,7 @@
 	.field input,
 	.field textarea {
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--text);
 		font-family: var(--font-sans);
@@ -237,7 +237,7 @@
 		width: 84px;
 		height: 56px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		overflow: hidden;
 	}
 	.shot img {
@@ -252,7 +252,7 @@
 		display: inline-flex;
 		padding: 2px;
 		border: none;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: color-mix(in oklab, var(--bg) 80%, transparent);
 		color: var(--text);
 		cursor: pointer;
@@ -263,7 +263,7 @@
 		gap: 6px;
 		padding: 5px 10px;
 		border: 1px dashed var(--border-strong);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		font: inherit;
@@ -309,7 +309,7 @@
 		margin: 4px 0 8px;
 		padding: 8px 10px;
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface);
 		font-family: var(--font-mono);
 		font-size: var(--fs-2xs);

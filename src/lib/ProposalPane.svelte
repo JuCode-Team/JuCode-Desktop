@@ -105,7 +105,7 @@
 	}
 	.tag {
 		padding: 1px 8px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--surface2);
 		font-size: var(--fs-2xs);
 		color: var(--dim);
@@ -118,7 +118,7 @@
 		display: inline-flex;
 		padding: 5px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		cursor: pointer;
@@ -162,7 +162,7 @@
 		width: 7px;
 		height: 1.1em;
 		margin-top: 6px;
-		border-radius: 1px;
+		border-radius: var(--r);
 		background: var(--accent);
 		animation: blink 1s steps(2, start) infinite;
 	}

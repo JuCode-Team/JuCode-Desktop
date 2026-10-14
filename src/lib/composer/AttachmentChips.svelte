@@ -75,7 +75,7 @@
 		font-family: var(--font-mono);
 		background: var(--surface2);
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		padding: 3px 5px 3px 8px;
 		max-width: 200px;
 		animation: rise var(--t-med) var(--ease-out);
@@ -96,7 +96,7 @@
 	.chip-thumb {
 		width: 26px;
 		height: 26px;
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		object-fit: cover;
 		flex-shrink: 0;
 	}
@@ -105,7 +105,7 @@
 		flex-shrink: 0;
 		padding: 0;
 		border: none;
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		background: none;
 		cursor: zoom-in;
 	}

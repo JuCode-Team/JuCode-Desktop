@@ -186,7 +186,7 @@
 	.field input,
 	.field textarea {
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--text);
 		font-family: var(--font-sans);

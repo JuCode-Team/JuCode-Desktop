@@ -470,7 +470,7 @@
 		align-items: center;
 		gap: 7px;
 		padding: 4px 5px 4px 10px;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		font-size: var(--fs-xs);
 		color: var(--dim);
 		cursor: pointer;
@@ -570,7 +570,7 @@
 		padding: 7px 10px;
 		background: var(--panel);
 		border: 1px solid color-mix(in oklab, var(--accent) 45%, var(--border));
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		box-shadow: var(--shadow-pop);
 	}
 	.ai-prompt :global(.ai-ico) {

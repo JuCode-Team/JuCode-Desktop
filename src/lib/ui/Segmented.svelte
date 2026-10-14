@@ -24,7 +24,7 @@
 		gap: 2px;
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 	}
 	.opt {
 		flex: 1;
@@ -34,7 +34,7 @@
 		color: var(--dim);
 		font-size: var(--fs-sm);
 		font-family: var(--font-sans);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		cursor: pointer;
 		white-space: nowrap;
 		transition:

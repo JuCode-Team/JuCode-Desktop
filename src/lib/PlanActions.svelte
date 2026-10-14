@@ -88,7 +88,7 @@
 		padding: 0 8px;
 		border: none;
 		border-left: 1px solid color-mix(in oklab, var(--on-accent) 25%, transparent);
-		border-radius: 0 var(--r-sm) var(--r-sm) 0;
+		border-radius: 0 var(--r) var(--r) 0;
 		background: var(--accent);
 		color: var(--on-accent);
 		cursor: pointer;

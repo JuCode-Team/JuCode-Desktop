@@ -101,7 +101,7 @@
 	.tick span {
 		width: 18px;
 		height: 2px;
-		border-radius: 1px;
+		border-radius: var(--r);
 		background: var(--dim2);
 		opacity: 0.55;
 		transform: scaleX(0.56);
@@ -130,14 +130,14 @@
 	.tick:focus-visible {
 		outline: 1px solid var(--accent-bright);
 		outline-offset: -1px;
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 	}
 	.preview {
 		position: fixed;
 		z-index: 400;
 		max-width: min(360px, 60vw);
 		padding: 10px 16px;
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		background: var(--panel);
 		border: 1px solid var(--border);
 		box-shadow: var(--shadow-pop);

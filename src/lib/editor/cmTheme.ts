@@ -61,14 +61,14 @@ const uiTheme = (dark: boolean) =>
 				color: 'var(--text)',
 				background: 'var(--surface2)',
 				border: '1px solid var(--border)',
-				borderRadius: '6px'
+				borderRadius: 'var(--r)'
 			},
 			'.cm-panels button': { cursor: 'pointer' },
 			'.cm-tooltip': {
 				backgroundColor: 'var(--panel)',
 				color: 'var(--text)',
 				border: '1px solid var(--border)',
-				borderRadius: 'var(--r-sm)',
+				borderRadius: 'var(--r)',
 				boxShadow: 'var(--shadow-pop)'
 			},
 			'.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]': {
@@ -81,7 +81,7 @@ const uiTheme = (dark: boolean) =>
 				display: 'inline-block',
 				width: '6px',
 				height: '100%',
-				borderRadius: '2px'
+				borderRadius: 'var(--r)'
 			},
 			'.cm-diff-dot.added': { background: 'color-mix(in oklab, var(--ok) 70%, transparent)' },
 			'.cm-diff-dot.modified': { background: 'color-mix(in oklab, var(--info) 70%, transparent)' },

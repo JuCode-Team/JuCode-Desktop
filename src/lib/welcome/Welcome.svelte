@@ -528,7 +528,7 @@
 		gap: 12px;
 		padding: 11px 12px;
 		border: none;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		font: inherit;
@@ -576,7 +576,7 @@
 	}
 	.pbar {
 		height: 3px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--surface2);
 		overflow: hidden;
 	}
@@ -644,7 +644,7 @@
 		display: flex;
 		flex-direction: column;
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 	}
 	.keys div {
 		display: flex;
@@ -668,7 +668,7 @@
 		padding: 2px 7px;
 		border: 1px solid var(--border);
 		border-bottom-width: 2px;
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		background: var(--surface);
 		font-family: var(--font-mono);
 		font-size: var(--fs-2xs);

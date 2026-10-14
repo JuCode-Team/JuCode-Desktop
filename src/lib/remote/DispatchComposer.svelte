@@ -174,7 +174,7 @@
 		gap: 12px;
 		padding: 14px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		background: var(--surface);
 		transition: border-color var(--t-fast) var(--ease-out);
 	}
@@ -259,7 +259,7 @@
 		width: 100%;
 		padding: 10px 14px;
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		font: inherit;

@@ -119,7 +119,7 @@
 	   the thumb stays inside the pill at both ends. */
 	.slider {
 		padding: 0 12px;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		cursor: pointer;
 		touch-action: none;
 		outline: none;
@@ -141,7 +141,7 @@
 		top: 0;
 		left: -12px;
 		height: 24px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 	}
 	.track {
 		right: -12px;
@@ -178,7 +178,7 @@
 		top: 50%;
 		width: 4px;
 		height: 4px;
-		border-radius: var(--r-full);
+		border-radius: 50%;
 		background: var(--dim2);
 		transform: translate(-50%, -50%);
 	}
@@ -190,7 +190,7 @@
 		top: 50%;
 		width: 20px;
 		height: 20px;
-		border-radius: var(--r-full);
+		border-radius: 50%;
 		background: var(--text);
 		border: 1px solid var(--border);
 		box-shadow: var(--shadow-pop);

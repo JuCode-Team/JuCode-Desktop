@@ -282,7 +282,7 @@
 		width: 156px;
 		height: 156px;
 		padding: 8px;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		/* QR codes need a light background to scan reliably in dark themes. */
 		background: #fff;
 		flex-shrink: 0;
@@ -324,7 +324,7 @@
 		min-width: 0;
 		padding: 6px 8px;
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface2);
 		font-family: var(--font-mono);
 		font-size: var(--fs-2xs);
@@ -389,7 +389,7 @@
 	}
 	.lan input {
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--text);
 		font-family: var(--font-mono);

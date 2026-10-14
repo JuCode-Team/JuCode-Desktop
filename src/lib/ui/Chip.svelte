@@ -17,7 +17,7 @@
 		gap: 5px;
 		font-size: var(--fs-xs);
 		padding: 4px 12px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		border: 1px solid var(--border);
 		background: var(--surface);
 		color: var(--dim);

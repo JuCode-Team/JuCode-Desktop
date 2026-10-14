@@ -66,7 +66,7 @@
 	.card {
 		background: var(--panel);
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 	}
 	/* Light theme: --panel is the page's white; a faint fill lifts the card. */
 	:global([data-theme='light']) .card {

@@ -967,7 +967,7 @@
 		position: relative;
 		padding: 16px 18px 14px;
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		background: var(--surface);
 	}
 	.sp-label {
@@ -981,7 +981,7 @@
 		height: 8px;
 		width: 72%;
 		margin-bottom: 8px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--surface2);
 	}
 	.sp-line.short {
@@ -1066,7 +1066,7 @@
 		width: 32px;
 		height: 32px;
 		border: none;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		cursor: pointer;
@@ -1085,7 +1085,7 @@
 		height: 36px;
 		margin: 0 12px 10px;
 		padding: 0 12px;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--dim2);
 		cursor: text;
@@ -1130,7 +1130,7 @@
 		min-height: 36px;
 		padding: 0 12px;
 		border: none;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: none;
 		color: var(--text);
 		font: inherit;
@@ -1277,7 +1277,7 @@
 	.keyhead .tile {
 		width: 34px;
 		height: 34px;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 	}
 	.keytxt {
 		display: flex;
@@ -1312,7 +1312,7 @@
 	.tile.sm {
 		width: 22px;
 		height: 22px;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 	}
 	.mono {
 		font-family: var(--font-mono);
@@ -1328,7 +1328,7 @@
 		font-size: var(--fs-2xs);
 		color: var(--accent-bright);
 		background: var(--accent-soft);
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		padding: 2px 8px;
 		flex-shrink: 0;
 		margin-left: auto;
@@ -1342,7 +1342,7 @@
 		font-size: var(--fs-2xs);
 		color: var(--dim);
 		border: 1px solid var(--border);
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		padding: 0 5px;
 		flex-shrink: 0;
 	}

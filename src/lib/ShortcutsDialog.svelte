@@ -52,7 +52,7 @@
 	kbd {
 		padding: 1px 6px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface);
 		color: var(--dim);
 		font-family: inherit;

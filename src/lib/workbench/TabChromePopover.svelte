@@ -240,7 +240,7 @@
 		gap: 7px;
 		padding: 11px;
 		background: var(--panel);
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		box-shadow: var(--shadow-pop);
 		animation: pop-in var(--t-med) var(--ease-out);
 	}
@@ -260,7 +260,7 @@
 		width: 100%;
 		padding: 6px 8px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--text);
 		font-size: var(--fs-sm);
@@ -320,7 +320,7 @@
 		justify-content: center;
 		padding: 5px 0;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		cursor: pointer;

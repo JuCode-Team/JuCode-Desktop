@@ -40,7 +40,7 @@
 		align-items: flex-start;
 		gap: 8px;
 		padding: 8px 10px;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		font-size: var(--fs-xs);
 		line-height: 1.5;
 		animation: rise var(--t-fast) var(--ease-out);
@@ -81,7 +81,7 @@
 		flex-shrink: 0;
 		padding: 2px;
 		border: none;
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		background: none;
 		color: inherit;
 		opacity: 0.7;

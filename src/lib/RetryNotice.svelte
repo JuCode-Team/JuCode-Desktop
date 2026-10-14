@@ -75,7 +75,7 @@
 		margin: 6px 0 2px;
 		padding: 10px 12px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--surface);
 		font-size: var(--fs-sm);
 	}
@@ -125,7 +125,7 @@
 		flex: none;
 		padding: 2px 8px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--text);
 		font: inherit;
@@ -143,7 +143,7 @@
 	.bar span {
 		flex: 1;
 		height: 3px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--surface2);
 	}
 	.bar span.done {
@@ -210,7 +210,7 @@
 		max-height: 140px;
 		overflow: auto;
 		padding: 8px 10px;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface);
 		font-family: var(--font-mono);
 		font-size: var(--fs-2xs);

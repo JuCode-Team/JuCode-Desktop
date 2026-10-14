@@ -48,7 +48,7 @@
 		display: block;
 		padding: 0;
 		border: none;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: none;
 		cursor: zoom-in;
 	}
@@ -61,7 +61,7 @@
 		display: block;
 		max-width: 220px;
 		max-height: 160px;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		object-fit: cover;
 	}
 	.ph {

@@ -359,7 +359,7 @@
 		padding: 12px 14px;
 		background: var(--panel);
 		border: 1px solid var(--border);
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		box-shadow: var(--shadow-float);
 		animation: rise var(--t-slow) var(--ease-out) both;
 	}
@@ -368,7 +368,7 @@
 		padding: 10px 12px;
 		background: var(--sidebar);
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		font-size: var(--fs-sm);
 		max-height: 340px;
 		overflow-y: auto;
@@ -413,7 +413,7 @@
 		text-align: left;
 		padding: 8px 10px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--sidebar);
 		color: var(--text);
 		cursor: pointer;
@@ -441,11 +441,11 @@
 		flex-shrink: 0;
 		margin-top: 1px;
 		border: 1.5px solid var(--border);
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		color: var(--on-accent);
 	}
 	.q-mark.multi {
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 	}
 	.q-opt.on .q-mark {
 		background: var(--accent);
@@ -485,7 +485,7 @@
 		color: var(--dim);
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		max-width: 200px;
 		white-space: nowrap;
 		overflow: hidden;
@@ -496,7 +496,7 @@
 		padding: 8px 10px;
 		background: var(--sidebar);
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		font-family: var(--font-mono);
 		font-size: var(--fs-xs);
 		white-space: pre-wrap;
@@ -529,7 +529,7 @@
 	.hunk {
 		background: var(--sidebar);
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		overflow: hidden;
 	}
 	.hunk.off {
@@ -613,7 +613,7 @@
 	.approval-actions :global(kbd) {
 		margin-left: 6px;
 		padding: 0 4px;
-		border-radius: 3px;
+		border-radius: var(--r);
 		background: color-mix(in oklab, currentColor 14%, transparent);
 		font: inherit;
 		font-size: 10px;

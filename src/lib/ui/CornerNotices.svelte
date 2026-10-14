@@ -80,7 +80,7 @@
 		width: 340px;
 		max-width: 100%;
 		padding: 10px 8px 10px 14px;
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		background: var(--panel);
 		box-shadow: var(--shadow-pop);
 		color: var(--text);
@@ -106,7 +106,7 @@
 		flex-shrink: 0;
 		padding: 4px 10px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: color-mix(in oklab, var(--text) 10%, transparent);
 		color: inherit;
 		font: inherit;
@@ -121,7 +121,7 @@
 		flex-shrink: 0;
 		padding: 4px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		cursor: pointer;

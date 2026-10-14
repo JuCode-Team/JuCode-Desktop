@@ -229,7 +229,7 @@
 		width: 110px;
 		padding: 2px 6px;
 		border: 1px solid color-mix(in oklab, var(--accent) 45%, var(--hairline));
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface);
 		color: var(--text);
 		font-size: var(--fs-xs);
@@ -240,7 +240,7 @@
 		display: inline-flex;
 		padding: 2px;
 		border: none;
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim2);
 		cursor: pointer;
@@ -266,7 +266,7 @@
 		padding: 4px;
 		margin-left: 2px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim2);
 		cursor: pointer;

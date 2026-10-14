@@ -173,7 +173,7 @@
 		min-height: 32px;
 		padding: 0 8px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		font: inherit;
 		font-size: var(--fs-sm);

@@ -665,7 +665,7 @@
 		min-height: 38px;
 		padding: 0 12px;
 		border: none;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: none;
 		color: var(--text);
 		font: inherit;
@@ -695,13 +695,13 @@
 		flex: none;
 		width: 7px;
 		height: 7px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 	}
 	.count {
 		flex: none !important;
 		min-width: 20px;
 		padding: 1px 7px;
-		border-radius: var(--r-full);
+		border-radius: 50%;
 		background: var(--accent);
 		color: var(--on-accent);
 		font-size: var(--fs-2xs);
@@ -740,7 +740,7 @@
 		height: 30px;
 		flex-shrink: 0;
 		border: none;
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim2);
 		cursor: pointer;
@@ -791,7 +791,7 @@
 		left: 12px;
 		right: 8px;
 		height: 2px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--accent);
 		pointer-events: none;
 	}
@@ -828,7 +828,7 @@
 		flex-shrink: 0;
 		padding: 4px 8px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		font: inherit;
@@ -863,7 +863,7 @@
 		height: 16px;
 		flex-shrink: 0;
 		border: 1px solid var(--border-strong);
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		background: var(--surface);
 		color: var(--on-accent);
 		transition:
@@ -893,7 +893,7 @@
 		height: 24px;
 		padding: 0 6px;
 		border: 1px solid var(--border-strong);
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		background: var(--bg);
 		color: var(--text);
 		font: inherit;
@@ -906,7 +906,7 @@
 		flex-shrink: 0;
 		padding: 1px 7px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		color: var(--dim);
 		font-size: var(--fs-2xs);
 	}
@@ -976,7 +976,7 @@
 		align-items: center;
 		gap: 2px;
 		padding-right: 4px;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 	}
 	.folder:hover {
 		background: var(--surface);
@@ -999,7 +999,7 @@
 		margin-left: 4px;
 		padding: 0;
 		border: none;
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim2);
 		cursor: pointer;

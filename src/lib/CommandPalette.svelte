@@ -243,7 +243,7 @@
 		text-align: left;
 		padding: 9px 11px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--text);
 		cursor: pointer;

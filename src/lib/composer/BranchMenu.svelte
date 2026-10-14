@@ -158,7 +158,7 @@
 		height: 34px;
 		padding: 0 10px;
 		margin-bottom: 4px;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--dim2);
 	}

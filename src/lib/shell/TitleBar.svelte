@@ -176,7 +176,7 @@
 		height: 34px;
 		flex-shrink: 0;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		cursor: pointer;

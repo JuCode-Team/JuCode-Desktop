@@ -48,7 +48,7 @@
 		gap: 6px;
 		padding: 8px 8px 10px 12px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		background: var(--surface);
 		font-size: var(--fs-xs);
 	}
@@ -75,7 +75,7 @@
 		flex: none;
 		padding: 3px;
 		border: none;
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim2);
 		cursor: pointer;

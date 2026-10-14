@@ -215,7 +215,7 @@
 		gap: 6px;
 		padding: 10px 10px 8px 14px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-xl);
+		border-radius: var(--r);
 		background: var(--panel);
 		box-shadow: var(--shadow-float);
 		transition:
@@ -259,14 +259,14 @@
 		display: inline-flex;
 		padding: 0;
 		border: none;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: none;
 		cursor: zoom-in;
 	}
 	.thumb img {
 		width: 56px;
 		height: 56px;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		object-fit: cover;
 		box-shadow: inset 0 0 0 1px var(--border);
 	}
@@ -277,7 +277,7 @@
 		display: inline-flex;
 		padding: 3px;
 		border: none;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--text);
 		color: var(--bg);
 		cursor: pointer;
@@ -300,7 +300,7 @@
 		height: 30px;
 		margin-left: -4px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		cursor: pointer;
@@ -317,7 +317,7 @@
 		height: 30px;
 		padding: 0 10px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		font-size: var(--fs-xs);
@@ -348,7 +348,7 @@
 		height: 30px;
 		padding: 0 8px;
 		border: none;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: none;
 		color: var(--text);
 		font-size: var(--fs-sm);
@@ -375,7 +375,7 @@
 		width: 32px;
 		height: 32px;
 		border: none;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--text);
 		color: var(--bg);
 		cursor: pointer;

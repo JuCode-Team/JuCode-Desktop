@@ -132,7 +132,7 @@
 		gap: 7px;
 		padding: 12px 14px;
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--surface);
 	}
 	.card.high {
@@ -208,7 +208,7 @@
 	}
 	textarea {
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--text);
 		font-family: var(--font-sans);
@@ -227,7 +227,7 @@
 	pre {
 		margin: 6px 0 0;
 		padding: 8px 10px;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface2);
 		font-family: var(--font-mono);
 		font-size: var(--fs-xs);

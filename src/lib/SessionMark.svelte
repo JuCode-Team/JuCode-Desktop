@@ -46,7 +46,7 @@
 		gap: 4px;
 		height: 20px;
 		padding: 0 7px 0 5px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--accent-soft);
 		color: var(--text);
 		font-size: var(--fs-2xs);
@@ -59,7 +59,7 @@
 		height: 18px;
 		padding: 0;
 		justify-content: center;
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 	}
 	@keyframes ask {
 		50% {

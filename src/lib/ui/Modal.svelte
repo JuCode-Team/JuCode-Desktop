@@ -130,7 +130,7 @@
 		overflow: hidden;
 		position: relative;
 		isolation: isolate;
-		border-radius: var(--r-xl);
+		border-radius: var(--r);
 		box-shadow: var(--shadow-modal);
 		outline: none;
 	}
@@ -154,7 +154,7 @@
 		display: inline-flex;
 		padding: 6px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		cursor: pointer;

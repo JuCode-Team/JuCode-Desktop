@@ -229,7 +229,7 @@
 		justify-content: center;
 		width: 44px;
 		height: 44px;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		transition:
 			background var(--t-fast) var(--ease-out),
 			color var(--t-fast) var(--ease-out),

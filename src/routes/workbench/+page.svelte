@@ -121,7 +121,7 @@
 		padding: 6px 12px;
 		font-size: var(--fs-sm);
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface);
 		color: var(--text);
 		cursor: pointer;

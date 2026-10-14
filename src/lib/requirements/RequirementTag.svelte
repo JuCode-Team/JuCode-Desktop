@@ -10,7 +10,7 @@
 		flex: none;
 		padding: 0 4px;
 		border: 1px solid var(--border-strong);
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		color: var(--dim);
 		font-family: var(--font-mono);
 		font-size: var(--fs-2xs);

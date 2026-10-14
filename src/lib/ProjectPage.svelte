@@ -165,7 +165,7 @@
 		flex: none;
 		padding: 3px;
 		border: none;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		cursor: pointer;
@@ -202,7 +202,7 @@
 		flex-direction: column;
 		margin-bottom: 10px;
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		background: var(--panel);
 		overflow: hidden;
 	}
@@ -244,7 +244,7 @@
 		gap: 10px;
 		padding: 8px 10px;
 		border: none;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: none;
 		color: var(--text);
 		font: inherit;

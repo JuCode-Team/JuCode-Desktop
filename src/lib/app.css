@@ -13,8 +13,8 @@
    --shadow-float (composer, cards) → --panel with --shadow-pop (menus, modals).
    Depth comes from these fills and shadows; strokes stay faint (--hairline).
 
-   Type scale: every font-size uses a --fs-* step. Radius: every corner uses a
-   --r-* step. Colors come only from the tokens below. */
+   Type scale: every font-size uses a --fs-* step. Radius: every corner is --r
+   (inline code --r-code, round things 50%). Colors come only from the tokens below. */
 :root {
 	/* Lucide quote / globe as masks for chips drawn in CSS. The stroke is set
 	   for ~11px so it matches the icons' 1.5px. */
@@ -60,13 +60,10 @@
 	--fs-xl: 24px; /* page titles */
 	--fs-2xl: 36px; /* welcome wordmark */
 
-	--r-xs: 5px;
-	--r-sm: 8px;
-	--r-md: 10px;
-	--r-lg: 14px;
-	--r-xl: 20px;
-	--r-2xl: 26px;
-	--r-full: 999px;
+	/* One corner for every box; only inline code is tighter. Things that are
+	   round by nature (dots, avatars, knobs) use 50%. */
+	--r: 10px;
+	--r-code: 4px;
 
 	/* Motion: one deceleration curve for everything that moves, a gentle
 	   spring for things that pop in, three durations. */
@@ -171,7 +168,7 @@
 :focus-visible {
 	outline: 2px solid var(--brand-bright);
 	outline-offset: 2px;
-	border-radius: var(--r-xs);
+	border-radius: var(--r);
 }
 input:focus-visible,
 textarea:focus-visible {
@@ -243,7 +240,7 @@ body {
 }
 ::-webkit-scrollbar-thumb {
 	background: var(--border);
-	border-radius: var(--r-full);
+	border-radius: var(--r);
 	border: 3px solid transparent;
 	background-clip: content-box;
 }
@@ -360,7 +357,7 @@ body {
 	flex-direction: column;
 	gap: 2px;
 	padding: 6px;
-	border-radius: var(--r-lg);
+	border-radius: var(--r);
 	background: var(--panel);
 	box-shadow: var(--shadow-pop);
 	user-select: none;
@@ -378,7 +375,7 @@ body {
 	min-height: 38px;
 	padding: 6px 12px;
 	border: none;
-	border-radius: var(--r-md);
+	border-radius: var(--r);
 	background: none;
 	color: var(--text);
 	font: inherit;

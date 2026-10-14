@@ -158,7 +158,7 @@
 		gap: 10px;
 		padding: 9px 10px 9px 12px;
 		border: 1px solid var(--border-strong);
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		background: var(--surface);
 		transition: border-color var(--t-fast) var(--ease-out);
 	}
@@ -202,7 +202,7 @@
 		width: 72px;
 		height: 48px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		overflow: hidden;
 	}
 	.shot img {
@@ -217,7 +217,7 @@
 		display: inline-flex;
 		padding: 2px;
 		border: none;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: color-mix(in oklab, var(--bg) 80%, transparent);
 		color: var(--text);
 		cursor: pointer;
@@ -233,7 +233,7 @@
 		margin-top: 2px;
 		padding: 5px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		cursor: pointer;
@@ -247,7 +247,7 @@
 		margin-top: 1px;
 		padding: 5px 12px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--accent);
 		color: var(--on-accent);
 		font: inherit;

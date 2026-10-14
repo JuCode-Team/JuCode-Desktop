@@ -137,7 +137,7 @@
 		align-items: center;
 		gap: 6px;
 		padding: 2px 4px;
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		cursor: default;
 	}
 	.ctx-text {
@@ -156,7 +156,7 @@
 		max-width: calc(100vw - 32px);
 		padding: 10px 12px 12px;
 		background: var(--panel);
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		box-shadow: var(--shadow-pop);
 		opacity: 0;
 		transform: translateY(4px) scale(0.97);
@@ -188,7 +188,7 @@
 	.ctx-track {
 		height: 4px;
 		margin: 8px 0 6px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--surface2);
 		overflow: hidden;
 	}
@@ -217,7 +217,7 @@
 		display: flex;
 		height: 8px;
 		margin: 8px 0 6px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--surface2);
 		overflow: hidden;
 	}
@@ -256,7 +256,7 @@
 	.bk-dot {
 		width: 8px;
 		height: 8px;
-		border-radius: 2px;
+		border-radius: var(--r);
 	}
 	.bk-dot.hollow,
 	.bk-dot.free {

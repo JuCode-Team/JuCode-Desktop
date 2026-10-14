@@ -396,7 +396,7 @@
 		color: var(--dim);
 		background: var(--surface2);
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		padding: 1px 8px;
 		flex-shrink: 0;
 	}
@@ -531,7 +531,7 @@
 		resize: vertical;
 		background: var(--surface2);
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		color: var(--text);
 		padding: 9px 11px;
 		font-size: var(--fs-sm);

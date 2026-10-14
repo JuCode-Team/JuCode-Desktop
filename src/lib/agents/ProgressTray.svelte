@@ -287,7 +287,7 @@
 		height: 34px;
 		padding: 0 10px 0 10px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-lg);
+		border-radius: var(--r);
 		background: var(--surface);
 		color: var(--text);
 		font-size: var(--fs-xs);
@@ -361,7 +361,7 @@
 	.bead {
 		width: 6px;
 		height: 6px;
-		border-radius: var(--r-full);
+		border-radius: 50%;
 		background: var(--dim2);
 	}
 	.bead.running {
@@ -406,7 +406,7 @@
 		overflow: hidden;
 		border: 1px solid var(--border);
 		border-bottom: none;
-		border-radius: var(--r-lg) var(--r-lg) 0 0;
+		border-radius: var(--r) var(--r) 0 0;
 		background: var(--panel);
 		animation: rise var(--t-med) var(--ease-out);
 	}
@@ -484,7 +484,7 @@
 
 	.agent {
 		position: relative;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		transition: background var(--t-fast) var(--ease-out);
 	}
 	.agent.link:hover {
@@ -537,7 +537,7 @@
 	.kind {
 		flex: none;
 		padding: 0 6px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--dim);
 		font-size: var(--fs-2xs);
@@ -579,7 +579,7 @@
 		display: inline-flex;
 		gap: 2px;
 		padding: 2px;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface2);
 		opacity: 0;
 		transition: opacity var(--t-fast) var(--ease-out);
@@ -592,7 +592,7 @@
 		display: inline-flex;
 		padding: 3px;
 		border: none;
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		cursor: pointer;
@@ -617,7 +617,7 @@
 	}
 	.task {
 		padding: 6px 8px;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 	}
 	.trow {
 		display: flex;
@@ -647,7 +647,7 @@
 		align-items: center;
 		padding: 3px;
 		border: none;
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		cursor: pointer;
@@ -674,7 +674,7 @@
 		overflow: auto;
 		margin: 0;
 		padding: 8px 10px;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface);
 		font-family: var(--font-mono);
 		font-size: var(--fs-2xs);

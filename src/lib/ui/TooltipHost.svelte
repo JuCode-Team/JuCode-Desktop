@@ -64,7 +64,7 @@
 		z-index: 400;
 		max-width: 320px;
 		padding: 5px 9px;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--text);
 		color: var(--bg);
 		box-shadow: var(--shadow-pop);

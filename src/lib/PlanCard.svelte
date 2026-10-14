@@ -68,7 +68,7 @@
 <style>
 	.plan {
 		max-width: 100%;
-		border-radius: var(--r-xl);
+		border-radius: var(--r);
 		background: var(--panel);
 		box-shadow: var(--shadow-float);
 	}
@@ -124,7 +124,7 @@
 	.tag {
 		flex-shrink: 0;
 		padding: 1px 8px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--surface2);
 		font-size: var(--fs-2xs);
 		color: var(--dim);

@@ -1851,7 +1851,7 @@
 	/* Round the frame to the macOS window corners (the transparent window does
 	   not clip them); frosted chrome when vibrancy is on. */
 	:global(:root[data-os='macos']) .app {
-		border-radius: 12px;
+		border-radius: var(--r);
 	}
 	:global(:root[data-vibrancy='on']) .app {
 		background: var(--vibrancy-chrome);
@@ -1865,7 +1865,7 @@
 		flex: 1;
 		display: flex;
 		min-width: 0;
-		border-top-left-radius: var(--r-lg);
+		border-top-left-radius: var(--r);
 		overflow: hidden;
 		position: relative;
 		/* No fill of its own: the sidebar (frosted under vibrancy) and the
@@ -1902,7 +1902,7 @@
 		justify-content: center;
 		padding: 4px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim2);
 		cursor: pointer;
@@ -1984,7 +1984,7 @@
 		gap: 10px;
 		padding: 10px 12px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--surface);
 		color: var(--text);
 		font-size: var(--fs-sm);
@@ -2016,7 +2016,7 @@
 	.pane-error button {
 		padding: 6px 14px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--panel);
 		color: var(--text);
 		font: inherit;

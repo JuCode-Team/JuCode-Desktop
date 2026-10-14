@@ -134,14 +134,14 @@
 		font-family: var(--font-mono);
 		font-size: 0.88em;
 		background: var(--surface2);
-		border-radius: var(--r-xs);
+		border-radius: var(--r-code);
 		padding: 1px 5px;
 	}
 	.md :global(pre) {
 		margin: 0 0 12px;
 		padding: 12px 14px;
 		background: var(--surface);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		overflow-x: auto;
 	}
 	.md :global(pre code) {
@@ -153,7 +153,7 @@
 	}
 	.md :global(.codeblock) {
 		margin: 0 0 12px;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		overflow: hidden;
 		background: var(--surface);
 	}
@@ -183,7 +183,7 @@
 		font-size: var(--fs-2xs);
 		cursor: pointer;
 		padding: 2px 7px;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
 	}
 	.md :global(.cb-copy:hover) {
@@ -196,7 +196,7 @@
 		max-width: 100%;
 		margin: 0 0 12px;
 		overflow-x: auto;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		box-shadow: inset 0 0 0 1px var(--hairline);
 	}
 	.md :global(table) {

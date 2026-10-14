@@ -108,7 +108,7 @@
 		gap: 10px;
 		padding: 18px 16px;
 		border: 1px dashed var(--border);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		color: var(--dim);
 		font-size: var(--fs-sm);
 	}
@@ -125,7 +125,7 @@
 		min-height: 34px;
 		padding: 0 8px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--text);
 		font: inherit;

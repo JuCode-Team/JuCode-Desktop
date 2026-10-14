@@ -177,7 +177,7 @@
 	.ctl {
 		width: 32px;
 		height: 32px;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 	}
 	.ctl:hover,
 	.nav:hover {
@@ -209,7 +209,7 @@
 		max-width: 100%;
 		max-height: 100%;
 		object-fit: contain;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		user-select: none;
 	}
 	img.zoomable {
@@ -233,7 +233,7 @@
 		width: 40px;
 		height: 40px;
 		margin-top: -20px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 	}
 	.prev {
 		left: 14px;

@@ -91,7 +91,7 @@
 		margin: 0;
 		padding: 10px 12px;
 		overflow: auto;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface);
 		color: var(--text);
 		font-family: inherit;
@@ -102,7 +102,7 @@
 	.bar {
 		height: 4px;
 		overflow: hidden;
-		border-radius: 2px;
+		border-radius: var(--r);
 		background: var(--surface2);
 	}
 	.fill {

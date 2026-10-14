@@ -56,7 +56,7 @@
 		display: inline-flex;
 		padding: 6px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--text);
 		cursor: pointer;
@@ -106,7 +106,7 @@
 		width: 36px;
 		height: 36px;
 		border: none;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: none;
 		color: var(--text);
 		cursor: pointer;

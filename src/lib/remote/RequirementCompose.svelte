@@ -157,7 +157,7 @@
 		min-height: 120px;
 		padding: 12px;
 		border: 1px solid var(--border-strong);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--surface);
 		color: var(--text);
 		/* 16px keeps iOS from zooming into the field. */
@@ -177,7 +177,7 @@
 		width: 84px;
 		height: 60px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		overflow: hidden;
 	}
 	.shot img {
@@ -192,7 +192,7 @@
 		display: inline-flex;
 		padding: 3px;
 		border: none;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: color-mix(in oklab, var(--bg) 80%, transparent);
 		color: var(--text);
 	}

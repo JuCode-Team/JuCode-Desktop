@@ -193,7 +193,7 @@
 		gap: 8px;
 		padding: 0 12px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--surface);
 		color: var(--dim);
 	}
@@ -226,7 +226,7 @@
 		margin: 0 0 4px;
 		padding: 9px 11px;
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--dim);
 		font-size: var(--fs-xs);
@@ -249,7 +249,7 @@
 		display: flex;
 		flex-direction: column;
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--surface);
 		padding: 14px;
 	}
@@ -271,7 +271,7 @@
 		font-size: var(--fs-2xs);
 		color: var(--accent-bright);
 		border: 1px solid color-mix(in oklab, var(--accent) 40%, transparent);
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		padding: 1px 8px;
 	}
 	.source {
@@ -313,7 +313,7 @@
 		font-family: var(--font-mono);
 		color: var(--dim2);
 		background: var(--surface2);
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		padding: 1px 6px;
 	}
 	.state {

@@ -66,7 +66,7 @@
 		font-size: var(--fs-2xs);
 		color: var(--accent-bright);
 		background: var(--accent-soft);
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		padding: 1px 8px;
 	}
 
@@ -150,7 +150,7 @@
 	.scan {
 		width: 18px;
 		height: 4px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--surface2);
 		overflow: hidden;
 		position: relative;
@@ -162,7 +162,7 @@
 		left: -40%;
 		width: 40%;
 		height: 100%;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--accent-bright);
 		animation: scan 1.1s ease-in-out infinite;
 	}
@@ -182,7 +182,7 @@
 	.compress i {
 		width: 5px;
 		height: 11px;
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		background: var(--accent-bright);
 	}
 	.compress i:first-child {

@@ -206,7 +206,7 @@
 	.proposed {
 		margin-left: 6px;
 		padding: 1px 7px;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--dim);
 		font-size: var(--fs-2xs);

@@ -343,14 +343,14 @@
 		flex: 1;
 		align-items: flex-end;
 		height: 100%;
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 	}
 	.col.on {
 		background: var(--surface2);
 	}
 	.b {
 		width: 100%;
-		border-radius: var(--r-xs);
+		border-radius: var(--r);
 		background: var(--text);
 		opacity: 0.78;
 		transition:
@@ -455,13 +455,13 @@
 		flex: 1;
 		height: 6px;
 		overflow: hidden;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--surface2);
 	}
 	.fill {
 		display: block;
 		height: 100%;
-		border-radius: var(--r-full);
+		border-radius: var(--r);
 		background: var(--text);
 		opacity: 0.7;
 	}

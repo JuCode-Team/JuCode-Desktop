@@ -226,7 +226,7 @@
 		display: inline-flex;
 		padding: 6px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		cursor: pointer;
@@ -248,7 +248,7 @@
 		height: 36px;
 		padding: 0 10px;
 		border: none;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: none;
 		color: var(--text);
 		font-size: var(--fs-sm);
@@ -272,7 +272,7 @@
 		height: 34px;
 		margin-top: 4px;
 		padding: 0 10px;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--dim2);
 	}
@@ -302,7 +302,7 @@
 		position: relative;
 		display: flex;
 		align-items: center;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 	}
 	.conv:hover,
 	.conv.menu {
@@ -332,7 +332,7 @@
 		margin-right: 4px;
 		padding: 4px;
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		opacity: 0;
@@ -358,7 +358,7 @@
 		margin: 3px;
 		padding: 5px 7px;
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		outline: none;
 		background: var(--bg);
 		color: var(--text);
@@ -376,7 +376,7 @@
 		margin-top: 8px;
 		padding: 8px;
 		border: none;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: none;
 		color: var(--dim);
 		font-size: var(--fs-xs);
@@ -401,7 +401,7 @@
 		width: 100%;
 		padding: 8px;
 		border: none;
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: none;
 		color: var(--text);
 		text-align: left;
@@ -417,7 +417,7 @@
 		flex: none;
 		width: 30px;
 		height: 30px;
-		border-radius: var(--r-full);
+		border-radius: 50%;
 		background: var(--surface2);
 		font-size: var(--fs-sm);
 		font-weight: 600;

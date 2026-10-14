@@ -23,7 +23,7 @@
 		align-items: center;
 		justify-content: center;
 		gap: 7px;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		border: 1px solid var(--border);
 		background: var(--surface2);
 		color: var(--text);

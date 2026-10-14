@@ -98,7 +98,7 @@
 	.opt {
 		position: relative;
 		border: 1px solid var(--hairline);
-		border-radius: var(--r-md);
+		border-radius: var(--r);
 		background: var(--surface);
 		transition: border-color 0.15s ease;
 	}
@@ -144,7 +144,7 @@
 		width: 34px;
 		height: 34px;
 		flex-shrink: 0;
-		border-radius: var(--r-sm);
+		border-radius: var(--r);
 		background: var(--surface2);
 		color: var(--text);
 	}
