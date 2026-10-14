@@ -1,6 +1,7 @@
 // Lightweight user preferences (localStorage-backed, reactive). Kept separate
 // from engine/backend settings — these are pure UI choices.
 import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
 
 const KEY = 'jucode-prefs';
 
@@ -41,7 +42,12 @@ type PrefsShape = {
 	footCost: boolean;
 	/** Engines that can summarize their thinking (Claude, Codex) do, before replying. */
 	thinkingSummaries: boolean;
+	/** Interface zoom (the webview's page zoom), one of ZOOM_STEPS. */
+	zoom: number;
 };
+
+/** The zoom levels ⌘+ / ⌘- step through. */
+export const ZOOM_STEPS = [0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
 
 export const TURN_STAT_KEYS = ['elapsed', 'ttft', 'tokens', 'files', 'tools', 'cost', 'model'] as const;
 export type TurnStatKey = (typeof TURN_STAT_KEYS)[number];
@@ -60,11 +66,14 @@ const DEFAULTS: PrefsShape = {
 	scrollOnSend: true,
 	footContext: true,
 	footCost: true,
-	thinkingSummaries: true
+	thinkingSummaries: true,
+	zoom: 1
 };
 
 /** A terminal font size within 8–32 px; anything else is the default. */
 const fontSize = (v: unknown) => (typeof v === 'number' && v >= 8 && v <= 32 ? v : DEFAULTS.terminalFontSize);
+const zoomLevel = (v: unknown) => (typeof v === 'number' && ZOOM_STEPS.includes(v) ? v : DEFAULTS.zoom);
+const inTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
 function load(): PrefsShape {
 	try {
@@ -118,6 +127,7 @@ class PrefsStore {
 	footContext = $state(DEFAULTS.footContext);
 	footCost = $state(DEFAULTS.footCost);
 	thinkingSummaries = $state(DEFAULTS.thinkingSummaries);
+	zoom = $state(DEFAULTS.zoom);
 
 	init() {
 		const p = load();
@@ -137,8 +147,10 @@ class PrefsStore {
 		this.footContext = p.footContext !== false;
 		this.footCost = p.footCost !== false;
 		this.thinkingSummaries = p.thinkingSummaries !== false;
+		this.zoom = zoomLevel(p.zoom);
 		this.#applyVibrancy();
-		if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+		if (inTauri()) {
+			if (this.zoom !== 1) this.#applyZoom();
 			invoke<string | null>('window_effect')
 				.then((effect) => {
 					this.windowEffect = effect;
@@ -166,7 +178,8 @@ class PrefsStore {
 					scrollOnSend: this.scrollOnSend,
 					footContext: this.footContext,
 					footCost: this.footCost,
-					thinkingSummaries: this.thinkingSummaries
+					thinkingSummaries: this.thinkingSummaries,
+					zoom: this.zoom
 				})
 			);
 		} catch {
@@ -240,6 +253,20 @@ class PrefsStore {
 	setTerminalFontSize(v: number) {
 		this.terminalFontSize = fontSize(v);
 		this.#save();
+	}
+
+	/** Step the interface zoom up (1) or down (-1), or reset it (0). */
+	stepZoom(dir: 1 | -1 | 0) {
+		const i = ZOOM_STEPS.indexOf(this.zoom);
+		const next = dir === 0 ? 1 : ZOOM_STEPS[Math.min(Math.max(i + dir, 0), ZOOM_STEPS.length - 1)];
+		if (next === this.zoom) return;
+		this.zoom = next;
+		this.#applyZoom();
+		this.#save();
+	}
+
+	#applyZoom() {
+		if (inTauri()) getCurrentWebview().setZoom(this.zoom).catch((e) => console.error('setZoom', e));
 	}
 
 	setSidebarVibrancy(v: boolean) {

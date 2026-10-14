@@ -20,7 +20,10 @@ export type ShortcutId =
 	| 'terminal'
 	| 'approvalMode'
 	| 'captureRequirement'
-	| 'shortcuts';
+	| 'shortcuts'
+	| 'zoomIn'
+	| 'zoomOut'
+	| 'zoomReset';
 
 export interface Shortcut {
 	/** `KeyboardEvent.key` (lower case for letters), or `1-9` for digits. */
@@ -41,6 +44,9 @@ export const SHORTCUTS: Record<ShortcutId, Shortcut> = {
 	terminal: { key: '`', ctrl: true, group: 'general' },
 	shortcuts: { key: '/', mod: true, group: 'general' },
 	captureRequirement: { key: 'n', mod: true, shift: true, group: 'general' },
+	zoomIn: { key: '=', mod: true, group: 'general' },
+	zoomOut: { key: '-', mod: true, group: 'general' },
+	zoomReset: { key: '0', mod: true, group: 'general' },
 	newSession: { key: 'n', mod: true, group: 'session' },
 	history: { key: 'h', mod: true, shift: true, group: 'session' },
 	prevSession: { key: '[', mod: true, shift: true, group: 'session' },
@@ -64,6 +70,8 @@ function keyOf(e: KeyboardEvent): string {
 	if (e.code === 'Backquote') return '`';
 	if (e.code === 'Period') return '.';
 	if (e.code === 'Comma') return ',';
+	if (e.code === 'Equal') return '=';
+	if (e.code === 'Minus') return '-';
 	return e.key.length === 1 ? e.key.toLowerCase() : e.key;
 }
 
@@ -83,7 +91,8 @@ export function matches(e: KeyboardEvent, id: ShortcutId, mac = isMac()): number
 /** How shortcut `id` reads on this platform: ⌘⇧M, Ctrl+Shift+M. */
 export function shortcutLabel(id: ShortcutId, mac = isMac()): string {
 	const s = SHORTCUTS[id];
-	const key = s.key === '1-9' ? '1…9' : s.key.length === 1 ? s.key.toUpperCase() : s.key;
+	// The zoom-in key reads as +, as other apps show it.
+	const key = s.key === '1-9' ? '1…9' : s.key === '=' ? '+' : s.key.length === 1 ? s.key.toUpperCase() : s.key;
 	if (mac) return `${s.ctrl ? '⌃' : ''}${s.shift ? '⇧' : ''}${s.mod ? '⌘' : ''}${key === 'Tab' ? '⇥' : key}`;
 	return [s.ctrl || s.mod ? 'Ctrl' : '', s.shift ? 'Shift' : '', key].filter(Boolean).join('+');
 }

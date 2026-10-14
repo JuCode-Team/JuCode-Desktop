@@ -1160,6 +1160,9 @@
 		const pane = panes.get(activeId);
 		if (matches(e, 'palette')) return act(() => (showPalette = !showPalette));
 		if (matches(e, 'shortcuts')) return act(() => (showShortcuts = !showShortcuts));
+		if (matches(e, 'zoomIn')) return act(() => prefs.stepZoom(1));
+		if (matches(e, 'zoomOut')) return act(() => prefs.stepZoom(-1));
+		if (matches(e, 'zoomReset')) return act(() => prefs.stepZoom(0));
 		if (matches(e, 'captureRequirement'))
 			return act(() => {
 				openRequirements();

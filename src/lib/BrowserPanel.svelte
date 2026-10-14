@@ -7,6 +7,7 @@
 	import SquareDashedIcon from '@lucide/svelte/icons/square-dashed';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import { browser } from '$lib/browser.svelte';
+	import { prefs } from '$lib/prefs.svelte';
 	import { t } from '$lib/i18n';
 
 	let placeholder = $state<HTMLElement | null>(null);
@@ -31,8 +32,11 @@
 		const el = placeholder;
 		if (!el) return;
 		const sync = () => {
+			// CSS pixels; the native webview is placed in window points, which
+			// differ by the interface zoom.
 			const r = el.getBoundingClientRect();
-			browser.syncBounds({ x: r.left, y: r.top, w: r.width, h: r.height });
+			const z = prefs.zoom;
+			browser.syncBounds({ x: r.left * z, y: r.top * z, w: r.width * z, h: r.height * z });
 		};
 		const ro = new ResizeObserver(sync);
 		ro.observe(el);

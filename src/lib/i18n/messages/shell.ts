@@ -70,7 +70,10 @@ const shell = {
 			model: '切换模型',
 			approvalMode: '切换审批模式',
 			stop: '停止生成',
-			captureRequirement: '记下想法'
+			captureRequirement: '记下想法',
+			zoomIn: '放大界面',
+			zoomOut: '缩小界面',
+			zoomReset: '恢复默认大小'
 		},
 		updatePrompt: {
 			label: '应用更新',
@@ -997,7 +1000,10 @@ const shell = {
 			model: 'Switch model',
 			approvalMode: 'Switch approval mode',
 			stop: 'Stop generating',
-			captureRequirement: 'Note an idea'
+			captureRequirement: 'Note an idea',
+			zoomIn: 'Zoom in',
+			zoomOut: 'Zoom out',
+			zoomReset: 'Actual size'
 		},
 		updatePrompt: {
 			label: 'App update',
