@@ -773,32 +773,6 @@
 							input.value = '';
 						}}
 					/>
-					{#if bcaps.approvalModes}
-						<div class="footsel">
-							<button
-								type="button"
-								class="flatbtn mode"
-								class:warn={approvalCurrent.tone === 'warn'}
-								class:on={approvalOpen}
-								disabled={!connected && !draft}
-								onclick={() => (approvalOpen = !approvalOpen)}
-								title={t('chat.approvalModeTitle')}
-								aria-haspopup="menu"
-								aria-expanded={approvalOpen}
-							>
-								{#if approvalCurrent.icon}<approvalCurrent.icon size={16} />{/if}<span>{approvalCurrent.label}</span>
-							</button>
-							{#if approvalOpen}
-								<PopMenu
-									title={isAgent ? t('chat.approvalAgent') : t('chat.approvalQuestion')}
-									items={APPROVAL}
-									placement="up-left"
-									onSelect={pickMode}
-									onClose={() => (approvalOpen = false)}
-								/>
-							{/if}
-						</div>
-					{/if}
 					<div class="cspace"></div>
 					{#if chat.model}
 						<button
@@ -839,8 +813,35 @@
 					{/if}
 				</div>
 			</form>
-			{#if chat.statusLog.length || showCost || showCtx}
+			{#if bcaps.approvalModes || chat.statusLog.length || showCost || showCtx}
 				<div class="composer-foot">
+				{#if bcaps.approvalModes}
+					<div class="footsel">
+						<button
+							type="button"
+							class="flatbtn mode foot-mode"
+							class:warn={approvalCurrent.tone === 'warn'}
+							class:on={approvalOpen}
+							disabled={!connected && !draft}
+							onclick={() => (approvalOpen = !approvalOpen)}
+							title={t('chat.approvalModeTitle')}
+							aria-haspopup="menu"
+							aria-expanded={approvalOpen}
+						>
+							{#if approvalCurrent.icon}<approvalCurrent.icon size={13} />{/if}<span>{approvalCurrent.label}</span>
+						</button>
+						{#if approvalOpen}
+							<PopMenu
+								title={isAgent ? t('chat.approvalAgent') : t('chat.approvalQuestion')}
+								items={APPROVAL}
+								placement="up-left"
+								onSelect={pickMode}
+								onClose={() => (approvalOpen = false)}
+							/>
+						{/if}
+					</div>
+				{/if}
+					<div class="fspace"></div>
 					<StatusStrip {chat} />
 					{#if showCost}<span class="foot-cost">{costText(chat.cost, chat.billing)}</span>{/if}
 					{#if showCtx}
@@ -1063,7 +1064,6 @@
 	.composer-foot {
 		display: flex;
 		align-items: center;
-		justify-content: flex-end;
 		gap: 10px;
 		min-height: 22px;
 		padding: 5px 8px 0;
@@ -1081,7 +1081,7 @@
 		padding: 0 12px calc(env(safe-area-inset-bottom) + 12px);
 	}
 	.composer {
-		padding: 12px 12px 10px 16px;
+		padding: 14px 14px 10px 16px;
 		border-radius: var(--r);
 		background: var(--panel);
 		box-shadow: var(--shadow-float);
@@ -1093,7 +1093,7 @@
 	textarea {
 		display: block;
 		width: 100%;
-		min-height: 26px;
+		min-height: 52px;
 		max-height: 40vh;
 		padding: 2px 0 8px;
 		border: none;
@@ -1163,6 +1163,15 @@
 	}
 	.flatbtn.mode {
 		max-width: 100%;
+	}
+	/* Under the card, in the footer strip's quieter type. */
+	.flatbtn.foot-mode {
+		margin: -2px 0 -2px -6px;
+		padding: 2px 6px;
+		color: var(--dim);
+	}
+	.fspace {
+		flex: 1;
 	}
 	.flatbtn.mode span {
 		overflow: hidden;
