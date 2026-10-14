@@ -135,9 +135,6 @@
 		segments: 2,
 		inTokens: 18400,
 		outTokens: 2100,
-		files: 3,
-		added: 42,
-		removed: 7,
 		tools: 6,
 		cost: 0.084,
 		model: 'claude-sonnet-5-5'

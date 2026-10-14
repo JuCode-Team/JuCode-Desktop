@@ -8,17 +8,13 @@
 	import MessageSquareTextIcon from '@lucide/svelte/icons/message-square-text';
 	import SessionMark from '$lib/SessionMark.svelte';
 	import { sessionStatus } from '$lib/sessionStatus';
-	import { joinPath, parseFileHref, pathExt } from '$lib/fileRefs';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import ListChecksIcon from '@lucide/svelte/icons/list-checks';
 	import TargetIcon from '@lucide/svelte/icons/target';
-	import GitCompareIcon from '@lucide/svelte/icons/git-compare';
-	import RotateCcwClockIcon from '@lucide/svelte/icons/rotate-ccw-clock';
 	import FilesIcon from '@lucide/svelte/icons/files';
 	import GitBranchIcon from '@lucide/svelte/icons/git-branch';
 	import FolderIcon from '@lucide/svelte/icons/folder';
 	import GlobeIcon from '@lucide/svelte/icons/globe';
-	import ActivityIcon from '@lucide/svelte/icons/activity';
 	import NetworkIcon from '@lucide/svelte/icons/network';
 	import Toaster from '$lib/ui/Toaster.svelte';
 	import ModelSetup from '$lib/ModelSetup.svelte';
@@ -124,13 +120,10 @@
 	import { shortPath } from '$lib/agentProgress';
 	import type { ApprovalMode } from '$lib/approval';
 	import GoalPanel from '$lib/GoalPanel.svelte';
-	import ChangesPanel from '$lib/ChangesPanel.svelte';
-	import TurnsPanel from '$lib/TurnsPanel.svelte';
 	import FilesPanel from '$lib/FilesPanel.svelte';
 	import GitPanel from '$lib/GitPanel.svelte';
 	import TerminalPanel from '$lib/TerminalPanel.svelte';
 	import BrowserPanel from '$lib/BrowserPanel.svelte';
-	import DiagnosticsPanel from '$lib/DiagnosticsPanel.svelte';
 	import AgentRunsPanel from '$lib/AgentRunsPanel.svelte';
 	import TuiPanel from '$lib/TuiPanel.svelte';
 	import EditorPane from '$lib/editor/EditorPane.svelte';
@@ -405,7 +398,7 @@
 	let tilesReady = $state(false);
 	let focusedLeaf = $state<string | null>(null);
 
-	const ALL_PANELS = ['plan', 'goal', 'agents', 'changes', 'turns', 'files', 'git', 'term', 'browser', 'diag'] as const;
+	const ALL_PANELS = ['plan', 'goal', 'agents', 'files', 'git', 'term', 'browser'] as const;
 	// Plan/Goal are engine features. Goal stays gated by the backend cap; the plan
 	// tab also appears whenever there's an actual plan (e.g. claude's TodoWrite),
 	// even on backends that don't advertise goals.
@@ -421,8 +414,8 @@
 	// session (model popup), never at tab creation. Persisted `tui:*` tabs
 	// still render, but TUI tabs are no longer offered as new options.
 	const PANEL_ICONS: Record<(typeof ALL_PANELS)[number], typeof PlusIcon> = {
-		plan: ListChecksIcon, goal: TargetIcon, agents: NetworkIcon, changes: GitCompareIcon, turns: RotateCcwClockIcon,
-		files: FilesIcon, git: GitBranchIcon, term: SquareTerminalIcon, browser: GlobeIcon, diag: ActivityIcon
+		plan: ListChecksIcon, goal: TargetIcon, agents: NetworkIcon,
+		files: FilesIcon, git: GitBranchIcon, term: SquareTerminalIcon, browser: GlobeIcon
 	};
 	const addOptions = $derived([
 		{ key: 'chat', label: t('shell.agentSession'), icon: MessageSquareTextIcon, primary: true },
@@ -758,18 +751,7 @@
 	// hides files already under review). With nothing changed and nothing open
 	// it does nothing — the pane has no empty-editor mode.
 	function toggleAudit() {
-		if (editorStore.visible) {
-			editorStore.visible = false;
-			return;
-		}
-		if (editorStore.tabs.length) {
-			editorStore.visible = true;
-			return;
-		}
-		const cwd = activeProject?.path;
-		const changed = chat?.changedFiles ?? [];
-		if (!cwd || !changed.length) return;
-		editorStore.open(changed[changed.length - 1], cwd).catch((e) => console.error('open audit', e));
+		editorStore.visible = !editorStore.visible;
 	}
 
 	// ⌘K in the editor: forward the structured instruction to the active session
@@ -1130,29 +1112,6 @@
 		}
 	}
 
-	// Open a workspace file referenced by a tool panel (e.g. the turns list).
-	// HTML opens in the built-in browser (rendered) or the editor (source) per
-	// preference; everything else opens in the editor. Paths resolve relative
-	// to the active project root (chat links resolve inside their own pane).
-	function openActiveFile(href: string) {
-		const cwd = activeProject?.path;
-		if (!cwd) return;
-		const rel = parseFileHref(href).path;
-		if (!rel) return;
-		const abs = joinPath(cwd, rel);
-		const ext = pathExt(abs);
-		if ((ext === 'html' || ext === 'htm') && prefs.htmlOpenInBrowser) {
-			// The embedded browser loads http(s) only (a file:// URL was refused
-			// and left it on its empty page): serve the file from the loopback
-			// preview server, as chat links do, so its relative assets load too.
-			invoke<string>('preview_url', { path: abs })
-				.then((url) => browser.open(url))
-				.catch((e) => toast.error(t('chat.fileOpenFailed', { path: rel, error: String(e) })));
-		} else {
-			editorStore.open(abs, cwd).catch((e) => console.error('open file', e));
-		}
-	}
-
 	function onWindowKey(e: KeyboardEvent) {
 		// Something closer to the target already claimed this key (e.g. the code
 		// editor's own ⌘K / ⌘S keymap, or a pane's picker) — never double-fire.
@@ -1234,9 +1193,6 @@
 				const hadApproval = s.chat.pendingApproval?.callId ?? null;
 				const hadPlan = s.chat.messages.findLast((m) => m.kind === 'plan' && m.status === 'pending');
 				const lastPlan = s.chat.messages.findLast((m) => m.kind === 'plan');
-				// Capture the raw frame for the diagnostics trace so a mis-parsed or
-				// dropped tool frame is inspectable after the fact.
-				s.chat.captureFrame(data);
 				// Route the raw line through the session's adapter (the daemon already
 				// speaks the jucode dialect for every engine). Parse, translate and
 				// each handle() are isolated so one bad frame or event
@@ -1640,17 +1596,10 @@
 									{/key}
 								{:else if tab.panel === 'goal'}<GoalPanel goal={chat?.goal ?? null} />
 								{:else if tab.panel === 'agents'}{#if chat && activeId}{#key activeId}<AgentRunsPanel {chat} onOp={(op) => activeId && dispatch(activeId, op)} />{/key}{/if}
-								{:else if tab.panel === 'changes'}<ChangesPanel cwd={activeProject?.path ?? ''} files={chat?.changedFiles ?? []} agentDiffs={chat?.agentDiffs ?? {}} onRevert={(p, rel) => {
-									if (!chat) return;
-									chat.changedFiles = chat.changedFiles.filter((x) => x !== p);
-									delete chat.agentDiffs[rel];
-								}} />
-								{:else if tab.panel === 'turns'}<TurnsPanel turns={chat?.turnTimeline ?? []} onOpenFile={openActiveFile} />
 								{:else if tab.panel === 'files'}<FilesPanel rootDir={activeProject?.path ?? ''} />
 								{:else if tab.panel === 'git'}<GitPanel cwd={activeProject?.path ?? ''} worktree={activeProject?.worktree ?? null} llm={llmTarget} onOpenTask={(path, meta) => openTaskProject(path, meta)} onTaskRemoved={closeTaskProject} />
 								{:else if tab.panel === 'term'}<TerminalPanel cwd={activeProject?.path ?? ''} />
 								{:else if tab.panel === 'browser'}<BrowserPanel />
-								{:else if tab.panel === 'diag'}<DiagnosticsPanel chat={chat ?? null} />
 								{:else if tab.panel === 'audit'}<EditorPane onAiSend={sendAiEdit} />
 								{:else if tui}<TuiPanel backend={tui} cwd={activeProject?.path ?? ''} onOpenSettings={() => openSettings('agents')} />
 								{/if}

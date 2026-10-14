@@ -18,7 +18,7 @@ export const LEGACY_DOCK_TABS_KEY = 'jucode-dock-tabs';
 export const LEGACY_DOCK_ACTIVE_KEY = 'jucode-dock-active';
 
 /** Tool panel kinds a tile tab may reference (besides chat:/tui: tabs). */
-export const DOCK_PANELS = ['plan', 'goal', 'changes', 'turns', 'files', 'git', 'term', 'browser', 'diag'] as const;
+export const DOCK_PANELS = ['plan', 'goal', 'files', 'git', 'term', 'browser'] as const;
 
 export interface WorkspaceEntry {
 	id: string;

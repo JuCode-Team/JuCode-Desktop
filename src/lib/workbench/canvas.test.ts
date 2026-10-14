@@ -94,6 +94,12 @@ describe('reconcileLayout', () => {
 		expect(chatSessionsIn(next)).toEqual(['live']);
 	});
 
+	it('drops tabs of removed tool panels', () => {
+		const layout = singleLeafLayout([chatTab('s1'), panelTab('c', 'changes'), panelTab('t', 'turns'), panelTab('d', 'diag'), panelTab('g', 'git')]);
+		const next = reconcileLayout(serializeLayout(layout), ['s1'], 's1');
+		expect(leavesOf(next.root).flatMap((l) => l.tabs.map((t) => t.panel))).toEqual(['chat:s1', 'git']);
+	});
+
 	it('keeps a persisted 2-chat split intact when both session ids are live', () => {
 		// Restore with persisted tab ids re-spawns sessions under the same ids,
 		// so a workspace switch (or restart) must not collapse the split.

@@ -10,7 +10,7 @@ const editor = {
 		closeTab: '关闭标签',
 		closePane: '收起审阅面板（⌘E）',
 		empty: '没有打开的文件',
-		emptyHint: '在「改动」面板点击文件查看，或按 ⌘P 快速打开',
+		emptyHint: '在「文件」面板点击文件查看，或按 ⌘P 快速打开',
 		unsavedTitle: '未保存的修改',
 		unsavedClose: '「{name}」有未保存的修改，关闭将丢弃这些修改。确定关闭？',
 		dirtyProjectConfirm: '该项目在编辑器中还有未保存的文件，关闭项目将丢弃这些修改。继续？',
@@ -36,7 +36,7 @@ const editor = {
 		closeTab: 'Close tab',
 		closePane: 'Hide audit pane (⌘E)',
 		empty: 'No file open',
-		emptyHint: 'Click a file in the Changes panel to review it, or press ⌘P to quick-open',
+		emptyHint: 'Click a file in the Files panel to open it, or press ⌘P to quick-open',
 		unsavedTitle: 'Unsaved changes',
 		unsavedClose: '"{name}" has unsaved changes. Closing will discard them. Close anyway?',
 		dirtyProjectConfirm:

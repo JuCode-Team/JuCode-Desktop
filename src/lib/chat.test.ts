@@ -1,18 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { ChatState, countDiffLines } from './chat.svelte';
+import { ChatState } from './chat.svelte';
 import { setLocale } from './i18n';
 
 const userTexts = (c: ChatState) =>
 	c.messages.filter((m) => m.kind === 'user').map((m) => (m.kind === 'user' ? m.text : ''));
-
-describe('countDiffLines', () => {
-	it('counts +/- lines, ignoring +++/--- headers', () => {
-		expect(countDiffLines('--- a\n+++ b\n@@\n-old\n+new\n ctx')).toEqual({ added: 1, removed: 1 });
-	});
-	it('handles pure additions', () => {
-		expect(countDiffLines('+a\n+b\n+c')).toEqual({ added: 3, removed: 0 });
-	});
-});
 
 describe('ChatState.handle', () => {
 	it('keeps a just-sent message that the arriving snapshot does not have yet', () => {
@@ -99,64 +90,6 @@ describe('ChatState.handle', () => {
 		const last = c.messages[c.messages.length - 1] as { kind: string; tokens?: number };
 		expect(last.kind).toBe('assistant');
 		expect(last.tokens).toBe(42);
-	});
-
-	it('builds a per-turn diff timeline from edit tool outputs', () => {
-		const c = new ChatState();
-		// Turn 1: edit a.ts (+2/-1)
-		c.handle({ type: 'user_message', content: 'edit a' });
-		c.handle({ type: 'tool_start', call_id: 't1', name: 'str_replace' });
-		c.handle({
-			type: 'tool_output',
-			call_id: 't1',
-			name: 'str_replace',
-			output: JSON.stringify({ path: '/proj/a.ts', diff: '-old\n+new1\n+new2' })
-		});
-		// Turn 2: edit b.ts (+1/-0)
-		c.handle({ type: 'user_message', content: 'edit b' });
-		c.handle({ type: 'tool_start', call_id: 't2', name: 'write' });
-		c.handle({
-			type: 'tool_output',
-			call_id: 't2',
-			name: 'write',
-			output: JSON.stringify({ path: '/proj/b.ts', diff: '+only' })
-		});
-		const tl = c.turnTimeline;
-		expect(tl.map((t) => t.index)).toEqual([1, 0]); // newest first
-		expect(tl[1]).toMatchObject({ index: 0, text: 'edit a', added: 2, removed: 1 });
-		expect(tl[1].files).toEqual([{ path: '/proj/a.ts', added: 2, removed: 1 }]);
-		expect(tl[0]).toMatchObject({ index: 1, text: 'edit b', added: 1, removed: 0 });
-	});
-
-	it('drops per-turn diffs when truncating to an earlier turn', () => {
-		const c = new ChatState();
-		c.handle({ type: 'user_message', content: 'edit a' });
-		c.handle({ type: 'tool_start', call_id: 't1', name: 'write' });
-		c.handle({ type: 'tool_output', call_id: 't1', name: 'write', output: JSON.stringify({ path: '/a', diff: '+x' }) });
-		c.handle({ type: 'user_message', content: 'edit b' });
-		c.handle({ type: 'tool_start', call_id: 't2', name: 'write' });
-		c.handle({ type: 'tool_output', call_id: 't2', name: 'write', output: JSON.stringify({ path: '/b', diff: '+y' }) });
-		c.truncateToUserTurn(1); // drop turn 2 (index 1)
-		expect(c.turnTimeline.map((t) => t.index)).toEqual([0]);
-	});
-
-	it('summarizes raw frames for the diagnostics trace (incl. unparseable)', () => {
-		const c = new ChatState();
-		c.captureFrame(JSON.stringify({ type: 'stream_event', event: { type: 'content_block_start', content_block: { type: 'tool_use', name: 'Bash' } } }));
-		c.captureFrame(JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_9' }] } }));
-		c.captureFrame(JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use' }] }, parent_tool_use_id: 'toolu_p' }));
-		c.captureFrame('{not json');
-		expect(c.frameTrace[0]).toBe('stream_event/content_block_start tool_use:Bash');
-		expect(c.frameTrace[1]).toBe('user/tool_result toolu_9');
-		expect(c.frameTrace[2]).toContain('⤷sub');
-		expect(c.frameTrace[3]).toMatch(/^⚠ unparseable/);
-	});
-
-	it('caps the frame trace ring buffer at 200', () => {
-		const c = new ChatState();
-		for (let i = 0; i < 250; i++) c.captureFrame(JSON.stringify({ type: 'system', subtype: `s${i}` }));
-		expect(c.frameTrace.length).toBe(200);
-		expect(c.frameTrace[c.frameTrace.length - 1]).toBe('system/s249');
 	});
 
 	it('aggregates turn timing and message stats for diagnostics', () => {
@@ -519,7 +452,7 @@ describe('send state and turn stats', () => {
 		// claude: usage for the turn arrives after it ended
 		c.handle({ type: 'usage', input_tokens: 50, output_tokens: 5 });
 		const last = [...c.messages].reverse().find((m) => m.kind === 'assistant') as { turn?: Record<string, number> };
-		expect(last.turn).toMatchObject({ inTokens: 150, outTokens: 25, tools: 1, files: 0 });
+		expect(last.turn).toMatchObject({ inTokens: 150, outTokens: 25, tools: 1 });
 		expect(last.turn!.ttft).toBeGreaterThanOrEqual(0);
 	});
 });

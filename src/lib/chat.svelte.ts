@@ -32,9 +32,6 @@ export interface TurnStats {
 	ttft?: number;
 	inTokens: number;
 	outTokens: number;
-	files: number;
-	added: number;
-	removed: number;
 	tools: number;
 	cost: number;
 	billingTurns?: string[];
@@ -251,25 +248,6 @@ function agentRun(raw: Record<string, unknown>): AgentRun {
 	};
 }
 
-export function countDiffLines(diff: string): { added: number; removed: number } {
-	let added = 0;
-	let removed = 0;
-	for (const line of diff.split('\n')) {
-		if (line.startsWith('+') && !line.startsWith('+++')) added++;
-		else if (line.startsWith('-') && !line.startsWith('---')) removed++;
-	}
-	return { added, removed };
-}
-
-/** One user turn's worth of file edits, for the turn-level diff timeline. */
-export interface TurnDiff {
-	index: number;
-	text: string;
-	files: { path: string; added: number; removed: number }[];
-	added: number;
-	removed: number;
-}
-
 /** Reactive chat state projected from the engine's AgentEvent stream. */
 /** A failed model request being re-sent: attempt `attempt` of `max`, after
  *  `delayMs` from `at` (ms), because of `reason` (the provider's error). */
@@ -483,9 +461,6 @@ export class ChatState {
 		plan: string | null;
 		windows: { key: string; used: number; resetsAt: number | null; minutes: number | null }[];
 	} | null>(null);
-	// Compact ring buffer of the most recent raw engine frames (summarized), for the
-	// diagnostics trace — lets a mis-parsed / dropped tool frame be inspected.
-	frameTrace = $state<string[]>([]);
 	commands = $state<CommandItem[]>([]);
 	totalIn = $state(0);
 	totalOut = $state(0);
@@ -496,14 +471,6 @@ export class ChatState {
 	/** The model request failed and is being re-sent (jucode engine); null
 	 *  once output flows again or the turn ends. */
 	retry = $state<RetryState | null>(null);
-	// Files the agent edited this session (drives the Changes panel).
-	changedFiles = $state<string[]>([]);
-	// Per user-turn file edits (path → added/removed line counts), keyed by the
-	// 0-based user-turn index — drives the turn-level diff timeline.
-	turnEdits = $state<Record<number, Record<string, { added: number; removed: number }>>>({});
-	/** The agent's own edits per file (the edit tools' unified diffs, oldest
-	 *  first), so 还原 can undo exactly them and keep the user's changes. */
-	agentDiffs: Record<string, string[]> = {};
 	// Approval policy, enforced engine-side ('ask' ↔ read-only, 'edits' ↔
 	// auto-edit, 'all' ↔ full-auto). The engine is the source of truth: this
 	// mirrors its `approval_mode` events, except right after engine startup where
@@ -686,15 +653,11 @@ export class ChatState {
 		this.#closeSegment(now);
 		const elapsed = now - this.#turnStart;
 		this.#addRun(elapsed);
-		const edits = Object.values(this.turnEdits[this.userTurns - 1] ?? {});
 		const turn: TurnStats = {
 			elapsed,
 			...(this.#firstOutput !== null ? { ttft: this.#firstOutput - this.#turnStart } : {}),
 			inTokens: this.#turnIn,
 			outTokens: this.#turnOut,
-			files: edits.length,
-			added: edits.reduce((n, e) => n + e.added, 0),
-			removed: edits.reduce((n, e) => n + e.removed, 0),
 			tools: this.#turnTools,
 			cost: this.cost - this.#turnCostStart,
 			billingTurns: [...this.#turnBillingIds],
@@ -858,27 +821,6 @@ export class ChatState {
 		return out;
 	}
 
-	/** Per-turn file-change timeline: one entry per user turn that edited files,
-	 *  newest first, with the turn's prompt and its files' ±line counts. */
-	get turnTimeline(): TurnDiff[] {
-		const userTexts: string[] = [];
-		for (const m of this.messages) if (m.kind === 'user') userTexts.push(m.text);
-		const out: TurnDiff[] = [];
-		for (const [key, bucket] of Object.entries(this.turnEdits)) {
-			const index = Number(key);
-			const files = Object.entries(bucket).map(([path, c]) => ({ path, added: c.added, removed: c.removed }));
-			if (!files.length) continue;
-			out.push({
-				index,
-				text: userTexts[index] ?? '',
-				files,
-				added: files.reduce((s, f) => s + f.added, 0),
-				removed: files.reduce((s, f) => s + f.removed, 0)
-			});
-		}
-		return out.sort((a, b) => b.index - a.index);
-	}
-
 	/** For a claude rewind to the `userIndex`-th user turn: the transcript uuid of
 	 *  the assistant message ending the previous turn — the `--resume-session-at`
 	 *  target. Null when rewinding to the first turn (restart fresh). */
@@ -900,10 +842,6 @@ export class ChatState {
 	 *  local view truncation on a thread/rollback rewind (the engine rewinds its
 	 *  own history; we mirror it in the projected transcript). */
 	truncateToUserTurn(userIndex: number) {
-		// Drop per-turn diffs for the dropped turns (index >= userIndex).
-		for (const key of Object.keys(this.turnEdits)) {
-			if (Number(key) >= userIndex) delete this.turnEdits[Number(key)];
-		}
 		let count = 0;
 		for (let i = 0; i < this.messages.length; i++) {
 			if (this.messages[i].kind === 'user') {
@@ -962,42 +900,6 @@ export class ChatState {
 		for (const m of this.messages) {
 			if (m.kind === 'tool' && m.running) m.running = false;
 		}
-	}
-
-	/** Summarize a raw engine frame into one trace line and keep the last 200.
-	 *  Deliberately compact (type + the few fields that matter for tool tracking)
-	 *  so the diagnostics trace stays readable and cheap. */
-	captureFrame(raw: string) {
-		let summary: string;
-		try {
-			const o = JSON.parse(raw) as Record<string, unknown>;
-			const type = typeof o.type === 'string' ? o.type : '?';
-			if (type === 'stream_event') {
-				const ev = (o.event ?? {}) as Record<string, unknown>;
-				const et = str(ev.type);
-				const cb = (ev.content_block ?? {}) as Record<string, unknown>;
-				const d = (ev.delta ?? {}) as Record<string, unknown>;
-				const detail = cb.type ? `${str(cb.type)}${cb.name ? `:${str(cb.name)}` : ''}` : str(d.type);
-				summary = `stream_event/${et}${detail ? ` ${detail}` : ''}`;
-			} else if (type === 'user') {
-				const content = ((o.message as Record<string, unknown>)?.content ?? []) as unknown;
-				const tr = Array.isArray(content) ? content.find((b) => (b as Record<string, unknown>)?.type === 'tool_result') : null;
-				summary = tr ? `user/tool_result ${str((tr as Record<string, unknown>).tool_use_id)}` : 'user/message';
-			} else if (type === 'assistant') {
-				const content = ((o.message as Record<string, unknown>)?.content ?? []) as unknown[];
-				const kinds = Array.isArray(content) ? content.map((b) => str((b as Record<string, unknown>).type)).join(',') : '';
-				summary = `assistant [${kinds}]`;
-			} else if (type === 'system') {
-				summary = `system/${str(o.subtype)}`;
-			} else {
-				summary = `${type}${o.subtype ? `/${str(o.subtype)}` : ''}`;
-			}
-			if (o.parent_tool_use_id) summary += ' ⤷sub';
-		} catch {
-			summary = `⚠ unparseable (${raw.length}b): ${raw.slice(0, 60)}`;
-		}
-		this.frameTrace.push(summary);
-		if (this.frameTrace.length > 200) this.frameTrace.splice(0, this.frameTrace.length - 200);
 	}
 
 	#tool(callId: string): Extract<Msg, { kind: 'tool' }> | undefined {
@@ -1242,39 +1144,14 @@ export class ChatState {
 						/* non-JSON output */
 					}
 				}
-				// Record files touched by a successful edit tool for the Changes panel.
+				// Reload editor tabs of files a successful edit tool touched.
 				if (ev.is_error !== true && EDIT_TOOLS.includes(str(ev.name))) {
 					try {
 						const out = JSON.parse(str(ev.output)) as Record<string, unknown>;
-						const paths = [out.path, ...(Array.isArray(out.paths) ? out.paths : [])];
-						const edited: string[] = [];
-						// One file's edit: keep its diff (bounded) for an exact undo,
-						// by the project-relative name its diff header carries.
-						const label = /^\+\+\+ b\/(.+)$/m.exec(str(out.diff))?.[1];
-						if (label && typeof out.path === 'string' && !Array.isArray(out.paths)) {
-							const list = (this.agentDiffs[label] ??= []);
-							if (list.length < 200) list.push(str(out.diff));
-						}
-						for (const p of paths) {
-							if (typeof p === 'string' && p) {
-								edited.push(p);
-								if (!this.changedFiles.includes(p)) this.changedFiles.push(p);
-							}
-						}
-						// Attribute the edit's ±line counts to the current user turn.
-						if (edited.length) {
-							const turn = this.userTurns - 1;
-							if (turn >= 0) {
-								const { added, removed } = countDiffLines(str(out.diff));
-								const bucket = (this.turnEdits[turn] ??= {});
-								for (const p of edited) {
-									const cur = (bucket[p] ??= { added: 0, removed: 0 });
-									cur.added += added;
-									cur.removed += removed;
-								}
-							}
-							ChatState.onFilesEdited?.(edited);
-						}
+						const edited = [out.path, ...(Array.isArray(out.paths) ? out.paths : [])].filter(
+							(p): p is string => typeof p === 'string' && !!p
+						);
+						if (edited.length) ChatState.onFilesEdited?.(edited);
 					} catch (e) {
 						/* non-JSON output */
 						console.warn('tool_output JSON parse failed', e);

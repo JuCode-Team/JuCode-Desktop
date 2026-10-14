@@ -284,7 +284,6 @@ const settings = {
 				elapsed: '总耗时',
 				ttft: '首字延迟',
 				tokens: 'Token',
-				files: '修改的文件',
 				tools: '工具调用',
 				cost: '费用',
 				model: '模型'
@@ -781,7 +780,6 @@ const settings = {
 				elapsed: 'Total time',
 				ttft: 'First token',
 				tokens: 'Tokens',
-				files: 'Files changed',
 				tools: 'Tool calls',
 				cost: 'Cost',
 				model: 'Model'

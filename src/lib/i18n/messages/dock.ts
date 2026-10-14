@@ -1,4 +1,4 @@
-// Tool-panel area: GitPanel, ChangesPanel, FilesPanel, PlanPanel, GoalPanel,
+// Tool-panel area: GitPanel, FilesPanel, PlanPanel, GoalPanel,
 // TerminalPanel and the Mosaic chrome. Populated during the dock-area i18n
 // migration; the keys keep their historical names.
 const dock = {
@@ -6,13 +6,10 @@ const dock = {
 		tabs: {
 			plan: '计划',
 			goal: '目标',
-			changes: '改动',
-			turns: '回合',
 			files: '文件',
 			git: 'Git',
 			term: '终端',
 			browser: '浏览器',
-			diag: '诊断',
 			agents: '智能体'
 		},
 		agents: {
@@ -55,35 +52,6 @@ const dock = {
 			exited: '进程已退出',
 			restart: '重新启动',
 			backToGui: '回到 GUI'
-		},
-		turns: {
-			empty: '本会话还没有文件改动',
-			turnN: '第 {n} 回合',
-			foot: '{n} 个有改动的回合'
-		},
-		diag: {
-			engine: '引擎',
-			backend: '后端',
-			provider: '提供方',
-			model: '模型',
-			state: '状态',
-			session: '会话 ID',
-			restarts: '重启次数',
-			usage: '用量',
-			tokensIn: '输入 tokens',
-			tokensOut: '输出 tokens',
-			tokensTotal: '合计 tokens',
-			context: '上下文',
-			cost: '成本',
-			timing: '耗时',
-			turns: '完成回合',
-			totalTime: '总耗时',
-			meanTime: '平均每回合',
-			trace: '事件日志',
-			traceEmpty: '暂无事件',
-			frames: '原始帧',
-			copy: '复制诊断',
-			copied: '已复制'
 		},
 		browser: {
 			urlPlaceholder: '输入网址，回车打开',
@@ -174,18 +142,6 @@ const dock = {
 			forceCleanupConfirm: '常规清理失败：\n{msg}\n\n强制删除该 worktree 与分支（丢弃未合并改动）？',
 			forceCleanupTitle: '强制清理'
 		},
-		changes: {
-			title: '本会话改动',
-			empty: '本会话暂无文件改动',
-			emptyHint: 'AI 编辑文件后会在此列出',
-			revert: '还原',
-			revertFile: '还原此文件',
-			revertConfirm: '把「{path}」还原到上次提交的版本？你自己在这个文件里没提交的改动也会一起丢掉，此操作不可撤销。',
-			revertAgentConfirm: '撤销智能体对「{path}」的修改？你自己的改动会保留。',
-			revertAgentFailed: '无法只撤销智能体的修改（文件之后又改动过），文件未改动：{error}',
-			revertTitle: '还原文件',
-			newFileDiff: '（新文件或无可显示的 diff）'
-		},
 		files: {
 			empty: '空目录',
 			refresh: '刷新',
@@ -219,13 +175,10 @@ const dock = {
 		tabs: {
 			plan: 'Plan',
 			goal: 'Goal',
-			changes: 'Changes',
-			turns: 'Turns',
 			files: 'Files',
 			git: 'Git',
 			term: 'Terminal',
 			browser: 'Browser',
-			diag: 'Diagnostics',
 			agents: 'Agents'
 		},
 		agents: {
@@ -268,35 +221,6 @@ const dock = {
 			exited: 'Process exited',
 			restart: 'Restart',
 			backToGui: 'Back to GUI'
-		},
-		turns: {
-			empty: 'No file changes in this session yet',
-			turnN: 'Turn {n}',
-			foot: '{n} turns with changes'
-		},
-		diag: {
-			engine: 'Engine',
-			backend: 'Backend',
-			provider: 'Provider',
-			model: 'Model',
-			state: 'State',
-			session: 'Session ID',
-			restarts: 'Restarts',
-			usage: 'Usage',
-			tokensIn: 'Tokens in',
-			tokensOut: 'Tokens out',
-			tokensTotal: 'Tokens total',
-			context: 'Context',
-			cost: 'Cost',
-			timing: 'Timing',
-			turns: 'Turns done',
-			totalTime: 'Total time',
-			meanTime: 'Mean / turn',
-			trace: 'Event log',
-			traceEmpty: 'No events yet',
-			frames: 'Raw frames',
-			copy: 'Copy diagnostics',
-			copied: 'Copied'
 		},
 		browser: {
 			urlPlaceholder: 'Enter a URL and press Enter',
@@ -386,18 +310,6 @@ const dock = {
 			prune: 'Prune stale records',
 			forceCleanupConfirm: 'Normal cleanup failed:\n{msg}\n\nForce-delete this worktree and branch (discarding unmerged changes)?',
 			forceCleanupTitle: 'Force cleanup'
-		},
-		changes: {
-			title: 'Changes this session',
-			empty: 'No file changes this session',
-			emptyHint: 'Files the AI edits will appear here',
-			revert: 'Revert',
-			revertFile: 'Revert this file',
-			revertConfirm: 'Restore "{path}" to its last commit? Your own uncommitted changes to it are lost too. This cannot be undone.',
-			revertAgentConfirm: 'Undo the agent\'s edits to "{path}"? Your own changes stay.',
-			revertAgentFailed: 'Could not undo only the agent\'s edits (the file changed since); the file is unchanged: {error}',
-			revertTitle: 'Revert file',
-			newFileDiff: '(New file or no diff to display)'
 		},
 		files: {
 			empty: 'Empty directory',
