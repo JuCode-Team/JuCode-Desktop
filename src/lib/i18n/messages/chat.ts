@@ -179,7 +179,7 @@ const chat = {
 			free: '剩余空间'
 		},
 		contextLoading: '正在统计各部分占用…',
-		contextDeferredHint: '用到时才加载，目前不占用上下文',
+		contextDeferred: '按需加载 · 暂不占用',
 		contextFiles: '记忆文件',
 		context: '上下文',
 		toCompaction: '{pct}% · 到压缩点',
@@ -511,7 +511,7 @@ const chat = {
 			free: 'Free'
 		},
 		contextLoading: 'Counting what the context holds…',
-		contextDeferredHint: 'Loaded only when used; not in the context yet',
+		contextDeferred: 'On demand · not loaded yet',
 		contextFiles: 'Memory files',
 		context: 'Context',
 		toCompaction: '{pct}% · to compaction',

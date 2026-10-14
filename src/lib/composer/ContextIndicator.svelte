@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import ContextRing from '$lib/ContextRing.svelte';
 	import { t } from '$lib/i18n';
 	import { fmtDur } from '$lib/turnStats';
@@ -39,19 +40,24 @@
 		onBreakdown?: () => void;
 	} = $props();
 
-	// Asked again on hover, at most every few seconds.
-	let askedAt = 0;
-	function ask() {
-		if (!onBreakdown || Date.now() - askedAt < 5000) return;
-		askedAt = Date.now();
-		onBreakdown();
-	}
+	// Asked in the background once the count settles, so the popover opens
+	// with figures already in.
+	$effect(() => {
+		void contextTokens;
+		const ask = onBreakdown;
+		if (!ask) return;
+		const timer = setTimeout(() => untrack(ask), 1500);
+		return () => clearTimeout(timer);
+	});
 	const counted = $derived(breakdown && 'total' in breakdown ? breakdown : null);
 	const rows = $derived(counted ? breakdownRows(counted) : null);
 	const label = (name: string) => {
 		const key = categoryKey(name);
 		return key ? t(`chat.contextCat.${key}`) : name;
 	};
+	// Deferred rows sit under their own heading, so drop the "(deferred)" suffix.
+	const deferredLabel = (name: string) => label(name.replace(/ \(deferred\)$/, ''));
+	const fmtPct = (n: number) => `${n.toFixed(1)}%`;
 	const base = (path: string) => path.split(/[\\/]/).pop() || path;
 
 	const fmtTokens = (n: number) =>
@@ -60,8 +66,7 @@
 
 <!-- Laid out like the plan-quota panel in the model menu: dim labels, plain
      tabular figures, a thin track. -->
-<!-- svelte-ignore a11y_no_static_element_interactions (hover only asks for figures) -->
-<div class="ctxwrap" onmouseenter={ask}>
+<div class="ctxwrap">
 	<ContextRing {pct} />
 	<span class="ctx-text">{fmtTokens(contextTokens)} / {fmtTokens(contextLimit)}</span>
 	<div class="ctx-pop">
@@ -69,35 +74,45 @@
 			<span class="ctx-label">{t('chat.context')}</span>
 			<span class="ctx-num">{fmtTokens(contextTokens)} / {fmtTokens(contextLimit)}</span>
 		</div>
-		{#if !rows}<div class="ctx-track"><span class="ctx-fill" class:warn={pct >= 75} class:full={pct >= 90} style:width="{Math.min(100, pct)}%"></span></div>{/if}
+		{#if rows}
+			<!-- Each category's share of the window; the room kept for compaction hatched. -->
+			<div class="bk-bar">
+				{#each rows.used as r (r.name)}<span class="bk-seg" style:--hue={r.hue} style:width="{r.pct}%"></span>{/each}
+				{#each rows.room as r (r.name)}{#if r.kind === 'buffer'}<span class="bk-seg buffer" style:width="{r.pct}%"></span>{/if}{/each}
+			</div>
+		{:else}
+			<div class="ctx-track"><span class="ctx-fill" class:warn={pct >= 75} class:full={pct >= 90} style:width="{Math.min(100, pct)}%"></span></div>
+		{/if}
 		<div class="ctx-sub">{atThreshold ? t('chat.toCompaction', { pct }) : t('chat.contextUsed', { pct })}</div>
-		{#if onBreakdown}
-			{#if rows}
-				<!-- Each category's share of the window; the room kept for compaction hatched. -->
-				<div class="bk-bar">
-					{#each rows.used as r (r.name)}<span class="bk-seg" style:--hue={r.hue} style:width="{r.pct}%"></span>{/each}
-					{#each rows.room as r (r.name)}{#if r.kind === 'buffer'}<span class="bk-seg buffer" style:width="{r.pct}%"></span>{/if}{/each}
-				</div>
+		{#if rows}
+			<div class="bk-list">
+				{#each rows.used as r (r.name)}
+					<div class="bk-row"><span class="bk-dot" style:--hue={r.hue}></span><span class="bk-name">{label(r.name)}</span><span class="ctx-num">{fmtTokens(r.tokens)}</span><span class="bk-pct">{fmtPct(r.pct)}</span></div>
+				{/each}
+			</div>
+			<div class="bk-list">
+				{#each rows.room as r (r.name)}
+					<div class="bk-row dim"><span class="bk-dot {r.kind}"></span><span class="bk-name">{label(r.name)}</span><span class="ctx-num">{fmtTokens(r.tokens)}</span><span class="bk-pct">{fmtPct(r.pct)}</span></div>
+				{/each}
+			</div>
+			{#if rows.deferred.length}
 				<div class="bk-list">
-					{#each rows.used as r (r.name)}
-						<div class="bk-row"><span class="bk-dot" style:--hue={r.hue}></span><span class="bk-name">{label(r.name)}</span><span class="ctx-num">{fmtTokens(r.tokens)}</span><span class="bk-pct">{r.pct}%</span></div>
-					{/each}
+					<div class="ctx-cap">{t('chat.contextDeferred')}</div>
 					{#each rows.deferred as r (r.name)}
-						<div class="bk-row dim" title={t('chat.contextDeferredHint')}><span class="bk-dot hollow"></span><span class="bk-name">{label(r.name)}</span><span class="ctx-num">{fmtTokens(r.tokens)}</span><span class="bk-pct"></span></div>
-					{/each}
-					{#each rows.room as r (r.name)}
-						<div class="bk-row dim"><span class="bk-dot {r.kind}"></span><span class="bk-name">{label(r.name)}</span><span class="ctx-num">{fmtTokens(r.tokens)}</span><span class="bk-pct">{r.pct}%</span></div>
+						<div class="bk-row dim"><span></span><span class="bk-name">{deferredLabel(r.name)}</span><span class="ctx-num">{fmtTokens(r.tokens)}</span><span class="bk-pct"></span></div>
 					{/each}
 				</div>
-				{#if counted?.memoryFiles.length}
-					<div class="ctx-cap bk-cap">{t('chat.contextFiles')}</div>
-					{#each counted.memoryFiles.slice(0, 6) as f (f.path)}
-						<div class="ctx-row" title={f.path}><span class="bk-file">{base(f.path)}</span><span class="ctx-num">{fmtTokens(f.tokens)}</span></div>
-					{/each}
-				{/if}
-			{:else if !breakdown}
-				<div class="ctx-sub bk-wait">{t('chat.contextLoading')}</div>
 			{/if}
+			{#if counted?.memoryFiles.length}
+				<div class="bk-list">
+					<div class="ctx-cap">{t('chat.contextFiles')}</div>
+					{#each counted.memoryFiles.slice(0, 6) as f (f.path)}
+						<div class="bk-row" title={f.path}><span></span><span class="bk-name">{base(f.path)}</span><span class="ctx-num">{fmtTokens(f.tokens)}</span><span class="bk-pct"></span></div>
+					{/each}
+				</div>
+			{/if}
+		{:else if onBreakdown && !breakdown}
+			<div class="ctx-sub bk-wait">{t('chat.contextLoading')}</div>
 		{/if}
 		{#if totalIn || totalOut || cost > 0 || billing || billingError || runMs > 0}
 			<div class="ctx-stats">
@@ -211,22 +226,21 @@
 		background: var(--dim);
 		background: oklch(from var(--brand) calc(l + 0.08 - var(--hue) * 0.05) calc(c * 0.8) calc(h - 40 + var(--hue) * 24));
 	}
+	/* No dividers or minimum widths: at a few percent they read as stripes. */
 	.bk-seg {
 		flex: none;
-		min-width: 2px;
 		height: 100%;
-	}
-	.bk-seg + .bk-seg {
-		box-shadow: inset 1px 0 0 var(--panel);
 	}
 	.bk-seg.buffer,
 	.bk-dot.buffer {
 		background: repeating-linear-gradient(135deg, var(--border) 0 2px, transparent 2px 4px);
 	}
+	/* Groups are set apart by space alone; one rule above the session totals. */
 	.bk-list {
 		display: flex;
 		flex-direction: column;
 		gap: 3px;
+		margin-top: 10px;
 	}
 	.bk-row {
 		display: grid;
@@ -249,8 +263,7 @@
 		background: none;
 		box-shadow: inset 0 0 0 1px var(--border);
 	}
-	.bk-name,
-	.bk-file {
+	.bk-name {
 		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -262,11 +275,8 @@
 		font-variant-numeric: tabular-nums;
 		color: var(--dim2);
 	}
-	.bk-cap {
-		margin: 8px 0 2px;
-	}
 	.bk-wait {
-		margin-top: 6px;
+		margin-top: 10px;
 	}
 	.ctx-stats {
 		display: flex;
