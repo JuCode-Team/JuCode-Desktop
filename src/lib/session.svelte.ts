@@ -1164,8 +1164,22 @@ export class SessionStore {
 
 	/** Tear down a project and all its sessions (the page handles confirmation). */
 	removeProject(p: Project) {
+		this.#dropProject(p, true);
+	}
+
+	/** Takes the project off this window without ending its sessions: they
+	 *  keep running in the daemon (a reply under way finishes) and reopen,
+	 *  where they are, when the project comes back (switching workspaces). */
+	detachProject(p: Project) {
+		this.#dropProject(p, false);
+	}
+
+	#dropProject(p: Project, close: boolean) {
 		for (const s of p.sessions) {
-			if (!s.dormant && !s.draft) closeSession(s.id).catch(() => {});
+			if (!s.dormant && !s.draft) {
+				if (close) closeSession(s.id).catch(() => {});
+				else daemon.detach(s.id);
+			}
 			unregisterAdapter(s.id);
 			clearDraft(s.id);
 			dropHeldOps(s.id);

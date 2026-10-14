@@ -884,8 +884,8 @@
 	// ---------- workspaces ----------
 	// A workspace is a saved set of projects + its canvas layout. Switching
 	// swaps the whole session tree: snapshot the current one into its
-	// workspace, close all live engine sessions, then restore the target's
-	// projects (resume by id) and rebuild the canvas. Swaps must never
+	// workspace, detach its sessions (they keep running in the daemon), then
+	// restore the target's projects (reopened by id) and rebuild the canvas. Swaps must never
 	// overlap: `wsBusy` rejects (and disables in the tab bar) new transitions
 	// while one is in flight; the generation token is belt-and-braces so a
 	// stale restore can never persist its tree over a newer one.
@@ -897,7 +897,7 @@
 		wsBusy = true;
 		try {
 			tilesReady = false; // gate the tile effects during the swap
-			for (const p of [...store.projects]) store.removeProject(p);
+			for (const p of [...store.projects]) store.detachProject(p);
 			store.loaded = false; // re-gate the persist effect during the swap
 			await store.restore(entry.projects);
 			if (gen !== wsGen) return;

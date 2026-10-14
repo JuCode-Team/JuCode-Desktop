@@ -5,7 +5,7 @@ vi.mock('./protocol', () => ({
 	hostSession: vi.fn(() => Promise.resolve()),
 	acpAgentsList: vi.fn(() => Promise.resolve([{ id: 'gemini', name: 'Gemini', command: 'gemini', args: ['--experimental-acp'], env: {} }])),
 	// The daemon names a new session after its desktop id.
-	daemon: { sessionOf: vi.fn((id: string) => `conv-${id}`), request: vi.fn(() => Promise.resolve({})) },
+	daemon: { sessionOf: vi.fn((id: string) => `conv-${id}`), request: vi.fn(() => Promise.resolve({})), detach: vi.fn() },
 	closeSession: vi.fn(() => Promise.resolve()),
 	sendOp: vi.fn(() => Promise.resolve()),
 	sendLine: vi.fn(() => Promise.resolve()),
@@ -909,6 +909,32 @@ describe('project order', () => {
 		store.moveProject('c', 'missing', false);
 		store.moveProject('missing', 'a', false);
 		expect(store.shownProjects.map((p) => p.id)).toEqual(['a', 'b', 'c']);
+	});
+});
+
+describe('switching workspaces', () => {
+	it('detaches the running sessions of a project instead of closing them', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p);
+		begin(id);
+		await flush();
+		store.detachProject(p);
+		expect(daemon.detach).toHaveBeenCalledWith(id);
+		expect(closeSession).not.toHaveBeenCalled();
+		expect(store.projects).toEqual([]);
+	});
+
+	it('still closes them when the project is removed', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p);
+		begin(id);
+		await flush();
+		store.removeProject(p);
+		expect(closeSession).toHaveBeenCalledWith(id);
 	});
 });
 
