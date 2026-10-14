@@ -3,7 +3,7 @@
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
 	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
-	import { untrack } from 'svelte';
+	import { flushSync, untrack } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import Markdown from '$lib/Markdown.svelte';
 	import Collapse from '$lib/ui/Collapse.svelte';
@@ -122,9 +122,29 @@
 	// streaming/auto-scroll path is completely untouched. Heights are measured per
 	// message (cached by object identity) with an estimate for not-yet-seen rows.
 	const VIRTUAL_MIN = 40; // messages before windowing engages
-	const EST_ROW = 120; // px estimate for an unmeasured row
+	// An unmeasured row's height, px, from what it holds: a row that enters the
+	// window above the view moves the view by however far this is off, which
+	// measure() then takes back.
+	function estimate(m: Msg): number {
+		if (folds.head.has(m) && folded(m)) return 26; // the fold's line
+		const lines = (text: string, perLine: number) =>
+			text.split('\n').reduce((n, l) => n + Math.max(1, Math.ceil(l.length / perLine)), 0);
+		switch (m.kind) {
+			case 'tool':
+				return 36; // a folded card
+			case 'reasoning':
+				return m.collapsed ? 26 : 30 + lines(m.text, 45) * 25;
+			case 'user':
+				return 46 + lines(m.text, 36) * 25;
+			case 'assistant':
+				return 8 + lines(m.text, 45) * 26;
+			default:
+				return 120;
+		}
+	}
 	const GAP = 16; // px, matches .list gap
 	const OVERSCAN = 800; // px rendered beyond the viewport on each side
+	const SETTLE_MS = 150; // quiet after the last scroll event before the padding settles
 
 	// Weak: a transcript replay replaces the messages, and the old ones (with
 	// their tool output) must not stay alive here.
@@ -143,7 +163,15 @@
 		const el = scroller;
 		if (!el) return;
 		const sync = () => {
+			lastScroll = performance.now();
 			scrollTop = el.scrollTop;
+			// Near the top the padding has no room left to give: settle now.
+			if (shift && padBase + shift < 0) {
+				const was = shift;
+				shift = 0;
+				flushSync();
+				el.scrollTop -= was;
+			}
 			viewH = el.clientHeight;
 			atEnd = el.scrollHeight - el.scrollTop - el.clientHeight < 8;
 			cite = null;
@@ -169,7 +197,7 @@
 		for (let i = 0; i < messages.length; i++) {
 			const m = messages[i];
 			// Unshown placeholders occupy no row (and no gap).
-			const h = shown(m) ? (heights.get(m) ?? EST_ROW) + GAP : 0;
+			const h = shown(m) ? (heights.get(m) ?? estimate(m)) + GAP : 0;
 			offs[i + 1] = offs[i] + h;
 		}
 		return offs;
@@ -188,23 +216,57 @@
 		return { first, last };
 	});
 	const windowRows = $derived(messages.slice(range.first, range.last + 1));
-	const padTop = $derived(virtual ? offsets[range.first] : 0);
+	// Rows above the view that change height while the reader scrolls give or
+	// take room in the top padding, so nothing below them moves and the
+	// scroll position is not touched mid-scroll (WebKit cuts a momentum
+	// scroll short when it is). Once scrolling stops, the padding goes back
+	// to the offsets' value and the position moves with it, in one step.
+	let shift = $state(0);
+	let lastScroll = 0;
+	let settleTimer: ReturnType<typeof setTimeout> | undefined;
+	const padBase = $derived(virtual ? offsets[range.first] : 0);
+	const padTop = $derived(Math.max(0, padBase + shift));
+	/** Rows above the view grew by `delta` px. */
+	function correct(delta: number) {
+		if (!scroller) return;
+		if (performance.now() - lastScroll < SETTLE_MS && padBase + shift - delta >= 0) {
+			shift -= delta;
+			clearTimeout(settleTimer);
+			settleTimer = setTimeout(settle, SETTLE_MS);
+		} else scroller.scrollTop += delta;
+	}
+	function settle() {
+		if (!shift || !scroller) return;
+		const left = SETTLE_MS - (performance.now() - lastScroll);
+		if (left > 0) {
+			settleTimer = setTimeout(settle, left);
+			return;
+		}
+		const was = shift;
+		shift = 0;
+		flushSync();
+		scroller.scrollTop -= was;
+	}
 	const padBottom = $derived(virtual ? Math.max(0, totalH - offsets[range.last + 1]) : 0);
 
 	let clickedAt = 0;
 	// Measure a rendered row and cache its height, coalescing recomputes into one rAF.
 	function measure(node: HTMLElement, msg: Msg) {
 		const record = () => {
-			const h = node.offsetHeight;
+			const h = node.getBoundingClientRect().height;
 			const prev = heights.get(msg);
 			if (h > 0 && prev !== h) {
 				heights.set(msg, h);
-				// A row that starts above the view changed height on its own (an
-				// image in it loaded, mostly as it is windowed back in on the way
-				// up): it grows upwards, so what is being read stays put. Not
-				// right after a click, which opens or folds something in view.
-				if (prev !== undefined && scroller && performance.now() - clickedAt > 1000 && node.getBoundingClientRect().top < scroller.getBoundingClientRect().top)
-					scroller.scrollTop += h - prev;
+				// A row that starts above the view has a height other than the one
+				// the window laid out for it: windowed in on the way up, it took
+				// the room of its estimate; or it changed on its own (an image
+				// loaded). It grows upwards, so what is being read stays put. A
+				// change right after a click opens or folds something in view and
+				// is left alone.
+				const was = prev ?? estimate(msg);
+				const own = prev === undefined || performance.now() - clickedAt > 1000;
+				if (scroller && own && h !== was && node.getBoundingClientRect().top < scroller.getBoundingClientRect().top)
+					correct(h - was);
 				if (!raf)
 					raf = requestAnimationFrame(() => {
 						raf = 0;

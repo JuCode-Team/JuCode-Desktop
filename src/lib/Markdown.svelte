@@ -1,13 +1,30 @@
+<script lang="ts" module>
+	// Rendered HTML by source text: a row windowed back in on the way up
+	// renders again, and parsing (code, math) is the costly part of that.
+	const rendered = new Map<string, string>();
+	const RENDERED_MAX = 400;
+</script>
+
 <script lang="ts">
 	import DOMPurify from 'dompurify';
 	import 'katex/dist/katex.min.css';
 	import { openExternal } from '$lib/openExternal';
 	import { renderMarkdown } from '$lib/markdown';
-	import { t } from '$lib/i18n';
+	import { getLocale, t } from '$lib/i18n';
 
 	let { text, onFile }: { text: string; onFile?: (href: string) => void } = $props();
 
-	const html = $derived(DOMPurify.sanitize(renderMarkdown(text)));
+	const html = $derived.by(() => {
+		// The code blocks' copy button is in the interface language.
+		const key = `${getLocale()}\n${text}`;
+		let out = rendered.get(key);
+		if (out === undefined) {
+			out = DOMPurify.sanitize(renderMarkdown(text));
+			if (rendered.size >= RENDERED_MAX) rendered.delete(rendered.keys().next().value!);
+			rendered.set(key, out);
+		}
+		return out;
+	});
 
 	// Only hand a link to the system opener if it carries an explicit, allowed
 	// scheme. The test is anchored and case-insensitive so tricks like
