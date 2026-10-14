@@ -57,6 +57,7 @@
 	import { parseToolOutput, toolTarget, toolVerb } from '$lib/toolSummary';
 	import { costText } from '$lib/sessionCost';
 	import { prefs } from '$lib/prefs.svelte';
+	import { fileMention } from '$lib/fileMention';
 	import { followAfterScroll, fromEnd, followTop, shortOfEnd } from '$lib/chatFollow';
 
 	let {
@@ -396,7 +397,7 @@
 		if ((!typed && !attached.length) || uploading) return;
 		const images = attached.filter((a) => a.image).map((a) => a.path);
 		const files = attached.filter((a) => !a.image).map((a) => a.path);
-		const content = files.length ? `${typed}${typed ? '\n\n' : ''}Attached files (read these):\n${files.join('\n')}` : typed;
+		const content = files.length ? `${typed}${typed ? '\n\n' : ''}${files.map(fileMention).join(' ')}` : typed;
 		if (draft) {
 			draft = false;
 			await connect();

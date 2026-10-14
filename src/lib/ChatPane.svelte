@@ -60,6 +60,7 @@
 	import { dispatch } from '$lib/backends/router';
 	import { browser } from '$lib/browser.svelte';
 	import { prefs } from '$lib/prefs.svelte';
+	import { fileMention } from '$lib/fileMention';
 	import { followAfterScroll, fromEnd, followTop, shortOfEnd } from '$lib/chatFollow';
 	import { t } from '$lib/i18n';
 	import type { SessionStore } from '$lib/session.svelte';
@@ -743,8 +744,7 @@
 				quotes = [];
 				return;
 			}
-			if (files.length)
-				content += `${content ? '\n\n' : ''}Attached files (read these):\n${files.join('\n')}`;
+			if (files.length) content += `${content ? '\n\n' : ''}${files.map(fileMention).join(' ')}`;
 			for (const v of videos) {
 				imagePaths.push(...v.frames);
 				content += `${content ? '\n\n' : ''}[视频附件] ${base(v.path)}（时长 ${v.duration.toFixed(1)} 秒）：已按时间等间隔抽取 ${v.frames.length} 个关键帧，随消息以图片附上（按时间先后排序），请结合这些关键帧理解视频内容。`;

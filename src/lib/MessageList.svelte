@@ -16,6 +16,8 @@
 	import DeliveryNotice from '$lib/DeliveryNotice.svelte';
 	import { parseDelivery } from '$lib/delivery';
 	import { stableBlocks } from '$lib/streamBlocks';
+	import { splitMentions } from '$lib/fileMention';
+	import FileTextIcon from '@lucide/svelte/icons/file-text';
 	import { turnFolds, type TurnFold } from '$lib/turnFold';
 	import Indicator from '$lib/Indicator.svelte';
 	import CallTimer from '$lib/CallTimer.svelte';
@@ -464,17 +466,19 @@
 	}
 
 	// A user message's text with its [图片 #N] placeholders split out.
-	function userSegments(text: string): { text: string; image?: string }[] {
-		const out: { text: string; image?: string }[] = [];
+	// …and its mentioned files (fileMention.ts) as chips naming the file.
+	function userSegments(text: string): { text: string; image?: string; file?: string }[] {
+		const out: { text: string; image?: string; file?: string }[] = [];
 		let last = 0;
 		for (const m of text.matchAll(/\[图片 #(\d+)\]/g)) {
-			if (m.index > last) out.push({ text: text.slice(last, m.index) });
+			if (m.index > last) out.push(...splitMentions(text.slice(last, m.index)));
 			out.push({ text: m[0], image: m[1] });
 			last = m.index + m[0].length;
 		}
-		if (last < text.length) out.push({ text: text.slice(last) });
+		if (last < text.length) out.push(...splitMentions(text.slice(last)));
 		return out;
 	}
+	const fileName = (p: string) => p.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || p;
 
 	// Skip empty placeholders (e.g. an assistant message before its first delta).
 	function hasContent(m: Msg): boolean {
@@ -582,7 +586,7 @@
 				<button class="uedit" onclick={() => onEdit(m.text)} aria-label="quote" title={t('chat.quoteTitle')}><PencilIcon size={12} /></button>
 				<div class="ucol">
 					<!-- One line: the bubble is pre-wrap, so template whitespace would show. -->
-					<div class="bubble" class:pending={m.state === 'sending'}>{#if m.images?.length}<div class="uimgs">{#each m.images as p (p)}<UserImage path={p} load={loadImage} group={m.images} />{/each}</div>{/if}{#each userBlocks(m.text) as block, b (b)}{#if block.quote}<span class="uquote">{block.text}</span>{:else}<span class="utext">{#each userSegments(block.text) as seg, j (j)}{#if seg.image}<span class="utoken">{t('chat.imageToken', { n: seg.image })}</span>{:else}{seg.text}{/if}{/each}</span>{/if}{/each}</div>
+					<div class="bubble" class:pending={m.state === 'sending'}>{#if m.images?.length}<div class="uimgs">{#each m.images as p (p)}<UserImage path={p} load={loadImage} group={m.images} />{/each}</div>{/if}{#each userBlocks(m.text) as block, b (b)}{#if block.quote}<span class="uquote">{block.text}</span>{:else}<span class="utext">{#each userSegments(block.text) as seg, j (j)}{#if seg.image}<span class="utoken">{t('chat.imageToken', { n: seg.image })}</span>{:else if seg.file}<button class="utoken ufile" title={seg.file} onclick={() => onFile?.(seg.file!)}><FileTextIcon size={12} />{fileName(seg.file)}</button>{:else}{seg.text}{/if}{/each}</span>{/if}{/each}</div>
 					{#if m.state}
 						{#key m.state}
 							<div class="sendstate {m.state}" in:fade={{ duration: 160 }}>
@@ -903,6 +907,20 @@
 	.utext + .uquote,
 	.uquote + .uquote {
 		margin-top: 8px;
+	}
+	.ufile {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		border: none;
+		color: var(--text);
+		font: inherit;
+		font-size: var(--fs-sm);
+		vertical-align: -1px;
+		cursor: pointer;
+	}
+	.ufile:hover {
+		background: color-mix(in oklab, var(--text) 10%, transparent);
 	}
 	.utoken {
 		padding: 0 5px;
