@@ -366,8 +366,6 @@
 	});
 
 	let sidebarWidth = $state(292);
-	/** Width of the workspace rail (WorkspaceRail.svelte); the title bar aligns the title past it. */
-	const RAIL_WIDTH = 68;
 	let showSidebar = $state(true);
 	let sbResizing = $state(false);
 
@@ -1397,10 +1395,8 @@
 
 <div class="app">
 	<!-- TOP: one title bar across the window (traffic lights, sidebar toggle,
-	     the title of what is in front aligned with the canvas, panel actions). -->
+	     the title of what is in front centred on the window, panel actions). -->
 	<TitleBar
-		leftWidth={RAIL_WIDTH + (showSettings || showDesk || showSidebar ? sidebarWidth : 0)}
-		resizing={sbResizing}
 		sidebarOpen={showSidebar}
 		onToggleSidebar={toggleSidebar}
 		title={showSettings ? t('settings.title') : showDesk ? t('shell.desk.title') : shownProject ? shownProject.name : (active?.chat.title ?? '')}
