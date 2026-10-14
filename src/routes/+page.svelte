@@ -77,6 +77,8 @@
 		chatSessionsIn,
 		openChatTab,
 		openElsewhere as placeElsewhere,
+		projectOf,
+		projectPanel,
 		reconcileLayout
 	} from '$lib/workbench/canvas';
 	import { tuiBackendOf, tuiTabTitle } from '$lib/workbench/tuiTab';
@@ -189,7 +191,6 @@
 	function openSettings(section: SectionKey = 'general') {
 		settingsSection = section;
 		showDesk = false;
-		projectPageId = null;
 		showSettings = true;
 	}
 	function closeSettings() {
@@ -218,21 +219,22 @@
 		deskAgent = agent;
 		deskSession = null;
 		showSettings = false;
-		projectPageId = null;
 		showDesk = true;
 	}
-	// A project's page over the canvas (the sidebar stays); any session
-	// shown there closes it.
-	let projectPageId = $state<string | null>(null);
-	const pageProject = $derived(projectPageId ? store.userProjects.find((p) => p.id === projectPageId) : undefined);
+	// A project's page is a canvas tab like a conversation (one per project).
 	function openProjectPage(p: Project) {
 		showDesk = false;
 		showSettings = false;
-		projectPageId = p.id;
+		if (!tilesReady) return;
+		const panel = projectPanel(p.id);
+		applyTiles(openTab(tiles, focusedLeaf, { id: panel, panel }));
+		focusedLeaf = leafOfTab(tiles.root, panel)?.id ?? focusedLeaf;
 	}
-	$effect(() => {
-		void store.activeId;
-		projectPageId = null;
+	/** The project whose page is the focused tile's tab, if any. */
+	const shownProject = $derived.by(() => {
+		const leaf = focusedLeaf ? findLeaf(tiles.root, focusedLeaf) : null;
+		const id = leaf?.active ? projectOf(leaf.active) : null;
+		return id ? store.userProjects.find((p) => p.id === id) : undefined;
 	});
 	/** The project a new agent is created in ('' for none). */
 	let agentDialogProject = $state('');
@@ -279,7 +281,6 @@
 				session.requirementStart = { plan: session.chat.approvalMode === 'plan' };
 			}
 			showDesk = false;
-			projectPageId = null;
 		} catch (e) {
 			toast.error(e instanceof Error ? e.message : String(e));
 		}
@@ -310,7 +311,6 @@
 		const cwd = listed?.cwd ?? '';
 		store.openAgentSession({ id: '', name: base(cwd), cwd }, session, listed?.title);
 		showDesk = false;
-		projectPageId = null;
 	}
 	let showQuickOpen = $state(false);
 
@@ -435,6 +435,8 @@
 		const tui = tuiBackendOf(tab.panel);
 		if (tui) return tuiTabTitle(tui);
 		if (tab.panel === 'audit') return t('editor.title');
+		const pid = projectOf(tab.panel);
+		if (pid) return store.userProjects.find((p) => p.id === pid)?.name ?? pid;
 		const proposal = proposalOf(tab.panel);
 		if (proposal) return planOf(proposal.sessionId, proposal.planId)?.title || t('chat.planCard.label');
 		const sub = subagentOf(tab.panel);
@@ -633,6 +635,15 @@
 		untrack(() => openSubagentPage(request.sessionId, request.agentId, request.place));
 	});
 
+	/** A sidebar click: the session becomes active and its tab comes to the
+	 *  front, also when it already was the active one behind another tab. */
+	function showSession(id: string) {
+		store.activeId = id;
+		if (!tilesReady || !chatSessionsIn(tiles).includes(id)) return;
+		applyTiles(activateTab(tiles, chatPanel(id)));
+		focusedLeaf = leafOfTab(tiles.root, chatPanel(id))?.id ?? focusedLeaf;
+	}
+
 	// The workbench-active session always has a chat tile: activating a session
 	// (sidebar click, ⌘N, resume, deep link…) opens or focuses it.
 	$effect(() => {
@@ -648,13 +659,19 @@
 		});
 	});
 
-	// Chat tiles of closed (or hidden) sessions disappear with them.
+	// Chat tiles of closed (or hidden) sessions disappear with them, and a
+	// removed project's page with the project.
 	$effect(() => {
 		const ids = new Set(store.shownSessions.map((s) => s.id));
+		const projectIds = new Set(store.userProjects.map((p) => p.id));
 		if (!tilesReady) return;
 		untrack(() => {
 			let next = tiles;
 			for (const sid of chatSessionsIn(next)) if (!ids.has(sid)) next = closeTab(next, chatPanel(sid));
+			for (const tab of leavesOf(next.root).flatMap((l) => l.tabs)) {
+				const pid = projectOf(tab.panel);
+				if (pid && !projectIds.has(pid)) next = closeTab(next, tab.id);
+			}
 			// A closed session's subagent pages go with it.
 			for (const tab of leavesOf(next.root).flatMap((l) => l.tabs)) {
 				const sub = subagentOf(tab.panel);
@@ -923,6 +940,11 @@
 	const chromeSession = $derived(sessionChromeFor ? (sessionMap.get(sessionChromeFor.sid) ?? null) : null);
 
 	function tileChrome(tab: TileTab): { color?: string; icon?: TabIcon } | null {
+		const pid = projectOf(tab.panel);
+		if (pid) {
+			const p = store.userProjects.find((x) => x.id === pid);
+			return { color: p?.color, icon: p?.icon ?? { kind: 'builtin', id: 'folder' } };
+		}
 		const sid = chatSessionOf(tab.panel);
 		const s = sid ? sessionMap.get(sid) : null;
 		if (!s || (!s.color && !s.icon)) return null;
@@ -931,6 +953,9 @@
 	/** Open the chrome popover for a chat tab (context menu / dblclick).
 	 *  Tool/TUI/audit tabs have no chrome and keep their default behavior. */
 	function openTileChrome(tab: TileTab, ev: MouseEvent) {
+		const pid = projectOf(tab.panel);
+		const p = pid ? store.userProjects.find((x) => x.id === pid) : undefined;
+		if (p) return openProjectMenu(p, ev);
 		const sid = chatSessionOf(tab.panel);
 		if (!sid || !sessionMap.has(sid)) return;
 		ev.preventDefault();
@@ -1404,8 +1429,8 @@
 		resizing={sbResizing}
 		sidebarOpen={showSidebar}
 		onToggleSidebar={toggleSidebar}
-		title={showSettings ? t('settings.title') : showDesk ? t('shell.desk.title') : pageProject ? pageProject.name : (active?.chat.title ?? '')}
-		subtitle={showSettings || showDesk ? '' : (activeProject?.name ?? '')}
+		title={showSettings ? t('settings.title') : showDesk ? t('shell.desk.title') : shownProject ? shownProject.name : (active?.chat.title ?? '')}
+		subtitle={showSettings || showDesk || shownProject ? '' : (activeProject?.name ?? '')}
 		addOptions={showSettings || showDesk ? [] : addOptions}
 		onAdd={(key) => mosaicAdd(focusedLeaf, key)}
 	>
@@ -1457,9 +1482,9 @@
 				{activeId}
 				width={showSidebar ? sidebarWidth : 0}
 				resizing={sbResizing}
-				onSelect={(id) => ((store.activeId = id), (projectPageId = null))}
+				onSelect={showSession}
 				onOpenProject={openProjectPage}
-				openProject={projectPageId}
+				openProject={shownProject?.id ?? null}
 				onNewProject={addProject}
 				onNewTask={newTask}
 				onNewSession={(p) => newSession(p)}
@@ -1489,21 +1514,6 @@
 			<!-- THE CANVAS: workspace tabs on top, one mosaic for chats, tool panels,
 			     TUI and audit tiles below. -->
 			<div class="canvas">
-				{#if pageProject}
-					{#key pageProject.id}
-						<ProjectPage
-							project={pageProject}
-							projects={workspaceProjects}
-							{currentStep}
-							onClose={() => (projectPageId = null)}
-							onDirs={(dirs) => store.setProjectDirs(pageProject, dirs)}
-							onStartRequirement={startRequirement}
-							onOpenSession={(s) => openDaemonSession(s)}
-							onOpenAgent={(id) => openDesk(id)}
-							onNewAgent={() => newAgent(pageProject.id)}
-						/>
-					{/key}
-				{/if}
 
 				<div class="stage">
 					{#if store.loaded && store.shownProjects.length === 0}
@@ -1599,6 +1609,20 @@
 										{/if}
 									{:else}
 										<div class="gone">{t('shell.chatGone')}</div>
+									{/if}
+								{:else if projectOf(tab.panel)}
+									{@const project = store.userProjects.find((p) => p.id === projectOf(tab.panel))}
+									{#if project}
+										<ProjectPage
+											{project}
+											projects={workspaceProjects}
+											{currentStep}
+											onDirs={(dirs) => store.setProjectDirs(project, dirs)}
+											onStartRequirement={startRequirement}
+											onOpenSession={(s) => openDaemonSession(s)}
+											onOpenAgent={(id) => openDesk(id)}
+											onNewAgent={() => newAgent(project.id)}
+										/>
 									{/if}
 								{:else if tab.panel === 'plan'}<PlanPanel plan={chat?.plan ?? []} />
 								{:else if proposalOf(tab.panel)}

@@ -6,6 +6,8 @@ import {
 	chatTab,
 	openChatTab,
 	openElsewhere,
+	projectOf,
+	projectPanel,
 	reconcileLayout,
 	CHAT_SEED_RATIO
 } from './canvas';
@@ -29,6 +31,14 @@ function dockOnlyLayout() {
 	const first = leavesOf(base.root)[0];
 	return splitLeaf(base, first.id, 'right', panelTab('t3', 'term')).layout;
 }
+
+describe('project tab naming', () => {
+	it('round-trips a project id and keeps other panels out', () => {
+		expect(projectOf(projectPanel('p-1'))).toBe('p-1');
+		expect(projectOf(chatPanel('p-1'))).toBeNull();
+		expect(projectOf('project:')).toBeNull();
+	});
+});
 
 describe('chat tab naming', () => {
 	it('round-trips a session id through the panel kind', () => {

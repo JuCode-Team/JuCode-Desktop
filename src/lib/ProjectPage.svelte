@@ -1,6 +1,5 @@
 <script lang="ts">
-	import { paneOut } from '$lib/ui/motion';
-	// One project's page, over the canvas (the sidebar stays): its
+	// One project's page, a canvas tab: its
 	// directories (the main one and extra ones the user adds), its
 	// requirements (the workbench's list, this project's only; one opens in
 	// place) and the agents that belong to it.
@@ -24,7 +23,6 @@
 		project,
 		projects,
 		currentStep,
-		onClose,
 		onDirs,
 		onStartRequirement,
 		onOpenSession,
@@ -35,7 +33,6 @@
 		/** The open workspace's projects. */
 		projects: { id: string; path: string; name: string }[];
 		currentStep?: (session: string) => string | undefined;
-		onClose: () => void;
 		/** The extra directories changed. */
 		onDirs: (dirs: string[]) => void;
 		onStartRequirement: (r: Requirement, how: StartHow) => void;
@@ -59,7 +56,7 @@
 	}
 </script>
 
-<div class="project-page" out:paneOut|global>
+<div class="project-page">
 	{#if shownReq}
 		<div class="col wide">
 			{#key shownReq.id}
@@ -74,10 +71,7 @@
 		</div>
 	{:else}
 		<div class="col">
-			<header>
-				<h1>{project.name}</h1>
-				<button class="close" onclick={onClose} aria-label={t('common.close')} title={t('common.close')}><XIcon size={16} /></button>
-			</header>
+			<h1>{project.name}</h1>
 
 			<section>
 				<h3>{t('shell.projectPage.dirs')}</h3>
@@ -144,12 +138,9 @@
 
 <style>
 	.project-page {
-		position: absolute;
-		inset: 0;
-		z-index: 10;
+		height: 100%;
 		overflow-y: auto;
 		background: var(--bg);
-		animation: pane-in var(--t-med) var(--ease-out);
 	}
 	.col {
 		max-width: 760px;
@@ -160,14 +151,7 @@
 		max-width: 1120px;
 		padding-top: 40px;
 	}
-	header {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-	}
 	h1 {
-		flex: 1;
-		min-width: 0;
 		margin: 0;
 		font-size: var(--fs-xl);
 		font-weight: 600;
@@ -176,21 +160,16 @@
 		color: var(--text);
 		overflow-wrap: anywhere;
 	}
-	.close,
 	.icon {
 		display: inline-flex;
 		flex: none;
-		padding: 6px;
+		padding: 3px;
 		border: none;
 		border-radius: var(--r-md);
 		background: none;
 		color: var(--dim);
 		cursor: pointer;
 	}
-	.icon {
-		padding: 3px;
-	}
-	.close:hover,
 	.icon:hover {
 		background: var(--surface2);
 		color: var(--text);

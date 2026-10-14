@@ -1,6 +1,7 @@
 // Unified canvas tabs: everything right of the navigator is ONE mosaic whose
-// tabs are chat sessions (`chat:<sessionId>`), tool panels (plan / git / term
-// / …), native TUI tabs (`tui:<backend>`) and the audit pane. Pure data —
+// tabs are chat sessions (`chat:<sessionId>`), project pages
+// (`project:<projectId>`), tool panels (plan / git / term / …), native TUI
+// tabs (`tui:<backend>`) and the audit pane. Pure data —
 // layout transforms come from tiles.ts, this module only adds the chat-tab
 // naming plus the reconcile/migration step run when a workspace loads.
 
@@ -37,6 +38,20 @@ export function chatSessionOf(panel: string): string | null {
 
 export function chatTab(sessionId: string): TileTab {
 	return { id: chatPanel(sessionId), panel: chatPanel(sessionId) };
+}
+
+export const PROJECT_PREFIX = 'project:';
+
+/** Panel kind (and tab id) of a project's page — one tab per project. */
+export function projectPanel(projectId: string): string {
+	return `${PROJECT_PREFIX}${projectId}`;
+}
+
+/** The project id a `project:*` panel kind renders, or null for any other kind. */
+export function projectOf(panel: string): string | null {
+	return panel.startsWith(PROJECT_PREFIX) && panel.length > PROJECT_PREFIX.length
+		? panel.slice(PROJECT_PREFIX.length)
+		: null;
 }
 
 /** Session ids of every chat tile in the layout (DFS / visual order). */
