@@ -197,10 +197,6 @@
 	// Passages quoted from replies: a chip in the composer, the quote on send.
 	let quotes: { id: number; text: string }[] = [];
 	let quoteSeq = 0;
-	// Images sit in the text as [图片 #N] tokens where they were added; on submit
-	// the images whose token is still there are sent, in token order.
-	let images = $state<{ n: number; path: string }[]>([]);
-	let imageSeq = 0;
 	let scroller = $state<HTMLElement | null>(null);
 	let composerEl = $state<HTMLElement | null>(null);
 	let composerRef = $state<{ insertToken: (t: string) => void; openModelMenu: () => void } | undefined>();
@@ -647,13 +643,9 @@
 		if (isImage(path)) addImage(path);
 		else if (!attachments.some((a) => a.path === path)) attachments.push({ path, image: false });
 	}
+	// Images sit above the text as cards, sent in the order they were added.
 	function addImage(path: string) {
-		if (images.some((i) => i.path === path)) return;
-		const n = ++imageSeq;
-		images.push({ n, path });
-		const token = `[图片 #${n}]`;
-		if (composerRef) composerRef.insertToken(token);
-		else input = input && !/\s$/.test(input) ? `${input} ${token} ` : `${input}${token} `;
+		if (!attachments.some((a) => a.path === path)) attachments.push({ path, image: true });
 	}
 	async function pickFiles() {
 		const sel = await open({ multiple: true, title: t('shell.attachTitle') });
@@ -717,11 +709,7 @@
 			if (btw) chat.sideAnswers.push({ question: btw[1].trim(), answer: '', error: '', pending: true });
 			send({ op: 'command', input: text });
 		} else {
-			const sent = [...new Set(
-				[...text.matchAll(/\[图片 #(\d+)\]/g)]
-					.map((m) => images.find((i) => i.n === Number(m[1]))?.path)
-					.filter((p): p is string => !!p)
-			)];
+			const sent = attachments.filter((a) => a.image).map((a) => a.path);
 			const imagePaths = [...sent];
 			const files = attachments.filter((a) => !a.image).map((a) => a.path);
 			let content = text;
@@ -775,8 +763,6 @@
 		videos = [];
 		webRefs = [];
 		quotes = [];
-		images = [];
-		imageSeq = 0;
 		if (prefs.scrollOnSend) jumpToBottom();
 	}
 	function stop() {
@@ -1282,7 +1268,6 @@
 			bind:this={composerRef}
 			bind:input
 			bind:attachments
-			{images}
 			onImage={addImage}
 			bind:videos
 			bind:el={composerEl}

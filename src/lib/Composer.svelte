@@ -29,7 +29,6 @@
 	import { buildEntries, mentionMatches, type AtEntry } from '$lib/mention';
 	import { t } from '$lib/i18n';
 	import { matches, withShortcut } from '$lib/shortcuts';
-	import { convertFileSrc } from '@tauri-apps/api/core';
 	import MentionMenu from '$lib/composer/MentionMenu.svelte';
 	import AttachmentChips from '$lib/composer/AttachmentChips.svelte';
 	import ContextIndicator from '$lib/composer/ContextIndicator.svelte';
@@ -43,7 +42,6 @@
 	import { effortLabel } from '$lib/composer/effort';
 	import type { ModelRow } from '$lib/composer/modelRows';
 	import type { ChatState } from '$lib/chat.svelte';
-	import { imageViewer } from '$lib/ui/imageViewer.svelte';
 	import { buildApproveOp, type ApprovalMode, type ApproveOp } from '$lib/approval';
 	import { caps, BACKEND_LABELS, type BackendId } from '$lib/backends';
 
@@ -68,7 +66,6 @@
 		onStop,
 		onSteer,
 		onPick,
-		images = [],
 		onImage,
 		onModel,
 		onModelSelect,
@@ -111,9 +108,7 @@
 		onStop: () => void;
 		onSteer: () => void;
 		onPick: () => void;
-		/** Images placed in the text as [图片 #N] tokens (N → file). */
-		images?: { n: number; path: string }[];
-		/** A pasted image, saved to a temp file: the pane adds it and its token. */
+		/** A pasted image, saved to a temp file: the pane adds it. */
 		onImage: (path: string) => void;
 		onModel: () => void;
 		onModelSelect?: (command: string) => void;
@@ -187,7 +182,7 @@
 	// programmatically (completion / refill / cleared on send) — never mid-typing.
 	let composing = $state(false);
 	let lastSync = '';
-	const TOKEN_RE = /\[网页元素#(\d+)(?::([^\]]*))?\]|\[引用#(\d+)(?::([^\]]*))?\]|\[图片 #(\d+)\]/g;
+	const TOKEN_RE = /\[网页元素#(\d+)(?::([^\]]*))?\]|\[引用#(\d+)(?::([^\]]*))?\]/g;
 
 	const tokenLabel = (token: string) => {
 		const m = /^\[(?:网页元素|引用)#(\d+)(?::([^\]]*))?\]$/.exec(token);
@@ -198,28 +193,7 @@
 		span.className = 'refchip';
 		span.contentEditable = 'false';
 		span.dataset.token = token;
-		const img = /^\[图片 #(\d+)\]$/.exec(token);
-		const path = img ? images.find((i) => i.n === Number(img[1]))?.path : undefined;
-		if (img) {
-			span.classList.add('imgchip');
-			if (path) {
-				const thumb = document.createElement('img');
-				thumb.src = convertFileSrc(path);
-				thumb.alt = '';
-				thumb.title = t('common.image.open');
-				// Full size, with the message's other images a step away. The
-				// mousedown would otherwise move the caret around the chip.
-				thumb.addEventListener('mousedown', (e) => e.preventDefault());
-				thumb.addEventListener('click', (e) => {
-					e.preventDefault();
-					e.stopPropagation();
-					const all = [...images].sort((a, b) => a.n - b.n).map((i) => ({ path: i.path }));
-					imageViewer.open(all, all.findIndex((i) => i.path === path));
-				});
-				span.appendChild(thumb);
-			}
-			span.appendChild(document.createTextNode(t('chat.imageToken', { n: img[1]! })));
-		} else span.textContent = tokenLabel(token);
+		span.textContent = tokenLabel(token);
 		if (token.startsWith('[引用#')) span.classList.add('quotechip');
 		return span;
 	}
@@ -1064,23 +1038,6 @@
 		user-select: none;
 		cursor: default;
 	}
-	.rich :global(.refchip.imgchip) {
-		display: inline-flex;
-		align-items: center;
-		gap: 5px;
-		padding: 1px 6px 1px 2px;
-		vertical-align: -3px;
-		color: var(--text);
-		background: var(--surface2);
-		box-shadow: inset 0 0 0 1px var(--border-strong);
-	}
-	.rich :global(.refchip.imgchip img) {
-		width: 18px;
-		height: 18px;
-		border-radius: var(--r);
-		object-fit: cover;
-		cursor: zoom-in;
-	}
 	/* A quoted passage: the opening words after a quote mark. */
 	.rich :global(.refchip.quotechip) {
 		color: var(--dim);
@@ -1098,7 +1055,7 @@
 		background: var(--dim2);
 		mask: var(--quote-mask) center / contain no-repeat;
 	}
-	.rich :global(.refchip:not(.imgchip):not(.quotechip))::before {
+	.rich :global(.refchip:not(.quotechip))::before {
 		content: '';
 		display: inline-block;
 		width: 11px;

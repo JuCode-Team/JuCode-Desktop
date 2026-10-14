@@ -35,12 +35,20 @@
 </script>
 
 <div class="chips">
+	<!-- Images as thumbnails (click: full size), other files as name chips. -->
 	{#each attachments as a, i (a.path)}
-		<span class="chip" class:imgchip={a.image}>
-			{#if a.image}<button class="thumb-btn" onclick={() => view(a.path)} aria-label={t('common.image.open')} title={t('common.image.open')}><img class="chip-thumb" src={convertFileSrc(a.path)} alt="" /></button>{:else}<FileTextIcon size={12} />{/if}
-			<span class="chip-name">{base(a.path)}</span>
-			<IconButton size="xs" onclick={() => onRemove(i)} label="remove"><XIcon size={12} /></IconButton>
-		</span>
+		{#if a.image}
+			<span class="imgcard">
+				<button class="thumb-btn" onclick={() => view(a.path)} aria-label={t('common.image.open')} title={t('common.image.open')}><img src={convertFileSrc(a.path)} alt={base(a.path)} /></button>
+				<button class="img-x" onclick={() => onRemove(i)} aria-label={t('common.remove')} title={t('common.remove')}><XIcon size={12} /></button>
+			</span>
+		{:else}
+			<span class="chip">
+				<FileTextIcon size={12} />
+				<span class="chip-name">{base(a.path)}</span>
+				<IconButton size="xs" onclick={() => onRemove(i)} label="remove"><XIcon size={12} /></IconButton>
+			</span>
+		{/if}
 	{/each}
 	{#each videos as v, i (v.path)}
 		<span class="chip videochip">
@@ -65,6 +73,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 6px;
+		align-items: flex-end;
 		margin-bottom: 8px;
 	}
 	.chip {
@@ -84,7 +93,47 @@
 	.chip:hover {
 		border-color: color-mix(in oklab, var(--text) 12%, var(--border));
 	}
-	.chip.imgchip,
+	.imgcard {
+		position: relative;
+		width: 64px;
+		height: 64px;
+		flex-shrink: 0;
+		animation: rise var(--t-med) var(--ease-out);
+	}
+	.imgcard .thumb-btn,
+	.imgcard img {
+		width: 100%;
+		height: 100%;
+	}
+	.imgcard img {
+		display: block;
+		border-radius: var(--r);
+		object-fit: cover;
+		box-shadow: inset 0 0 0 1px var(--border);
+	}
+	/* Remove: a small button on the corner, shown on hover. */
+	.img-x {
+		position: absolute;
+		top: -6px;
+		right: -6px;
+		display: inline-flex;
+		padding: 3px;
+		border: none;
+		border-radius: 50%;
+		background: var(--panel);
+		color: var(--dim);
+		box-shadow: var(--shadow-sm), 0 0 0 1px var(--border);
+		cursor: pointer;
+		opacity: 0;
+		transition: opacity var(--t-fast) var(--ease-out);
+	}
+	.imgcard:hover .img-x,
+	.img-x:focus-visible {
+		opacity: 1;
+	}
+	.img-x:hover {
+		color: var(--text);
+	}
 	.chip.videochip {
 		padding: 3px 5px 3px 3px;
 	}
