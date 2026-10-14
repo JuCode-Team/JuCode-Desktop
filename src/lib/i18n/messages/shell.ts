@@ -115,6 +115,7 @@ const shell = {
 
 		// workspaces
 		workspace: {
+			moved: '已把「{name}」移到「{ws}」',
 			label: '工作区',
 			default: '默认工作区',
 			nth: '工作区 {n}',
@@ -130,6 +131,7 @@ const shell = {
 		// shared chrome editor (workspace tabs, session tabs, project folders, agents)
 		chrome: {
 			title: '外观',
+			moveTo: '移到工作区',
 			name: '名称',
 			color: '颜色',
 			noColor: '无颜色',
@@ -1052,6 +1054,7 @@ const shell = {
 
 		// workspaces
 		workspace: {
+			moved: 'Moved “{name}” to “{ws}”',
 			label: 'Workspace',
 			default: 'Default workspace',
 			nth: 'Workspace {n}',
@@ -1067,6 +1070,7 @@ const shell = {
 		// shared chrome editor (workspace tabs, session tabs, project folders, agents)
 		chrome: {
 			title: 'Appearance',
+			moveTo: 'Move to workspace',
 			name: 'Name',
 			color: 'Color',
 			noColor: 'No color',

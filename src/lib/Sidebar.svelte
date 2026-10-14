@@ -67,7 +67,8 @@
 		onAgentSession = () => {},
 		agentPending = () => 0,
 		pendingCount = 0,
-		onDesk = () => {}
+		onDesk = () => {},
+		onAgentMenu = () => {}
 	}: {
 		projects: Project[];
 		activeId: string;
@@ -112,6 +113,8 @@
 		/** Questions and pending actions waiting for the user. */
 		pendingCount?: number;
 		onDesk?: () => void;
+		/** Right-click on an agent: the page opens its popover. */
+		onAgentMenu?: (agent: AgentView, ev: MouseEvent) => void;
 	} = $props();
 	const reqs = useRequirements();
 
@@ -515,6 +518,7 @@
 					class="sess agent"
 					class:off={!a.enabled}
 					onclick={() => onOpenAgent(a)}
+					oncontextmenu={(e) => onAgentMenu(a, e)}
 					title={t('shell.agents.view', { name: a.name })}
 				>
 					<AgentAvatar agent={a} size={18} />

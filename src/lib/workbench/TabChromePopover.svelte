@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { overBrowser } from '$lib/browser.svelte';
+	import ArrowRightLeftIcon from '@lucide/svelte/icons/arrow-right-left';
 	import { tick, type Snippet } from 'svelte';
 	import BanIcon from '@lucide/svelte/icons/ban';
 	import TrashIcon from '@lucide/svelte/icons/trash';
@@ -29,6 +30,8 @@
 		deleteLabel = '',
 		pinned = false,
 		onPin,
+		moveTargets = [],
+		onMove,
 		onClose,
 		defaultIcon,
 		children
@@ -47,6 +50,9 @@
 		/** Sessions: pin or unpin it in the sidebar. */
 		pinned?: boolean;
 		onPin?: (pinned: boolean) => void;
+		/** Projects and agents: the other workspaces it can move to. */
+		moveTargets?: { id: string; name: string }[];
+		onMove?: (workspace: string) => void;
 		onClose: () => void;
 		/** What shows with no icon set (a project's folder, an agent's
 		 *  generated avatar): the first choice, so it can be picked back. */
@@ -218,12 +224,22 @@
 			{#if pinned}<PinOffIcon size={12} />{t('shell.unpin')}{:else}<PinIcon size={12} />{t('shell.pin')}{/if}
 		</Button>
 	{/if}
+	{#if onMove && moveTargets.length}
+		<span class="move-label">{t('shell.chrome.moveTo')}</span>
+		{#each moveTargets as w (w.id)}
+			<Button size="sm" full onclick={() => onMove(w.id)}><ArrowRightLeftIcon size={12} />{w.name}</Button>
+		{/each}
+	{/if}
 	{#if onDelete}
 		<Button variant="danger" size="sm" full onclick={onDelete}><TrashIcon size={12} />{deleteLabel || t('shell.chrome.delete')}</Button>
 	{/if}
 </div>
 
 <style>
+	.move-label {
+		font-size: var(--fs-2xs);
+		color: var(--dim2);
+	}
 	/* Above a Modal (z-index 100): an agent's page opens it. */
 	.backdrop {
 		position: fixed;

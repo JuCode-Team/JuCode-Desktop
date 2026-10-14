@@ -111,7 +111,8 @@
 	import { normalizeBackendId, BACKEND_LABELS, type BackendId } from '$lib/backends';
 	import Modal from '$lib/ui/Modal.svelte';
 	import BackendIcon from '$lib/BackendIcon.svelte';
-	import { agentDirectory, agentsOfWorkspace } from '$lib/agents.svelte';
+	import { agentDirectory, agentsOfWorkspace, type AgentChanges, type AgentView } from '$lib/agents.svelte';
+	import AgentAvatar from '$lib/AgentAvatar.svelte';
 	import { CHATS_ENABLED, type Project, type WorktreeMeta } from '$lib/types';
 	import PlanPanel from '$lib/PlanPanel.svelte';
 	import ProposalPane from '$lib/ProposalPane.svelte';
@@ -979,6 +980,34 @@
 		ev.preventDefault();
 		projectChromeFor = { id: p.id, x: ev.clientX, y: ev.clientY };
 	}
+	/** The workspaces other than the open one, for 移到工作区. */
+	const otherWorkspaces = $derived(workspaces.workspaces.filter((w) => w.id !== workspaces.activeId).map((w) => ({ id: w.id, name: w.name })));
+	/** A project, its tabs with it, moves to another workspace. Its sessions
+	 *  keep running in the daemon and open there. */
+	function moveProjectToWorkspace(p: Project, wsId: string) {
+		const saved = store.serialize().find((x) => x.id === p.id);
+		const target = workspaces.workspaces.find((w) => w.id === wsId);
+		if (!saved || !target) return;
+		workspaces.setProjects(wsId, [...target.projects.filter((x) => x.id !== p.id && normPath(x.path) !== normPath(p.path)), saved]);
+		store.detachProject(p);
+		workspaces.updateProjects(store.serialize());
+		toast.info(t('shell.workspace.moved', { name: p.name, ws: target.name }));
+	}
+	// An agent's right-click: its look and the workspace it is listed in.
+	let agentChromeFor = $state<{ id: string; x: number; y: number } | null>(null);
+	const chromeAgent = $derived(agentChromeFor ? (agentDirectory.agents.find((a) => a.id === agentChromeFor!.id) ?? null) : null);
+	function updateAgent(id: string, changes: AgentChanges) {
+		agentDirectory.update(id, changes).catch((e) => toast.error(e instanceof Error ? e.message : String(e)));
+	}
+	function moveAgentToWorkspace(a: AgentView, wsId: string) {
+		const target = workspaces.workspaces.find((w) => w.id === wsId);
+		if (!target) return;
+		agentChromeFor = null;
+		agentDirectory
+			.update(a.id, { workspace: wsId })
+			.then(() => toast.info(t('shell.workspace.moved', { name: a.name, ws: target.name })))
+			.catch((e) => toast.error(e instanceof Error ? e.message : String(e)));
+	}
 
 	/** Settings → 导入: the folders of imported conversations become projects
 	 *  (without a chat; their conversations are in the project's 历史). */
@@ -1497,6 +1526,7 @@
 				onRenameSession={(id, title) => store.renameSession(id, title)}
 				onSessionMenu={openSessionMenu}
 				onProjectMenu={openProjectMenu}
+				onAgentMenu={(a, e) => (e.preventDefault(), (agentChromeFor = { id: a.id, x: e.clientX, y: e.clientY }))}
 				onHistory={(p) => store.openHistory(p)}
 				agents={agentsOfWorkspace(agentDirectory.agents, workspaces.workspaces, workspaces.activeId)}
 				agentsStatus={agentDirectory.status}
@@ -1801,11 +1831,34 @@
 			icon={chromeProject.icon ?? null}
 			onColor={(c) => store.setProjectChrome(chromeProject, { color: c })}
 			onIcon={(i) => store.setProjectChrome(chromeProject, { icon: i })}
+			moveTargets={chromeProject.chats ? [] : otherWorkspaces}
+			onMove={(ws) => {
+				const p = chromeProject;
+				projectChromeFor = null;
+				moveProjectToWorkspace(p, ws);
+			}}
 			onClose={() => (projectChromeFor = null)}
 		>
 			{#snippet defaultIcon()}
 				{#if chromeProject.worktree}<GitBranchIcon size={14} />{:else}<FolderIcon size={14} />{/if}
 			{/snippet}
+		</TabChromePopover>
+	{/if}
+
+	{#if agentChromeFor && chromeAgent}
+		<TabChromePopover
+			x={agentChromeFor.x}
+			y={agentChromeFor.y}
+			name={chromeAgent.name}
+			color={chromeAgent.color ?? null}
+			icon={chromeAgent.icon ?? null}
+			onColor={(color) => updateAgent(chromeAgent.id, { color })}
+			onIcon={(icon) => updateAgent(chromeAgent.id, { icon })}
+			moveTargets={otherWorkspaces}
+			onMove={(ws) => moveAgentToWorkspace(chromeAgent, ws)}
+			onClose={() => (agentChromeFor = null)}
+		>
+			{#snippet defaultIcon()}<AgentAvatar agent={{ ...chromeAgent, icon: null }} size={16} />{/snippet}
 		</TabChromePopover>
 	{/if}
 
