@@ -7,6 +7,7 @@
 	import RotateCwIcon from '@lucide/svelte/icons/rotate-cw';
 	import Button from '$lib/ui/Button.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
+	import Markdown from '$lib/Markdown.svelte';
 	import { readConfig } from '$lib/protocol';
 	import { updater } from '$lib/updater.svelte';
 	import { t } from '$lib/i18n';
@@ -15,6 +16,9 @@
 	const ready = $derived(updater.phase === 'ready');
 	const open = $derived(required || (ready && updater.dismissed !== updater.version));
 	const busy = $derived(updater.phase === 'checking' || updater.phase === 'downloading');
+	// What changed: the release notes up to their `---` rule (the install
+	// note after it is for people downloading, not updating).
+	const changes = $derived(updater.notes.split(/\n-{3,}\s*\n/)[0]!.trim());
 
 	async function openDownloads() {
 		const cfg = await readConfig().catch(() => ({}) as Record<string, unknown>);
@@ -38,8 +42,8 @@
 					{t('shell.updatePrompt.readyHint')}
 				{/if}
 			</p>
-			{#if updater.notes && (ready || busy)}
-				<pre class="notes selectable">{updater.notes}</pre>
+			{#if changes && (ready || busy)}
+				<div class="notes selectable"><Markdown text={changes} /></div>
 			{/if}
 			{#if busy}
 				<div class="bar"><div class="fill" style:width="{updater.progress}%"></div></div>
@@ -94,10 +98,12 @@
 		border-radius: var(--r);
 		background: var(--surface);
 		color: var(--text);
-		font-family: inherit;
 		font-size: var(--fs-sm);
 		line-height: 1.6;
-		white-space: pre-wrap;
+	}
+	.notes :global(ul) {
+		margin: 0;
+		padding-left: 18px;
 	}
 	.bar {
 		height: 4px;

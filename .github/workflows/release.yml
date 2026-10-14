@@ -31,6 +31,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The release notes list the commits since the previous tag.
+          fetch-depth: 0
 
       - name: Install Linux dependencies
         if: matrix.os == 'ubuntu-22.04'
@@ -108,6 +111,31 @@ jobs:
       # additionally signs the updater bundles (.sig files) and generates +
       # uploads latest.json, which installed clients poll via the endpoint in
       # plugins.updater. Key generation & setup: see docs/updater.md.
+      # What the update prompt shows (latest.json `notes`) and the release
+      # page leads with: release-notes/<tag>.md when there is one, else the
+      # commit subjects since the previous tag. The install note follows a
+      # `---` rule; the app shows only what comes before it.
+      - name: Release notes
+        id: notes
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if [ -f "release-notes/${tag}.md" ]; then
+            notes="$(cat "release-notes/${tag}.md")"
+          else
+            prev="$(git describe --tags --abbrev=0 "${tag}^" 2>/dev/null || true)"
+            notes="$(git log --no-merges --pretty='- %s' ${prev:+"$prev.."}"$tag" | grep -v '^- Version ' || true)"
+          fi
+          {
+            echo 'body<<NOTES_EOF'
+            echo "$notes"
+            echo
+            echo '---'
+            echo
+            echo 'The beta builds are not code-signed yet. To open them the first time and grant their permissions, see the [install guide](https://github.com/JuCode-Team/JuCode-Desktop/blob/main/docs/install.md).'
+            echo 'NOTES_EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -121,10 +149,7 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: --config src-tauri/tauri.bundle.conf.json
-          releaseBody: |
-            The beta builds are not code-signed yet. To open them the first
-            time and grant their permissions, see the install guide:
-            https://github.com/JuCode-Team/JuCode-Desktop/blob/main/docs/install.md
+          releaseBody: ${{ steps.notes.outputs.body }}
 
       - name: Keep the manual build
         if: github.event_name == 'workflow_dispatch'
