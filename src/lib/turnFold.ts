@@ -4,7 +4,7 @@
 // (their approval) and errors.
 import type { Msg } from './chat.svelte';
 import { parseDelivery } from './delivery';
-import { parseToolOutput, toolVerb } from './toolSummary';
+import { editedPaths, isEdit, parseToolOutput, toolVerb } from './toolSummary';
 
 export interface TurnFold {
 	/** The user message that opened the turn: keys its open state. */
@@ -46,12 +46,8 @@ export function turnFolds(messages: Msg[], shows: (m: Msg) => boolean, busy: boo
 		for (const m of members) {
 			if (m.kind !== 'tool') continue;
 			calls++;
-			const verb = toolVerb(m.name);
-			if (verb === 'Ran') commands++;
-			if (verb === 'Edited' || verb === 'Wrote') {
-				const out = parseToolOutput(m.output);
-				for (const p of [out?.path, ...(Array.isArray(out?.paths) ? out.paths : [])]) if (typeof p === 'string' && p) files.add(p);
-			}
+			if (toolVerb(m.name) === 'Ran') commands++;
+			if (isEdit(m.name)) for (const p of editedPaths(parseToolOutput(m.output))) files.add(p);
 		}
 		const stats = body.findLast((m) => m.kind === 'assistant' && m.turn);
 		folds.push({

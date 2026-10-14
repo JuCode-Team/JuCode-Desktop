@@ -100,6 +100,28 @@ export function parseToolOutput(output: string): Record<string, unknown> | null 
 
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
 
+/** A call that edits or writes files. */
+export const isEdit = (name: string) => VERBS[name] === 'Edited' || VERBS[name] === 'Wrote';
+
+/** The files an edit call touched. */
+export function editedPaths(parsed: Record<string, unknown> | null): string[] {
+	if (!parsed) return [];
+	return [parsed.path, ...(Array.isArray(parsed.paths) ? parsed.paths : [])].filter((p): p is string => typeof p === 'string' && !!p);
+}
+
+/** Lines an edit added and removed, from its diff (null: no diff). */
+export function diffStat(parsed: Record<string, unknown> | null): { add: number; del: number } | null {
+	const diff = str(parsed?.diff);
+	if (!diff) return null;
+	let add = 0;
+	let del = 0;
+	for (const line of diff.split('\n')) {
+		if (line.startsWith('+') && !line.startsWith('+++')) add++;
+		else if (line.startsWith('-') && !line.startsWith('---')) del++;
+	}
+	return { add, del };
+}
+
 /** What the call acted on: the command, search, file name or query. */
 export function toolTarget(name: string, parsed: Record<string, unknown> | null): string {
 	if (!parsed) return '';

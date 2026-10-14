@@ -6,7 +6,8 @@
 	import Collapse from '$lib/ui/Collapse.svelte';
 	import { t } from '$lib/i18n';
 	import Notice from '$lib/ui/Notice.svelte';
-	import { parseToolOutput, toolTarget, toolVerb, unwrapShell } from '$lib/toolSummary';
+	import { diffStat, parseToolOutput, toolTarget, toolVerb, unwrapShell } from '$lib/toolSummary';
+	import DiffStat from '$lib/DiffStat.svelte';
 	import { fmtDur } from '$lib/turnStats';
 
 	let {
@@ -47,6 +48,7 @@
 	const parsed = $derived(parseToolOutput(output));
 	const s = (v: unknown) => (typeof v === 'string' ? v : '');
 	const verb = $derived(toolVerb(name));
+	const stat = $derived(diffStat(parsed));
 	const target = $derived(toolTarget(name, parsed));
 
 	const kind = $derived(s(parsed?.kind));
@@ -169,6 +171,7 @@
 			<span class="partial">{t('chat.partialApply', { n: partialApply.n, m: partialApply.m })}</span>
 		{/if}
 		<span class="grow"></span>
+		{#if stat}<DiffStat {...stat} />{/if}
 		{#if took !== null}<span class="took">{fmtDur(took)}</span>{/if}
 		{#if !isRead}
 			<span class="chev" class:open={!collapsed}><ChevronRightIcon size={14} /></span>
