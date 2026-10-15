@@ -77,7 +77,7 @@
 	import ProgressTray from '$lib/agents/ProgressTray.svelte';
 	import NewSessionPicker from '$lib/NewSessionPicker.svelte';
 	import { placeFor, subagentPages, type OpenHow } from '$lib/agents/subagentPages.svelte';
-	import { agentRows, type AgentRow } from '$lib/agentProgress';
+	import { agentRows, handedOffWork, type AgentRow } from '$lib/agentProgress';
 	import { parseToolOutput, toolTarget, toolVerb } from '$lib/toolSummary';
 	import { joinPath, parseFileHref, pathExt } from '$lib/fileRefs';
 	import type { Msg } from '$lib/chat.svelte';
@@ -471,6 +471,8 @@
 		return m ? `${toolVerb(m.name)} ${toolTarget(m.name, parseToolOutput(m.output))}`.trim() : '';
 	};
 	const allAgents = $derived(agentRows({ runs: chat.agentRuns, subagents: chat.subagents, lastTool }));
+	// The turn goes on while work it handed off runs (its work stays unfolded).
+	const turnOpen = $derived(chat.busy || handedOffWork(allAgents, chat.bgTasks));
 	const turnAgents = $derived(
 		agentRows({ runs: chat.agentRuns, subagents: chat.subagents, lastTool, since: chat.turnStartedAt || Number.MAX_SAFE_INTEGER })
 	);
@@ -1175,7 +1177,7 @@
 	<main bind:this={scroller} onscroll={onScroll} onwheel={onWheel}>
 		<!-- Pressing inside the conversation (opening a card, selecting text) stops following the end: what was pressed stays under the pointer instead of being pushed up as the reply grows. -->
 		<div bind:this={contentEl} onpointerdowncapture={() => (atBottom = false)} role="presentation">
-			<MessageList bind:this={messageList} bind:mark messages={chat.messages} busy={chat.busy} foldTurns={prefs.foldTurns} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onNote={noteRequirement} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} traceOf={traceable ? traceOf : undefined} agents={allAgents} onOpenAgent={traceable ? openAgent : undefined} onPlan={planAction} {planMode} onOpenPlan={(id) => planPages.open(session.id, id)} />
+			<MessageList bind:this={messageList} bind:mark messages={chat.messages} busy={turnOpen} foldTurns={prefs.foldTurns} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onNote={noteRequirement} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} traceOf={traceable ? traceOf : undefined} agents={allAgents} onOpenAgent={traceable ? openAgent : undefined} onPlan={planAction} {planMode} onOpenPlan={(id) => planPages.open(session.id, id)} />
 		</div>
 		{#if chat.booting && chat.engineState !== 'exited'}
 			<div class="welcome spawning">

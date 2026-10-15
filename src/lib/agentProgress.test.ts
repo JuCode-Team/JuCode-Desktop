@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
 	agentOfCall,
 	agentRows,
+	handedOffWork,
 	trayMode,
 	pillParts,
 	planShown,
@@ -202,5 +203,16 @@ describe('progress tray', () => {
 	it('writes the bar counts', () => {
 		expect(pillParts(plan, [runningRow, doneRow], true)).toEqual({ steps: '1/2', agents: 2, running: 1 });
 		expect(pillParts(plan, [], false).steps).toBe('');
+	});
+});
+
+describe('handed-off work', () => {
+	it('keeps the turn open while a subagent or background agent runs, not for a background command', () => {
+		expect(handedOffWork([{ state: 'running' }], [])).toBe(true);
+		expect(handedOffWork([{ state: 'queued' }], [])).toBe(true);
+		expect(handedOffWork([{ state: 'done' }, { state: 'failed' }], [])).toBe(false);
+		expect(handedOffWork([], [{ kind: 'local_agent' }])).toBe(true);
+		expect(handedOffWork([], [{ kind: 'local_workflow' }])).toBe(true);
+		expect(handedOffWork([], [{ kind: 'local_bash' }, { kind: 'monitor' }])).toBe(false);
 	});
 });

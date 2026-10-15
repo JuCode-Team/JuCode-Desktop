@@ -298,3 +298,11 @@ export function shortElapsed(ms: number): string {
 	if (m < 60) return `${m}m${String(s % 60).padStart(2, '0')}s`;
 	return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}m`;
 }
+
+/** Work the turn handed off is still going: a subagent running or queued,
+ *  or a background agent or workflow. Its result comes back to the
+ *  conversation, which then goes on, so the turn is not over yet (its work
+ *  stays unfolded). Background commands (a dev server) do not count. */
+export function handedOffWork(rows: Pick<AgentRow, 'state'>[], bgTasks: { kind: string }[]): boolean {
+	return rows.some((r) => r.state === 'running' || r.state === 'queued') || bgTasks.some((x) => /^local_(agent|workflow)/.test(x.kind));
+}

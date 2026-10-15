@@ -56,7 +56,7 @@
 	import ProgressTray from '$lib/agents/ProgressTray.svelte';
 	import StatusStrip from '$lib/composer/StatusStrip.svelte';
 	import ContextIndicator from '$lib/composer/ContextIndicator.svelte';
-	import { agentRows, type AgentRow } from '$lib/agentProgress';
+	import { agentRows, handedOffWork, type AgentRow } from '$lib/agentProgress';
 	import { parseToolOutput, toolTarget, toolVerb } from '$lib/toolSummary';
 	import { costText } from '$lib/sessionCost';
 	import { prefs } from '$lib/prefs.svelte';
@@ -619,6 +619,8 @@
 		return m ? `${toolVerb(m.name)} ${toolTarget(m.name, parseToolOutput(m.output))}`.trim() : '';
 	};
 	const allAgents = $derived(agentRows({ runs: chat.agentRuns, subagents: chat.subagents, lastTool }));
+	// The turn goes on while work it handed off runs (its work stays unfolded).
+	const turnOpen = $derived(chat.busy || handedOffWork(allAgents, chat.bgTasks));
 	const turnAgents = $derived(
 		agentRows({ runs: chat.agentRuns, subagents: chat.subagents, lastTool, since: chat.turnStartedAt || Number.MAX_SAFE_INTEGER })
 	);
@@ -689,7 +691,7 @@
 		<div class="thread" bind:this={contentEl} onclickcapture={() => (atBottom = false)} role="presentation">
 			<MessageList
 				messages={chat.messages}
-				busy={chat.busy}
+				busy={turnOpen}
 				foldTurns={prefs.foldTurns}
 				{streamingMsg}
 				{streamingReasoning}
