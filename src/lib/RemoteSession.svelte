@@ -9,6 +9,9 @@
 	import SquareIcon from '@lucide/svelte/icons/square';
 	import RotateCwIcon from '@lucide/svelte/icons/rotate-cw';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+	import FolderIcon from '@lucide/svelte/icons/folder';
+	import { CHATS_ENABLED } from '$lib/types';
+	import type { ProjectView } from '$lib/remote/store.svelte';
 	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import FilesIcon from '@lucide/svelte/icons/files';
 	import GitCompareIcon from '@lucide/svelte/icons/git-compare';
@@ -63,9 +66,9 @@
 	let {
 		session,
 		agent,
-		cwd,
-		chat: isChat = false,
-		engine,
+		cwd: cwdProp,
+		chat: chatProp = false,
+		engine: engineProp,
 		title,
 		hostName,
 		register,
@@ -73,6 +76,7 @@
 		onFiles,
 		onFile,
 		onChanges,
+		onPick,
 		active = false
 	}: {
 		/** An existing session; omit to start a new one as `agent`, in `cwd`,
@@ -99,7 +103,14 @@
 		onBack?: () => void;
 		/** The page on top of the shown tab: its approval card answers keys. */
 		active?: boolean;
+		/** A new session's project or engine was picked (before it starts). */
+		onPick?: (where: { cwd: string; chat: boolean; engine?: string }) => void;
 	} = $props();
+	// Where a new session starts; picked on its empty page until the first
+	// message creates it there (as on the desktop).
+	let cwd = $state(untrack(() => cwdProp));
+	let isChat = $state(untrack(() => chatProp));
+	let engine = $state(untrack(() => engineProp));
 	const host = useHost();
 	const { daemon, agents: agentDirectory } = host;
 
@@ -320,6 +331,28 @@
 
 	function send(op: Op) {
 		for (const line of adapter.encodeOp(op) ?? []) sendLine(line);
+	}
+
+	// The new-session picker: the open workspace's projects and the engines.
+	const PICK_ENGINES = ['jucode', 'claude', 'codex'] as const;
+	let pickMenu = $state<'project' | 'engine' | null>(null);
+	const pickProjects = $derived((host.projects.active?.projects ?? []).filter((p) => CHATS_ENABLED || !p.chats));
+	const pickedProject = $derived(pickProjects.find((p) => (isChat ? p.chats : !p.chats && p.path === cwd)));
+	const projectLabel = (p: ProjectView) => (p.chats ? t('shell.remote.chats') : p.name);
+	function pickProject(key: string) {
+		pickMenu = null;
+		const p = pickProjects.find((x) => x.id === key);
+		if (!p) return;
+		cwd = p.path;
+		isChat = !!p.chats;
+		// Chats run on JuCode only.
+		if (isChat) engine = undefined;
+		onPick?.({ cwd, chat: isChat, engine });
+	}
+	function pickEngine(key: string) {
+		pickMenu = null;
+		engine = key === 'jucode' ? undefined : key;
+		onPick?.({ cwd: cwd ?? '', chat: isChat, engine });
 	}
 
 	/** Phones send with the button (Enter is a new line); keyboards with Enter. */
@@ -681,6 +714,42 @@
 				<span class="spawn-spin"><LoaderCircleIcon size={28} class="spin" /></span>
 				<p class="welcome-tip">{t('shell.remote.openingSession')}</p>
 			</div>
+		{:else if draft && !agent && chat.messages.length === 0}
+			<div class="welcome">
+				<p class="lead">
+					{#each t('shell.startPicker.lead').split(/(\{project\}|\{backend\})/) as part, i (i)}
+						{#if part === '{project}'}
+							<span class="anchor">
+								<button class="word" class:on={pickMenu === 'project'} onclick={() => (pickMenu = pickMenu === 'project' ? null : 'project')} aria-haspopup="menu" aria-label={t('shell.startPicker.project')}>
+									<FolderIcon size={16} /><span class="wname">{pickedProject ? projectLabel(pickedProject) : t('shell.startPicker.project')}</span><ChevronDownIcon size={12} />
+								</button>
+								{#if pickMenu === 'project'}
+									<PopMenu
+										placement="down-left"
+										items={pickProjects.map((p) => ({ key: p.id, label: projectLabel(p), icon: FolderIcon, checked: p.id === pickedProject?.id }))}
+										onSelect={pickProject}
+										onClose={() => (pickMenu = null)}
+									/>
+								{/if}
+							</span>
+						{:else if part === '{backend}'}
+							<span class="anchor">
+								<button class="word" class:on={pickMenu === 'engine'} disabled={isChat} onclick={() => (pickMenu = pickMenu === 'engine' ? null : 'engine')} aria-haspopup="menu" aria-label={t('shell.startPicker.backend')}>
+									<BackendIcon backend={(engine ?? 'jucode') as 'jucode'} size={14} /><span class="wname">{BACKEND_LABELS[(engine ?? 'jucode') as 'jucode']}</span><ChevronDownIcon size={12} />
+								</button>
+								{#if pickMenu === 'engine'}
+									<PopMenu
+										placement="down-left"
+										items={PICK_ENGINES.map((e) => ({ key: e, label: BACKEND_LABELS[e], checked: e === (engine ?? 'jucode') }))}
+										onSelect={pickEngine}
+										onClose={() => (pickMenu = null)}
+									/>
+								{/if}
+							</span>
+						{:else}{part}{/if}
+					{/each}
+				</p>
+			</div>
 		{:else if (draft || connected) && chat.messages.length === 0 && !chat.busy}
 			<div class="welcome"><p class="welcome-tip">{t('shell.welcomeTip')}</p></div>
 		{/if}
@@ -1015,6 +1084,54 @@
 	.spawn-spin {
 		display: inline-flex;
 		color: var(--accent);
+	}
+	/* The new-session sentence: the project and the engine read as words. */
+	.lead {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: center;
+		gap: 2px;
+		margin: 0;
+		color: var(--dim);
+		font-size: var(--fs-md);
+		white-space: pre-wrap;
+		text-align: center;
+	}
+	.anchor {
+		position: relative;
+		display: inline-flex;
+		text-align: left;
+	}
+	.word {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		max-width: 240px;
+		padding: 2px 6px;
+		border: none;
+		border-radius: var(--r);
+		background: none;
+		color: var(--text);
+		font: inherit;
+		font-weight: 500;
+		cursor: pointer;
+	}
+	.word:disabled {
+		cursor: default;
+	}
+	.word:not(:disabled):hover,
+	.word.on {
+		background: var(--surface2);
+	}
+	.word > :global(svg:last-child) {
+		color: var(--dim2);
+	}
+	.wname {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	.welcome-tip {
 		margin: 0;

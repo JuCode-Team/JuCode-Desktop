@@ -6,7 +6,7 @@
 	// computer and hides all but the shown one, so each keeps its open pages
 	// and their sessions keep streaming while another computer is shown.
 	import { cubicOut } from 'svelte/easing';
-	import type { Component, Snippet } from 'svelte';
+	import { untrack, type Component, type Snippet } from 'svelte';
 	import InboxIcon from '@lucide/svelte/icons/inbox';
 	import MenuIcon from '@lucide/svelte/icons/menu';
 	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
@@ -31,7 +31,6 @@
 	import type { AgentView } from '$lib/agents.svelte';
 	import { t } from '$lib/i18n';
 	import Projects from './Projects.svelte';
-	import NewSessionDialog from './NewSessionDialog.svelte';
 	import ProjectScreen from './ProjectScreen.svelte';
 	import AddProjectScreen from './AddProjectScreen.svelte';
 	import { baseName, type ProjectView } from './store.svelte';
@@ -156,25 +155,37 @@
 		return { duration: 200, easing: cubicOut, css: (t: number, u: number) => `transform: translateX(${u * 40}%); opacity: ${t}` };
 	}
 
-	/** The new-session dialog, for a given project or a choice of them. */
-	let creating = $state<{ project?: ProjectView; replace: boolean } | null>(null);
-	const ENGINE_TITLES: Record<string, string> = { claude: 'Claude Code', codex: 'Codex' };
-	function create(project: ProjectView, engine: string) {
-		const replace = creating?.replace ?? true;
-		creating = null;
-		const screen: NewScreen = {
-			kind: 'session',
-			cwd: project.path,
-			chat: project.chats,
-			engine: engine === 'jucode' ? undefined : engine,
-			title: ENGINE_TITLES[engine] ?? t('shell.remote.newSession')
-		};
+	/** A new session: its empty page, where the project and the engine are
+	 *  picked and the first message creates it (as on the desktop). It starts
+	 *  in `project`, else where the last one did, else the first project. */
+	function newSession(project?: ProjectView, replace = true) {
+		const projects = conn.projects.active?.projects ?? [];
+		const last = localStorage.getItem(`jucode-remote-last-project:${conn.id}`);
+		const start = project ?? projects.find((p) => p.path === last && !p.chats) ?? projects.find((p) => !p.chats) ?? projects[0];
+		if (!start) {
+			push({ kind: 'add' });
+			return;
+		}
+		const screen: NewScreen = { kind: 'session', cwd: start.path, chat: start.chats, title: t('shell.remote.newSession') };
 		if (replace) open(screen);
 		else push(screen);
+	}
+	/** The new session's page moved to another project or engine. */
+	function picked(screen: Screen, where: { cwd: string; chat: boolean; engine?: string }) {
+		if (screen.kind !== 'session') return;
+		Object.assign(screen, where);
+		if (!where.chat) localStorage.setItem(`jucode-remote-last-project:${conn.id}`, where.cwd);
 	}
 
 	/** Past pairing and connected once: the lists and pages are showing. */
 	const ready = $derived(conn.everConnected && !conn.relayError?.fatal);
+	// A wide pane with nothing open on the sessions tab shows a new session,
+	// ready to type in, as the desktop does.
+	$effect(() => {
+		if (!wide || hidden || !ready || tab !== 'projects' || stacks.projects.length) return;
+		if (!(conn.projects.active?.projects ?? []).length) return;
+		untrack(() => newSession());
+	});
 
 	/** What the page on top shows, highlighted in its tab's list. */
 	const top = $derived(stack.at(-1));
@@ -303,7 +314,7 @@
 								engine: s.engine && s.engine !== 'jucode' ? s.engine : undefined,
 								title: s.title || t('shell.remote.untitled')
 							})}
-						onNewSession={(project) => (creating = { project, replace: true })}
+						onNewSession={(project) => newSession(project)}
 						onAddProject={() => open({ kind: 'add' })}
 						onHistory={(project) => open({ kind: 'project', project })}
 						onFiles={(project) => open({ kind: 'files', root: project.path, title: project.name })}
@@ -354,7 +365,7 @@
 				{:else}
 					<div class="pane-empty">
 						<h1>{t('shell.remote.pickSomething')}</h1>
-						<button class="start" onclick={() => (creating = { replace: true })}><PlusIcon size={16} />{t('shell.remote.newSession')}</button>
+						<button class="start" onclick={() => newSession()}><PlusIcon size={16} />{t('shell.remote.newSession')}</button>
 					</div>
 				{/if}
 			{/if}
@@ -377,6 +388,7 @@
 								onFiles={root ? () => push({ kind: 'files', root, title: baseName(root) }) : undefined}
 								onFile={root ? (file: string, line?: number) => push({ kind: 'files', root, title: baseName(root), file, line }) : undefined}
 								onChanges={root ? () => push({ kind: 'changes', root, title: baseName(root) }) : undefined}
+								onPick={(where: { cwd: string; chat: boolean; engine?: string }) => picked(screen, where)}
 								active={!hidden && name === tab && i === stacks[name].length - 1}
 							/>
 						{:else}
@@ -389,7 +401,7 @@
 							onBack={pop}
 							onOpenSession={(session, cwd, title, engine) =>
 								push({ kind: 'session', session, cwd, chat: project.chats, engine, title })}
-							onNewSession={() => (creating = { project, replace: false })}
+							onNewSession={() => newSession(project, false)}
 							onFiles={() => push({ kind: 'files', root: project.path, title: project.name })}
 							onChanges={() => push({ kind: 'changes', root: project.path, title: project.name })}
 						/>
@@ -441,9 +453,6 @@
 			{/each}
 			{/each}
 		</section>
-		{#if creating}
-			<NewSessionDialog project={creating.project} onCreate={create} onClose={() => (creating = null)} />
-		{/if}
 	{/if}
 </div>
 
