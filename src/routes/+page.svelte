@@ -143,12 +143,11 @@
 	const chat = $derived(store.chat);
 	const activeProject = $derived(store.activeProject);
 	const activeId = $derived(store.activeId);
-	// O(1) session lookup for the hot agent-event path (fires per stream chunk),
-	// instead of an O(n) allSessions.find on every event. Read from the store,
-	// not through the `allSessions` derived: chained, the map once stopped
-	// following new sessions until a restart (Svelte 5.57.1), so a new
-	// conversation's tab showed it as closed.
-	const sessionMap = $derived(new Map(store.allSessions.map((s) => [s.id, s])));
+	// A session by id, read from the store each time. A derived map of them
+	// went stale twice after the app had run a while (even a new tab's first
+	// read got the old map, so its new conversation showed as closed); a scan
+	// of a few hundred sessions per lookup costs nothing next to that.
+	const sessionById = (id: string) => store.allSessions.find((s) => s.id === id);
 	// The requirements on this computer (the daemon's list).
 	const requirements = new Requirements(daemon);
 	provideRequirements(requirements);
@@ -437,7 +436,7 @@
 
 	function tileLabel(tab: TileTab): string {
 		const sid = chatSessionOf(tab.panel);
-		if (sid) return sessionMap.get(sid)?.chat.title || t('shell.untitled');
+		if (sid) return sessionById(sid)?.chat.title || t('shell.untitled');
 		const tui = tuiBackendOf(tab.panel);
 		if (tui) return tuiTabTitle(tui);
 		if (tab.panel === 'audit') return t('editor.title');
@@ -450,7 +449,7 @@
 		return (ALL_PANELS as readonly string[]).includes(tab.panel) ? t(`dock.tabs.${tab.panel}`) : tab.panel;
 	}
 	function tuiReady(sid: string): boolean {
-		const session = sessionMap.get(sid);
+		const session = sessionById(sid);
 		return !!session &&
 			isValidResumeSessionId(session.chat.sessionId) &&
 			(session.chat.resumable || !!session.restored) &&
@@ -473,7 +472,7 @@
 	/** Into the TUI. A running reply or background task ends with the engine,
 	 *  so the user confirms that first. */
 	async function continueInTui(sid: string) {
-		const chat = sessionMap.get(sid)?.chat;
+		const chat = sessionById(sid)?.chat;
 		if (!chat) return;
 		if (chat.busy || chat.bgTasks.length) {
 			const ok = await confirm({
@@ -491,7 +490,8 @@
 	const openedInTui = new Set<string>();
 	$effect(() => {
 		if (prefs.defaultSurface !== 'tui') return;
-		for (const [sid, session] of sessionMap) {
+		for (const session of store.allSessions) {
+			const sid = session.id;
 			if (openedInTui.has(sid) || !session.restored || !canHandOffToTui(session.backendId)) continue;
 			if (!tuiReady(sid) || !daemon.sessionOf(sid)) continue;
 			openedInTui.add(sid);
@@ -515,7 +515,7 @@
 		if (next === tiles) return;
 		// A draft whose tab closes before its first message leaves nothing behind.
 		const open = new Set(chatSessionsIn(next));
-		const dropped = chatSessionsIn(tiles).filter((sid) => !open.has(sid) && sessionMap.get(sid)?.draft);
+		const dropped = chatSessionsIn(tiles).filter((sid) => !open.has(sid) && sessionById(sid)?.draft);
 		tiles = next;
 		for (const sid of dropped) store.removeSession(sid);
 		if (tilesReady) workspaces.updateLayout(serializeLayout(next));
@@ -551,7 +551,7 @@
 		const leaf = focusedLeaf ? findLeaf(tiles.root, focusedLeaf) : null;
 		const tab = leaf?.tabs.find((tb) => tb.id === leaf.active);
 		const sid = tab ? chatSessionOf(tab.panel) : null;
-		if (sid && sid !== store.activeId && sessionMap.has(sid)) store.activeId = sid;
+		if (sid && sid !== store.activeId && !!sessionById(sid)) store.activeId = sid;
 	}
 	function onMosaicChange(next: TileLayout) {
 		applyTiles(next);
@@ -603,12 +603,12 @@
 
 	/** The approval mode a plan runs in once approved: the one before plan mode. */
 	function planModeOf(sessionId: string): ApprovalMode {
-		const before = sessionMap.get(sessionId)?.chat.modeBeforePlan;
+		const before = sessionById(sessionId)?.chat.modeBeforePlan;
 		return before && before !== 'plan' ? before : 'edits';
 	}
 		/** A plan message of a session, for its page. */
 	function planOf(sessionId: string, planId: string) {
-		const m = sessionMap.get(sessionId)?.chat.messages.find((x) => x.kind === 'plan' && x.id === planId);
+		const m = sessionById(sessionId)?.chat.messages.find((x) => x.kind === 'plan' && x.id === planId);
 		return m?.kind === 'plan' ? m : undefined;
 	}
 	/** A plan's page in the side column beside its session's chat: shown
@@ -627,7 +627,7 @@
 
 	/** A subagent of a session, for its tab: its name and state. */
 	function subagentInfo(sessionId: string, agentId: string): { label: string; state: ReturnType<typeof runState> | 'unknown' } {
-		const chat = sessionMap.get(sessionId)?.chat;
+		const chat = sessionById(sessionId)?.chat;
 		const run =
 			chat?.agentRuns.agents.find((a) => a.id === agentId) ??
 			chat?.agentRuns.workflows.flatMap((w) => w.agents).find((a) => a.id === agentId);
@@ -944,7 +944,7 @@
 	// ---------- session tab chrome (color / icon / rename) ----------
 	// One shared popover serves the mosaic tabs and the sidebar rows.
 	let sessionChromeFor = $state<{ sid: string; x: number; y: number } | null>(null);
-	const chromeSession = $derived(sessionChromeFor ? (sessionMap.get(sessionChromeFor.sid) ?? null) : null);
+	const chromeSession = $derived(sessionChromeFor ? (sessionById(sessionChromeFor.sid) ?? null) : null);
 
 	function tileChrome(tab: TileTab): { color?: string; icon?: TabIcon } | null {
 		const pid = projectOf(tab.panel);
@@ -953,7 +953,7 @@
 			return { color: p?.color, icon: p?.icon ?? { kind: 'builtin', id: 'folder' } };
 		}
 		const sid = chatSessionOf(tab.panel);
-		const s = sid ? sessionMap.get(sid) : null;
+		const s = sid ? sessionById(sid) : null;
 		if (!s || (!s.color && !s.icon)) return null;
 		return { color: s.color, icon: s.icon };
 	}
@@ -964,12 +964,12 @@
 		const p = pid ? store.userProjects.find((x) => x.id === pid) : undefined;
 		if (p) return openProjectMenu(p, ev);
 		const sid = chatSessionOf(tab.panel);
-		if (!sid || !sessionMap.has(sid)) return;
+		if (!sid || !!!sessionById(sid)) return;
 		ev.preventDefault();
 		sessionChromeFor = { sid, x: ev.clientX, y: ev.clientY };
 	}
 	function openSessionMenu(sid: string, ev: MouseEvent) {
-		if (!sessionMap.has(sid)) return;
+		if (!!!sessionById(sid)) return;
 		ev.preventDefault();
 		sessionChromeFor = { sid, x: ev.clientX, y: ev.clientY };
 	}
@@ -1060,7 +1060,7 @@
 	}
 
 	async function removeSession(id: string) {
-		const s = sessionMap.get(id);
+		const s = sessionById(id);
 		// A draft that never started has nothing to lose.
 		if (s && !s.draft) {
 			const ok = await confirm({
@@ -1243,7 +1243,7 @@
 			// One engine frame from the daemon into its session's adapter and
 			// ChatState.
 			const deliver = (sessionId: string, data: string) => {
-				const s = sessionMap.get(sessionId);
+				const s = sessionById(sessionId);
 				if (!s) return;
 				const wasBusy = s.chat.busy;
 				const hadApproval = s.chat.pendingApproval?.callId ?? null;
@@ -1436,7 +1436,7 @@
 <!-- A chat tab's status, the same marks as its sidebar row. -->
 {#snippet tabMark(tab: TileTab)}
 	{@const sid = chatSessionOf(tab.panel)}
-	{@const s = sid ? sessionMap.get(sid) : undefined}
+	{@const s = sid ? sessionById(sid) : undefined}
 	{#if s}<SessionMark status={sessionStatus(s.chat)} />{/if}
 	{@const sub = subagentOf(tab.panel)}
 	{#if sub}<StateIcon state={subagentInfo(sub.sessionId, sub.agentId).state} size={12} />{/if}
@@ -1575,7 +1575,7 @@
 								{@const sid = chatSessionOf(tab.panel)}
 								{@const tui = tuiBackendOf(tab.panel)}
 								{#if sid}
-									{@const sess = sessionMap.get(sid)}
+									{@const sess = sessionById(sid)}
 									{#if sess}
 										{#if sess.surface === 'tui'}
 											<!-- Session handoff: the same chat tile renders the native TUI
@@ -1638,7 +1638,7 @@
 								{:else if proposalOf(tab.panel)}
 									{@const p = proposalOf(tab.panel)!}
 									{@const plan = planOf(p.sessionId, p.planId)}
-									{@const lastPlan = sessionMap.get(p.sessionId)?.chat.messages.findLast((m) => m.kind === 'plan')}
+									{@const lastPlan = sessionById(p.sessionId)?.chat.messages.findLast((m) => m.kind === 'plan')}
 									<ProposalPane
 										{plan}
 										actionable={!!plan && plan === lastPlan}
@@ -1651,7 +1651,7 @@
 								{:else if subagentOf(tab.panel)}
 									{@const sub = subagentOf(tab.panel)!}
 									{#key tab.panel}
-										<SubagentPane chat={sessionMap.get(sub.sessionId)?.chat} agentId={sub.agentId} onOp={(op) => dispatch(sub.sessionId, op)} />
+										<SubagentPane chat={sessionById(sub.sessionId)?.chat} agentId={sub.agentId} onOp={(op) => dispatch(sub.sessionId, op)} />
 									{/key}
 								{:else if tab.panel === 'goal'}<GoalPanel goal={chat?.goal ?? null} />
 								{:else if tab.panel === 'agents'}{#if chat && activeId}{#key activeId}<AgentRunsPanel {chat} onOp={(op) => activeId && dispatch(activeId, op)} />{/key}{/if}
@@ -1694,14 +1694,14 @@
 					{captureSignal}
 					{currentStep}
 					onStartRequirement={startRequirement}
-					openSid={deskSession ? (sessionMap.get(deskSession)?.chat.sessionId ?? null) : null}
+					openSid={deskSession ? (sessionById(deskSession)?.chat.sessionId ?? null) : null}
 					navWidth={sidebarWidth}
 					onClose={() => (showDesk = false)}
 					onOpenSession={openDaemonSession}
 					onNewAgent={() => newAgent()}
 				>
 					{#snippet chatView(id)}
-						{@const sess = sessionMap.get(id)}
+						{@const sess = sessionById(id)}
 						{#if sess}
 							<ChatPane
 								session={sess}
