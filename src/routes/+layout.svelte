@@ -2,6 +2,8 @@
 	import '$lib/app.css';
 	import { browser } from '$app/environment';
 	import { onMount } from 'svelte';
+	import { beforeNavigate } from '$app/navigation';
+	import { updated } from '$app/state';
 	import { initTheme } from '$lib/theme.svelte';
 	import { prefs, applyPlatformClass } from '$lib/prefs.svelte';
 	import { getLocale, setLocale } from '$lib/i18n';
@@ -16,6 +18,12 @@
 	if (browser) applyPlatformClass();
 
 	let { children } = $props();
+
+	// A newer build was deployed while this page was open: go to the next page
+	// with a full load, so it comes with that build's files.
+	beforeNavigate(({ willUnload, to }) => {
+		if (updated.current && !willUnload && to?.url) location.href = to.url.href;
+	});
 
 	// Icon defaults (lucide): a fixed 1.5px stroke at every size, so 12px and
 	// 20px icons read as the same weight. Icons are aria-hidden unless labelled.

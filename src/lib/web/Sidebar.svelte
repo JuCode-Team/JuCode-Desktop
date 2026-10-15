@@ -145,7 +145,7 @@
 
 	<div class="actions">
 		<button class="row strong" onclick={newChat}><SquarePenIcon size={16} /><span>{t('web.side.newChat')}</span></button>
-		<a class="row" href="/remote" title={t('web.side.remoteHint')}><MonitorIcon size={16} /><span>{t('web.side.remote')}</span></a>
+		<a class="row" href="/remote" data-sveltekit-reload title={t('web.side.remoteHint')}><MonitorIcon size={16} /><span>{t('web.side.remote')}</span></a>
 	</div>
 
 	<div class="list">

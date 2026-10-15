@@ -15,6 +15,10 @@ const config = {
     // src/service-worker.ts is for the phone PWA only: the /remote page
     // registers it outside Tauri, so it never runs in the desktop app.
     serviceWorker: { register: false },
+    // The web pages (app.jucode.net) learn of a new deployment within a
+    // minute; the next navigation then loads the page afresh (+layout.svelte)
+    // rather than asking for files of the build it started with.
+    version: { pollInterval: 60_000 },
   },
 };
 
