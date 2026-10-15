@@ -280,6 +280,7 @@ const shell = {
 		agentSession: '新建会话',
 		newTask: '新建并行任务',
 		remote: {
+			workspaces: '工作区',
 			installTitle: '先添加到主屏幕',
 			installStep1: '点 Safari 底部的分享按钮，选「添加到主屏幕」。',
 			installStep2: '从主屏幕打开 JuCode。',
@@ -1219,6 +1220,7 @@ const shell = {
 		agentSession: 'New session',
 		newTask: 'New parallel task',
 		remote: {
+			workspaces: 'Workspaces',
 			installTitle: 'Add to Home Screen first',
 			installStep1: 'Tap the Share button in Safari and choose “Add to Home Screen”.',
 			installStep2: 'Open JuCode from the Home Screen.',

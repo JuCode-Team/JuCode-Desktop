@@ -57,44 +57,39 @@
 </div>
 
 <style>
-	.list {
-		display: flex;
-		flex-direction: column;
-		gap: 16px;
-		padding-bottom: 16px;
-	}
+	/* The tab's first action, as the sessions tab's 新会话 row. */
 	.new {
 		display: flex;
 		align-items: center;
 		gap: 10px;
 		width: 100%;
-		min-height: 42px;
+		min-height: 40px;
+		margin-bottom: 14px;
 		padding: 0 12px;
-		border: 1px solid var(--hairline);
+		border: none;
 		border-radius: var(--r);
-		background: var(--surface);
+		background: none;
 		color: var(--text);
 		font: inherit;
 		font-size: var(--fs-sm);
+		text-align: left;
 		cursor: pointer;
 		-webkit-tap-highlight-color: transparent;
-		transition:
-			background var(--t-fast) var(--ease-out),
-			border-color var(--t-fast) var(--ease-out),
-			transform var(--t-fast) var(--ease-out);
-	}
-	.new:hover {
-		background: var(--surface2);
-	}
-	.new:active {
-		transform: scale(0.985);
-	}
-	.new.on {
-		border-color: color-mix(in oklab, var(--accent) 50%, var(--hairline));
-		background: var(--surface2);
+		transition: background var(--t-fast) var(--ease-out);
 	}
 	.new > :global(svg) {
-		color: var(--accent-bright);
+		flex-shrink: 0;
+		color: var(--dim);
+	}
+	.new:hover,
+	.new.on {
+		background: var(--surface2);
+	}
+	.list {
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+		padding-bottom: 16px;
 	}
 	.head {
 		display: flex;

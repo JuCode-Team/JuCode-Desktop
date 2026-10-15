@@ -48,9 +48,7 @@
 		align-items: center;
 		gap: 8px;
 		min-height: 52px;
-		padding: calc(env(safe-area-inset-top) + 8px) 12px 8px;
-		border-bottom: 1px solid var(--hairline);
-		background: var(--panel);
+		padding: calc(env(safe-area-inset-top) + 8px) 12px 8px 16px;
 	}
 	.back {
 		display: inline-flex;
@@ -85,9 +83,11 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
+	/* As a conversation's header: a quiet line above the page. */
 	.title {
-		font-weight: 600;
-		font-size: var(--fs-lg);
+		font-weight: 500;
+		font-size: var(--fs-sm);
+		color: var(--dim);
 	}
 	.subtitle {
 		font-size: var(--fs-xs);

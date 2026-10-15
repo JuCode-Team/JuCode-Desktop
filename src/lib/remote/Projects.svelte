@@ -17,6 +17,10 @@
 	import GitCompareIcon from '@lucide/svelte/icons/git-compare';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import XIcon from '@lucide/svelte/icons/x';
+	import SquarePenIcon from '@lucide/svelte/icons/square-pen';
+	import LayersIcon from '@lucide/svelte/icons/layers';
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+	import PopMenu from '$lib/ui/PopMenu.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
@@ -92,6 +96,7 @@
 	});
 
 	// The actions sheet of a session or a project.
+	let wsMenu = $state(false);
 	let menu = $state<{ session: DaemonSessionView } | { project: ProjectView } | null>(null);
 	let renaming = $state(false);
 	let name = $state('');
@@ -192,13 +197,32 @@
 {#if agentDirectory.status === 'on' && waited && !remoteProjects.supported}
 	<Notice tone="warn">{t('shell.remote.outdated')}</Notice>
 {:else}
-	{#if remoteProjects.workspaces.length > 1}
-		<div class="workspaces">
-			{#each remoteProjects.workspaces as ws (ws.id)}
-				<button class:on={remoteProjects.active?.id === ws.id} onclick={() => (remoteProjects.activeId = ws.id)}>{ws.name}</button>
-			{/each}
-		</div>
-	{/if}
+	<!-- The open workspace (a menu of the others), then a new session, as the
+	     desktop's sidebar starts. -->
+	<nav class="primary">
+		{#if remoteProjects.workspaces.length > 1}
+			<div class="ws-anchor">
+				<button class="primary-row" class:on={wsMenu} onclick={() => (wsMenu = !wsMenu)} aria-haspopup="menu" aria-expanded={wsMenu}>
+					<LayersIcon size={16} />
+					<span class="primary-name">{remoteProjects.active?.name ?? ''}</span>
+					<ChevronDownIcon size={14} />
+				</button>
+				{#if wsMenu}
+					<PopMenu
+						placement="down-left"
+						title={t('shell.remote.workspaces')}
+						items={remoteProjects.workspaces.map((ws) => ({ key: ws.id, label: ws.name, icon: LayersIcon, checked: ws.id === remoteProjects.active?.id }))}
+						onSelect={(id) => ((wsMenu = false), (remoteProjects.activeId = id))}
+						onClose={() => (wsMenu = false)}
+					/>
+				{/if}
+			</div>
+		{/if}
+		<button class="primary-row" onclick={() => onNewSession()}>
+			<SquarePenIcon size={16} />
+			<span class="primary-name">{t('shell.remote.newSession')}</span>
+		</button>
+	</nav>
 
 	{#if agentDirectory.agents.length}
 		<section>
@@ -304,25 +328,44 @@
 {/if}
 
 <style>
-	.workspaces {
+	.primary {
 		display: flex;
-		gap: 6px;
-		overflow-x: auto;
-		margin-bottom: 8px;
-		padding-bottom: 2px;
+		flex-direction: column;
+		gap: 1px;
+		margin-bottom: 14px;
 	}
-	.workspaces button {
-		flex-shrink: 0;
-		padding: 6px 12px;
-		border: 1px solid var(--border);
+	.ws-anchor {
+		position: relative;
+	}
+	.primary-row {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		width: 100%;
+		min-height: 40px;
+		padding: 0 12px;
+		border: none;
 		border-radius: var(--r);
 		background: none;
-		color: var(--dim);
-		font-size: var(--fs-sm);
-	}
-	.workspaces button.on {
-		border-color: var(--accent);
 		color: var(--text);
+		font: inherit;
+		font-size: var(--fs-sm);
+		text-align: left;
+	}
+	.primary-row > :global(svg) {
+		flex-shrink: 0;
+		color: var(--dim);
+	}
+	.primary-row:hover,
+	.primary-row.on {
+		background: var(--surface2);
+	}
+	.primary-name {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	section + section {
 		margin-top: 20px;
@@ -368,7 +411,7 @@
 	.act,
 	.more,
 	.menu button,
-	.workspaces button {
+	.primary-row {
 		cursor: pointer;
 		-webkit-tap-highlight-color: transparent;
 		transition:
@@ -385,8 +428,7 @@
 	.menu button:active {
 		transform: scale(0.985);
 	}
-	.act:active,
-	.workspaces button:active {
+	.act:active {
 		transform: scale(0.9);
 	}
 	.more:hover {
