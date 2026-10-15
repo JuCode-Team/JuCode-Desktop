@@ -461,10 +461,10 @@
 			</button>
 			{#if switchMenu}
 				<button class="backdrop" aria-label="close menu" tabindex="-1" onclick={() => (switchMenu = false)}></button>
-				<div class="pop switch-menu" class:left={wide} class:up={foot} role="menu">
+				<div class="pop switch-menu" class:left={wide} role="menu">
 					{#if relayOrigin && !foot}
 						<!-- app.jucode.net: the remote computers are one part of the web app. -->
-						<a class="pop-row" role="menuitem" href="/chat">
+						<a class="pop-row" role="menuitem" href="/chat" data-sveltekit-reload>
 							<span class="pop-ico"><MessageSquareTextIcon size={16} /></span>
 							<span class="pop-txt"><span class="pop-label">{t('shell.remote.backToChat')}</span></span>
 						</a>
@@ -882,12 +882,7 @@
 		left: 0;
 		transform-origin: top left;
 	}
-	.switch-menu.up {
-		top: auto;
-		bottom: calc(100% + 6px);
-		transform-origin: bottom left;
-	}
-	/* The wide sidebar's foot: a full row, as the chat's account. */
+	/* The wide sidebar's head: a full row naming the computer and its state. */
 	.conn.foot {
 		display: flex;
 		width: 100%;

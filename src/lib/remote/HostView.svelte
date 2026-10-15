@@ -15,7 +15,6 @@
 	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
 	import SendIcon from '@lucide/svelte/icons/send';
 	import ListChecksIcon from '@lucide/svelte/icons/list-checks';
-	import MessageSquareTextIcon from '@lucide/svelte/icons/message-square-text';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import RequirementList from './RequirementList.svelte';
 	import RequirementCompose from './RequirementCompose.svelte';
@@ -170,6 +169,19 @@
 		if (replace) open(screen);
 		else push(screen);
 	}
+	// Another workspace: a new session waiting on the wide pane starts over
+	// in that workspace's projects.
+	let shownWorkspace = '';
+	$effect(() => {
+		const ws = conn.projects.active?.id ?? '';
+		if (ws === shownWorkspace) return;
+		const was = shownWorkspace;
+		shownWorkspace = ws;
+		untrack(() => {
+			const draft = stacks.projects.at(-1);
+			if (was && wide && draft?.kind === 'session' && !draft.session && !draft.agent) newSession();
+		});
+	});
 	/** The new session's page moved to another project or engine. */
 	function picked(screen: Screen, where: { cwd: string; chat: boolean; engine?: string }) {
 		if (screen.kind !== 'session') return;
@@ -255,14 +267,11 @@
 		</div>
 	{:else}
 		<aside class="side">
-			{#if wide}<div class="brand">JuCode</div>{/if}
+			<!-- Wide: the computer first (everything below is on it), then its
+			     sections in one row; the sessions section starts with the
+			     workspace and a new session (Projects). -->
+			{#if wide}<div class="head">{@render switcher(true)}</div>{/if}
 			<nav>
-				{#if wide && chatHref}
-					<a class="chat" href={chatHref}>
-						<MessageSquareTextIcon size={16} />
-						<span class="label">{t('shell.remote.backToChat')}</span>
-					</a>
-				{/if}
 				<button class:on={tab === 'projects'} onclick={() => (tab = 'projects')}>
 					<ActiveIcon icon={MenuIcon} size={16} active={tab === 'projects'} />
 					<span class="label">{t('shell.remote.sessions')}</span>
@@ -283,8 +292,7 @@
 					{#if conn.agents.pending > 0}<span class="badge">{conn.agents.pending}</span>{/if}
 				</button>
 			</nav>
-			<!-- Outside the scrolling list, so the switcher's menu is not cut off.
-			     Wide: the nav names the tab, the switcher sits in the foot. -->
+			<!-- Outside the scrolling list, so the switcher's menu is not cut off. -->
 			{#if !wide}
 				<div class="top">
 					<h1>{t(TAB_TITLES[tab])}</h1>
@@ -348,7 +356,15 @@
 				</div>
 			</main>
 			{#if wide}
-				<div class="foot">{@render switcher(true)}</div>
+				{#if chatHref}
+					<div class="foot">
+						<!-- Another app: a full page load, not a route change. -->
+						<a class="chat" href={chatHref} data-sveltekit-reload>
+							<ArrowLeftIcon size={16} />
+							<span>{t('shell.remote.backToChat')}</span>
+						</a>
+					</div>
+				{/if}
 				{@render resizer()}
 			{/if}
 		</aside>
@@ -535,61 +551,47 @@
 		border-right: 1px solid var(--hairline);
 		background: var(--sidebar);
 	}
-	/* Wide: as the chat's sidebar — the name, the sections one per row. */
-	.brand {
-		padding: calc(env(safe-area-inset-top) + 14px) 16px 6px;
-		font-size: var(--fs-md);
-		font-weight: 600;
-		letter-spacing: -0.01em;
+	/* Wide: the computer, then its sections as one row of tabs. */
+	.head {
+		padding: calc(env(safe-area-inset-top) + 10px) 8px 4px;
 	}
 	.wide nav {
 		position: static;
-		flex-direction: column;
+		flex-direction: row;
 		gap: 2px;
-		padding: 6px 8px 8px;
+		padding: 4px 8px 8px;
 		border: none;
 		background: none;
 	}
-	.wide nav button,
-	.wide nav .chat {
-		flex: none;
+	.wide nav button {
+		flex: 1;
 		flex-direction: row;
-		justify-content: flex-start;
-		gap: 10px;
-		height: 36px;
-		padding: 0 10px;
+		justify-content: center;
+		gap: 4px;
+		height: 32px;
+		padding: 0 6px;
 		border-radius: var(--r);
-		color: var(--text);
+		color: var(--dim);
 		font-size: var(--fs-sm);
-		text-decoration: none;
-	}
-	.wide nav .chat {
-		display: flex;
-		align-items: center;
 	}
 	.wide nav :global(svg) {
-		flex: none;
-		color: var(--dim);
+		display: none;
 	}
-	.wide nav button:hover,
-	.wide nav .chat:hover {
+	.wide nav button:hover {
 		background: var(--surface2);
+		color: var(--text);
 	}
 	.wide nav button:active {
 		transform: none;
 	}
 	.wide nav button.on {
 		background: var(--surface2);
+		color: var(--text);
 		font-weight: 500;
 	}
-	.wide nav button.on :global(svg) {
-		color: var(--text);
-	}
 	.wide nav .label {
-		flex: 1;
 		min-width: 0;
 		overflow: hidden;
-		text-align: left;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
@@ -600,6 +602,21 @@
 	.foot {
 		padding: 8px;
 		border-top: 1px solid var(--hairline);
+	}
+	.chat {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		height: 36px;
+		padding: 0 10px;
+		border-radius: var(--r);
+		color: var(--dim);
+		font-size: var(--fs-sm);
+		text-decoration: none;
+	}
+	.chat:hover {
+		background: var(--surface2);
+		color: var(--text);
 	}
 	.wide main {
 		flex: 1;

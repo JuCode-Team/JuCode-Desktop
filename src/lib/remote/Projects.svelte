@@ -28,7 +28,7 @@
 	import AgentAvatar from '$lib/AgentAvatar.svelte';
 	import TabGlyph from '$lib/workbench/TabGlyph.svelte';
 	import { normalizeColor, parseTabIcon } from '$lib/workbench/tabChrome';
-	import type { AgentView, DaemonSessionView } from '$lib/agents.svelte';
+	import { agentsOfWorkspace, type AgentView, type DaemonSessionView } from '$lib/agents.svelte';
 	import { baseName, type ProjectView } from './store.svelte';
 	import { useHost } from './connection.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
@@ -72,8 +72,12 @@
 			.sort((a, b) => (b.updated_at ?? b.created_at) - (a.updated_at ?? a.created_at))
 	);
 	const sessionsOf = (p: ProjectView) => listed.filter((s) => trim(s.cwd) === trim(p.path));
-	/** Sessions in no project of this workspace. */
-	const loose = $derived(listed.filter((s) => !projects.some((p) => trim(s.cwd) === trim(p.path))));
+	/** Sessions in no project of any workspace (those of another workspace
+	 *  show there). */
+	const loose = $derived.by(() => {
+		const all = remoteProjects.workspaces.flatMap((w) => w.projects);
+		return listed.filter((s) => !all.some((p) => trim(s.cwd) === trim(p.path)));
+	});
 
 	let collapsed = $state<Record<string, boolean>>({});
 	let showAll = $state<Record<string, boolean>>({});
@@ -97,6 +101,8 @@
 
 	// The actions sheet of a session or a project.
 	let wsMenu = $state(false);
+	// The open workspace's agents, as the desktop lists them.
+	const agents = $derived(agentsOfWorkspace(agentDirectory.agents, remoteProjects.workspaces.map((w) => ({ id: w.id, isDefault: w.is_default })), remoteProjects.active?.id ?? ''));
 	let menu = $state<{ session: DaemonSessionView } | { project: ProjectView } | null>(null);
 	let renaming = $state(false);
 	let name = $state('');
@@ -224,10 +230,10 @@
 		</button>
 	</nav>
 
-	{#if agentDirectory.agents.length}
+	{#if agents.length}
 		<section>
 			<div class="head"><span>{t('shell.remote.agents')}</span></div>
-			{#each agentDirectory.agents as a (a.id)}
+			{#each agents as a (a.id)}
 				<div class="sess">
 					<button class="sess-main" onclick={() => onOpenAgent(a)}>
 						{#if a.busy}<LoaderCircleIcon size={16} class="spin" />{:else}<AgentAvatar agent={a} size={16} />{/if}
