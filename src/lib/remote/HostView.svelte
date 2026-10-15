@@ -272,21 +272,21 @@
 			     workspace and a new session (Projects). -->
 			{#if wide}<div class="head">{@render switcher(true)}</div>{/if}
 			<nav>
-				<button class:on={tab === 'projects'} onclick={() => (tab = 'projects')}>
+				<button class:on={tab === 'projects'} onclick={() => (tab = 'projects')} title={t('shell.remote.sessions')}>
 					<ActiveIcon icon={MenuIcon} size={16} active={tab === 'projects'} />
 					<span class="label">{t('shell.remote.sessions')}</span>
 				</button>
-				<button class:on={tab === 'requirements'} onclick={() => (tab = 'requirements')}>
+				<button class:on={tab === 'requirements'} onclick={() => (tab = 'requirements')} title={t('shell.requirement.title')}>
 					<ActiveIcon icon={ListChecksIcon} size={16} active={tab === 'requirements'} />
 					<span class="label">{t('shell.requirement.title')}</span>
 					{#if conn.requirements.pending > 0}<span class="badge">{conn.requirements.pending}</span>{/if}
 				</button>
-				<button class:on={tab === 'dispatch'} onclick={() => (tab = 'dispatch')}>
+				<button class:on={tab === 'dispatch'} onclick={() => (tab = 'dispatch')} title={t('shell.dispatch.title')}>
 					<ActiveIcon icon={SendIcon} size={16} active={tab === 'dispatch'} />
 					<span class="label">{t('shell.dispatch.title')}</span>
 					{#if conn.dispatches.pending > 0}<span class="badge">{conn.dispatches.pending}</span>{/if}
 				</button>
-				<button class:on={tab === 'desk'} onclick={() => (tab = 'desk')}>
+				<button class:on={tab === 'desk'} onclick={() => (tab = 'desk')} title={t('shell.desk.title')}>
 					<ActiveIcon icon={InboxIcon} size={16} active={tab === 'desk'} />
 					<span class="label">{t('shell.desk.title')}</span>
 					{#if conn.agents.pending > 0}<span class="badge">{conn.agents.pending}</span>{/if}
@@ -564,7 +564,8 @@
 		background: none;
 	}
 	.wide nav button {
-		flex: 1;
+		flex: 1 1 auto;
+		min-width: 0;
 		flex-direction: row;
 		justify-content: center;
 		gap: 4px;
@@ -597,7 +598,17 @@
 	}
 	.wide .badge {
 		position: static;
+		flex-shrink: 0;
 		animation: none;
+	}
+	/* A narrow sidebar: the tabs as icons (their names in the title). */
+	@container side (width < 330px) {
+		.wide nav .label {
+			display: none;
+		}
+		.wide nav :global(svg) {
+			display: block;
+		}
 	}
 	.foot {
 		padding: 8px;
