@@ -1,3 +1,12 @@
+<script lang="ts" module>
+	import type { AccountInfo as Info, PlanUsage as Usage } from '$lib/protocol';
+
+	/** How long a fetch is shown as is before the next open refreshes it. */
+	const FRESH_MS = 30_000;
+	// Kept across opens: the card mounts on every hover.
+	let cached: { account: Info; usage: Usage | null; at: number } | null = null;
+</script>
+
 <script lang="ts">
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import { fetchAccountInfo, fetchUsage, type AccountInfo, type PlanUsage } from '$lib/protocol';
@@ -24,17 +33,23 @@
 		onManage: () => void;
 	} = $props();
 
-	let account = $state<AccountInfo | null>(null);
-	let usage = $state<PlanUsage | null>(null);
+	let account = $state<AccountInfo | null>(cached?.account ?? null);
+	let usage = $state<PlanUsage | null>(cached?.usage ?? null);
 	let error = $state<string | null>(null);
 	let loading = $state(false);
 
-	// Refetch on every open: balance moves with each call.
+	// The last fetch shows at once; one older than FRESH_MS is refreshed in
+	// the background (balance moves with each call).
 	$effect(() => {
-		if (!loggedIn) return;
+		if (!loggedIn) {
+			cached = null;
+			return;
+		}
+		if (cached && Date.now() - cached.at < FRESH_MS) return;
 		loading = true;
 		Promise.all([fetchAccountInfo(), fetchUsage().catch(() => null)])
 			.then(([a, u]) => {
+				cached = { account: a, usage: u, at: Date.now() };
 				account = a;
 				usage = u;
 				error = null;
