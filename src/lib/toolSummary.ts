@@ -109,10 +109,14 @@ export function editedPaths(parsed: Record<string, unknown> | null): string[] {
 	return [parsed.path, ...(Array.isArray(parsed.paths) ? parsed.paths : [])].filter((p): p is string => typeof p === 'string' && !!p);
 }
 
-/** Lines an edit added and removed, from its diff (null: no diff). */
+/** Lines an edit added and removed, from its diff, or the counts an edit
+ *  still streaming reports (null: neither). */
 export function diffStat(parsed: Record<string, unknown> | null): { add: number; del: number } | null {
 	const diff = str(parsed?.diff);
-	if (!diff) return null;
+	if (!diff) {
+		const { add, del } = parsed ?? {};
+		return typeof add === 'number' && typeof del === 'number' ? { add, del } : null;
+	}
 	let add = 0;
 	let del = 0;
 	for (const line of diff.split('\n')) {
