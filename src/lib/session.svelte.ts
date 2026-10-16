@@ -770,8 +770,8 @@ export class SessionStore {
 
 	/** Show daemon session `sid` (one the daemon hosts in `cwd`) in its
 	 *  open tab or a new one, in the project for `cwd`, which is added when
-	 *  missing. `title`: the daemon's. */
-	openDaemonSession(cwd: string, sid: string, title?: string | null) {
+	 *  missing. `title`, `engine`, `gateway`: the daemon's record of it. */
+	openDaemonSession(cwd: string, sid: string, title?: string | null, engine?: string, gateway?: boolean) {
 		const open = this.allSessions.find((s) => s.chat.sessionId === sid);
 		if (open) {
 			open.archived = false;
@@ -783,9 +783,10 @@ export class SessionStore {
 			project = { id: this.uid(), name: base(cwd), path: cwd, sessions: [] };
 			this.projects.push(project);
 		}
-		const s = this.#newSession('jucode');
+		// The daemon holds the conversation and reopens it on its own engine.
+		const s = this.#newSession(normalizeBackendId(engine));
+		if (gateway) s.gateway = true;
 		if (title) s.chat.title = title;
-		// The daemon holds the conversation; the backend stays jucode.
 		s.restored = true;
 		s.chat.sessionId = sid;
 		project.sessions.push(s);

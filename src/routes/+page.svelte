@@ -289,7 +289,7 @@
 	/** Show a daemon session in a tab. */
 	function openDaemonSession(session: string) {
 		const listed = daemonState.sessions.find((s) => s.session === session);
-		store.openDaemonSession(listed?.cwd ?? '', session, listed?.title);
+		store.openDaemonSession(listed?.cwd ?? '', session, listed?.title, listed?.engine, listed?.gateway);
 		showDesk = false;
 	}
 	let showQuickOpen = $state(false);

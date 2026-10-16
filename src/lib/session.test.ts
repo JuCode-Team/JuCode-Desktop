@@ -1353,6 +1353,11 @@ describe('daemon sessions', () => {
 		// A directory with no project gets one.
 		store.openDaemonSession('/srv/other', 'daemon-2');
 		expect(store.projects.map((x) => x.path)).toEqual(['/srv/ops', '/srv/other']);
+		// A Codex run (a scheduled task's) opens as Codex, through the gateway.
+		const codexId = store.openDaemonSession('/srv/ops', 'daemon-3', null, 'codex', true);
+		const codex = store.allSessions.find((x) => x.id === codexId);
+		expect(codex?.chat.backendId).toBe('codex');
+		expect(codex?.gateway).toBe(true);
 	});
 });
 
