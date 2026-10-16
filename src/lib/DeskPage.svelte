@@ -2,39 +2,29 @@
 	import ActiveIcon from '$lib/icons/ActiveIcon.svelte';
 	import { paneOut } from '$lib/ui/motion';
 	// The workbench: a page over the content panel, like Settings. The nav
-	// lists the overview, the requirements, the scheduled tasks and every
-	// agent with what it is doing, the shown agent with its sessions under it;
-	// the main column shows the overview (DeskContent), the requirements (one
-	// of them, or the list), the scheduled tasks, one agent's page, or one of
-	// its sessions (`chatView`, rendered by the page).
+	// lists what waits for the user (approvals deferred while nobody watched,
+	// requirements on the user's turn), the requirements and the scheduled
+	// tasks; the main column shows one of them.
 	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
 	import InboxIcon from '@lucide/svelte/icons/inbox';
 	import CalendarIcon from '@lucide/svelte/icons/calendar';
 	import ListChecksIcon from '@lucide/svelte/icons/list-checks';
-	import PlusIcon from '@lucide/svelte/icons/plus';
-	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
-	import ClockIcon from '@lucide/svelte/icons/clock';
-	import type { Snippet } from 'svelte';
-	import AgentAvatar from '$lib/AgentAvatar.svelte';
-	import AgentPage from '$lib/AgentPage.svelte';
-	import DeskContent from '$lib/DeskContent.svelte';
+	import Notice from '$lib/ui/Notice.svelte';
+	import DeskCard from '$lib/DeskCard.svelte';
+	import DeskClosed from '$lib/DeskClosed.svelte';
 	import ScheduleBoard from '$lib/ScheduleBoard.svelte';
 	import RequirementBoard from '$lib/requirements/RequirementBoard.svelte';
 	import RequirementDetail from '$lib/requirements/RequirementDetail.svelte';
+	import RequirementTag from '$lib/requirements/RequirementTag.svelte';
+	import { statusLabel } from '$lib/requirements/labels';
 	import type { StartHow } from '$lib/requirements/StartButton.svelte';
 	import { needsYou, useRequirements, type Requirement } from '$lib/requirements.svelte';
-	import { agentDirectory, agentsOfWorkspace, agentWorkspace, taskSession, type AgentView, type TaskView } from '$lib/agents.svelte';
-	import { workspaces } from '$lib/workbench/workspaceStore.svelte';
+	import { daemonState } from '$lib/daemonState.svelte';
 	import { t } from '$lib/i18n';
-	import { when } from '$lib/time';
 
 	let {
-		agentId = $bindable(null),
-		sessionId = $bindable(null),
-		page = $bindable('overview'),
+		page = $bindable('pending'),
 		requirementId = $bindable(null),
-		openSid = null,
-		chatView,
 		navWidth,
 		projects,
 		currentProject,
@@ -42,22 +32,11 @@
 		currentStep,
 		onClose,
 		onOpenSession,
-		onNewAgent,
 		onStartRequirement
 	}: {
-		/** The agent shown; null for the overview. */
-		agentId?: string | null;
-		/** The desktop session shown in the main column (one of the agent's). */
-		sessionId?: string | null;
-		/** With no agent shown: the overview, the requirements or the
-		 *  scheduled tasks. */
-		page?: 'overview' | 'requirements' | 'schedules';
+		page?: 'pending' | 'requirements' | 'schedules';
 		/** The requirement shown on the requirements page; null for the list. */
 		requirementId?: string | null;
-		/** The daemon session `sessionId` is, for the nav's highlight. */
-		openSid?: string | null;
-		/** A desktop session's chat pane. */
-		chatView: Snippet<[string]>;
 		navWidth: number;
 		/** The open workspace's projects: its requirements are those about them
 		 *  (or about none), and sessions start in them. */
@@ -69,9 +48,7 @@
 		/** What a running session is doing now, when this computer shows it. */
 		currentStep?: (session: string) => string | undefined;
 		onClose: () => void;
-		/** `agent`: whose it is, when the caller knows (the list may lag). */
-		onOpenSession: (session: string, agent?: string) => void;
-		onNewAgent: () => void;
+		onOpenSession: (session: string) => void;
 		onStartRequirement: (r: Requirement, how: StartHow) => void;
 	} = $props();
 
@@ -79,99 +56,31 @@
 	const projectIds = $derived(new Set(projects.map((p) => p.id)));
 	/** The open workspace's requirements: about its projects, or about none. */
 	const shownReqs = $derived(reqs.list.filter((r) => !r.project || projectIds.has(r.project)));
-	/** An agent's project, by name (any workspace's). */
-	function projectName(id: string | null | undefined): string {
-		if (!id) return '';
-		return (
-			projects.find((p) => p.id === id)?.name ??
-			workspaces.workspaces.flatMap((w) => w.projects).find((p) => p.id === id)?.name ??
-			''
-		);
-	}
-	const yourTurn = $derived(
-		shownReqs.filter(needsYou).sort((a, b) => b.updated_at - a.updated_at)
-	);
+	const yourTurn = $derived(shownReqs.filter(needsYou).sort((a, b) => b.updated_at - a.updated_at));
 	const shownReq = $derived(requirementId ? reqs.get(requirementId) : undefined);
+	const pending = $derived(daemonState.actions.length + yourTurn.length);
+	const scheduleCount = $derived(daemonState.schedules.filter((s) => s.enabled).length);
+
+	function openPage(p: typeof page) {
+		page = p;
+		requirementId = null;
+	}
 	function openRequirement(id: string | null) {
 		page = 'requirements';
 		requirementId = id;
-		agentId = null;
-		sessionId = null;
 	}
 	/** J: the next requirement on the user's turn (outside text fields). */
 	function onKey(e: KeyboardEvent) {
 		if (e.key !== 'j' || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || e.defaultPrevented) return;
 		const el = e.target as HTMLElement | null;
 		if (el?.closest('input, textarea, [contenteditable="true"]')) return;
-		if (sessionId || agentId || !yourTurn.length) return;
+		if (!yourTurn.length) return;
 		e.preventDefault();
 		const i = yourTurn.findIndex((r) => r.id === requirementId);
 		openRequirement(yourTurn[(i + 1) % yourTurn.length].id);
 	}
-
-	const shown = $derived(agentId ? agentDirectory.agents.find((a) => a.id === agentId) : undefined);
-	/** The agents listed: the open workspace's, or every agent. */
-	let showAll = $state(false);
-	const listed = $derived(
-		showAll ? agentDirectory.agents : agentsOfWorkspace(agentDirectory.agents, workspaces.workspaces, workspaces.activeId)
-	);
-	const listedIds = $derived(listed.map((a) => a.id));
-	const pending = $derived(listed.reduce((n, a) => n + agentDirectory.pendingFor(a.id), 0) + yourTurn.length);
-	const workspaceName = (a: AgentView) =>
-		workspaces.workspaces.find((w) => w.id === agentWorkspace(a, workspaces.workspaces))?.name ?? '';
-	/** The shown agent's tasks still going (not done or closed): what needs
-	 *  the user first, then what is working, then the rest by recency. */
-	const STATE_ORDER: Record<TaskView['state'], number> = { needs_you: 0, running: 1, waiting: 2, paused: 3, done: 4, closed: 5 };
-	const shownTasks = $derived(
-		shown
-			? agentDirectory.tasks
-					.filter((task) => task.agent === shown.id && task.state !== 'done' && task.state !== 'closed')
-					.sort((a, b) => STATE_ORDER[a.state] - STATE_ORDER[b.state] || b.updated_at - a.updated_at)
-			: []
-	);
-	function openTask(task: TaskView, agent: string) {
-		const session = taskSession(task);
-		if (session) onOpenSession(session, agent);
-		else openAgent(agent);
-	}
-
-	const scheduleCount = $derived(agentDirectory.schedules.filter((s) => s.enabled && listedIds.includes(s.agent)).length);
-	const onOverview = $derived(!shown && page === 'overview');
-	const onSchedules = $derived(!shown && page === 'schedules');
-	const onRequirements = $derived(!shown && !sessionId && page === 'requirements');
-	function openPage(p: typeof page) {
-		page = p;
-		agentId = null;
-		sessionId = null;
-		requirementId = null;
-	}
-	function openAgent(id: string) {
-		agentId = id;
-		sessionId = null;
-	}
-
-	function nextRun(agent: string): number | null {
-		const runs = agentDirectory.schedules
-			.filter((s) => s.agent === agent && s.enabled && s.next_run_at)
-			.map((s) => s.next_run_at! * 1000);
-		return runs.length ? Math.min(...runs) : null;
-	}
-
-	/** `summary`: fall back to the role's first line when nothing else applies. */
-	function status(agent: AgentView, summary = true): string {
-		if (!agent.enabled) return t('shell.desk.statusOff');
-		if (agent.busy) return t('shell.desk.statusWorking');
-		const next = nextRun(agent.id);
-		if (next)
-			return t('shell.desk.statusNext', {
-				time: when(next)
-			});
-		return (summary && agent.summary) || t('shell.desk.statusIdle');
-	}
 </script>
-
 <svelte:window onkeydown={onKey} />
-
 <div class="desk-page" out:paneOut|global>
 	<nav class="nav" style:width="{navWidth}px" aria-label={t('shell.desk.title')}>
 		<div class="nav-head">
@@ -181,75 +90,27 @@
 			<h2>{t('shell.desk.title')}</h2>
 		</div>
 		<div class="nav-list">
-			<button class="item" class:on={onOverview} aria-current={onOverview ? 'page' : undefined} onclick={() => openPage('overview')}>
-				<ActiveIcon icon={InboxIcon} size={16} active={onOverview} />
-				<span class="label">{t('shell.desk.overview')}</span>
+			<button class="item" class:on={page === 'pending'} aria-current={page === 'pending' ? 'page' : undefined} onclick={() => openPage('pending')}>
+				<ActiveIcon icon={InboxIcon} size={16} active={page === 'pending'} />
+				<span class="label">{t('shell.desk.pending')}</span>
 				{#if pending}<span class="badge">{pending}</span>{/if}
 			</button>
-			<button class="item" class:on={onRequirements} aria-current={onRequirements ? 'page' : undefined} onclick={() => openPage('requirements')}>
-				<ActiveIcon icon={ListChecksIcon} size={16} active={onRequirements} />
+			<button class="item" class:on={page === 'requirements'} aria-current={page === 'requirements' ? 'page' : undefined} onclick={() => openPage('requirements')}>
+				<ActiveIcon icon={ListChecksIcon} size={16} active={page === 'requirements'} />
 				<span class="label">{t('shell.requirement.title')}</span>
 				{#if yourTurn.length}<span class="badge">{yourTurn.length}</span>{/if}
 			</button>
-			<button class="item" class:on={onSchedules} aria-current={onSchedules ? 'page' : undefined} onclick={() => openPage('schedules')}>
-				<ActiveIcon icon={CalendarIcon} size={16} active={onSchedules} />
+			<button class="item" class:on={page === 'schedules'} aria-current={page === 'schedules' ? 'page' : undefined} onclick={() => openPage('schedules')}>
+				<ActiveIcon icon={CalendarIcon} size={16} active={page === 'schedules'} />
 				<span class="label">{t('shell.schedule.title')}</span>
 				{#if scheduleCount}<span class="count">{scheduleCount}</span>{/if}
 			</button>
-			<div class="group-label">
-				<span>{showAll ? t('shell.agents.allTitle') : t('shell.agents.title')}</span>
-				<span class="grow"></span>
-				<button class="scope" class:on={showAll} aria-pressed={showAll} onclick={() => (showAll = !showAll)} title={t('shell.agents.allHint')}>
-					{t('shell.agents.all')}
-				</button>
-				<button class="add" onclick={onNewAgent} aria-label={t('shell.agents.add')} title={t('shell.agents.add')}><PlusIcon size={14} /></button>
-			</div>
-			{#each listed as a (a.id)}
-				{@const waiting = agentDirectory.pendingFor(a.id)}
-				<button class="item agent" class:on={shown?.id === a.id && !sessionId} class:off={!a.enabled} onclick={() => openAgent(a.id)}>
-					<AgentAvatar agent={a} size={22} />
-					<span class="two">
-						<span class="label">{a.name}</span>
-						<span class="sub" class:live={a.busy && a.enabled}>{[showAll ? workspaceName(a) : '', projectName(a.project), status(a)].filter(Boolean).join(' · ')}</span>
-					</span>
-					{#if waiting}<span class="badge" title={t('shell.desk.pendingFor', { n: waiting })}>{waiting}</span>
-					{:else if a.busy && a.enabled}<LoaderCircleIcon size={14} class="spin busy" />{/if}
-				</button>
-				{#if shown?.id === a.id}
-					{#each shownTasks as task (task.id)}
-						{@const session = taskSession(task)}
-						<button class="item sess" class:on={!!sessionId && !!session && openSid === session} onclick={() => openTask(task, a.id)}>
-							{#if task.trigger.kind !== 'manual'}<ClockIcon size={12} />{/if}
-							<span class="label">{task.title || t('shell.agentPage.untitled')}</span>
-							{#if task.state === 'running'}<LoaderCircleIcon size={12} class="spin busy" />
-							{:else if task.state === 'needs_you'}<span class="needs" title={t('shell.activity.stateNeedsYou')}></span>{/if}
-						</button>
-					{/each}
-				{/if}
-			{:else}
-				<button class="item ghost" onclick={onNewAgent}><PlusIcon size={16} /><span class="label">{t('shell.agents.add')}</span></button>
-			{/each}
 		</div>
 	</nav>
-
-	<div class="main" class:chat={!!sessionId}>
-		{#if sessionId}
-			{@render chatView(sessionId)}
-		{:else if shown}
-			{#key shown.id}
-				<div class="col">
-					<AgentPage
-						agentId={shown.id}
-						{projects}
-						onDeleted={() => (agentId = null)}
-						onOpenSession={(session) => onOpenSession(session, shown.id)}
-						onOpenAgent={openAgent}
-					/>
-				</div>
-			{/key}
-		{:else if page === 'schedules'}
+	<div class="main">
+		{#if page === 'schedules'}
 			<div class="col">
-				<ScheduleBoard agents={listed} {onOpenSession} onOpenAgent={openAgent} />
+				<ScheduleBoard {projects} {onOpenSession} />
 			</div>
 		{:else if page === 'requirements'}
 			{#if shownReq}
@@ -279,28 +140,28 @@
 			{/if}
 		{:else}
 			<div class="col">
-				<h1>{t('shell.desk.title')}</h1>
+				<h1>{t('shell.desk.pending')}</h1>
 				<p class="lede">{t('shell.desk.subtitle')}</p>
-				{#if listed.length}
-					<div class="roster">
-						{#each listed as a (a.id)}
-							{@const waiting = agentDirectory.pendingFor(a.id)}
-							<button class="card" class:off={!a.enabled} onclick={() => openAgent(a.id)}>
-								<span class="card-head">
-									<AgentAvatar agent={a} size={28} />
-									<span class="card-name">{a.name}</span>
-									{#if projectName(a.project)}<span class="card-project">{projectName(a.project)}</span>{/if}
-									{#if waiting}<span class="badge">{waiting}</span>{/if}
+				{#if daemonState.status === 'unreachable'}<Notice tone="warn">{t('shell.desk.unreachable')}</Notice>{/if}
+				<section>
+					{#if pending === 0}<p class="empty">{t('shell.desk.nothingPending')}</p>{/if}
+					<div class="cards">
+						{#each yourTurn as r (r.id)}
+							<button class="req" onclick={() => openRequirement(r.id)}>
+								<span class="req-head">
+									<RequirementTag id={r.id} />
+									<span class="req-title">{r.title}</span>
+									<span class="req-status {r.status}">{statusLabel(r.status)}</span>
 								</span>
-								<span class="card-status" class:live={a.busy && a.enabled}>
-									{#if a.busy && a.enabled}<LoaderCircleIcon size={12} class="spin" />{/if}{status(a, false)}
-								</span>
-								{#if a.summary}<span class="card-role">{a.summary}</span>{/if}
+								{#if r.last_reply}<span class="req-tail">{r.last_reply.replace(/\s+/g, ' ')}</span>{/if}
 							</button>
 						{/each}
+						{#each daemonState.actions as a (a.id)}
+							<DeskCard action={a} {onOpenSession} />
+						{/each}
 					</div>
-				{/if}
-				<DeskContent agents={listedIds} {onOpenSession} onOpenAgent={openAgent} requirements={yourTurn} onOpenRequirement={openRequirement} />
+					<DeskClosed />
+				</section>
 			</div>
 		{/if}
 	</div>
@@ -367,51 +228,6 @@
 		gap: 1px;
 		padding: 0 12px 16px;
 	}
-	.group-label {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 16px 6px 6px 12px;
-		font-size: var(--fs-xs);
-		color: var(--dim2);
-	}
-	.grow {
-		flex: 1;
-	}
-	.scope {
-		margin-right: 2px;
-		padding: 1px 7px;
-		border: 1px solid transparent;
-		border-radius: var(--r);
-		background: none;
-		color: var(--dim2);
-		font: inherit;
-		font-size: var(--fs-2xs);
-		cursor: pointer;
-	}
-	.scope:hover {
-		color: var(--text);
-	}
-	.scope.on {
-		border-color: var(--border-strong);
-		color: var(--text);
-	}
-	.add {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 24px;
-		height: 24px;
-		border: none;
-		border-radius: var(--r);
-		background: none;
-		color: var(--dim);
-		cursor: pointer;
-	}
-	.add:hover {
-		background: var(--surface2);
-		color: var(--text);
-	}
 	.item {
 		display: flex;
 		align-items: center;
@@ -429,10 +245,6 @@
 		cursor: pointer;
 		transition: background var(--t-fast) var(--ease-out);
 	}
-	.item.agent {
-		padding-top: 7px;
-		padding-bottom: 7px;
-	}
 	.item > :global(svg) {
 		flex-shrink: 0;
 		color: var(--dim);
@@ -444,35 +256,12 @@
 	.item.on > :global(svg) {
 		color: var(--text);
 	}
-	.item.off .label,
-	.item.off > :global(.avatar) {
-		opacity: 0.55;
-	}
-	.item.ghost {
-		color: var(--dim);
-	}
-	.two {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-		min-width: 0;
-	}
 	.label {
 		flex: 1;
 		min-width: 0;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
-	}
-	.sub {
-		font-size: var(--fs-xs);
-		color: var(--dim2);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	.sub.live {
-		color: var(--accent-bright);
 	}
 	.badge {
 		flex: none;
@@ -492,41 +281,12 @@
 		font-size: var(--fs-2xs);
 		color: var(--dim2);
 	}
-	/* An agent's sessions, indented under it. */
-	.item.sess {
-		min-height: 30px;
-		padding-left: 44px;
-		color: var(--dim);
-		font-size: var(--fs-xs);
-	}
-	.item.sess.on {
-		color: var(--text);
-	}
-	.item.sess :global(svg:first-child) {
-		flex: none;
-	}
-	.needs {
-		flex: none;
-		width: 6px;
-		height: 6px;
-		border-radius: 50%;
-		background: var(--warn);
-	}
-	.item :global(.busy) {
-		color: var(--accent-bright);
-	}
 
 	.main {
 		flex: 1;
 		min-width: 0;
 		overflow-y: auto;
 		background: var(--bg);
-	}
-	/* A session fills the column; its chat pane scrolls itself. */
-	.main.chat {
-		display: flex;
-		flex-direction: column;
-		overflow: hidden;
 	}
 	.col {
 		max-width: 760px;
@@ -548,79 +308,66 @@
 		line-height: 1.15;
 		color: var(--text);
 	}
-	.roster {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-		gap: 10px;
-		margin-bottom: 18px;
-	}
-	.card {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-		padding: 14px;
-		border: 1px solid var(--hairline);
-		border-radius: var(--r);
-		background: var(--surface);
-		color: var(--text);
-		font: inherit;
-		text-align: left;
-		cursor: pointer;
-		transition: border-color var(--t-fast) var(--ease-out);
-	}
-	.card:hover {
-		border-color: var(--border);
-	}
-	.card.off {
-		opacity: 0.6;
-	}
-	.card-head {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		min-width: 0;
-	}
-	.card-name {
-		flex: 1;
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		font-size: var(--fs-sm);
-		font-weight: 600;
-	}
-	.card-project {
-		flex: none;
-		max-width: 40%;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		font-size: var(--fs-xs);
-		color: var(--dim2);
-	}
-	.card-status {
-		display: inline-flex;
-		align-items: center;
-		gap: 5px;
-		font-size: var(--fs-xs);
-		color: var(--dim);
-	}
-	.card-status.live {
-		color: var(--accent-bright);
-	}
-	.card-role {
-		display: -webkit-box;
-		-webkit-line-clamp: 2;
-		line-clamp: 2;
-		-webkit-box-orient: vertical;
-		overflow: hidden;
-		font-size: var(--fs-xs);
-		line-height: 1.5;
-		color: var(--dim2);
-	}
 	.lede {
 		margin: 10px 0 22px;
 		font-size: var(--fs-sm);
 		color: var(--dim);
+	}
+	.empty {
+		margin: 0;
+		font-size: var(--fs-sm);
+		color: var(--dim2);
+	}
+	.cards {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+	}
+	.req {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		width: 100%;
+		padding: 11px 13px;
+		border: 1px solid var(--hairline);
+		border-radius: var(--r);
+		background: var(--panel);
+		color: var(--text);
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+	}
+	.req:hover {
+		border-color: var(--border-strong);
+	}
+	.req-head {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		min-width: 0;
+		font-size: var(--fs-sm);
+	}
+	.req-title {
+		flex: 1;
+		min-width: 0;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.req-status {
+		flex: none;
+		font-size: var(--fs-xs);
+		color: var(--warn);
+	}
+	.req-status.approval,
+	.req-status.failed {
+		color: var(--err);
+	}
+	.req-tail {
+		font-size: var(--fs-xs);
+		color: var(--dim);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 </style>

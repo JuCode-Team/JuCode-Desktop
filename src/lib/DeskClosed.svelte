@@ -1,54 +1,30 @@
 <script lang="ts">
-	// Questions and actions closed lately, each with who closed it and why,
-	// and a button that reopens it. Below the pending items on the desk
-	// (DeskContent), at the foot of an agent's tasks and on the remote page's
-	// desk list. Approvals that lapsed with their run (`superseded`) are left
-	// out: there is nothing left to approve them for.
-	import CircleQuestionMarkIcon from '@lucide/svelte/icons/circle-question-mark';
+	// Approvals closed lately, each with who closed it and why, and a button
+	// that reopens it. Below the pending items on the workbench and on the
+	// remote page's list. Approvals that lapsed with their run (`superseded`)
+	// are left out: there is nothing left to approve them for.
 	import ShieldCheckIcon from '@lucide/svelte/icons/shield-check';
-	import { useAgents } from '$lib/agentScope';
-	import type { ItemKind } from '$lib/agents.svelte';
+	import { useDaemonState } from '$lib/daemonScope';
 	import { t } from '$lib/i18n';
 	import { when } from '$lib/time';
-
-	let {
-		inScope = () => true
-	}: {
-		/** Only the items of agents this accepts (by agent id). */
-		inScope?: (agent: string | undefined) => boolean;
-	} = $props();
 
 	/** Shown before "all". */
 	const FIRST = 3;
 
-	const agentDirectory = useAgents();
-	const items = $derived(
-		[
-			...agentDirectory.closedQuestions
-				.filter((q) => inScope(q.agent))
-				.map((q) => ({ kind: 'question' as ItemKind, id: q.id, agent: q.agent, title: q.title, by: q.closed_by, reason: q.closed_reason, at: q.closed_at })),
-			...agentDirectory.closedActions
-				.map((a) => ({ a, agent: agentDirectory.agentOfSession(a.session_id)?.id }))
-				.filter(({ a, agent }) => inScope(agent) && a.closed_by !== 'superseded')
-				.map(({ a, agent }) => ({ kind: 'action' as ItemKind, id: a.id, agent, title: `${a.name} ${a.summary}`, by: a.closed_by, reason: a.closed_reason, at: a.closed_at }))
-		].sort((x, y) => y.at - x.at)
-	);
+	const daemon = useDaemonState();
+	const items = $derived(daemon.closedActions.filter((a) => a.closed_by !== 'superseded'));
 	let all = $state(false);
 	let error = $state('');
 	const shown = $derived(all ? items : items.slice(0, FIRST));
 
 	function closedBy(by: string): string {
-		if (by === 'user') return t('shell.desk.closedByUser');
-		if (by === 'superseded') return t('shell.desk.closedSuperseded');
-		const agent = by.startsWith('agent:') ? by.slice('agent:'.length) : by;
-		return t('shell.desk.closedByAgent', { agent: agentDirectory.agentName(agent) });
+		return by === 'user' ? t('shell.desk.closedByUser') : t('shell.desk.closedByOther');
 	}
 
-
-	async function reopen(kind: ItemKind, id: string) {
+	async function reopen(id: string) {
 		error = '';
 		try {
-			await agentDirectory.reopen(kind, id);
+			await daemon.reopen(id);
 		} catch (e) {
 			error = e instanceof Error ? e.message : String(e);
 		}
@@ -60,12 +36,12 @@
 		<div class="head">{t('shell.desk.closed')}</div>
 		{#each shown as item (item.id)}
 			<div class="row">
-				{#if item.kind === 'question'}<CircleQuestionMarkIcon size={14} />{:else}<ShieldCheckIcon size={14} />{/if}
+				<ShieldCheckIcon size={14} />
 				<span class="text">
-					<span class="title">{item.title}</span>
-					<span class="meta">{closedBy(item.by)}{item.reason && item.by !== 'superseded' ? `：${item.reason}` : ''} · {when(item.at)}</span>
+					<span class="title">{item.name} {item.summary}</span>
+					<span class="meta">{closedBy(item.closed_by)}{item.closed_reason ? `：${item.closed_reason}` : ''} · {when(item.closed_at)}</span>
 				</span>
-				<button class="undo" onclick={() => reopen(item.kind, item.id)}>{t('shell.desk.reopen')}</button>
+				<button class="undo" onclick={() => reopen(item.id)}>{t('shell.desk.reopen')}</button>
 			</div>
 		{/each}
 		{#if items.length > FIRST}

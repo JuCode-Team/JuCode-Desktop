@@ -4,7 +4,6 @@
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import RotateCcwClockIcon from '@lucide/svelte/icons/rotate-ccw-clock';
 	import XIcon from '@lucide/svelte/icons/x';
-	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import GitBranchIcon from '@lucide/svelte/icons/git-branch';
 	import GitForkIcon from '@lucide/svelte/icons/git-fork';
 	import ArchiveIcon from '@lucide/svelte/icons/archive';
@@ -15,7 +14,6 @@
 	import SquarePenIcon from '@lucide/svelte/icons/square-pen';
 	import FolderIcon from '@lucide/svelte/icons/folder';
 	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
-	import MessagesSquareIcon from '@lucide/svelte/icons/messages-square';
 	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import PinIcon from '@lucide/svelte/icons/pin';
@@ -29,11 +27,9 @@
 	import BackendIcon from '$lib/BackendIcon.svelte';
 	import TabGlyph from '$lib/workbench/TabGlyph.svelte';
 	import SessionMark from '$lib/SessionMark.svelte';
-	import AgentAvatar from '$lib/AgentAvatar.svelte';
 	import { sessionStatus } from '$lib/sessionStatus';
 	import { listedSessions } from '$lib/session.svelte';
 	import { CHATS_ENABLED, type Project, type Session } from '$lib/types';
-	import type { AgentView } from '$lib/agents.svelte';
 	import RequirementTag from '$lib/requirements/RequirementTag.svelte';
 	import { useRequirements } from '$lib/requirements.svelte';
 
@@ -60,15 +56,8 @@
 		onSessionMenu,
 		onProjectMenu,
 		onHistory,
-		agents = [],
-		agentsStatus = 'off',
-		onOpenAgent = () => {},
-		onNewAgent = () => {},
-		onAgentSession = () => {},
-		agentPending = () => 0,
 		pendingCount = 0,
-		onDesk = () => {},
-		onAgentMenu = () => {}
+		onDesk = () => {}
 	}: {
 		projects: Project[];
 		activeId: string;
@@ -100,21 +89,10 @@
 		/** Right-click on a project folder: the page opens the chrome popover. */
 		onProjectMenu: (p: Project, ev: MouseEvent) => void;
 		onHistory: (p: Project) => void;
-		/** Long-lived agents of the local jucode daemon. */
-		agents?: AgentView[];
-		agentsStatus?: 'off' | 'connecting' | 'on' | 'unreachable';
-		/** Show the agent on the workbench. */
-		onOpenAgent?: (agent: AgentView) => void;
-		onNewAgent?: () => void;
-		/** Open the agent's latest session. */
-		onAgentSession?: (agent: AgentView) => void;
-		/** Questions and pending actions of one agent. */
-		agentPending?: (agent: string) => number;
-		/** Questions and pending actions waiting for the user. */
+		/** Approvals and requirements waiting for the user. */
 		pendingCount?: number;
+		/** Opens the workbench. */
 		onDesk?: () => void;
-		/** Right-click on an agent: the page opens its popover. */
-		onAgentMenu?: (agent: AgentView, ev: MouseEvent) => void;
 	} = $props();
 	const reqs = useRequirements();
 
@@ -350,12 +328,10 @@
 
 	<nav class="primary">
 		<button class="row" onclick={newHere}><SquarePenIcon size={16} /><span>{t('shell.newChat')}</span></button>
-		{#if agentsStatus !== 'off'}
-			<button class="row" onclick={onDesk}>
-				<InboxIcon size={16} /><span>{t('shell.desk.title')}</span>
-				{#if pendingCount > 0}<span class="count">{pendingCount}</span>{/if}
-			</button>
-		{/if}
+		<button class="row" onclick={onDesk}>
+			<InboxIcon size={16} /><span>{t('shell.desk.title')}</span>
+			{#if pendingCount > 0}<span class="count">{pendingCount}</span>{/if}
+		</button>
 	</nav>
 
 
@@ -387,9 +363,6 @@
 			{/if}
 			{#if s.icon}
 				<TabGlyph icon={s.icon} color={s.color} size={14} />
-			{:else if s.chat.agent}
-				{@const owner = agents.find((a) => a.id === s.chat.agent)}
-				{#if owner}<AgentAvatar agent={owner} size={14} />{/if}
 			{:else if s.color}
 				<!-- The tab colour the user picked, without an icon to carry it. -->
 				<span class="tag-dot" style:background={s.color}></span>
@@ -501,52 +474,6 @@
 	{/snippet}
 
 	<div class="list" class:dragging={drag?.live} bind:this={listEl}>
-		<!-- Agents: long-lived workers of the local daemon. -->
-		<section>
-			<div class="head">
-				<span>{t('shell.agents.title')}</span>
-				<button class="head-act" onclick={onNewAgent} aria-label={t('shell.agents.add')} title={t('shell.agents.add')}><PlusIcon size={16} /></button>
-			</div>
-			{#if agentsStatus === 'unreachable'}
-				<div class="note">{t('shell.agents.unreachable')}</div>
-			{:else if agentsStatus === 'off' || agents.length === 0}
-				<button class="sess ghost" onclick={onNewAgent}><PlusIcon size={16} /><span class="sess-title">{t('shell.agents.add')}</span></button>
-			{/if}
-			{#each agents as a (a.id)}
-				{@const waiting = agentPending(a.id)}
-				<button
-					class="sess agent"
-					class:off={!a.enabled}
-					onclick={() => onOpenAgent(a)}
-					oncontextmenu={(e) => onAgentMenu(a, e)}
-					title={t('shell.agents.view', { name: a.name })}
-				>
-					<AgentAvatar agent={a} size={18} />
-					<span class="agent-text">
-						<span class="sess-title">{a.name}</span>
-						{#if a.summary}<span class="agent-summary">{a.summary}</span>{/if}
-					</span>
-					{#if waiting}<span class="count">{waiting}</span>
-					{:else if a.busy}<LoaderCircleIcon size={16} class="spin state" />{/if}
-					{#if !a.enabled}<span class="tag">{t('shell.agents.disabled')}</span>
-					{:else}
-						<span
-							class="act"
-							role="button"
-							tabindex="0"
-							onclick={(e) => {
-								e.stopPropagation();
-								onAgentSession(a);
-							}}
-							onkeydown={(e) => e.key === 'Enter' && (e.stopPropagation(), onAgentSession(a))}
-							aria-label={t('shell.agents.open', { name: a.name })}
-							title={t('shell.agents.open', { name: a.name })}><MessagesSquareIcon size={16} /></span
-						>
-					{/if}
-				</button>
-			{/each}
-		</section>
-
 		<!-- Chats: conversations without a project. -->
 		{#if chats}
 			{@const active = listedSessions(chats).filter((s) => sessionMatches(chats, s))}
@@ -1001,32 +928,6 @@
 		display: inline-flex;
 		color: var(--dim);
 		flex-shrink: 0;
-	}
-
-	.agent-text {
-		flex: 1;
-		min-width: 0;
-		display: flex;
-		flex-direction: column;
-	}
-	.agent-summary {
-		color: var(--dim2);
-		font-size: var(--fs-xs);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	.sess.agent.off .sess-title,
-	.sess.agent.off > :global(svg) {
-		color: var(--dim2);
-	}
-	.sess.agent.off > :global(.avatar) {
-		opacity: 0.5;
-	}
-	.note {
-		padding: 6px 10px;
-		color: var(--dim2);
-		font-size: var(--fs-xs);
 	}
 
 	.folder {

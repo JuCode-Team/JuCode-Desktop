@@ -1,31 +1,32 @@
 <script lang="ts">
+	// What a scheduled task's runs cost, one row per run session.
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
-	import { useAgents } from '$lib/agentScope';
+	import { daemonState } from '$lib/daemonState.svelte';
 	import { usageCost, type ScheduleUsage, type ScheduleUsageTotals } from '$lib/schedules';
 	import { fmtTokens } from '$lib/usageStats';
 	import { t } from '$lib/i18n';
 
-	let { schedule, agent, onOpenSession }: {
+	let { schedule, onOpenSession }: {
 		schedule: string;
-		agent: string;
 		onOpenSession: (session: string) => void;
 	} = $props();
-	const directory = useAgents();
 	let data = $state<ScheduleUsage | null>(null);
 	let loading = $state(false);
 	let error = $state('');
 	let refresh = $state(0);
+	/** Read again when a run starts or ends. */
+	const run = $derived(daemonState.schedules.find((s) => s.id === schedule)?.last_run);
 
 	$effect(() => {
 		void refresh;
-		void directory.activity;
-		void directory.agents.find((a) => a.id === agent)?.busy;
+		void run?.session;
+		void run?.status;
 		const id = schedule;
 		let stale = false;
 		loading = true;
 		error = '';
-		directory.scheduleUsage(id).then(
+		daemonState.scheduleUsage(id).then(
 			(next) => { if (!stale) data = next; },
 			(e) => { if (!stale) error = e instanceof Error ? e.message : String(e); }
 		).finally(() => { if (!stale) loading = false; });

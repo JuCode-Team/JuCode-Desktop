@@ -3,15 +3,17 @@ import { setLocale } from './i18n';
 import { summary, toWire, upsert, validate, usageCost, type Schedule, type ScheduleDraft, type ScheduleUsageTotals } from './schedules';
 
 const draft = (over: Partial<ScheduleDraft> = {}): ScheduleDraft => ({
-	agent: 'ops',
 	name: 'Check',
 	prompt: 'Look at the logs',
+	cwd: '/work/app',
+	engine: 'jucode',
+	mode: 'auto',
+	options: {},
 	enabled: true,
 	repeat: 'daily',
 	time: '11:00',
 	days: [],
 	date: '',
-	new_session: true,
 	...over
 });
 
@@ -51,6 +53,8 @@ describe('schedule validation', () => {
 	it('refuses what the daemon would', () => {
 		expect(validate(draft({ name: ' ' }), now)).toBe('请填写名称');
 		expect(validate(draft({ prompt: '' }), now)).toBe('请填写任务内容');
+		expect(validate(draft({ cwd: '' }), now)).toBe('请选择运行目录');
+		expect(validate(draft({ cwd: '', enabled: false }), now)).toBeNull();
 		expect(validate(draft({ time: '24:00' }), now)).toBe('时间格式不对');
 		expect(validate(draft({ time: '9:00' }), now)).toBe('时间格式不对');
 		expect(validate(draft({ repeat: 'weekly', days: [] }), now)).toBe('至少选一天');
@@ -63,13 +67,15 @@ describe('schedule validation', () => {
 describe('schedule wire shape', () => {
 	it('sends days and date only where they apply', () => {
 		expect(toWire(draft({ days: [3, 1], date: '2026-10-02' }))).toEqual({
-			agent: 'ops',
 			name: 'Check',
 			prompt: 'Look at the logs',
+			cwd: '/work/app',
+			engine: 'jucode',
+			mode: 'auto',
+			options: {},
 			enabled: true,
 			repeat: 'daily',
-			time: '11:00',
-			new_session: true
+			time: '11:00'
 		});
 		expect(toWire(draft({ id: 'sch-1', repeat: 'weekly', days: [5, 1] }))).toMatchObject({ id: 'sch-1', days: [1, 5] });
 		expect(toWire(draft({ repeat: 'once', date: '2026-10-02' })).date).toBe('2026-10-02');

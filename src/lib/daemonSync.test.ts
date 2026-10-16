@@ -202,7 +202,7 @@ describe('DaemonSync', () => {
 		const session = (over: Record<string, unknown> = {}) => ({
 			session: 's-1', cwd: '/w/app/', created_at: 0, open: false, title: 'fix login', archived: false, engine: 'claude', ...over
 		});
-		sync.reconcile([session(), session({ session: 's-agent', agent: 'ops' }), session({ session: 's-other', cwd: '/elsewhere' })]);
+		sync.reconcile([session(), session({ session: 's-other', cwd: '/elsewhere' })]);
 		const listed = store.projects[0].sessions;
 		expect(listed).toHaveLength(1);
 		expect(listed[0]).toMatchObject({ dormant: true, backendId: 'claude' });

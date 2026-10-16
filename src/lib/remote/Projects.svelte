@@ -1,7 +1,7 @@
 <script lang="ts">
 	import ActiveIcon from '$lib/icons/ActiveIcon.svelte';
-	// The remote app's list, laid out like the desktop sidebar: agents, chats,
-	// then projects with their sessions nested and an archived section each.
+	// The remote app's list, laid out like the desktop sidebar: chats, then
+	// projects with their sessions nested and an archived section each.
 	// Sessions come from the daemon's list, the one the desktop shows too, so
 	// titles, archive state and removals are the same on every device.
 	import FolderIcon from '@lucide/svelte/icons/folder';
@@ -12,7 +12,6 @@
 	import ArchiveRestoreIcon from '@lucide/svelte/icons/archive-restore';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import RotateCcwClockIcon from '@lucide/svelte/icons/rotate-ccw-clock';
-	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import FilesIcon from '@lucide/svelte/icons/files';
 	import GitCompareIcon from '@lucide/svelte/icons/git-compare';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
@@ -25,10 +24,9 @@
 	import Modal from '$lib/ui/Modal.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import BackendIcon from '$lib/BackendIcon.svelte';
-	import AgentAvatar from '$lib/AgentAvatar.svelte';
 	import TabGlyph from '$lib/workbench/TabGlyph.svelte';
 	import { normalizeColor, parseTabIcon } from '$lib/workbench/tabChrome';
-	import { agentsOfWorkspace, type AgentView, type DaemonSessionView } from '$lib/agents.svelte';
+	import type { DaemonSessionView } from '$lib/daemonState.svelte';
 	import { baseName, type ProjectView } from './store.svelte';
 	import { useHost } from './connection.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
@@ -42,8 +40,7 @@
 		onAddProject,
 		onHistory,
 		onFiles,
-		onChanges,
-		onOpenAgent
+		onChanges
 	}: {
 		/** The session shown next to the list (wide screens). */
 		current?: string;
@@ -53,10 +50,9 @@
 		onHistory: (project: ProjectView) => void;
 		onFiles: (project: ProjectView) => void;
 		onChanges: (project: ProjectView) => void;
-		onOpenAgent: (agent: AgentView) => void;
 	} = $props();
 
-	const { agents: agentDirectory, projects: remoteProjects } = useHost();
+	const { daemonState, projects: remoteProjects } = useHost();
 	const SHOW_LIMIT = 6;
 	const trim = (path: string) => path.replace(/[\\/]+$/, '');
 
@@ -67,8 +63,8 @@
 	 *  reopened, so it is not listed (the desktop does the same); nor are
 	 *  chats while they are hidden. */
 	const listed = $derived(
-		agentDirectory.sessions
-			.filter((s) => !s.agent && (s.engine !== 'acp' || s.open) && (CHATS_ENABLED || !s.chat))
+		daemonState.sessions
+			.filter((s) => (s.engine !== 'acp' || s.open) && (CHATS_ENABLED || !s.chat))
 			.sort((a, b) => (b.updated_at ?? b.created_at) - (a.updated_at ?? a.created_at))
 	);
 	const sessionsOf = (p: ProjectView) => listed.filter((s) => trim(s.cwd) === trim(p.path));
@@ -83,9 +79,7 @@
 	let showAll = $state<Record<string, boolean>>({});
 	let showArchived = $state<Record<string, boolean>>({});
 
-	const waiting = (s: DaemonSessionView) =>
-		agentDirectory.questions.some((q) => q.session === s.session) ||
-		agentDirectory.actions.some((a) => a.session_id === s.session);
+	const waiting = (s: DaemonSessionView) => daemonState.actions.some((a) => a.session_id === s.session);
 	/** The daemon labels a session with no title yet by its id. */
 	const title = (s: DaemonSessionView) => (s.title && s.title !== s.session ? s.title : t('shell.untitled'));
 
@@ -93,7 +87,7 @@
 	// call it outdated when none arrived in a while.
 	let waited = $state(false);
 	$effect(() => {
-		if (agentDirectory.status !== 'on') return;
+		if (daemonState.status !== 'on') return;
 		waited = false;
 		const timer = setTimeout(() => (waited = true), 3000);
 		return () => clearTimeout(timer);
@@ -101,8 +95,6 @@
 
 	// The actions sheet of a session or a project.
 	let wsMenu = $state(false);
-	// The open workspace's agents, as the desktop lists them.
-	const agents = $derived(agentsOfWorkspace(agentDirectory.agents, remoteProjects.workspaces.map((w) => ({ id: w.id, isDefault: w.is_default })), remoteProjects.active?.id ?? ''));
 	let menu = $state<{ session: DaemonSessionView } | { project: ProjectView } | null>(null);
 	let renaming = $state(false);
 	let name = $state('');
@@ -200,7 +192,7 @@
 	{/if}
 {/snippet}
 
-{#if agentDirectory.status === 'on' && waited && !remoteProjects.supported}
+{#if daemonState.status === 'on' && waited && !remoteProjects.supported}
 	<Notice tone="warn">{t('shell.remote.outdated')}</Notice>
 {:else}
 	<!-- The open workspace (a menu of the others), then a new session, as the
@@ -230,22 +222,6 @@
 		</button>
 	</nav>
 
-	{#if agents.length}
-		<section>
-			<div class="head"><span>{t('shell.remote.agents')}</span></div>
-			{#each agents as a (a.id)}
-				<div class="sess">
-					<button class="sess-main" onclick={() => onOpenAgent(a)}>
-						{#if a.busy}<LoaderCircleIcon size={16} class="spin" />{:else}<AgentAvatar agent={a} size={16} />{/if}
-						<span class="agent-text">
-							<span class="sess-title">{a.name}</span>
-							{#if a.summary}<span class="summary">{a.summary}</span>{/if}
-						</span>
-					</button>
-				</div>
-			{/each}
-		</section>
-	{/if}
 
 	{#if chats}
 		<section>
@@ -500,19 +476,6 @@
 		border-radius: var(--r);
 		color: var(--dim);
 		font-size: var(--fs-2xs);
-	}
-	.agent-text {
-		flex: 1;
-		min-width: 0;
-		display: flex;
-		flex-direction: column;
-	}
-	.summary {
-		color: var(--dim2);
-		font-size: var(--fs-xs);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
 	}
 	.more {
 		display: flex;

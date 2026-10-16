@@ -34,7 +34,7 @@
 		store.addProjectShell({ id: store.uid(), name, path });
 		// Already a project (the same folder, with or without a trailing separator): that one.
 		const trim = (x: string) => x.replace(/[\\/]+$/, '');
-		const added = store.userProjects.find((p) => trim(p.path) === trim(path));
+		const added = store.projects.find((p) => trim(p.path) === trim(path));
 		if (added) store.moveDraft(session.id, added.id);
 	}
 	function pickBackend(key: string) {

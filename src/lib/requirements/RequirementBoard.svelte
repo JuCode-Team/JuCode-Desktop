@@ -15,7 +15,7 @@
 	import StartButton, { type StartHow } from './StartButton.svelte';
 	import Select from '$lib/ui/Select.svelte';
 	import { grouped, type Requirement } from '$lib/requirements.svelte';
-	import { useAgents } from '$lib/agentScope';
+	import { useDaemonState } from '$lib/daemonScope';
 	import { projectLabel, statusLabel, sourceLabel, when } from './labels';
 	import { t } from '$lib/i18n';
 
@@ -43,7 +43,7 @@
 		onStart: (r: Requirement, how: StartHow) => void;
 	} = $props();
 
-	const agents = useAgents();
+	const daemon = useDaemonState();
 	// The filter: '*' all, '' none, else a project's id.
 	let filter = $state('*');
 	const filterOptions = $derived([
@@ -68,7 +68,7 @@
 	});
 
 	function sessionTitle(id: string | null | undefined): string {
-		return (id && agents.sessions.find((s) => s.session === id)?.title) || t('shell.agentPage.untitled');
+		return (id && daemon.sessions.find((s) => s.session === id)?.title) || t('shell.untitled');
 	}
 	/** What a running requirement's latest running session is doing. */
 	function step(r: Requirement): string | undefined {
@@ -94,9 +94,7 @@
 					{/if}
 				</span>
 				<span class="sub">
-					{#if r.proposal || r.status === 'proposed'}
-						<span class="q">{statusLabel(r.status)}{r.proposal?.reason ? ` · ${r.proposal.reason}` : ''}</span>
-					{:else if r.status === 'review' || r.status === 'failed' || r.status === 'confirm'}
+					{#if r.status === 'review' || r.status === 'failed' || r.status === 'confirm'}
 						{#if r.status === 'confirm'}<span class="q-lead">{statusLabel(r.status)}</span>{/if}
 						{#if r.last_reply}<MessageSquareTextIcon size={14} /><span class="q">{r.last_reply.replace(/\s+/g, ' ')}</span>{/if}
 					{:else if r.status === 'approval'}

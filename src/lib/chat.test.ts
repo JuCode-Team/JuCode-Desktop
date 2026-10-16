@@ -345,22 +345,6 @@ describe('approval flow (engine-enforced)', () => {
 		expect(c.pendingModeSync).toBeNull();
 	});
 
-	it("keeps an agent session in the agent's mode and does not persist it", () => {
-		const setItem = vi.fn();
-		vi.stubGlobal('localStorage', { getItem: () => null, setItem });
-		const c = new ChatState();
-		c.agent = 'ops';
-		c.approvalMode = 'ask'; // the desktop's mode
-		c.handle({ type: 'startup', model: 'm', cwd: '/', session_id: 's1' });
-		c.handle({ type: 'approval_mode', mode: 'auto' }); // the agent's mode
-		expect(c.pendingModeSync).toBeNull();
-		expect(c.approvalMode).toBe('auto');
-		c.handle({ type: 'approval_mode', mode: 'full-auto' });
-		expect(c.approvalMode).toBe('all');
-		expect(setItem).not.toHaveBeenCalled();
-		vi.unstubAllGlobals();
-	});
-
 	it('requests no push when the startup announcement already matches', () => {
 		const c = new ChatState();
 		c.approvalMode = 'ask';

@@ -80,13 +80,13 @@ describe('HostConnection', () => {
 		a.conn.start();
 		b.conn.start();
 		await tick();
-		expect(a.conn.agents.status).toBe('on');
-		expect(b.conn.agents.status).toBe('on');
+		expect(a.conn.daemonState.status).toBe('on');
+		expect(b.conn.daemonState.status).toBe('on');
 
 		a.sockets[0].push({ type: 'sessions', sessions: [{ session: 's-a', cwd: '/a', created_at: 1, open: true }] });
 		b.sockets[0].push({ type: 'workspaces', rev: 1, workspaces: [{ id: 'w', name: 'B', projects: [] }] });
-		expect(a.conn.agents.sessions.map((s) => s.session)).toEqual(['s-a']);
-		expect(b.conn.agents.sessions).toEqual([]);
+		expect(a.conn.daemonState.sessions.map((s) => s.session)).toEqual(['s-a']);
+		expect(b.conn.daemonState.sessions).toEqual([]);
 		expect(b.conn.projects.workspaces.map((w) => w.name)).toEqual(['B']);
 		expect(a.conn.projects.workspaces).toEqual([]);
 	});
@@ -122,7 +122,7 @@ describe('HostConnection', () => {
 			started.push(a.conn);
 			a.conn.start();
 			await flush();
-			expect(a.conn.agents.status).toBe('on');
+			expect(a.conn.daemonState.status).toBe('on');
 
 			const woke = a.conn.wake();
 			await flush();
@@ -130,11 +130,11 @@ describe('HostConnection', () => {
 			await flush(5000);
 			await woke;
 			expect(a.sockets[0].readyState).toBe(3);
-			expect(a.conn.agents.status).toBe('unreachable');
+			expect(a.conn.daemonState.status).toBe('unreachable');
 
 			await flush(2000);
 			expect(a.sockets).toHaveLength(2);
-			expect(a.conn.agents.status).toBe('on');
+			expect(a.conn.daemonState.status).toBe('on');
 		} finally {
 			vi.useRealTimers();
 		}
@@ -151,7 +151,7 @@ describe('HostConnection', () => {
 		a.sockets[0].push({ type: 'pong', id: ping.id });
 		await woke;
 		expect(a.sockets[0].readyState).toBe(1);
-		expect(a.conn.agents.status).toBe('on');
+		expect(a.conn.daemonState.status).toBe('on');
 	});
 
 	it('disconnects for good when stopped', async () => {
@@ -160,7 +160,7 @@ describe('HostConnection', () => {
 		await tick();
 		a.conn.stop();
 		expect(a.sockets[0].readyState).toBe(3);
-		expect(a.conn.agents.status).toBe('off');
+		expect(a.conn.daemonState.status).toBe('off');
 		await expect(a.conn.daemon.connect()).rejects.toThrow('connection stopped');
 		expect(a.sockets).toHaveLength(1);
 	});

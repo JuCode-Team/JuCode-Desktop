@@ -5,7 +5,7 @@
 
 import type { HistoryItem } from '$lib/protocol';
 import type { DaemonClient } from '$lib/daemon';
-import type { AgentDirectory } from '$lib/agents.svelte';
+import type { DaemonState } from '$lib/daemonState.svelte';
 
 export type { HistoryItem };
 
@@ -70,11 +70,11 @@ export class RemoteProjects {
 	activeId = $state<string | null>(null);
 	active = $derived(this.workspaces.find((w) => w.id === this.activeId) ?? this.workspaces[0] ?? null);
 	#daemon: DaemonClient;
-	#agents: AgentDirectory;
+	#state: DaemonState;
 
-	constructor(daemon: DaemonClient, agents: AgentDirectory) {
+	constructor(daemon: DaemonClient, state: DaemonState) {
 		this.#daemon = daemon;
-		this.#agents = agents;
+		this.#state = state;
 	}
 
 	handle(frame: Record<string, unknown>) {
@@ -100,15 +100,15 @@ export class RemoteProjects {
 	 *  list changes here first so the row moves at once; a failed send puts
 	 *  it back and throws. */
 	async setMeta(session: string, meta: { title?: string; archived?: boolean; hidden?: boolean }) {
-		const before = this.#agents.sessions;
+		const before = this.#state.sessions;
 		const { hidden, ...fields } = meta;
-		this.#agents.sessions = hidden
+		this.#state.sessions = hidden
 			? before.filter((s) => s.session !== session)
 			: before.map((s) => (s.session === session ? { ...s, ...fields } : s));
 		try {
 			await this.#daemon.post({ op: 'session_meta', session, ...meta });
 		} catch (e) {
-			this.#agents.sessions = before;
+			this.#state.sessions = before;
 			throw e;
 		}
 	}

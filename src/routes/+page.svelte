@@ -99,19 +99,17 @@
 	import ShortcutsDialog from '$lib/ShortcutsDialog.svelte';
 	import { matches } from '$lib/shortcuts';
 	import TaskDialog from '$lib/TaskDialog.svelte';
-	import AgentDialog from '$lib/AgentDialog.svelte';
 	import DeskPage from '$lib/DeskPage.svelte';
 	import ProjectPage from '$lib/ProjectPage.svelte';
 	import FeedbackDialog from '$lib/FeedbackDialog.svelte';
 	import { telemetry } from '$lib/telemetry.svelte';
 	import { sendTelemetry } from '$lib/protocol';
-	import { Requirements, provideRequirements, type Requirement } from '$lib/requirements.svelte';
+	import { Requirements, needsYou, provideRequirements, type Requirement } from '$lib/requirements.svelte';
 	import type { StartHow } from '$lib/requirements/StartButton.svelte';
 	import { normalizeBackendId, BACKEND_LABELS, type BackendId } from '$lib/backends';
 	import Modal from '$lib/ui/Modal.svelte';
 	import BackendIcon from '$lib/BackendIcon.svelte';
-	import { agentDirectory, agentsOfWorkspace, type AgentChanges, type AgentView } from '$lib/agents.svelte';
-	import AgentAvatar from '$lib/AgentAvatar.svelte';
+	import { daemonState } from '$lib/daemonState.svelte';
 	import { CHATS_ENABLED, type Project, type WorktreeMeta } from '$lib/types';
 	import PlanPanel from '$lib/PlanPanel.svelte';
 	import ProposalPane from '$lib/ProposalPane.svelte';
@@ -130,7 +128,7 @@
 	// Project/session tree + lifecycle lives in the store; the page keeps thin
 	// reactive aliases so templates and handlers read it naturally.
 	const store = new SessionStore();
-	const projects = $derived(store.userProjects);
+	const projects = $derived(store.projects);
 	const allSessions = $derived(store.allSessions);
 	const active = $derived(store.active);
 	const chat = $derived(store.chat);
@@ -167,17 +165,19 @@
 	}
 	const notifyDone = (title: string) =>
 		notify('JuCode', t('shell.notifyDone', { title: title || t('shell.untitled') }));
-	// An agent's question, pending action or report while the window is in
-	// the background.
-	agentDirectory.onArrival = (kind, agent, text, agentId) => {
-		const message = t(`shell.notify.${kind}`, { text });
-		if (!document.hasFocus()) void notify(agent, message);
-		// In front: a notice that leads to the agent on the workbench.
-		else
-			toast.info(`${agent} · ${message}`, {
-				action: { label: t('shell.desk.title'), run: () => openDesk(agentId ?? null) }
-			});
-	};
+	// An approval a session deferred while nobody watched it, and a
+	// scheduled run that needs the user: an OS notification while the window
+	// is in the background, else a notice that leads there.
+	function tell(title: string, message: string, open: () => void) {
+		if (!document.hasFocus()) void notify(title, message);
+		else toast.info(`${title} · ${message}`, { action: { label: t('shell.notify.open'), run: open } });
+	}
+	daemonState.onAction = (a) =>
+		tell(t('shell.notify.action'), a.summary || a.name, () => openDesk('pending'));
+	daemonState.onScheduleEvent = (e) =>
+		tell(t(`shell.notify.schedule.${e.kind}`, { name: e.name }), e.detail, () =>
+			e.session ? openDaemonSession(e.session) : openDesk('schedules')
+		);
 	let showSettings = $state(false);
 	let settingsSection = $state<SectionKey>('general');
 	function openSettings(section: SectionKey = 'general') {
@@ -198,18 +198,18 @@
 	let showFeedback = $state(false);
 	// 「新建并行任务」对话框：为哪个（主仓库）项目开任务。
 	let taskDialogFor = $state<Project | null>(null);
-	let showAgentDialog = $state(false);
-	// The workbench page, on the overview, one agent, or one of its sessions
-	// (agent sessions open only there, never on the canvas).
+	// The workbench page: what waits for the user, the requirements, the
+	// scheduled tasks.
 	let showDesk = $state(false);
-	let deskAgent = $state<string | null>(null);
-	let deskSession = $state<string | null>(null);
-	let deskPage = $state<'overview' | 'requirements' | 'schedules'>('overview');
+	let deskPage = $state<'pending' | 'requirements' | 'schedules'>('pending');
 	let deskRequirement = $state<string | null>(null);
 	let captureSignal = $state(0);
-	function openDesk(agent: string | null) {
-		deskAgent = agent;
-		deskSession = null;
+	/** `page`: the one to show; the last one shown otherwise. */
+	function openDesk(page?: typeof deskPage) {
+		if (page) {
+			deskPage = page;
+			deskRequirement = null;
+		}
 		showSettings = false;
 		showDesk = true;
 	}
@@ -226,18 +226,11 @@
 	const shownProject = $derived.by(() => {
 		const leaf = focusedLeaf ? findLeaf(tiles.root, focusedLeaf) : null;
 		const id = leaf?.active ? projectOf(leaf.active) : null;
-		return id ? store.userProjects.find((p) => p.id === id) : undefined;
+		return id ? store.projects.find((p) => p.id === id) : undefined;
 	});
-	/** The project a new agent is created in ('' for none). */
-	let agentDialogProject = $state('');
-	function newAgent(project = '') {
-		agentDialogProject = project;
-		showAgentDialog = true;
-	}
 	/** The workbench's requirements page: one requirement, or the list. */
 	function openRequirements(id: string | null = null) {
-		openDesk(null);
-		deskPage = 'requirements';
+		openDesk('requirements');
 		deskRequirement = id;
 	}
 
@@ -283,25 +276,20 @@
 		const chat = allSessions.find((s) => s.chat.sessionId === session)?.chat;
 		return chat?.plan.find((p) => p.status === 'in_progress')?.step;
 	}
+	/** Requirements of the open workspace on the user's turn (as the
+	 *  workbench counts them). */
+	const yourTurnCount = $derived.by(() => {
+		const ids = new Set(workspaceProjects.map((p) => p.id));
+		return requirements.list.filter((r) => needsYou(r) && (!r.project || ids.has(r.project))).length;
+	});
 	const workspaceProjects = $derived(
 		projects.filter((p) => !p.worktree && !p.chats).map((p) => ({ id: p.id, path: p.path, name: p.name }))
 	);
 
-	/** Show a daemon session: an agent's on the workbench, a plain hosted one
-	 *  in a tab. */
-	function openDaemonSession(session: string, agentId?: string) {
-		const agent =
-			agentDirectory.agentOfSession(session) ?? agentDirectory.agents.find((a) => a.id === agentId);
-		const listed = agentDirectory.sessions.find((s) => s.session === session);
-		if (agent) {
-			deskSession = store.openAgentSession(agent, session, listed?.title);
-			deskAgent = agent.id;
-			showSettings = false;
-			showDesk = true;
-			return;
-		}
-		const cwd = listed?.cwd ?? '';
-		store.openAgentSession({ id: '', name: base(cwd), cwd }, session, listed?.title);
+	/** Show a daemon session in a tab. */
+	function openDaemonSession(session: string) {
+		const listed = daemonState.sessions.find((s) => s.session === session);
+		store.openDaemonSession(listed?.cwd ?? '', session, listed?.title);
 		showDesk = false;
 	}
 	let showQuickOpen = $state(false);
@@ -433,7 +421,7 @@
 		if (tui) return tuiTabTitle(tui);
 		if (tab.panel === 'audit') return t('editor.title');
 		const pid = projectOf(tab.panel);
-		if (pid) return store.userProjects.find((p) => p.id === pid)?.name ?? pid;
+		if (pid) return store.projects.find((p) => p.id === pid)?.name ?? pid;
 		const proposal = proposalOf(tab.panel);
 		if (proposal) return planOf(proposal.sessionId, proposal.planId)?.title || t('chat.planCard.label');
 		return (ALL_PANELS as readonly string[]).includes(tab.panel) ? t(`dock.tabs.${tab.panel}`) : tab.panel;
@@ -643,7 +631,7 @@
 	// removed project's page with the project.
 	$effect(() => {
 		const ids = new Set(store.shownSessions.map((s) => s.id));
-		const projectIds = new Set(store.userProjects.map((p) => p.id));
+		const projectIds = new Set(store.projects.map((p) => p.id));
 		if (!tilesReady) return;
 		untrack(() => {
 			let next = tiles;
@@ -777,32 +765,18 @@
 		return () => clearTimeout(timer);
 	});
 	$effect(() => {
-		const list = agentDirectory.sessions;
+		const list = daemonState.sessions;
 		void workspaces.activeId;
 		if (!store.loaded || wsBusy) return;
 		untrack(() => sync.reconcile(list));
 	});
-	// Tabs of an agent's sessions (restored ones too) keep the agent's
-	// approval mode: see ChatState.agent. One still in a user project (opened
-	// before agent sessions moved to the workbench) moves to its agent's host.
-	$effect(() => {
-		for (const s of store.allSessions) {
-			if (!s.chat.agent && s.chat.sessionId) {
-				const agent = agentDirectory.sessions.find((d) => d.session === s.chat.sessionId)?.agent;
-				if (agent) s.chat.agent = agent;
-			}
-			const cwd = s.chat.agent && agentDirectory.agents.find((a) => a.id === s.chat.agent)?.cwd;
-			if (cwd) untrack(() => store.adoptAgentSession(s.id, cwd));
-		}
-	});
-	// Off the workbench, the active session is always one the canvas shows:
-	// leaving it from an agent's session goes back to the last shown one.
+	// The active session is always one the canvas shows.
 	let lastShown = '';
 	$effect(() => {
 		const id = store.activeId;
 		const shown = store.shownSessions.some((s) => s.id === id);
 		if (shown) lastShown = id;
-		else if (id && !showDesk)
+		else if (id)
 			untrack(() => {
 				const back = store.shownSessions.find((s) => s.id === lastShown) ?? store.shownSessions[0];
 				store.activeId = back?.id ?? '';
@@ -907,7 +881,7 @@
 	function tileChrome(tab: TileTab): { color?: string; icon?: TabIcon } | null {
 		const pid = projectOf(tab.panel);
 		if (pid) {
-			const p = store.userProjects.find((x) => x.id === pid);
+			const p = store.projects.find((x) => x.id === pid);
 			return { color: p?.color, icon: p?.icon ?? { kind: 'builtin', id: 'folder' } };
 		}
 		const sid = chatSessionOf(tab.panel);
@@ -919,7 +893,7 @@
 	 *  Tool/TUI/audit tabs have no chrome and keep their default behavior. */
 	function openTileChrome(tab: TileTab, ev: MouseEvent) {
 		const pid = projectOf(tab.panel);
-		const p = pid ? store.userProjects.find((x) => x.id === pid) : undefined;
+		const p = pid ? store.projects.find((x) => x.id === pid) : undefined;
 		if (p) return openProjectMenu(p, ev);
 		const sid = chatSessionOf(tab.panel);
 		if (!sid || !!!sessionById(sid)) return;
@@ -951,28 +925,12 @@
 		workspaces.updateProjects(store.serialize());
 		toast.info(t('shell.workspace.moved', { name: p.name, ws: target.name }));
 	}
-	// An agent's right-click: its look and the workspace it is listed in.
-	let agentChromeFor = $state<{ id: string; x: number; y: number } | null>(null);
-	const chromeAgent = $derived(agentChromeFor ? (agentDirectory.agents.find((a) => a.id === agentChromeFor!.id) ?? null) : null);
-	function updateAgent(id: string, changes: AgentChanges) {
-		agentDirectory.update(id, changes).catch((e) => toast.error(e instanceof Error ? e.message : String(e)));
-	}
-	function moveAgentToWorkspace(a: AgentView, wsId: string) {
-		const target = workspaces.workspaces.find((w) => w.id === wsId);
-		if (!target) return;
-		agentChromeFor = null;
-		agentDirectory
-			.update(a.id, { workspace: wsId })
-			.then(() => toast.info(t('shell.workspace.moved', { name: a.name, ws: target.name })))
-			.catch((e) => toast.error(e instanceof Error ? e.message : String(e)));
-	}
-
 	/** Settings → 导入: the folders of imported conversations become projects
 	 *  (without a chat; their conversations are in the project's 历史). */
 	function addImportedFolders(paths: string[]): number {
 		let added = 0;
 		for (const path of paths) {
-			if (store.userProjects.some((p) => normPath(p.path) === normPath(path))) continue;
+			if (store.projects.some((p) => normPath(p.path) === normPath(path))) continue;
 			store.addProjectShell({ id: store.uid(), name: folderName(path), path });
 			added++;
 		}
@@ -1039,7 +997,7 @@
 		taskDialogFor = null;
 		const requirement = taskRequirement?.id;
 		taskRequirement = null;
-		const existing = store.userProjects.find((p) => normPath(p.path) === normPath(path));
+		const existing = store.projects.find((p) => normPath(p.path) === normPath(path));
 		if (existing) {
 			store.activeId = existing.sessions[0]?.id ?? store.addSession(existing);
 			return;
@@ -1056,14 +1014,14 @@
 	}
 	/** 任务清理完成（worktree 已删除）后，把对应项目从侧边栏移除。 */
 	function closeTaskProject(path: string) {
-		const p = store.userProjects.find((x) => normPath(x.path) === normPath(path));
+		const p = store.projects.find((x) => normPath(x.path) === normPath(path));
 		if (p) store.removeProject(p);
 	}
 	/** 打开「新建并行任务」对话框；worktree 项目上则回落到其主仓库项目。 */
 	function newTask(p: Project | undefined) {
 		if (!p) return;
 		if (p.worktree) {
-			const main = store.userProjects.find((x) => normPath(x.path) === normPath(p.worktree!.mainRepoPath));
+			const main = store.projects.find((x) => normPath(x.path) === normPath(p.worktree!.mainRepoPath));
 			taskDialogFor = main ?? { ...p, path: p.worktree.mainRepoPath, name: base(p.worktree.mainRepoPath) };
 			return;
 		}
@@ -1074,7 +1032,7 @@
 	const normPath = (p: string) => p.replace(/\/+$/, '');
 	/** 打开（或聚焦）路径对应的项目；不存在则在目录有效时创建。 */
 	async function openProjectPath(path: string, focusSession = true): Promise<Project | null> {
-		const existing = store.userProjects.find((p) => normPath(p.path) === normPath(path));
+		const existing = store.projects.find((p) => normPath(p.path) === normPath(path));
 		if (existing) {
 			if (focusSession) store.activeId = existing.sessions[0]?.id ?? store.addSession(existing);
 			return existing;
@@ -1279,13 +1237,13 @@
 			daemon.onIdleClose = (id) => store.sleep(id);
 			daemon.onEvent = (frame) => {
 				if (frame.type === 'session_reopened' && typeof frame.session === 'string') store.followReopened(frame.session);
-				agentDirectory.handle(frame);
+				daemonState.handle(frame);
 				sync.handle(frame);
 				requirements.handle(frame);
 				devServers.handle(frame);
 			};
 			daemon.onDisconnect = () => {
-				agentDirectory.disconnected();
+				daemonState.disconnected();
 				sync.reset();
 				devServers.disconnected();
 			};
@@ -1299,7 +1257,7 @@
 			// The client outlives this page: release the sessions it claimed for
 			// this page's tabs when the page goes (see detachAll).
 			cleanups.push(() => daemon.detachAll());
-			agentDirectory.start();
+			daemonState.start();
 			const undrop = await getCurrentWebview().onDragDropEvent((e) => {
 				if (e.payload.type === 'drop')
 					for (const p of e.payload.paths) panes.get(store.activeId)?.addAttachment(p);
@@ -1482,16 +1440,9 @@
 				onRenameSession={(id, title) => store.renameSession(id, title)}
 				onSessionMenu={openSessionMenu}
 				onProjectMenu={openProjectMenu}
-				onAgentMenu={(a, e) => (e.preventDefault(), (agentChromeFor = { id: a.id, x: e.clientX, y: e.clientY }))}
 				onHistory={(p) => store.openHistory(p)}
-				agents={agentsOfWorkspace(agentDirectory.agents, workspaces.workspaces, workspaces.activeId)}
-				agentsStatus={agentDirectory.status}
-				onOpenAgent={(a) => openDesk(a.id)}
-				onNewAgent={() => newAgent()}
-				onAgentSession={(a) => store.openAgentSession(a, agentDirectory.latestSession(a.id)?.session)}
-				agentPending={(id) => agentDirectory.pendingFor(id)}
-				pendingCount={agentDirectory.pending}
-				onDesk={() => openDesk(null)}
+				pendingCount={daemonState.actions.length + yourTurnCount}
+				onDesk={() => openDesk()}
 			/>
 			<div class="resizer side" class:hidden={!showSidebar} role="separator" aria-label="resize sidebar" onpointerdown={startSidebarResize}></div>
 
@@ -1560,7 +1511,6 @@
 													onRegister={registerPane}
 													onUnregister={unregisterPane}
 													onOpenSettings={openSettings}
-													onOpenAgent={openDesk}
 													onOpenRequirement={openRequirements}
 												/>
 												{#snippet failed(error, reset)}
@@ -1576,7 +1526,7 @@
 										<div class="gone">{t('shell.chatGone')}</div>
 									{/if}
 								{:else if projectOf(tab.panel)}
-									{@const project = store.userProjects.find((p) => p.id === projectOf(tab.panel))}
+									{@const project = store.projects.find((p) => p.id === projectOf(tab.panel))}
 									{#if project}
 										<ProjectPage
 											{project}
@@ -1585,8 +1535,6 @@
 											onDirs={(dirs) => store.setProjectDirs(project, dirs)}
 											onStartRequirement={startRequirement}
 											onOpenSession={(s) => openDaemonSession(s)}
-											onOpenAgent={(id) => openDesk(id)}
-											onNewAgent={() => newAgent(project.id)}
 										/>
 									{/if}
 								{:else if tab.panel === 'plan'}<PlanPanel plan={chat?.plan ?? []} />
@@ -1634,8 +1582,6 @@
 			{/if}
 			{#if showDesk}
 				<DeskPage
-					bind:agentId={deskAgent}
-					bind:sessionId={deskSession}
 					bind:page={deskPage}
 					bind:requirementId={deskRequirement}
 					projects={workspaceProjects}
@@ -1643,32 +1589,10 @@
 					{captureSignal}
 					{currentStep}
 					onStartRequirement={startRequirement}
-					openSid={deskSession ? (sessionById(deskSession)?.chat.sessionId ?? null) : null}
 					navWidth={sidebarWidth}
 					onClose={() => (showDesk = false)}
 					onOpenSession={openDaemonSession}
-					onNewAgent={() => newAgent()}
-				>
-					{#snippet chatView(id)}
-						{@const sess = sessionById(id)}
-						{#if sess}
-							<ChatPane
-								session={sess}
-								{store}
-								{providers}
-								{providersList}
-								isActive={id === activeId}
-								onRegister={registerPane}
-								onUnregister={unregisterPane}
-								onOpenSettings={openSettings}
-								onOpenAgent={openDesk}
-								onOpenRequirement={openRequirements}
-							/>
-						{:else}
-							<div class="gone">{t('shell.chatGone')}</div>
-						{/if}
-					{/snippet}
-				</DeskPage>
+				/>
 			{/if}
 		</div>
 	</div>
@@ -1742,19 +1666,6 @@
 		/>
 	{/if}
 
-	{#if showAgentDialog}
-		<AgentDialog
-			defaultDir={store.activeProject?.path ?? ''}
-			projects={workspaceProjects}
-			defaultProject={agentDialogProject}
-			onClose={() => (showAgentDialog = false)}
-			onCreated={(agent) => {
-				showAgentDialog = false;
-				openDesk(agent.id);
-			}}
-		/>
-	{/if}
-
 	{#if sessionChromeFor && chromeSession}
 		<TabChromePopover
 			x={sessionChromeFor.x}
@@ -1791,23 +1702,6 @@
 			{#snippet defaultIcon()}
 				{#if chromeProject.worktree}<GitBranchIcon size={14} />{:else}<FolderIcon size={14} />{/if}
 			{/snippet}
-		</TabChromePopover>
-	{/if}
-
-	{#if agentChromeFor && chromeAgent}
-		<TabChromePopover
-			x={agentChromeFor.x}
-			y={agentChromeFor.y}
-			name={chromeAgent.name}
-			color={chromeAgent.color ?? null}
-			icon={chromeAgent.icon ?? null}
-			onColor={(color) => updateAgent(chromeAgent.id, { color })}
-			onIcon={(icon) => updateAgent(chromeAgent.id, { icon })}
-			moveTargets={otherWorkspaces}
-			onMove={(ws) => moveAgentToWorkspace(chromeAgent, ws)}
-			onClose={() => (agentChromeFor = null)}
-		>
-			{#snippet defaultIcon()}<AgentAvatar agent={{ ...chromeAgent, icon: null }} size={16} />{/snippet}
 		</TabChromePopover>
 	{/if}
 

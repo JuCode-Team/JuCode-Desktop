@@ -185,7 +185,7 @@ const settings = {
 			noDevices: '还没有配对的设备',
 			revoke: '吊销',
 			remoteGroup: '远程访问',
-			remoteGroupHint: '在手机上查看工作台、回复 Agent。扫一次码配对，之后直接打开。',
+			remoteGroupHint: '在手机上继续会话、处理待确认的操作。扫一次码配对，之后直接打开。',
 			relayToggle: '允许通过中继远程访问',
 			relayHint: '手机经 app.jucode.net 的中继连接这台电脑，不需要在同一网络。内容端到端加密，中继看不到。',
 			relayConnected: '已连接中继 · 主机 {host}',
@@ -456,7 +456,7 @@ const settings = {
 		},
 		sync: {
 			title: '设置同步',
-			desc: '语言、主题、默认后端、模型默认值、网络和语音设置在登录同一账号的电脑间同步。密钥、自定义渠道、MCP、技能、Agent 和定时任务只留在本机。',
+			desc: '语言、主题、默认后端、模型默认值、网络和语音设置在登录同一账号的电脑间同步。密钥、自定义渠道、MCP、技能和定时任务只留在本机。',
 			now: '立即同步',
 			at: '{time} 已同步',
 			failed: '同步失败：{msg}'
@@ -686,7 +686,7 @@ const settings = {
 			noDevices: 'No paired devices yet',
 			revoke: 'Revoke',
 			remoteGroup: 'Remote access',
-			remoteGroupHint: 'Check the desk and answer agents from your phone. Pair once by scanning, then just open it.',
+			remoteGroupHint: 'Continue sessions and decide waiting actions from your phone. Pair once by scanning, then just open it.',
 			relayToggle: 'Allow remote access through the relay',
 			relayHint: 'Your phone reaches this computer through the app.jucode.net relay, from any network. End-to-end encrypted: the relay cannot read anything.',
 			relayConnected: 'Connected to the relay · host {host}',
@@ -957,7 +957,7 @@ const settings = {
 		},
 		sync: {
 			title: 'Settings sync',
-			desc: 'Language, theme, default backend, model defaults, network and voice settings sync between the computers signed in to this account. Keys, custom providers, MCP, skills, agents and schedules stay on this computer.',
+			desc: 'Language, theme, default backend, model defaults, network and voice settings sync between the computers signed in to this account. Keys, custom providers, MCP, skills and scheduled tasks stay on this computer.',
 			now: 'Sync now',
 			at: 'Synced at {time}',
 			failed: 'Sync failed: {msg}'

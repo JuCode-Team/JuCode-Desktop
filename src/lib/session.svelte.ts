@@ -100,12 +100,7 @@ export class SessionStore {
 	/** Projects the UI shows: a hidden chats group stays in the tree (and in
 	 *  the saved and daemon lists) but is never listed or opened. */
 	get shownProjects() {
-		return this.userProjects.filter((p) => CHATS_ENABLED || !p.chats);
-	}
-	/** Every project but the hidden ones that host agent sessions (see
-	 *  Project.agents): what is saved, synced and matched by path. */
-	get userProjects() {
-		return this.projects.filter((p) => !p.agents);
+		return this.projects.filter((p) => CHATS_ENABLED || !p.chats);
 	}
 	get shownSessions() {
 		return this.shownProjects.flatMap((p) => p.sessions);
@@ -184,16 +179,15 @@ export class SessionStore {
 	 *  restore, provider switch), else a new one; then runs `after`, then what
 	 *  the user sent meanwhile. `extraOpts` carries per-start choices (claude's
 	 *  `permission_mode`, `resume_session_at`); `resume` names the conversation
-	 *  to reopen when it is not the session's own; `agent` starts it as that
-	 *  long-lived agent. The daemon translates every engine into jucode
+	 *  to reopen when it is not the session's own. The daemon translates
+	 *  every engine into jucode
 	 *  events, so the session's adapter is the jucode one. */
 	#spawn(
 		s: Session,
 		cwd: string | undefined,
 		after?: () => void,
 		extraOpts?: Record<string, unknown>,
-		resume?: string,
-		agent?: string
+		resume?: string
 	) {
 		// Sessions of the chats group run as chats (engine-side chat prompt).
 		const chat = this.projects.some((p) => p.chats && p.sessions.some((x) => x.id === s.id));
@@ -277,7 +271,7 @@ export class SessionStore {
 						: Promise.resolve(undefined);
 		return engine
 			.then((spec) =>
-				hostSession(s.id, cwd ?? '', resume ?? (s.chat.sessionId || undefined), agent, chat, spec).then(() => {
+				hostSession(s.id, cwd ?? '', resume ?? (s.chat.sessionId || undefined), chat, spec).then(() => {
 					// A new session is named by the daemon (the engine's conversation id).
 					if (!s.chat.sessionId) {
 						s.chat.sessionId = daemon.sessionOf(s.id) ?? '';
@@ -544,7 +538,7 @@ export class SessionStore {
 	 *  project: it starts there, in that project's directory. */
 	moveDraft(id: string, projectId: string) {
 		const from = this.projects.find((p) => p.sessions.some((x) => x.id === id));
-		const to = this.userProjects.find((p) => p.id === projectId && !p.chats && !p.stale);
+		const to = this.projects.find((p) => p.id === projectId && !p.chats && !p.stale);
 		const s = from?.sessions.find((x) => x.id === id);
 		if (!from || !to || !s?.draft || from === to) return;
 		from.sessions = from.sessions.filter((x) => x !== s);
@@ -642,7 +636,7 @@ export class SessionStore {
 		icon?: unknown;
 		dirs?: unknown;
 	}) {
-		if (this.userProjects.some((x) => x.id === project.id || samePath(x.path, project.path))) return;
+		if (this.projects.some((x) => x.id === project.id || samePath(x.path, project.path))) return;
 		const p: Project = { id: project.id, name: project.name, path: project.path, sessions: [] };
 		if (project.chats) p.chats = true;
 		this.setProjectDirs(p, project.dirs);
@@ -774,39 +768,29 @@ export class SessionStore {
 		return p;
 	}
 
-	/** Show a long-lived agent's conversation: `sid` (a daemon session of
-	 *  that agent) in its open tab or a new one, or a new session of the
-	 *  agent when `sid` is omitted. The tab lands in the project for the
-	 *  agent's directory, which is added when missing. */
-	/** `title`: the daemon's for an existing conversation; a new one is named
-	 *  by the daemon after its first message. */
-	openAgentSession(agent: { id: string; name: string; cwd: string }, sid?: string, title?: string | null) {
-		const open = sid && this.allSessions.find((s) => s.chat.sessionId === sid);
+	/** Show daemon session `sid` (one the daemon hosts in `cwd`) in its
+	 *  open tab or a new one, in the project for `cwd`, which is added when
+	 *  missing. `title`: the daemon's. */
+	openDaemonSession(cwd: string, sid: string, title?: string | null) {
+		const open = this.allSessions.find((s) => s.chat.sessionId === sid);
 		if (open) {
 			open.archived = false;
 			this.activeId = open.id;
 			return open.id;
 		}
-		// An agent's sessions live in its hidden host (the workbench shows
-		// them); a plain hosted session (no agent id) opens in its project.
-		let project = agent.id ? this.#agentHost(agent.cwd) : this.userProjects.find((p) => p.path === agent.cwd && !p.worktree);
+		let project = this.projects.find((p) => p.path === cwd && !p.worktree);
 		if (!project) {
-			project = { id: this.uid(), name: base(agent.cwd), path: agent.cwd, sessions: [] };
+			project = { id: this.uid(), name: base(cwd), path: cwd, sessions: [] };
 			this.projects.push(project);
 		}
 		const s = this.#newSession('jucode');
 		if (title) s.chat.title = title;
-		if (agent.id) s.chat.agent = agent.id;
-		if (sid) {
-			// The daemon holds the conversation; the backend stays jucode.
-			s.restored = true;
-			s.chat.sessionId = sid;
-		}
+		// The daemon holds the conversation; the backend stays jucode.
+		s.restored = true;
+		s.chat.sessionId = sid;
 		project.sessions.push(s);
 		this.activeId = s.id;
-		this.#spawn(s, project.path, undefined, undefined, sid, sid ? undefined : agent.id).catch((e) =>
-			this.#engineFailed(s.chat, e)
-		);
+		this.#spawn(s, project.path, undefined, undefined, sid).catch((e) => this.#engineFailed(s.chat, e));
 		return s.id;
 	}
 
@@ -1131,26 +1115,6 @@ export class SessionStore {
 		if (this.activeId === id) this.activeId = this.shownSessions[0]?.id ?? '';
 	}
 
-	/** The hidden project an agent working in `cwd` hosts its sessions in. */
-	#agentHost(cwd: string): Project {
-		let host = this.projects.find((p) => p.agents && p.path === cwd);
-		if (!host) {
-			host = { id: this.uid(), name: base(cwd), path: cwd, sessions: [], agents: true };
-			this.projects.push(host);
-		}
-		return host;
-	}
-
-	/** An agent's session opened before agent sessions moved to the workbench
-	 *  (it sits in a user project): move it to its agent's hidden host. */
-	adoptAgentSession(id: string, cwd: string) {
-		const from = this.projects.find((p) => !p.agents && p.sessions.some((s) => s.id === id));
-		if (!from) return;
-		const s = from.sessions.find((x) => x.id === id)!;
-		from.sessions = from.sessions.filter((x) => x.id !== id);
-		this.#agentHost(cwd).sessions.push(s);
-	}
-
 	/** Move a whole project next to another, preserving its sessions. */
 	moveProject(id: string, targetId: string, after: boolean) {
 		const p = this.projects.find((x) => x.id === id);
@@ -1273,7 +1237,7 @@ export class SessionStore {
 	 *  is only written when it isn't the default, so pre-existing layouts stay
 	 *  byte-identical; 'acp' tabs also carry their agent so restore can respawn. */
 	serialize(): SavedProject[] {
-		return this.userProjects.map((p) => ({
+		return this.projects.map((p) => ({
 			id: p.id,
 			name: p.name,
 			path: p.path,
@@ -1373,7 +1337,7 @@ export class SessionStore {
 			for (const p of saved) {
 				// The same project twice (a file an older version wrote while a
 				// daemon list raced the restore): one entry, both entries' tabs.
-				const known = this.userProjects.find((x) => x.id === p.id || samePath(x.path, p.path));
+				const known = this.projects.find((x) => x.id === p.id || samePath(x.path, p.path));
 				if (known) {
 					if (known.stale) this.#staleTabs.set(known.id, [...(this.#staleTabs.get(known.id) ?? []), ...(p.tabs ?? [])]);
 					else this.#restoreTabs(known, p.tabs ?? []);

@@ -9,11 +9,9 @@ import type { DaemonClient } from '$lib/daemon';
 import { getLocale } from '$lib/i18n';
 import { sendFile, type Uploaded } from '$lib/upload';
 
-/** `proposed`: an agent proposed it; the user accepts or rejects it. */
-export type RequirementState = 'idea' | 'open' | 'done' | 'parked' | 'proposed';
+export type RequirementState = 'idea' | 'open' | 'done' | 'parked';
 /** `state`, except while open: what its sessions are doing (see the daemon).
- *  `confirm`: its start waits for the user to confirm (see `gate`);
- *  `proposal`: an agent proposes to close it. */
+ *  `confirm`: its start waits for the user to confirm (see `gate`). */
 export type RequirementStatus =
 	| 'idea'
 	| 'open'
@@ -22,8 +20,6 @@ export type RequirementStatus =
 	| 'failed'
 	| 'review'
 	| 'confirm'
-	| 'proposed'
-	| 'proposal'
 	| 'done'
 	| 'parked';
 export type SessionState = 'running' | 'waiting' | 'failed' | 'idle';
@@ -50,16 +46,6 @@ export interface RequirementGate {
 	answered?: boolean;
 }
 
-/** An agent's proposal: a new requirement, or closing this one. */
-export interface RequirementProposal {
-	kind: 'create' | 'close';
-	outcome?: 'done' | 'parked';
-	agent: string;
-	session?: string;
-	reason: string;
-	at: number;
-}
-
 export interface Requirement {
 	id: string;
 	/** The user's words. */
@@ -70,7 +56,6 @@ export interface Requirement {
 	/** The project (its id) it belongs to; null: none yet. */
 	project: string | null;
 	gate?: RequirementGate;
-	proposal?: RequirementProposal;
 	state: RequirementState;
 	status: RequirementStatus;
 	/** Linked sessions, oldest first. */
@@ -80,6 +65,7 @@ export interface Requirement {
 	progress_at?: number;
 	/** The end of the latest reply, on the user's turn. */
 	last_reply?: string;
+	/** `agent`: noted by a long-lived agent (gone since 2026-10). */
 	source: 'desktop' | 'phone' | 'session' | 'agent';
 	source_session?: string | null;
 	created_at: number;
@@ -96,8 +82,6 @@ export function groupOf(status: RequirementStatus): RequirementGroup {
 		case 'failed':
 		case 'review':
 		case 'confirm':
-		case 'proposed':
-		case 'proposal':
 			return 'attention';
 		case 'running':
 		case 'open':
@@ -228,11 +212,6 @@ export class Requirements {
 	/** Confirms its gate's stage: on to the plan, or to the work. */
 	async confirm(id: string, text = '') {
 		await this.daemon.request({ op: 'requirement_confirm', requirement: id, text, lang: getLocale() });
-	}
-
-	/** Accepts or rejects an agent's proposal. */
-	async answerProposal(id: string, accept: boolean) {
-		await this.daemon.request({ op: 'requirement_proposal', requirement: id, accept });
 	}
 
 	/** Sends `text` to its latest session, or starts a new one (asked for,

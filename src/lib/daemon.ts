@@ -44,17 +44,12 @@ export interface SocketLike {
 const OPEN = 1;
 /** Frames about the daemon as a whole rather than one session's engine. */
 const DAEMON_EVENTS = new Set([
-	'agents',
 	'sessions',
-	'message_delivered',
-	'questions',
 	'actions',
-	'report_posted',
-	'report_read',
 	'schedules',
-	'tasks',
+	// Carries the run's `session`, but is about the scheduled task.
+	'schedule_event',
 	'workspaces',
-	'dispatches',
 	'requirements',
 	'dev_servers',
 	'session_reopened'
@@ -113,8 +108,8 @@ export class DaemonClient {
 		return this.#toDaemon.get(desktopId);
 	}
 
-	/** Creates a daemon session in `cwd` (as `agent`, when given; as a chat
-	 *  in the chats directory, when `chat`), or reopens `resume` (a session
+	/** Creates a daemon session in `cwd` (as a chat in the chats directory,
+	 *  when `chat`), or reopens `resume` (a session
 	 *  id; `cwd` lets the daemon find one saved there that it never hosted),
 	 *  then watches it. The watch snapshot (startup state and transcript)
 	 *  arrives through `onFrame`. */
@@ -122,7 +117,6 @@ export class DaemonClient {
 		desktopId: string,
 		cwd: string,
 		resume?: string,
-		agent?: string,
 		chat = false,
 		engine?: EngineSpec
 	): Promise<void> {
@@ -130,11 +124,9 @@ export class DaemonClient {
 		const reply = resume
 			? await this.request({ op: 'session_open', session: resume, ...(cwd ? { cwd } : {}), ...(engine ?? {}) })
 			: await this.request(
-					agent
-						? { op: 'session_create', agent }
-						: chat && !engine
-							? { op: 'session_create', chat: true }
-							: { op: 'session_create', cwd, ...(engine ?? {}) }
+					chat && !engine
+						? { op: 'session_create', chat: true }
+						: { op: 'session_create', cwd, ...(engine ?? {}) }
 				);
 		const session = String(reply.session);
 		this.#toDaemon.set(desktopId, session);

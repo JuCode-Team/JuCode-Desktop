@@ -1,119 +1,104 @@
 <script lang="ts">
-	// The Desk tab's list on the remote page: what waits for the user, then
-	// the agents' reports; one row each, opened as a page (DeskItemScreen).
-	// With `status` (a phone, where the list is the whole tab), which agents
-	// are working and the next scheduled runs too; a wide page shows those
-	// beside the queue (DeskHome).
-	import CircleQuestionMarkIcon from '@lucide/svelte/icons/circle-question-mark';
+	// The remote page's 待处理 tab: approvals that sessions deferred while
+	// nobody watched them, one row each, opened as a page (DeskItemScreen),
+	// and the computer's scheduled tasks, which can be switched on or off and
+	// run from here (they are made and changed on the desktop).
 	import ShieldCheckIcon from '@lucide/svelte/icons/shield-check';
-	import FileTextIcon from '@lucide/svelte/icons/file-text';
-	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import ClockIcon from '@lucide/svelte/icons/clock';
+	import PlayIcon from '@lucide/svelte/icons/play';
 	import Notice from '$lib/ui/Notice.svelte';
+	import Switch from '$lib/ui/Switch.svelte';
 	import DeskClosed from '$lib/DeskClosed.svelte';
-	import { useAgents } from '$lib/agentScope';
+	import NotifyToggle from './NotifyToggle.svelte';
+	import { useDaemonState } from '$lib/daemonScope';
+	import { summary, type Schedule } from '$lib/schedules';
 	import { t } from '$lib/i18n';
-	import { deskKey, when } from './desk';
+	import { when } from '$lib/time';
 
 	let {
 		current,
-		status = false,
-		onOpen,
-		onOpenAgent
+		onOpen
 	}: {
-		/** The item shown in the pane, highlighted. */
+		/** The action shown in the pane, highlighted. */
 		current?: string;
-		status?: boolean;
-		onOpen: (key: string) => void;
-		onOpenAgent: (agent: string) => void;
+		onOpen: (action: string) => void;
 	} = $props();
 
-	const agentDirectory = useAgents();
-	const pending = $derived(agentDirectory.questions.length + agentDirectory.actions.length);
-	const working = $derived(agentDirectory.agents.filter((a) => a.busy));
-	const upcoming = $derived(
-		agentDirectory.schedules
-			.filter((s) => s.enabled && s.next_run_at)
-			.sort((a, b) => a.next_run_at! - b.next_run_at!)
-			.slice(0, 3)
-	);
+	const daemon = useDaemonState();
+	/** A computer whose daemon is older keeps its tasks in another shape. */
+	const outdated = $derived(daemon.schedules.some((s) => !('engine' in s)));
+	let error = $state('');
+	let starting = $state<Record<string, boolean>>({});
+
+	async function act(work: () => Promise<unknown>) {
+		error = '';
+		try {
+			await work();
+		} catch (e) {
+			error = e instanceof Error ? e.message : String(e);
+		}
+	}
+	function run(s: Schedule) {
+		starting[s.id] = true;
+		setTimeout(() => (starting[s.id] = false), 1500);
+		void act(() => daemon.runSchedule(s.id));
+	}
+	function status(s: Schedule): string {
+		const last = s.last_run;
+		if (last?.status === 'running') return t('shell.schedule.statusRunning');
+		if (last?.status === 'waiting') return t('shell.schedule.statusWaiting');
+		if (last?.status === 'failed') return t('shell.schedule.statusFailed');
+		if (!s.enabled) return t('shell.schedule.off');
+		return s.next_run_at ? t('shell.schedule.next', { time: when(s.next_run_at) }) : t('shell.schedule.done');
+	}
 </script>
 
 <div class="desk">
-	{#if agentDirectory.status === 'unreachable'}
+	{#if daemon.status === 'unreachable'}
 		<Notice tone="warn">{t('shell.desk.unreachable')}</Notice>
 	{/if}
+	<div class="notify-wrap"><NotifyToggle /></div>
 
 	<section>
-		<div class="head"><span>{t('shell.desk.pending')}</span>{#if pending}<span class="count">{pending}</span>{/if}</div>
-		{#each agentDirectory.questions as q (q.id)}
-			{@const key = deskKey('question', q.id)}
-			<button class="row" class:on={current === key} class:high={q.importance === 'high'} onclick={() => onOpen(key)}>
-				<CircleQuestionMarkIcon size={16} />
-				<span class="text">
-					<span class="title">{q.title}</span>
-					<span class="meta">{agentDirectory.agentName(q.agent)} · {when(q.asked_at)}</span>
-				</span>
-			</button>
-		{/each}
-		{#each agentDirectory.actions as a (a.id)}
-			{@const key = deskKey('action', a.id)}
-			{@const agent = agentDirectory.agentOfSession(a.session_id)}
-			<button class="row" class:on={current === key} onclick={() => onOpen(key)}>
+		<div class="head"><span>{t('shell.desk.pending')}</span>{#if daemon.actions.length}<span class="count">{daemon.actions.length}</span>{/if}</div>
+		{#each daemon.actions as a (a.id)}
+			<button class="row" class:on={current === a.id} onclick={() => onOpen(a.id)}>
 				<ShieldCheckIcon size={16} />
 				<span class="text">
 					<span class="title"><code>{a.name}</code> {a.summary}</span>
-					<span class="meta">{agent?.name ?? a.cwd} · {when(a.created_at)}</span>
+					<span class="meta">{daemon.sessions.find((s) => s.session === a.session_id)?.title || a.cwd} · {when(a.created_at)}</span>
 				</span>
 			</button>
+		{:else}
+			<p class="empty">{t('shell.desk.nothingPending')}</p>
 		{/each}
-		{#if pending === 0}<p class="empty">{t('shell.desk.nothingPending')}</p>{/if}
 		<div class="closed"><DeskClosed /></div>
 	</section>
 
-	{#if status}
-		<section>
-			<div class="head"><span>{t('shell.desk.working')}</span></div>
-			{#each working as agent (agent.id)}
-				<button class="row" onclick={() => onOpenAgent(agent.id)}>
-					<LoaderCircleIcon size={16} class="spin" />
-					<span class="text"><span class="title">{agent.name}</span></span>
-				</button>
-			{:else}
-				<p class="empty">{t('shell.desk.nobodyWorking')}</p>
-			{/each}
-		</section>
-		{#if upcoming.length}
-			<section>
-				<div class="head"><span>{t('shell.schedule.upcoming')}</span></div>
-				{#each upcoming as s (s.id)}
-					<div class="row static">
-						<ClockIcon size={16} />
-						<span class="text">
-							<span class="title">{s.name}</span>
-							<span class="meta">{agentDirectory.agentName(s.agent)} · {when(s.next_run_at! * 1000)}</span>
-						</span>
-					</div>
-				{/each}
-			</section>
-		{/if}
-	{/if}
-
 	<section>
-		<div class="head"><span>{t('shell.desk.reports')}</span></div>
-		{#each agentDirectory.reports as r (r.id)}
-			{@const key = deskKey('report', r.id)}
-			<button class="row" class:on={current === key} class:unread={!r.read} class:read={r.read} onclick={() => onOpen(key)}>
-				<FileTextIcon size={16} />
-				<span class="text">
-					<span class="title">{r.title}</span>
-					<span class="meta">{agentDirectory.agentName(r.agent)} · {when(r.at)}</span>
-				</span>
-				{#if !r.read}<span class="dot"></span>{/if}
-			</button>
+		<div class="head"><span>{t('shell.schedule.title')}</span></div>
+		{#if outdated}
+			<p class="empty">{t('shell.schedule.outdated')}</p>
 		{:else}
-			<p class="empty">{t('shell.desk.noReports')}</p>
-		{/each}
+			{#each daemon.schedules as s (s.id)}
+				<div class="row static">
+					<ClockIcon size={16} />
+					<span class="text">
+						<span class="title">{s.name}</span>
+						<span
+							class="meta"
+							class:failed={s.last_run?.status === 'failed'}
+							class:waiting={s.last_run?.status === 'waiting'}>{summary(s)} · {status(s)}</span
+						>
+					</span>
+					<button class="run" title={t('shell.schedule.runNow')} disabled={starting[s.id] || !s.cwd} onclick={() => run(s)}><PlayIcon size={16} /></button>
+					<Switch checked={s.enabled} label={t('shell.schedule.enabled')} onChange={(on) => act(() => daemon.setScheduleEnabled(s.id, on))} />
+				</div>
+			{:else}
+				<p class="empty">{t('shell.schedule.empty')}</p>
+			{/each}
+			{#if error}<p class="empty failed">{error}</p>{/if}
+		{/if}
 	</section>
 </div>
 
@@ -181,9 +166,6 @@
 		flex-shrink: 0;
 		color: var(--dim);
 	}
-	.row.high > :global(svg) {
-		color: var(--warn);
-	}
 	.text {
 		flex: 1;
 		min-width: 0;
@@ -206,19 +188,6 @@
 		color: var(--dim2);
 		font-size: var(--fs-xs);
 	}
-	.row.read .title {
-		color: var(--dim);
-	}
-	.row.unread .title {
-		font-weight: 600;
-	}
-	.dot {
-		flex-shrink: 0;
-		width: 7px;
-		height: 7px;
-		border-radius: 50%;
-		background: var(--accent);
-	}
 	.closed {
 		padding: 0 12px;
 	}
@@ -227,5 +196,31 @@
 		padding: 4px 12px;
 		color: var(--dim2);
 		font-size: var(--fs-xs);
+	}
+	.run {
+		flex-shrink: 0;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 32px;
+		height: 32px;
+		border: none;
+		border-radius: var(--r);
+		background: none;
+		color: var(--dim);
+		cursor: pointer;
+	}
+	.run:hover:not(:disabled) {
+		background: var(--surface2);
+		color: var(--text);
+	}
+	.failed {
+		color: var(--err);
+	}
+	.waiting {
+		color: var(--warn);
+	}
+	.notify-wrap {
+		padding: 0 12px;
 	}
 </style>

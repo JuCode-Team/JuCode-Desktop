@@ -1,6 +1,7 @@
 <script lang="ts">
 	import ActiveIcon from '$lib/icons/ActiveIcon.svelte';
-	// One paired computer on the remote page: its list (sessions and desk) and
+	// One paired computer on the remote page: its lists (sessions,
+	// requirements, what waits for the user) and
 	// the pages opened over it, or, until its daemon has accepted this device,
 	// a connecting / pair-again screen. The page keeps one mounted per
 	// computer and hides all but the shown one, so each keeps its open pages
@@ -13,21 +14,15 @@
 	import QrCodeIcon from '@lucide/svelte/icons/qr-code';
 	import MonitorIcon from '@lucide/svelte/icons/monitor';
 	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
-	import SendIcon from '@lucide/svelte/icons/send';
 	import ListChecksIcon from '@lucide/svelte/icons/list-checks';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import RequirementList from './RequirementList.svelte';
 	import RequirementCompose from './RequirementCompose.svelte';
 	import RequirementScreen from './RequirementScreen.svelte';
-	import DispatchList from './DispatchList.svelte';
-	import DispatchComposer from './DispatchComposer.svelte';
-	import DispatchScreen from './DispatchScreen.svelte';
 	import DeskList from './DeskList.svelte';
-	import DeskHome from './DeskHome.svelte';
 	import DeskItemScreen from './DeskItemScreen.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
-	import type { AgentView } from '$lib/agents.svelte';
 	import { t } from '$lib/i18n';
 	import Projects from './Projects.svelte';
 	import ProjectScreen from './ProjectScreen.svelte';
@@ -87,30 +82,27 @@
 	// svelte-ignore state_referenced_locally
 	provideHost(conn);
 
-	type Tab = 'projects' | 'requirements' | 'dispatch' | 'desk';
-	const TABS: Tab[] = ['projects', 'requirements', 'dispatch', 'desk'];
+	type Tab = 'projects' | 'requirements' | 'desk';
+	const TABS: Tab[] = ['projects', 'requirements', 'desk'];
 	let tab = $state<Tab>('projects');
 	const TAB_TITLES = {
 		projects: 'shell.remote.sessions',
 		requirements: 'shell.requirement.title',
-		dispatch: 'shell.dispatch.title',
-		desk: 'shell.desk.title'
+		desk: 'shell.desk.pending'
 	} as const;
 	/** Pages opened over the tabs, last on top. */
 	type Screen = { key: number } & (
-		| { kind: 'session'; session?: string; agent?: string; cwd?: string; chat?: boolean; engine?: string; title: string }
+		| { kind: 'session'; session?: string; cwd?: string; chat?: boolean; engine?: string; title: string }
 		| { kind: 'project'; project: ProjectView }
 		| { kind: 'add' }
 		| { kind: 'files' | 'changes'; root: string; title: string; file?: string; line?: number }
-		| { kind: 'dispatch'; id: string }
-		| { kind: 'compose' }
-		| { kind: 'desk'; item: string }
+		| { kind: 'desk'; action: string }
 		| { kind: 'requirement'; id: string }
 		| { kind: 'capture' }
 	);
 	/** Each tab keeps its own pages: switching tabs on a wide page shows that
 	 *  tab's pane as it was left (and keeps its sessions streaming). */
-	let stacks = $state<Record<Tab, Screen[]>>({ projects: [], requirements: [], dispatch: [], desk: [] });
+	let stacks = $state<Record<Tab, Screen[]>>({ projects: [], requirements: [], desk: [] });
 	const stack = $derived(stacks[tab]);
 	let nextKey = 0;
 	type NewScreen = Screen extends infer S ? (S extends Screen ? Omit<S, 'key'> : never) : never;
@@ -179,7 +171,7 @@
 		shownWorkspace = ws;
 		untrack(() => {
 			const draft = stacks.projects.at(-1);
-			if (was && wide && draft?.kind === 'session' && !draft.session && !draft.agent) newSession();
+			if (was && wide && draft?.kind === 'session' && !draft.session) newSession();
 		});
 	});
 	/** The new session's page moved to another project or engine. */
@@ -202,8 +194,7 @@
 	/** What the page on top shows, highlighted in its tab's list. */
 	const top = $derived(stack.at(-1));
 	const currentSession = $derived(top?.kind === 'session' ? top.session : undefined);
-	const currentDispatch = $derived(top?.kind === 'dispatch' ? top.id : undefined);
-	const currentDeskItem = $derived(top?.kind === 'desk' ? top.item : undefined);
+	const currentAction = $derived(top?.kind === 'desk' ? top.action : undefined);
 	const currentRequirement = $derived(top?.kind === 'requirement' ? top.id : undefined);
 
 	// A requirement asked for from outside (an opened notification).
@@ -215,27 +206,14 @@
 
 	/** A daemon session's page, from what the daemon's list knows of it. */
 	function sessionScreen(session: string, title?: string): NewScreen {
-		const agent = conn.agents.agentOfSession(session);
-		const known = conn.agents.sessions.find((s) => s.session === session);
+		const known = conn.daemonState.sessions.find((s) => s.session === session);
 		return {
 			kind: 'session',
 			session,
 			cwd: known?.cwd,
 			engine: known?.engine && known.engine !== 'jucode' ? known.engine : undefined,
-			title: title ?? agent?.name ?? known?.title ?? session
+			title: title ?? known?.title ?? session
 		};
-	}
-
-	/** An agent's latest session, or a new one. */
-	function agentScreen(id: string): NewScreen {
-		const agent = conn.agents.agents.find((a) => a.id === id);
-		const name = agent?.name ?? id;
-		const latest = conn.agents.latestSession(id);
-		return latest ? { kind: 'session', session: latest.session, title: name } : { kind: 'session', agent: id, title: name };
-	}
-
-	function openAgent(agent: AgentView) {
-		open(agentScreen(agent.id));
 	}
 </script>
 
@@ -281,15 +259,10 @@
 					<span class="label">{t('shell.requirement.title')}</span>
 					{#if conn.requirements.pending > 0}<span class="badge">{conn.requirements.pending}</span>{/if}
 				</button>
-				<button class:on={tab === 'dispatch'} onclick={() => (tab = 'dispatch')} title={t('shell.dispatch.title')}>
-					<ActiveIcon icon={SendIcon} size={16} active={tab === 'dispatch'} />
-					<span class="label">{t('shell.dispatch.title')}</span>
-					{#if conn.dispatches.pending > 0}<span class="badge">{conn.dispatches.pending}</span>{/if}
-				</button>
-				<button class:on={tab === 'desk'} onclick={() => (tab = 'desk')} title={t('shell.desk.title')}>
+				<button class:on={tab === 'desk'} onclick={() => (tab = 'desk')} title={t('shell.desk.pending')}>
 					<ActiveIcon icon={InboxIcon} size={16} active={tab === 'desk'} />
-					<span class="label">{t('shell.desk.title')}</span>
-					{#if conn.agents.pending > 0}<span class="badge">{conn.agents.pending}</span>{/if}
+					<span class="label">{t('shell.desk.pending')}</span>
+					{#if conn.daemonState.actions.length > 0}<span class="badge">{conn.daemonState.actions.length}</span>{/if}
 				</button>
 			</nav>
 			<!-- Outside the scrolling list, so the switcher's menu is not cut off. -->
@@ -300,7 +273,7 @@
 				</div>
 			{/if}
 			<main>
-				{#if conn.kind === 'lan' && conn.agents.status === 'unreachable'}
+				{#if conn.kind === 'lan' && conn.daemonState.status === 'unreachable'}
 					<!-- The daemon served this page, so a failing connection most likely
 					     means this device's token was revoked; offer to pair again. -->
 					<div class="refused">
@@ -327,7 +300,6 @@
 						onHistory={(project) => open({ kind: 'project', project })}
 						onFiles={(project) => open({ kind: 'files', root: project.path, title: project.name })}
 						onChanges={(project) => open({ kind: 'changes', root: project.path, title: project.name })}
-						onOpenAgent={openAgent}
 					/>
 				</div>
 				<div class="tabbody" hidden={tab !== 'requirements'}>
@@ -338,21 +310,8 @@
 						onOpen={(id) => open({ kind: 'requirement', id })}
 					/>
 				</div>
-				<div class="tabbody" hidden={tab !== 'dispatch'}>
-					<DispatchList
-						current={currentDispatch}
-						composing={wide ? stacks.dispatch.length === 0 : false}
-						onNew={() => (wide ? (stacks.dispatch = []) : push({ kind: 'compose' }))}
-						onOpen={(d) => open({ kind: 'dispatch', id: d.id })}
-					/>
-				</div>
 				<div class="tabbody" hidden={tab !== 'desk'}>
-					<DeskList
-						current={currentDeskItem}
-						status={!wide}
-						onOpen={(item) => open({ kind: 'desk', item })}
-						onOpenAgent={(id) => open(agentScreen(id))}
-					/>
+					<DeskList current={currentAction} onOpen={(action) => open({ kind: 'desk', action })} />
 				</div>
 			</main>
 			{#if wide}
@@ -370,14 +329,10 @@
 		</aside>
 		<section class="pane">
 			<!-- With nothing opened from the list, a wide pane shows the tab's
-			     own page: the composer, the desk's queue. -->
+			     own page: the requirement composer, or a new session. -->
 			{#if wide && stack.length === 0}
 				{#if tab === 'requirements'}
 					<RequirementCompose onNoted={(id) => open({ kind: 'requirement', id })} />
-				{:else if tab === 'dispatch'}
-					<DispatchComposer onSent={(d) => open({ kind: 'dispatch', id: d.id })} />
-				{:else if tab === 'desk'}
-					<DeskHome onOpenSession={(s) => push(sessionScreen(s))} onOpenAgent={(id) => push(agentScreen(id))} />
 				{:else}
 					<div class="pane-empty">
 						<h1>{t('shell.remote.pickSomething')}</h1>
@@ -389,11 +344,10 @@
 			{#each stacks[name] as screen, i (screen.key)}
 				<div class="layer" hidden={name !== tab} style:z-index={20 + i} out:layerOut>
 					{#if screen.kind === 'session'}
-						{@const root = screen.cwd && !screen.chat && !screen.agent ? screen.cwd : null}
+						{@const root = screen.cwd && !screen.chat ? screen.cwd : null}
 						{#if screens.RemoteSession}
 							<screens.RemoteSession
 								session={screen.session}
-								agent={screen.agent}
 								cwd={screen.cwd}
 								chat={screen.chat}
 								engine={screen.engine}
@@ -423,21 +377,6 @@
 						/>
 					{:else if screen.kind === 'add'}
 						<AddProjectScreen onBack={pop} onAdded={pop} />
-					{:else if screen.kind === 'dispatch'}
-						{@const id = screen.id}
-						<DispatchScreen
-							{id}
-							onBack={pop}
-							onOpenSession={(session, title) => push(sessionScreen(session, title))}
-							onOpenProcess={() => push({ kind: 'session', session: id, title: t('shell.dispatch.title') })}
-						/>
-					{:else if screen.kind === 'compose'}
-						<DispatchComposer
-							onBack={pop}
-							onSent={(d) => {
-								replace({ kind: 'dispatch', id: d.id });
-							}}
-						/>
 					{:else if screen.kind === 'requirement'}
 						<RequirementScreen id={screen.id} onBack={pop} onOpenSession={(s, title) => push(sessionScreen(s, title))} />
 					{:else if screen.kind === 'capture'}
@@ -448,12 +387,7 @@
 							}}
 						/>
 					{:else if screen.kind === 'desk'}
-						<DeskItemScreen
-							key={screen.item}
-							onBack={pop}
-							onOpenSession={(s) => push(sessionScreen(s))}
-							onOpenAgent={(id) => push(agentScreen(id))}
-						/>
+						<DeskItemScreen id={screen.action} onBack={pop} onOpenSession={(s) => push(sessionScreen(s))} />
 					{:else if screen.kind === 'files'}
 						{#if screens.FilesScreen}
 							<screens.FilesScreen root={screen.root} title={screen.title} file={screen.file} line={screen.line} onBack={pop} />

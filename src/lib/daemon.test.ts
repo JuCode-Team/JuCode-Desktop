@@ -215,3 +215,15 @@ describe('session billing refresh', () => {
 		} finally { vi.useRealTimers(); }
 	});
 });
+
+describe('daemon-wide frames', () => {
+	it("give a scheduled run's event to the daemon's listener, not to the run's tab", async () => {
+		const env = setup();
+		const events: Record<string, unknown>[] = [];
+		env.client.onEvent = (frame) => events.push(frame);
+		const socket = await openCreated(env, 'desk-1', 's-run');
+		socket.push({ type: 'schedule_event', schedule: 'sch-1', name: '巡检', kind: 'failed', detail: 'x', session: 's-run' });
+		expect(events.map((e) => e.type)).toContain('schedule_event');
+		expect(env.frames.some(([, f]) => f.type === 'schedule_event')).toBe(false);
+	});
+});

@@ -38,7 +38,7 @@ describe('SessionStore × backends', () => {
 		expect(hostSession).not.toHaveBeenCalled();
 		begin(id);
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined, undefined, false, undefined);
+		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined, false, undefined);
 		expect(adapterFor(id)?.id).toBe('jucode');
 		expect(p.lastBackend).toBe('jucode');
 		const cl = store.addSession(p, undefined, 'claude');
@@ -53,7 +53,7 @@ describe('SessionStore × backends', () => {
 		expect(p.lastBackend).toBeUndefined(); // a draft belongs to no backend yet
 		begin(id);
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined, undefined, false, {
+		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined, false, {
 			engine: 'claude',
 			options: { approval_mode: 'read-only' }
 		});
@@ -65,7 +65,7 @@ describe('SessionStore × backends', () => {
 		expect(p.sessions[1].backendId).toBe('claude');
 		begin(id2);
 		await flush();
-		expect(hostSession).toHaveBeenLastCalledWith(id2, p.path, undefined, undefined, false, {
+		expect(hostSession).toHaveBeenLastCalledWith(id2, p.path, undefined, false, {
 			engine: 'claude',
 			options: { approval_mode: 'read-only' }
 		});
@@ -123,7 +123,7 @@ describe('SessionStore × backends', () => {
 		expect(hostSession).not.toHaveBeenCalled();
 		store.wake(sessions[1].id);
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(sessions[1].id, '/tmp/p1', 's-b', undefined, false, {
+		expect(hostSession).toHaveBeenCalledWith(sessions[1].id, '/tmp/p1', 's-b', false, {
 			engine: 'claude',
 			options: { approval_mode: 'read-only' }
 		});
@@ -142,7 +142,7 @@ describe('SessionStore × backends', () => {
 		vi.clearAllMocks();
 		store.restartSession(id, true);
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(id, p.path, 'thread-1', undefined, false, {
+		expect(hostSession).toHaveBeenCalledWith(id, p.path, 'thread-1', false, {
 			engine: 'codex',
 			options: { approval_mode: 'read-only' }
 		});

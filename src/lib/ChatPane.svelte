@@ -31,8 +31,6 @@
 </script>
 
 <script lang="ts">
-	import AgentAvatar from '$lib/AgentAvatar.svelte';
-	import { agentDirectory } from '$lib/agents.svelte';
 	import { onDestroy, onMount, tick, untrack } from 'svelte';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
@@ -111,7 +109,6 @@
 		onRegister,
 		onUnregister,
 		onOpenSettings,
-		onOpenAgent,
 		onOpenRequirement
 	}: {
 		session: Session;
@@ -128,15 +125,11 @@
 		/** Passes the api back so a remount (tile drag) can't drop the fresh one. */
 		onUnregister?: (id: string, api: ChatPaneApi) => void;
 		onOpenSettings?: (section: SectionKey) => void;
-		/** Show an agent on the workbench. */
-		onOpenAgent?: (agent: string) => void;
 		/** Show a requirement on the workbench. */
 		onOpenRequirement?: (id: string) => void;
 	} = $props();
 
 	const chat = $derived(session.chat);
-	/** The long-lived agent this session belongs to. */
-	const owner = $derived(chat.agent ? agentDirectory.agents.find((a) => a.id === chat.agent) : undefined);
 	const project = $derived(store.projects.find((p) => p.sessions.some((s) => s.id === session.id)));
 	// The requirement this session works on (or, a draft, will once it starts).
 	const reqs = useRequirements();
@@ -1144,14 +1137,6 @@
 
 <div class="chatpane">
 	<div class="chatcol" style:--chat-w="{chatW}px" style:--chat-pad="{chatPad}px">
-		{#if owner}
-			<div class="owner">
-				<AgentAvatar agent={owner} size={16} />
-				<span class="owner-name">{t('chat.agentSession', { name: owner.name })}</span>
-				{#if owner.summary}<span class="owner-role">{owner.summary}</span>{/if}
-				{#if onOpenAgent}<button class="owner-link" onclick={() => onOpenAgent(owner.id)}>{t('chat.agentOnDesk')}</button>{/if}
-			</div>
-		{/if}
 		{#if linked}
 			<div class="owner">
 				<RequirementTag id={linked.id} />

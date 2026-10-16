@@ -1,87 +1,143 @@
 <script lang="ts">
-	// The workbench's 定时任务 page: every agent's scheduled tasks, grouped by
-	// agent, with the reminders each agent set itself.
-	import AgentAvatar from '$lib/AgentAvatar.svelte';
-	import AgentSchedules from '$lib/AgentSchedules.svelte';
+	// The workbench's 定时任务 page: every scheduled task with where and how
+	// it runs, when it runs next, how its latest run went, and the controls
+	// to switch, run, edit and delete it.
+	import PlusIcon from '@lucide/svelte/icons/plus';
+	import PlayIcon from '@lucide/svelte/icons/play';
+	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import TrashIcon from '@lucide/svelte/icons/trash';
+	import Button from '$lib/ui/Button.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
+	import Switch from '$lib/ui/Switch.svelte';
 	import { confirm } from '$lib/ui/confirm.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
-	import { agentDirectory, type AgentView, type TimerView } from '$lib/agents.svelte';
+	import ScheduleDialog from '$lib/ScheduleDialog.svelte';
+	import ScheduleUsage from '$lib/ScheduleUsage.svelte';
+	import { daemonState } from '$lib/daemonState.svelte';
+	import { summary, type Schedule } from '$lib/schedules';
+	import { BACKEND_LABELS } from '$lib/backends/types';
 	import { t } from '$lib/i18n';
 	import { when } from '$lib/time';
 
 	let {
-		agents,
-		onOpenSession,
-		onOpenAgent
+		projects,
+		onOpenSession
 	}: {
-		/** The agents shown (the workbench's workspace scope). */
-		agents: AgentView[];
+		/** Offered as the folder a task runs in. */
+		projects: { id: string; path: string; name: string }[];
 		onOpenSession: (session: string) => void;
-		onOpenAgent: (agent: string) => void;
 	} = $props();
 
-	let timers = $state<Record<string, TimerView[]>>({});
-	let cancelling = $state<Record<string, boolean>>({});
+	const schedules = $derived([...daemonState.schedules].sort((a, b) => a.created_at - b.created_at));
+	/** The task in the dialog: null for a new one; undefined while closed. */
+	let editing = $state<Schedule | null | undefined>(undefined);
+	let showUsage = $state<Record<string, boolean>>({});
 
-	async function cancelTimer(timer: TimerView) {
-		if (cancelling[timer.timer]) return;
-		cancelling[timer.timer] = true;
+	/** Where it runs: the project's name, else the folder's. */
+	function place(s: Schedule): string {
+		if (!s.cwd) return t('shell.schedule.noCwd');
+		return projects.find((p) => p.path === s.cwd)?.name ?? s.cwd.split(/[\\/]/).pop() ?? s.cwd;
+	}
+
+	async function act(work: () => Promise<unknown>) {
 		try {
-			if (!await confirm({
-				title: t('shell.schedule.cancelTimerTitle'),
-				message: t('shell.schedule.cancelTimerMessage'),
-				confirmLabel: t('shell.schedule.cancelTimer'),
-				danger: true
-			})) return;
-			await agentDirectory.cancelTimer(timer.timer);
-			timers[timer.agent] = timers[timer.agent].filter((t) => t.timer !== timer.timer);
+			await work();
 		} catch (e) {
 			toast.error(e instanceof Error ? e.message : String(e));
-		} finally {
-			cancelling[timer.timer] = false;
 		}
 	}
-	$effect(() => {
-		for (const a of agents) {
-			if (a.id in timers) continue;
-			timers[a.id] = [];
-			agentDirectory.timers(a.id).then((list) => (timers[a.id] = list), () => {});
-		}
-	});
 
+	// Held briefly after a click, so a double click starts one run.
+	let starting = $state<Record<string, boolean>>({});
+	function run(s: Schedule) {
+		starting[s.id] = true;
+		setTimeout(() => (starting[s.id] = false), 1500);
+		void act(async () => {
+			await daemonState.runSchedule(s.id);
+			toast.success(t('shell.schedule.started', { name: s.name }));
+		});
+	}
+
+	async function remove(s: Schedule) {
+		const ok = await confirm({
+			title: t('shell.schedule.deleteTitle', { name: s.name }),
+			message: t('shell.schedule.deleteMessage'),
+			confirmLabel: t('shell.schedule.delete'),
+			danger: true
+		});
+		if (ok) void act(() => daemonState.deleteSchedule(s.id));
+	}
 </script>
 
-<h1>{t('shell.schedule.title')}</h1>
+<div class="page-head">
+	<h1>{t('shell.schedule.title')}</h1>
+	<Button size="sm" onclick={() => (editing = null)}><PlusIcon size={14} /> {t('shell.schedule.add')}</Button>
+</div>
 <p class="lede">{t('shell.schedule.boardHint')}</p>
 
-{#each agents as a (a.id)}
-	<div class="group" class:off={!a.enabled}>
-		<AgentSchedules agentId={a.id} {onOpenSession}>
-			{#snippet heading()}
-				<button class="agent" onclick={() => onOpenAgent(a.id)}>
-					<AgentAvatar agent={a} size={20} />
-					<span>{a.name}</span>
-				</button>
-			{/snippet}
-		</AgentSchedules>
-		{#if timers[a.id]?.length}
-			<div class="timers">
-				<span class="timers-head">{t('shell.agentPage.timers')}</span>
-				{#each timers[a.id] as timer (timer.timer)}
-					<div class="timer">
-						<span class="when">{when(timer.fire_at)}</span>
-						<span class="timer-body">{timer.body}</span>
-						<IconButton size="sm" title={t('shell.schedule.cancelTimer')} disabled={cancelling[timer.timer]} onclick={() => cancelTimer(timer)}><TrashIcon size={14} /></IconButton>
-					</div>
-				{/each}
+{#if schedules.length === 0}
+	<p class="empty">{t('shell.schedule.empty')}</p>
+{/if}
+{#each schedules as s (s.id)}
+	{@const last = s.last_run}
+	<div class="task" class:off={!s.enabled}>
+		<Switch
+			checked={s.enabled}
+			label={t('shell.schedule.enabled')}
+			onChange={(enabled) => act(() => daemonState.setScheduleEnabled(s.id, enabled))}
+		/>
+		<div class="text">
+			<div class="name">
+				{s.name}
+				{#if last?.status === 'running'}<span class="working">{t('shell.schedule.statusRunning')}</span>
+				{:else if last?.status === 'waiting'}<span class="needs">{t('shell.schedule.statusWaiting')}</span>
+				{:else if last?.status === 'failed'}<span class="failed">{t('shell.schedule.statusFailed')}</span>{/if}
 			</div>
-		{/if}
+			<div class="meta">
+				<span>{summary(s)}</span>
+				<span>
+					·
+					{#if !s.enabled}{t('shell.schedule.off')}
+					{:else if s.next_run_at}{t('shell.schedule.next', { time: when(s.next_run_at) })}
+					{:else}{t('shell.schedule.done')}{/if}
+				</span>
+				<span>· {place(s)} · {BACKEND_LABELS[s.engine]}</span>
+				{#if last}
+					<span>
+						·
+						{#if last.session}
+							<button class="link" onclick={() => onOpenSession(last.session!)}>
+								{t('shell.schedule.last', { time: when(last.at) })}
+							</button>
+						{:else}{t('shell.schedule.last', { time: when(last.at) })}{/if}
+					</span>
+				{/if}
+			</div>
+			{#if last?.status === 'failed' && last.error}<div class="error">{last.error}</div>{/if}
+		</div>
+		<IconButton size="sm" title={t('shell.schedule.runNow')} disabled={starting[s.id] || !s.cwd} onclick={() => run(s)}><PlayIcon size={14} /></IconButton>
+		<IconButton size="sm" title={t('shell.schedule.edit')} onclick={() => (editing = s)}><PencilIcon size={14} /></IconButton>
+		<IconButton size="sm" title={t('shell.schedule.delete')} onclick={() => remove(s)}><TrashIcon size={14} /></IconButton>
 	</div>
+	{#if last}
+		<details class="usage" ontoggle={(e) => (showUsage[s.id] = e.currentTarget.open)}>
+			<summary>{t('shell.schedule.usage')}</summary>
+			{#if showUsage[s.id]}<ScheduleUsage schedule={s.id} {onOpenSession} />{/if}
+		</details>
+	{/if}
 {/each}
 
+{#if editing !== undefined}
+	<ScheduleDialog schedule={editing ?? undefined} {projects} onClose={() => (editing = undefined)} />
+{/if}
+
 <style>
+	.page-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+	}
 	h1 {
 		margin: 0;
 		font-size: var(--fs-xl);
@@ -95,56 +151,80 @@
 		font-size: var(--fs-sm);
 		color: var(--dim);
 	}
-	.group {
-		padding: 4px 16px 12px;
-		margin-bottom: 12px;
-		border: 1px solid var(--hairline);
-		border-radius: var(--r);
-		background: var(--surface);
-	}
-	.agent {
-		display: inline-flex;
-		align-items: center;
-		gap: 8px;
-		padding: 2px 0;
-		border: none;
-		background: none;
-		color: var(--text);
-		font: inherit;
+	.empty {
+		margin: 0;
 		font-size: var(--fs-sm);
-		font-weight: 600;
-		cursor: pointer;
+		color: var(--dim2);
 	}
-	.agent:hover span {
-		text-decoration: underline;
+	.task {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 7px 0;
 	}
-	.group.off .agent {
-		opacity: 0.55;
+	.text {
+		flex: 1;
+		min-width: 0;
 	}
-	.timers {
-		margin-top: 8px;
-		padding-top: 8px;
-		border-top: 1px solid var(--hairline);
+	.name {
+		font-size: var(--fs-sm);
+		color: var(--text);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
-	.timers-head {
+	.task.off .name {
+		color: var(--dim2);
+	}
+	.working,
+	.needs,
+	.failed {
+		margin-left: 8px;
+		font-size: var(--fs-xs);
+	}
+	.working {
+		color: var(--accent-bright);
+	}
+	.needs {
+		color: var(--warn);
+	}
+	.failed {
+		color: var(--err);
+	}
+	.meta {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+		margin-top: 2px;
 		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
-	.timer {
-		display: flex;
-		gap: 10px;
-		padding: 4px 0;
-		font-size: var(--fs-sm);
-	}
-	.when {
-		flex: none;
+	.error {
+		margin-top: 2px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 		font-size: var(--fs-xs);
-		font-family: var(--font-mono);
-		color: var(--dim2);
+		color: var(--dim);
 	}
-	.timer-body {
-		flex: 1;
-		min-width: 0;
-		color: var(--text);
+	.link {
+		padding: 0;
+		border: none;
+		background: none;
+		color: var(--accent-bright);
+		font: inherit;
+		cursor: pointer;
+	}
+	.link:hover {
+		text-decoration: underline;
+	}
+	.usage {
+		margin: 0 0 10px 0;
+		font-size: var(--fs-xs);
+		color: var(--dim);
+	}
+	.usage summary {
+		cursor: pointer;
+		padding: 4px 0;
 	}
 </style>

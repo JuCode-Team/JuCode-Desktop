@@ -2,19 +2,16 @@
 	// One project's page, a canvas tab: its
 	// directories (the main one and extra ones the user adds), its
 	// requirements (the workbench's list, this project's only; one opens in
-	// place) and the agents that belong to it.
+	// place).
 	import XIcon from '@lucide/svelte/icons/x';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import FolderIcon from '@lucide/svelte/icons/folder';
-	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import { open } from '@tauri-apps/plugin-dialog';
 	import Button from '$lib/ui/Button.svelte';
-	import AgentAvatar from '$lib/AgentAvatar.svelte';
 	import RequirementBoard from '$lib/requirements/RequirementBoard.svelte';
 	import RequirementDetail from '$lib/requirements/RequirementDetail.svelte';
 	import type { StartHow } from '$lib/requirements/StartButton.svelte';
 	import { useRequirements, type Requirement } from '$lib/requirements.svelte';
-	import { agentDirectory } from '$lib/agents.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
 	import type { Project } from '$lib/types';
 	import { t } from '$lib/i18n';
@@ -25,9 +22,7 @@
 		currentStep,
 		onDirs,
 		onStartRequirement,
-		onOpenSession,
-		onOpenAgent,
-		onNewAgent
+		onOpenSession
 	}: {
 		project: Project;
 		/** The open workspace's projects. */
@@ -37,8 +32,6 @@
 		onDirs: (dirs: string[]) => void;
 		onStartRequirement: (r: Requirement, how: StartHow) => void;
 		onOpenSession: (session: string) => void;
-		onOpenAgent: (agent: string) => void;
-		onNewAgent: () => void;
 	} = $props();
 
 	const reqs = useRequirements();
@@ -46,7 +39,6 @@
 	const norm = (p: string) => p.replace(/[\\/]+$/, '');
 	let requirementId = $state<string | null>(null);
 	const shownReq = $derived(requirementId ? reqs.get(requirementId) : undefined);
-	const agents = $derived(agentDirectory.agents.filter((a) => a.project === project.id));
 
 	async function addDir() {
 		const path = await open({ directory: true, title: t('shell.projectPage.addDir') });
@@ -110,28 +102,6 @@
 				/>
 			</section>
 
-			<section>
-				<div class="h3-row">
-					<h3>{t('shell.projectPage.agents')}</h3>
-					<Button size="sm" variant="ghost" onclick={onNewAgent}><PlusIcon size={14} />{t('shell.projectPage.newAgent')}</Button>
-				</div>
-				{#if agents.length}
-					<div class="agents">
-						{#each agents as a (a.id)}
-							<button class="agent" class:off={!a.enabled} onclick={() => onOpenAgent(a.id)}>
-								<AgentAvatar agent={a} size={24} />
-								<span class="two">
-									<span class="name">{a.name}</span>
-									{#if a.summary}<span class="sub">{a.summary}</span>{/if}
-								</span>
-								{#if a.busy && a.enabled}<LoaderCircleIcon size={14} class="spin" />{/if}
-							</button>
-						{/each}
-					</div>
-				{:else}
-					<p class="hint">{t('shell.projectPage.noAgents')}</p>
-				{/if}
-			</section>
 		</div>
 	{/if}
 </div>
@@ -183,15 +153,6 @@
 		font-weight: 600;
 		color: var(--text);
 	}
-	.h3-row {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		margin-bottom: 6px;
-	}
-	.h3-row h3 {
-		margin: 0;
-	}
 	.hint {
 		margin: 0 0 10px;
 		font-size: var(--fs-xs);
@@ -233,46 +194,5 @@
 		padding: 0 4px;
 		font-size: var(--fs-2xs);
 		color: var(--dim2);
-	}
-	.agents {
-		display: flex;
-		flex-direction: column;
-	}
-	.agent {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		padding: 8px 10px;
-		border: none;
-		border-radius: var(--r);
-		background: none;
-		color: var(--text);
-		font: inherit;
-		text-align: left;
-		cursor: pointer;
-	}
-	.agent:hover {
-		background: var(--surface);
-	}
-	.agent.off {
-		opacity: 0.6;
-	}
-	.two {
-		flex: 1;
-		min-width: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 1px;
-	}
-	.name {
-		font-size: var(--fs-sm);
-		font-weight: 500;
-	}
-	.sub {
-		font-size: var(--fs-xs);
-		color: var(--dim);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
 	}
 </style>

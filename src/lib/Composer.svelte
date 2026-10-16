@@ -325,20 +325,15 @@
 		edits: { key: 'edits', label: t('chat.approvalEdits'), desc: t('chat.approvalEditsDesc'), icon: SquarePenIcon },
 		all: { key: 'all', label: t('chat.approvalAll'), desc: t('chat.approvalAllDesc'), icon: ShieldAlertIcon, tone: 'warn' }
 	};
-	// An agent's session shows the agent's four modes, read-only: they are
-	// changed on its Agent page.
 	const APPROVAL = $derived(
-		(chat.agent
-			? ['ask', 'edits', 'auto', 'all']
-			: bcaps.extendedApprovalModes
-				? ['ask', 'plan', 'auto', 'edits', 'all']
-				: bcaps.planMode
-					? ['ask', 'plan', 'edits', 'all']
-					: ['ask', 'edits', 'all']
+		(bcaps.extendedApprovalModes
+			? ['ask', 'plan', 'auto', 'edits', 'all']
+			: bcaps.planMode
+				? ['ask', 'plan', 'edits', 'all']
+				: ['ask', 'edits', 'all']
 		).map((k) => ({
 			...APPROVAL_MODES[k],
-			checked: chat.approvalMode === k,
-			disabled: !!chat.agent
+			checked: chat.approvalMode === k
 		}))
 	);
 	const approvalCurrent = $derived(APPROVAL.find((a) => a.checked) ?? APPROVAL_MODES.ask);
@@ -364,7 +359,7 @@
 			});
 		}
 		const sections = [add];
-		if (bcaps.approvalModes && bcaps.planMode && !chat.agent) {
+		if (bcaps.approvalModes && bcaps.planMode) {
 			sections.push({
 				label: t('chat.modeSection'),
 				items: [
@@ -664,7 +659,7 @@
 			e.stopPropagation();
 			return;
 		}
-		if (bcaps.approvalModes && !chat.agent && matches(e, 'approvalMode')) {
+		if (bcaps.approvalModes && matches(e, 'approvalMode')) {
 			e.preventDefault();
 			const i = APPROVAL.findIndex((a) => a.checked);
 			onApproval(APPROVAL[(i + 1) % APPROVAL.length].key as ApprovalMode);
@@ -862,7 +857,7 @@
 					</button>
 					{#if showApproval}
 						<PopMenu
-							title={chat.agent ? t('chat.approvalAgent') : t('chat.approvalQuestion')}
+							title={t('chat.approvalQuestion')}
 							items={APPROVAL}
 							placement="up-left"
 							onSelect={setApproval}

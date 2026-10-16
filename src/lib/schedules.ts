@@ -1,5 +1,6 @@
-// An agent's scheduled tasks, kept by the jucode daemon: the wire shape,
-// the human summary of when one repeats, and the checks the daemon applies.
+// Scheduled tasks, kept by the jucode daemon: a prompt sent to a new session
+// in a directory at set times. The wire shape, the human summary of when one
+// repeats, and the checks the daemon applies.
 
 import { getLocale, t } from './i18n';
 import type { UsageTokens } from './protocol';
@@ -28,12 +29,30 @@ export function usageCost(usage: ScheduleUsageTotals): string {
 }
 
 export type Repeat = 'once' | 'hourly' | 'daily' | 'weekdays' | 'weekly';
+/** The engines a scheduled task can run on. */
+export type ScheduleEngine = 'jucode' | 'claude' | 'codex';
+/** Permission modes, as the daemon names them for every engine. */
+export type ScheduleMode = 'ask' | 'edits' | 'auto' | 'all';
+
+/** The latest run: `waiting` for an approval, `failed` with `error`. */
+export interface ScheduleRun {
+	/** ms */
+	at: number;
+	session: string | null;
+	status: 'running' | 'waiting' | 'done' | 'failed';
+	error: string | null;
+}
 
 export interface Schedule {
 	id: string;
-	agent: string;
 	name: string;
 	prompt: string;
+	/** Where its runs start; null until picked (one moved from an agent). */
+	cwd: string | null;
+	engine: ScheduleEngine;
+	mode: ScheduleMode;
+	/** Engine start options (`jucode_gateway`, `bin`, `env`). */
+	options: Record<string, unknown>;
 	enabled: boolean;
 	repeat: Repeat;
 	/** Local "HH:MM"; hourly uses the minute only. */
@@ -42,20 +61,18 @@ export interface Schedule {
 	days?: number[] | null;
 	/** Once only: local "YYYY-MM-DD". */
 	date?: string | null;
-	/** Every run in a new session; false continues the previous run's. */
-	new_session: boolean;
-	/** Proposed by the agent itself; off until the user turns it on. */
-	by_agent?: boolean;
-	/** Unix seconds. */
+	/** ms */
 	created_at: number;
-	last_run_at: number | null;
-	last_session: string | null;
 	next_run_at: number | null;
+	last_run: ScheduleRun | null;
+	/** Times skipped in a row while the last run was still going. */
+	skipped: number;
 }
 
 /** What `schedule_save` takes: no id creates one. */
-export type ScheduleDraft = Pick<Schedule, 'agent' | 'name' | 'prompt' | 'enabled' | 'repeat' | 'time' | 'new_session'> & {
+export type ScheduleDraft = Pick<Schedule, 'name' | 'prompt' | 'engine' | 'mode' | 'options' | 'enabled' | 'repeat' | 'time'> & {
 	id?: string;
+	cwd: string;
 	days: number[];
 	date: string;
 };
@@ -80,15 +97,17 @@ export function toWire(d: ScheduleDraft): Record<string, unknown> {
 export function toDraft(s: Schedule): ScheduleDraft {
 	return {
 		id: s.id,
-		agent: s.agent,
 		name: s.name,
 		prompt: s.prompt,
+		cwd: s.cwd ?? '',
+		engine: s.engine,
+		mode: s.mode,
+		options: s.options ?? {},
 		enabled: s.enabled,
 		repeat: s.repeat,
 		time: s.time,
 		days: s.days ?? [],
-		date: s.date ?? '',
-		new_session: s.new_session
+		date: s.date ?? ''
 	};
 }
 
@@ -97,6 +116,7 @@ export function toDraft(s: Schedule): ScheduleDraft {
 export function validate(d: ScheduleDraft, now = new Date()): string | null {
 	if (!d.name.trim()) return t('shell.schedule.errName');
 	if (!d.prompt.trim()) return t('shell.schedule.errPrompt');
+	if (d.enabled && !d.cwd) return t('shell.schedule.errCwd');
 	if (!TIME.test(d.time)) return t('shell.schedule.errTime');
 	if (d.repeat === 'weekly' && (d.days.length === 0 || d.days.some((x) => !Number.isInteger(x) || x < 0 || x > 6)))
 		return t('shell.schedule.errDays');

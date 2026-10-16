@@ -1,6 +1,7 @@
 <script lang="ts">
-	// Create or edit one of an agent's scheduled tasks. 立即运行 saves first,
-	// then runs the saved task, so a new task can be tried right away.
+	// Create or edit a scheduled task: what to send, where and on which
+	// engine it runs, in which permission mode, and when. 立即运行 saves
+	// first, then runs the saved task, so a new task can be tried right away.
 	import { onMount, tick, untrack } from 'svelte';
 	import ClockIcon from '@lucide/svelte/icons/clock';
 	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
@@ -11,18 +12,21 @@
 	import Switch from '$lib/ui/Switch.svelte';
 	import Chip from '$lib/ui/Chip.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
-	import { agentDirectory } from '$lib/agents.svelte';
-	import { toDraft, validate, WEEK, type Repeat, type Schedule, type ScheduleDraft } from '$lib/schedules';
+	import { daemonState } from '$lib/daemonState.svelte';
+	import { toDraft, validate, WEEK, type Repeat, type Schedule, type ScheduleDraft, type ScheduleEngine, type ScheduleMode } from '$lib/schedules';
+	import { BACKEND_LABELS } from '$lib/backends/types';
+	import { buildBackendOpts } from '$lib/backends/settings';
 	import { t } from '$lib/i18n';
 
 	let {
-		agent,
 		schedule,
+		projects,
 		onClose
 	}: {
-		agent: string;
 		/** The task to edit; omitted for a new one. */
 		schedule?: Schedule;
+		/** The folders offered to run in. */
+		projects: { id: string; path: string; name: string }[];
 		onClose: () => void;
 	} = $props();
 
@@ -32,17 +36,29 @@
 	const initial: ScheduleDraft = untrack(() =>
 		schedule
 			? toDraft(schedule)
-			: { agent, name: '', prompt: '', enabled: true, repeat: 'daily', time: '09:00', days: [1], date: '', new_session: true }
+			: {
+					name: '',
+					prompt: '',
+					cwd: projects[0]?.path ?? '',
+					engine: 'jucode',
+					mode: 'auto',
+					options: {},
+					enabled: true,
+					repeat: 'daily',
+					time: '09:00',
+					days: [1],
+					date: ''
+				}
 	);
-	// Every run is a new session, told what the last run concluded.
 	let draft = $state<ScheduleDraft>({
 		...initial,
-		new_session: true,
 		date: initial.date || `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}`
 	});
 	// The frequency is kept while repeat is off, so turning it back on restores it.
 	let repeating = $state(initial.repeat !== 'once');
 	let frequency = $state<Repeat>(initial.repeat === 'once' ? 'daily' : initial.repeat);
+	/** Claude Code / Codex: through the JuCode gateway, as a session can. */
+	let gateway = $state(initial.options.jucode_gateway === true);
 	let busy = $state(false);
 	let error = $state('');
 	let nameEl = $state<HTMLInputElement | null>(null);
@@ -53,6 +69,20 @@
 
 	const FREQUENCIES = $derived(
 		(['hourly', 'daily', 'weekdays', 'weekly'] as const).map((value) => ({ value, label: t(`shell.schedule.${value}`) }))
+	);
+	/** The open workspace's projects, and the task's own folder if it is not one. */
+	const FOLDERS = $derived([
+		...projects.map((p) => ({ value: p.path, label: p.name })),
+		...(initial.cwd && !projects.some((p) => p.path === initial.cwd) ? [{ value: initial.cwd, label: initial.cwd }] : [])
+	]);
+	const ENGINES = (['jucode', 'claude', 'codex'] as const).map((value) => ({ value, label: BACKEND_LABELS[value] }));
+	const MODES = $derived(
+		([
+			['ask', 'chat.approvalAsk'],
+			['edits', 'chat.approvalEdits'],
+			['auto', 'chat.approvalAuto'],
+			['all', 'chat.approvalAll']
+		] as const).map(([value, key]) => ({ value, label: t(key) }))
 	);
 	const dayNames = $derived(t('shell.schedule.dayNames').split(','));
 	const minute = $derived(Number(draft.time.split(':')[1] ?? 0));
@@ -66,15 +96,29 @@
 		draft.days = draft.days.includes(day) ? draft.days.filter((d) => d !== day) : [...draft.days, day];
 	}
 
+	/** How its runs start the engine: this desktop's program settings for
+	 *  it, and the gateway choice. */
+	function options(engine: ScheduleEngine): Record<string, unknown> {
+		if (engine === 'jucode') return {};
+		const base = buildBackendOpts(engine);
+		return {
+			jucode_gateway: gateway,
+			...(base?.bin_override ? { bin: base.bin_override } : {}),
+			...(base?.env ? { env: base.env } : {})
+		};
+	}
+
 	async function save(run: boolean) {
-		const next = { ...draft, repeat: repeating ? frequency : ('once' as const) };
+		const next = { ...draft, repeat: repeating ? frequency : ('once' as const), options: options(draft.engine) };
 		error = validate(next) ?? '';
 		if (error) return;
 		busy = true;
 		try {
-			const saved = await agentDirectory.saveSchedule(next);
+			const saved = await daemonState.saveSchedule(next);
+			// Saved: trying again changes this task rather than adding one.
+			draft.id = saved.id;
 			if (run) {
-				await agentDirectory.runSchedule(saved.id);
+				await daemonState.runSchedule(saved.id);
 				toast.success(t('shell.schedule.started', { name: saved.name }));
 			}
 			onClose();
@@ -100,6 +144,27 @@
 		<span>{t('shell.schedule.prompt')}</span>
 		<textarea bind:value={draft.prompt} rows="4" placeholder={t('shell.schedule.promptPlaceholder')}></textarea>
 	</label>
+	<div class="field">
+		<span>{t('shell.schedule.cwd')}</span>
+		<Select value={draft.cwd} options={FOLDERS} placeholder={t('shell.schedule.noCwd')} onChange={(v) => (draft.cwd = v)} />
+	</div>
+	<div class="pair">
+		<div class="field">
+			<span>{t('shell.schedule.engine')}</span>
+			<Select value={draft.engine} options={ENGINES} onChange={(v) => (draft.engine = v as ScheduleEngine)} />
+		</div>
+		<div class="field">
+			<span>{t('shell.schedule.mode')}</span>
+			<Select value={draft.mode} options={MODES} onChange={(v) => (draft.mode = v as ScheduleMode)} />
+		</div>
+	</div>
+	{#if draft.engine !== 'jucode'}
+		<div class="row">
+			<span>{t('shell.schedule.gateway')}</span>
+			<Switch bind:checked={gateway} label={t('shell.schedule.gateway')} />
+		</div>
+		{#if draft.mode === 'ask'}<Notice tone="warn">{t('shell.schedule.askWaits')}</Notice>{/if}
+	{/if}
 
 	<div class="row">
 		<span>{t('shell.schedule.repeat')}</span>

@@ -1,32 +1,28 @@
 // One computer the remote page is connected to: its own daemon connection
 // (through the relay, or over the LAN with a device token), with its own
-// reconnect backoff, agent directory, projects and open-session routes. The
+// reconnect backoff, daemon state, projects and open-session routes. The
 // page keeps one per paired computer, all live at once, and gives each
 // computer's view its own through context.
 
 import { getContext, setContext } from 'svelte';
 import { DaemonClient, type DaemonEndpoint, type SocketLike } from '$lib/daemon';
-import { AgentDirectory } from '$lib/agents.svelte';
-import { Dispatches } from './dispatch.svelte';
+import { DaemonState } from '$lib/daemonState.svelte';
 import { resubscribe } from './push';
-import { provideAgents } from '$lib/agentScope';
+import { provideDaemonState } from '$lib/daemonScope';
 import { deviceKey, hostStaticKey, type RelayHost } from '$lib/relay/pairing';
 import { RelaySocket, type RelayError, type RelayErrorKind } from '$lib/relay/socket';
 import { deviceName, remoteEndpoint } from '$lib/remote';
 import { RemoteProjects } from './store.svelte';
 import { Requirements, provideRequirements, type Requirement } from '$lib/requirements.svelte';
 import { loadLists, saveLists } from './cache';
-import type { AgentView, DaemonSessionView } from '$lib/agents.svelte';
+import type { DaemonSessionView } from '$lib/daemonState.svelte';
 import type { WorkspaceView } from './store.svelte';
-import type { DispatchView } from './dispatch.svelte';
 
 /** A computer's lists as kept on the phone (see cache.ts). */
 type Lists = {
 	sessions: DaemonSessionView[];
-	agents: AgentView[];
 	workspaces: WorkspaceView[];
 	requirements: Requirement[];
-	dispatches: DispatchView[];
 };
 
 /** The id of the LAN connection (relay computers use their host id). */
@@ -42,7 +38,7 @@ export type ConnectionTone = 'ok' | 'wait' | 'off';
  *  short label (`short`), both i18n keys. */
 export function connectionState(
 	kind: 'relay' | 'lan',
-	status: AgentDirectory['status'],
+	status: DaemonState['status'],
 	error: RelayErrorKind | undefined
 ): { tone: ConnectionTone; text: string; short: string } {
 	if (status === 'on') return { tone: 'ok', text: 'shell.remote.relayConnected', short: 'shell.remote.relayConnected' };
@@ -62,9 +58,8 @@ export class HostConnection {
 	readonly id: string;
 	readonly kind: 'relay' | 'lan';
 	readonly daemon: DaemonClient;
-	readonly agents: AgentDirectory;
+	readonly daemonState: DaemonState;
 	readonly projects: RemoteProjects;
-	readonly dispatches: Dispatches;
 	readonly requirements: Requirements;
 	/** Why the last relay connection failed (relay only). */
 	relayError = $state<RelayError | null>(null);
@@ -89,19 +84,16 @@ export class HostConnection {
 			this.#socket = openSocket(url);
 			return this.#socket;
 		});
-		this.agents = new AgentDirectory(this.daemon);
-		this.projects = new RemoteProjects(this.daemon, this.agents);
-		this.dispatches = new Dispatches(this.daemon);
+		this.daemonState = new DaemonState(this.daemon);
+		this.projects = new RemoteProjects(this.daemon, this.daemonState);
 		this.requirements = new Requirements(this.daemon);
 		this.everConnected = kind === 'lan';
 		// What this phone saw last shows until the computer is reached.
 		const kept = loadLists<Lists>(id);
 		if (kept) {
-			this.agents.sessions = kept.sessions ?? [];
-			this.agents.agents = kept.agents ?? [];
+			this.daemonState.sessions = kept.sessions ?? [];
 			this.projects.workspaces = kept.workspaces ?? [];
 			this.requirements.list = kept.requirements ?? [];
-			this.dispatches.list = kept.dispatches ?? [];
 			this.everConnected = true;
 		}
 	}
@@ -131,7 +123,7 @@ export class HostConnection {
 					onRelayError: (error) => {
 						if (conn.#stopped) return;
 						conn.relayError = error;
-						if (error.fatal) conn.agents.stop();
+						if (error.fatal) conn.daemonState.stop();
 					}
 				})
 		);
@@ -151,9 +143,8 @@ export class HostConnection {
 	/** Connects and keeps reconnecting, with backoff, until stopped. */
 	start() {
 		this.daemon.onEvent = (frame) => {
-			this.agents.handle(frame);
+			this.daemonState.handle(frame);
 			this.projects.handle(frame);
-			this.dispatches.handle(frame);
 			this.requirements.handle(frame);
 			this.#keepLists();
 		};
@@ -164,7 +155,7 @@ export class HostConnection {
 		};
 		this.daemon.onDisconnect = () => {
 			// The lists stay, as last seen, until the computer is back.
-			this.agents.disconnected();
+			this.daemonState.disconnected();
 			this.projects.reset();
 		};
 		this.daemon.onFrame = (id, raw) => this.#routes.get(id)?.onFrame(raw);
@@ -173,7 +164,7 @@ export class HostConnection {
 			const route = this.#routes.get(id);
 			(route?.onIdleClose ?? route?.onExit)?.();
 		};
-		this.agents.start();
+		this.daemonState.start();
 	}
 
 	/** The page came back to the foreground. A socket the phone suspended can
@@ -182,7 +173,7 @@ export class HostConnection {
 	 *  retries now instead of waiting out its backoff. */
 	async wake() {
 		if (this.#stopped) return;
-		if (this.agents.status !== 'on') return this.agents.retryNow();
+		if (this.daemonState.status !== 'on') return this.daemonState.retryNow();
 		const socket = this.#socket;
 		// Any reply counts, an older daemon's error to `ping` included.
 		const answered = await Promise.race([
@@ -200,11 +191,9 @@ export class HostConnection {
 		clearTimeout(this.#saveTimer);
 		this.#saveTimer = setTimeout(() => {
 			const lists: Lists = {
-				sessions: this.agents.sessions,
-				agents: this.agents.agents,
+				sessions: this.daemonState.sessions,
 				workspaces: this.projects.workspaces,
-				requirements: this.requirements.list,
-				dispatches: this.dispatches.list
+				requirements: this.requirements.list
 			};
 			saveLists(this.id, $state.snapshot(lists));
 		}, 1000);
@@ -214,14 +203,14 @@ export class HostConnection {
 	stop() {
 		this.#stopped = true;
 		clearTimeout(this.#saveTimer);
-		this.agents.stop();
+		this.daemonState.stop();
 		this.#socket?.close();
 		this.#socket = null;
 	}
 
 	/** How the connection is doing (see connectionState). */
 	get state() {
-		return connectionState(this.kind, this.agents.status, this.relayError?.kind);
+		return connectionState(this.kind, this.daemonState.status, this.relayError?.kind);
 	}
 
 	/** Routes daemon frames and exits for session `id` here (`onIdleClose`:
@@ -240,7 +229,7 @@ const KEY = Symbol('remote-host');
 /** Makes `conn` the computer the components below this one show. */
 export function provideHost(conn: HostConnection) {
 	setContext(KEY, conn);
-	provideAgents(conn.agents);
+	provideDaemonState(conn.daemonState);
 	provideRequirements(conn.requirements);
 }
 

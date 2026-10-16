@@ -64,7 +64,6 @@
 
 	let {
 		session,
-		agent,
 		cwd: cwdProp,
 		chat: chatProp = false,
 		engine: engineProp,
@@ -78,10 +77,9 @@
 		onPick,
 		active = false
 	}: {
-		/** An existing session; omit to start a new one as `agent`, in `cwd`,
-		 *  or as a chat. */
+		/** An existing session; omit to start a new one in `cwd`, or as a
+		 *  chat. */
 		session?: string;
-		agent?: string;
 		/** The session's directory; also lets the daemon reopen a session
 		 *  saved there that it never hosted. */
 		cwd?: string;
@@ -111,7 +109,7 @@
 	let isChat = $state(untrack(() => chatProp));
 	let engine = $state(untrack(() => engineProp));
 	const host = useHost();
-	const { daemon, agents: agentDirectory } = host;
+	const { daemon, daemonState } = host;
 
 	const id = `remote-${Math.random().toString(36).slice(2)}`;
 	const chat = new ChatState();
@@ -121,7 +119,7 @@
 	// Unsent text is kept on this device per conversation (a new one by where
 	// it would start), so leaving the page or closing the app keeps it.
 	const textKey = untrack(
-		() => `${host.id}:${session ?? `new:${agent ?? ''}:${isChat ? 'chat' : (cwd ?? '')}:${engine ?? ''}`}`
+		() => `${host.id}:${session ?? `new::${isChat ? 'chat' : (cwd ?? '')}:${engine ?? ''}`}`
 	);
 	let text = $state(loadComposerText(textKey));
 	$effect(() => saveComposerText(textKey, text));
@@ -241,9 +239,9 @@
 	let retries = $state(0);
 	const RETRY_DELAYS = [0, 2000, 5000];
 	const reconnecting = $derived(exited && dropped && retries < RETRY_DELAYS.length);
-	let wasOn = untrack(() => agentDirectory.status === 'on');
+	let wasOn = untrack(() => daemonState.status === 'on');
 	$effect(() => {
-		const on = agentDirectory.status === 'on';
+		const on = daemonState.status === 'on';
 		// The computer is back: start the attempts afresh.
 		if (on && !wasOn) retries = 0;
 		wasOn = on;
@@ -268,8 +266,7 @@
 				id,
 				cwd ?? '',
 				resume,
-				resume ? undefined : agent,
-				!resume && !agent && isChat,
+				!resume && isChat,
 				engine && engine !== 'jucode' ? { engine, options: {} } : undefined
 			);
 			connected = true;
@@ -303,7 +300,7 @@
 				connected = false;
 				// The connection's own disconnect is handled before its sessions
 				// exit, so a computer that still looks reachable closed the session.
-				dropped = agentDirectory.status !== 'on';
+				dropped = daemonState.status !== 'on';
 			},
 			() => {
 				asleep = true;
@@ -463,7 +460,7 @@
 	});
 
 	const sid = $derived(chat.sessionId || session || '');
-	const view = $derived(agentDirectory.sessions.find((x) => x.session === sid));
+	const view = $derived(daemonState.sessions.find((x) => x.session === sid));
 	const bcaps = $derived(caps({ backendId: engine ?? view?.engine ?? 'jucode' }));
 	/** Messages sent mid-turn to an engine that runs them as the next turn
 	 *  (it does not list them): shown until that turn starts. */
@@ -473,8 +470,7 @@
 	});
 	const waiting = $derived(chat.pendingMessages.length ? chat.pendingMessages : queued);
 
-	// The approval mode, as on the desktop: claude adds plan and auto; an
-	// agent's session follows the agent (changed on its page).
+	// The approval mode, as on the desktop: claude adds plan and auto.
 	const APPROVAL_MODES: Record<string, PopMenuItem> = {
 		ask: { key: 'ask', label: t('chat.approvalAsk'), desc: t('chat.approvalAskDesc'), icon: HandIcon },
 		plan: { key: 'plan', label: t('chat.approvalPlan'), desc: t('chat.approvalPlanDesc'), icon: ClipboardListIcon },
@@ -482,13 +478,12 @@
 		edits: { key: 'edits', label: t('chat.approvalEdits'), desc: t('chat.approvalEditsDesc'), icon: SquarePenIcon },
 		all: { key: 'all', label: t('chat.approvalAll'), desc: t('chat.approvalAllDesc'), icon: ShieldAlertIcon, tone: 'warn' }
 	};
-	const isAgent = $derived(!!(agent || chat.agent || view?.agent));
 	/** Picked before the first message: applied once the session is open. */
 	let draftMode = $state<ApprovalMode | null>(null);
 	const shownMode = $derived(draftMode ?? chat.approvalMode);
 	const APPROVAL = $derived(
-		(isAgent ? ['ask', 'edits', 'auto', 'all'] : bcaps.extendedApprovalModes ? ['ask', 'plan', 'auto', 'edits', 'all'] : bcaps.planMode ? ['ask', 'plan', 'edits', 'all'] : ['ask', 'edits', 'all']).map(
-			(k) => ({ ...APPROVAL_MODES[k], checked: shownMode === k, disabled: isAgent })
+		(bcaps.extendedApprovalModes ? ['ask', 'plan', 'auto', 'edits', 'all'] : bcaps.planMode ? ['ask', 'plan', 'edits', 'all'] : ['ask', 'edits', 'all']).map(
+			(k) => ({ ...APPROVAL_MODES[k], checked: shownMode === k })
 		)
 	);
 	const approvalCurrent = $derived(APPROVAL.find((a) => a.checked) ?? APPROVAL_MODES.ask);
@@ -725,7 +720,7 @@
 				<span class="spawn-spin"><LoaderCircleIcon size={28} class="spin" /></span>
 				<p class="welcome-tip">{t('shell.remote.openingSession')}</p>
 			</div>
-		{:else if draft && !agent && chat.messages.length === 0}
+		{:else if draft && chat.messages.length === 0}
 			<div class="welcome">
 				<p class="lead">
 					{#each t('shell.startPicker.lead').split(/(\{project\}|\{backend\})/) as part, i (i)}
@@ -873,7 +868,7 @@
 							</button>
 							{#if approvalOpen}
 								<PopMenu
-									title={isAgent ? t('chat.approvalAgent') : t('chat.approvalQuestion')}
+									title={t('chat.approvalQuestion')}
 									items={APPROVAL}
 									placement="up-left"
 									onSelect={pickMode}

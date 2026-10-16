@@ -8,7 +8,7 @@ const req = (id: string, status: Requirement['status'], updated_at = 0, sessions
 	title: id,
 	images: [],
 	project: null,
-	state: status === 'idea' || status === 'done' || status === 'parked' || status === 'proposed' ? status : 'open',
+	state: status === 'idea' || status === 'done' || status === 'parked' ? status : 'open',
 	status,
 	sessions,
 	progress: null,
@@ -23,8 +23,6 @@ describe('requirements', () => {
 		expect(groupOf('approval')).toBe('attention');
 		expect(groupOf('failed')).toBe('attention');
 		expect(groupOf('confirm')).toBe('attention');
-		expect(groupOf('proposed')).toBe('attention');
-		expect(groupOf('proposal')).toBe('attention');
 		expect(groupOf('running')).toBe('active');
 		expect(groupOf('open')).toBe('active');
 		expect(groupOf('parked')).toBe('closed');
@@ -69,7 +67,7 @@ describe('requirements', () => {
 		expect(workMode('auto')).toBe('auto');
 	});
 
-	it('begins, confirms and answers proposals with the spec ops', async () => {
+	it('begins and confirms with the spec ops', async () => {
 		const request = vi.fn(async () => ({}));
 		const reqs = new Requirements({ request } as unknown as DaemonClient);
 		await reqs.begin('R-1', { session: 's1', plan: true, mode: 'edits', text: 'note' });
@@ -78,8 +76,6 @@ describe('requirements', () => {
 		);
 		await reqs.confirm('R-1', 'go');
 		expect(request).toHaveBeenLastCalledWith(expect.objectContaining({ op: 'requirement_confirm', requirement: 'R-1', text: 'go' }));
-		await reqs.answerProposal('R-1', false);
-		expect(request).toHaveBeenLastCalledWith({ op: 'requirement_proposal', requirement: 'R-1', accept: false });
 		await reqs.reply('R-1', { newSession: true, plan: true, mode: 'auto' });
 		expect(request).toHaveBeenLastCalledWith(
 			expect.objectContaining({ op: 'requirement_reply', new_session: true, plan: true, mode: 'auto' })

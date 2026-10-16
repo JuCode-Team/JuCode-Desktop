@@ -17,7 +17,7 @@
 // Tabs, their order and chrome, and the tile layout stay desktop-only.
 
 import { daemon } from '$lib/protocol';
-import type { DaemonSessionView } from '$lib/agents.svelte';
+import type { DaemonSessionView } from '$lib/daemonState.svelte';
 import type { SavedProject, SessionStore } from '$lib/session.svelte';
 import type { Project, WorktreeMeta } from '$lib/types';
 import type { WorkspaceStore } from '$lib/workbench/workspaceStore.svelte';
@@ -147,7 +147,7 @@ export class DaemonSync {
 		return this.workspaces.workspaces.map((ws) =>
 			workspace(
 				ws,
-				(ws.id === this.workspaces.activeId ? this.store.userProjects : ws.projects).map(project)
+				(ws.id === this.workspaces.activeId ? this.store.projects : ws.projects).map(project)
 			)
 		);
 	}
@@ -213,7 +213,7 @@ export class DaemonSync {
 	/** Brings the live project list in line with the daemon's. */
 	#applyLive(projects: DaemonProject[]) {
 		const byPath = new Map(projects.map((p) => [trim(p.path), p]));
-		for (const p of [...this.store.userProjects]) {
+		for (const p of [...this.store.projects]) {
 			const r = byPath.get(trim(p.path));
 			if (!r) {
 				this.store.removeProject(p);
@@ -224,7 +224,7 @@ export class DaemonSync {
 			this.store.setProjectDirs(p, r.dirs);
 		}
 		for (const r of projects) {
-			if (!this.store.userProjects.some((p) => trim(p.path) === trim(r.path))) this.store.addProjectShell(r);
+			if (!this.store.projects.some((p) => trim(p.path) === trim(r.path))) this.store.addProjectShell(r);
 		}
 	}
 
@@ -239,12 +239,6 @@ export class DaemonSync {
 		const opening = this.store.allSessions.some((s) => !s.draft && !s.chat.sessionId);
 		for (const r of list) {
 			const s = bySid.get(r.session);
-			// An agent's session opens on the workbench, never listed here; an
-			// open one still follows the daemon's title.
-			if (r.agent) {
-				if (s && r.title && r.title !== s.chat.title) s.chat.title = r.title;
-				continue;
-			}
 			if (s) {
 				if (r.title && r.title !== s.chat.title) s.chat.title = r.title;
 				if (!!r.archived !== !!s.archived) s.archived = !!r.archived;
@@ -269,7 +263,7 @@ export class DaemonSync {
 	}
 
 	#projectFor(cwd: string): Project | undefined {
-		return this.store.userProjects.find((p) => !p.stale && trim(p.path) === trim(cwd));
+		return this.store.projects.find((p) => !p.stale && trim(p.path) === trim(cwd));
 	}
 }
 

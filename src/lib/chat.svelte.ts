@@ -488,11 +488,6 @@ export class ChatState {
 	// A mode the user picked that the engine applies only once the running
 	// turn ends (Codex, or Claude in or out of full access); null otherwise.
 	approvalPending = $state<ApprovalMode | null>(null);
-	// The long-lived agent this session belongs to (empty for other sessions).
-	// It runs in the agent's approval mode, set on the Agent page: the startup
-	// sync never pushes the desktop's mode over it, and its mode is not
-	// persisted as the desktop's.
-	agent = $state('');
 	// Show the engine's approval mode as it is and never push this client's
 	// last choice onto it at startup (the remote page: the session belongs to
 	// the computer, and only an explicit pick there changes its mode).
@@ -989,7 +984,7 @@ export class ChatState {
 			}
 			case 'approval_mode': {
 				const engineMode = str(ev.mode);
-				if (this.agent || this.followEngineMode) {
+				if (this.followEngineMode) {
 					this.approvalMode = reconcileMode(this.approvalMode, engineMode);
 					break;
 				}

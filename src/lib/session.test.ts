@@ -36,7 +36,7 @@ const begin = (id: string) => dispatch(id, { op: 'user_message', content: 'hi' }
 /** Lets a spawn's promise chain (spec → hostSession → onStart) run. */
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 /** The engine spec of the last hostSession call. */
-const lastSpec = () => vi.mocked(hostSession).mock.calls.at(-1)![5] as EngineSpec | undefined;
+const lastSpec = () => vi.mocked(hostSession).mock.calls.at(-1)![4] as EngineSpec | undefined;
 
 beforeEach(() => {
 	vi.clearAllMocks();
@@ -122,7 +122,7 @@ describe('SessionStore lifecycle', () => {
 		expect(p.sessions[0].draft).toBe(false);
 		expect(listedSessions(p).map((s) => s.id)).toEqual([id]);
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined, undefined, false, undefined);
+		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined, false, undefined);
 		// The daemon named the new session.
 		expect(p.sessions[0].chat.sessionId).toBe(`conv-${id}`);
 	});
@@ -179,7 +179,7 @@ describe('SessionStore lifecycle', () => {
 		const call = vi.mocked(hostSession).mock.calls.at(-1)!;
 		// The same conversation reopens, now on the gateway.
 		expect(call[2]).toBe(`conv-${id}`);
-		expect(call[5]).toEqual({ engine: 'claude', options: { approval_mode: 'read-only', jucode_gateway: true } });
+		expect(call[4]).toEqual({ engine: 'claude', options: { approval_mode: 'read-only', jucode_gateway: true } });
 		expect(writeConfig).not.toHaveBeenCalled();
 		const tab = store.serialize()[0].tabs![0];
 		expect(tab.gateway).toBe(true);
@@ -330,7 +330,7 @@ describe('SessionStore lifecycle', () => {
 		store.projects.push(p);
 		store.openSaved(p, 's6old', 'old chat', 'jucode');
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(store.activeId, p.path, 's6old', undefined, false, undefined);
+		expect(hostSession).toHaveBeenCalledWith(store.activeId, p.path, 's6old', false, undefined);
 		const first = store.activeId;
 		store.openSaved(p, 's6old', 'old chat', 'jucode');
 		expect(store.activeId).toBe(first);
@@ -452,7 +452,7 @@ describe('SessionStore lifecycle', () => {
 		// A new claude conversation, not the jucode one reopened.
 		const call = vi.mocked(hostSession).mock.calls.at(-1)!;
 		expect(call[2]).toBeUndefined();
-		expect(call[5]).toMatchObject({ engine: 'claude' });
+		expect(call[4]).toMatchObject({ engine: 'claude' });
 		expect(s.chat.sessionId).toBe(`conv-${id}`);
 	});
 
@@ -512,7 +512,7 @@ describe('SessionStore lifecycle', () => {
 		vi.mocked(hostSession).mockClear();
 		await store.switchProvider(id, { id: 'x', base_url: 'u', format: 'openai', models: [{ name: 'm' }] }, 'm');
 		expect(closeSession).toHaveBeenCalledWith(id);
-		expect(hostSession).toHaveBeenCalledWith(id, p.path, `conv-${id}`, undefined, false, undefined);
+		expect(hostSession).toHaveBeenCalledWith(id, p.path, `conv-${id}`, false, undefined);
 		expect(sendLine).not.toHaveBeenCalledWith(id, expect.stringContaining('/resume'));
 	});
 
@@ -618,7 +618,7 @@ describe('SessionStore lifecycle', () => {
 		const s = store.projects[0].sessions[0];
 		expect(s.dormant).toBeUndefined();
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith('t1', '/tmp/p1', 'acp-1', undefined, false, expect.objectContaining({ engine: 'acp' }));
+		expect(hostSession).toHaveBeenCalledWith('t1', '/tmp/p1', 'acp-1', false, expect.objectContaining({ engine: 'acp' }));
 	});
 
 	it('acp tabs without a saved agent fall back to the project lastAcpAgent', async () => {
@@ -757,14 +757,14 @@ describe('SessionStore claude and codex in the daemon', () => {
 		const claude = store.addSession(p, undefined, 'claude');
 		begin(claude);
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(claude, p.path, undefined, undefined, false, {
+		expect(hostSession).toHaveBeenCalledWith(claude, p.path, undefined, false, {
 			engine: 'claude',
 			options: { approval_mode: 'read-only' }
 		});
 		const codex = store.addSession(p, undefined, 'codex');
 		begin(codex);
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(codex, p.path, undefined, undefined, false, {
+		expect(hostSession).toHaveBeenCalledWith(codex, p.path, undefined, false, {
 			engine: 'codex',
 			options: { approval_mode: 'read-only' }
 		});
@@ -776,7 +776,7 @@ describe('SessionStore claude and codex in the daemon', () => {
 		store.projects.push(p);
 		const id = store.restoreSession(p, 'codex-1', 'old', 'codex', false, undefined, undefined, undefined, undefined, true);
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(id, p.path, 'codex-1', undefined, false, {
+		expect(hostSession).toHaveBeenCalledWith(id, p.path, 'codex-1', false, {
 			engine: 'codex',
 			options: { approval_mode: 'read-only', jucode_gateway: true }
 		});
@@ -821,7 +821,7 @@ describe('SessionStore claude and codex in the daemon', () => {
 		vi.mocked(hostSession).mockClear();
 		await store.respawnClaudeYolo(id);
 		expect(closeSession).toHaveBeenCalledWith(id);
-		expect(hostSession).toHaveBeenCalledWith(id, p.path, 'claude-1', undefined, false, {
+		expect(hostSession).toHaveBeenCalledWith(id, p.path, 'claude-1', false, {
 			engine: 'claude',
 			options: { approval_mode: 'full-auto' }
 		});
@@ -839,7 +839,7 @@ describe('SessionStore claude and codex in the daemon', () => {
 		await flush();
 		vi.mocked(hostSession).mockClear();
 		await store.rewindClaudeSession(id, 'uuid-a', 1);
-		expect(hostSession).toHaveBeenLastCalledWith(id, p.path, 'claude-1', undefined, false, {
+		expect(hostSession).toHaveBeenLastCalledWith(id, p.path, 'claude-1', false, {
 			engine: 'claude',
 			options: { approval_mode: 'read-only', resume_at: 'uuid-a' }
 		});
@@ -848,7 +848,7 @@ describe('SessionStore claude and codex in the daemon', () => {
 		await store.rewindClaudeSession(id, null, 0);
 		const call = vi.mocked(hostSession).mock.calls.at(-1)!;
 		expect(call[2]).toBeUndefined();
-		expect(call[5]).toEqual({ engine: 'claude', options: { approval_mode: 'read-only' } });
+		expect(call[4]).toEqual({ engine: 'claude', options: { approval_mode: 'read-only' } });
 		expect(s.chat.sessionId).toBe(`conv-${id}`);
 	});
 
@@ -1036,7 +1036,7 @@ describe('SessionStore chats', () => {
 		expect(chats.sessions.map((s) => s.id)).toEqual([id]);
 		begin(id);
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(id, chats.path, undefined, undefined, true, undefined);
+		expect(hostSession).toHaveBeenCalledWith(id, chats.path, undefined, true, undefined);
 		// A second chat joins the same group.
 		await store.newChat();
 		expect(store.projects.filter((p) => p.chats)).toHaveLength(1);
@@ -1054,7 +1054,7 @@ describe('SessionStore chats', () => {
 		expect(again.projects[0].chats).toBe(true);
 		begin(again.projects[0].sessions[0].id);
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(expect.any(String), '/home/u/.jucode/chats', undefined, undefined, true, undefined);
+		expect(hostSession).toHaveBeenCalledWith(expect.any(String), '/home/u/.jucode/chats', undefined, true, undefined);
 	});
 });
 
@@ -1203,11 +1203,11 @@ describe('sessions in the jucode daemon', () => {
 		expect(hostSession).not.toHaveBeenCalled(); // a draft is in no daemon yet
 		begin(id);
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined, undefined, false, undefined);
+		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined, false, undefined);
 		const acp = store.addSession(p, undefined, 'acp', { id: 'gemini', name: 'Gemini' });
 		begin(acp);
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(acp, p.path, undefined, undefined, false, {
+		expect(hostSession).toHaveBeenCalledWith(acp, p.path, undefined, false, {
 			engine: 'acp',
 			options: { command: 'gemini', args: ['--experimental-acp'], env: {} }
 		});
@@ -1243,7 +1243,7 @@ describe('sessions in the jucode daemon', () => {
 		vi.mocked(hostSession).mockClear();
 		const picked = store.restoreSession(p, 'conv-2', '', 'claude');
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(picked, p.path, 'conv-2', undefined, false, expect.objectContaining({ engine: 'claude' }));
+		expect(hostSession).toHaveBeenCalledWith(picked, p.path, 'conv-2', false, expect.objectContaining({ engine: 'claude' }));
 		expect(p.sessions.find((x) => x.id === picked)!.chat.sessionId).toBe('conv-2');
 	});
 
@@ -1259,7 +1259,7 @@ describe('sessions in the jucode daemon', () => {
 		vi.mocked(hostSession).mockClear();
 		store.handleExit(id);
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(id, p.path, `conv-${id}`, undefined, false, undefined);
+		expect(hostSession).toHaveBeenCalledWith(id, p.path, `conv-${id}`, false, undefined);
 		expect(sendLine).not.toHaveBeenCalledWith(id, expect.stringContaining('/resume'));
 	});
 
@@ -1286,7 +1286,7 @@ describe('sessions in the jucode daemon', () => {
 		restored.wake(s.id);
 		expect(s.dormant).toBe(false);
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(s.id, p.path, sid, undefined, false, undefined);
+		expect(hostSession).toHaveBeenCalledWith(s.id, p.path, sid, false, undefined);
 		expect(sendLine).not.toHaveBeenCalledWith(s.id, expect.stringContaining('/resume'));
 	});
 
@@ -1317,16 +1317,16 @@ describe('sessions in the jucode daemon', () => {
 
 		for (const s of sessions) store.wake(s.id);
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith('t-claude', '/tmp/p1', 'claude-1', undefined, false, {
+		expect(hostSession).toHaveBeenCalledWith('t-claude', '/tmp/p1', 'claude-1', false, {
 			engine: 'claude',
 			options: { approval_mode: 'read-only' }
 		});
-		expect(hostSession).toHaveBeenCalledWith('t-codex', '/tmp/p1', 'codex-1', undefined, false, {
+		expect(hostSession).toHaveBeenCalledWith('t-codex', '/tmp/p1', 'codex-1', false, {
 			engine: 'codex',
 			options: { approval_mode: 'read-only' }
 		});
-		expect(hostSession).toHaveBeenCalledWith('t-jucode', '/tmp/p1', 'jucode-1', undefined, false, undefined);
-		expect(hostSession).toHaveBeenCalledWith('t-old', '/tmp/p1', 'jucode-2', undefined, false, undefined);
+		expect(hostSession).toHaveBeenCalledWith('t-jucode', '/tmp/p1', 'jucode-1', false, undefined);
+		expect(hostSession).toHaveBeenCalledWith('t-old', '/tmp/p1', 'jucode-2', false, undefined);
 		// Woken once: a second wake opens nothing.
 		vi.mocked(hostSession).mockClear();
 		store.wake('t-claude');
@@ -1335,53 +1335,24 @@ describe('sessions in the jucode daemon', () => {
 	});
 });
 
-describe('agent sessions', () => {
-	it("opens a new session as the agent in a hidden project for its directory", async () => {
-		const store = new SessionStore();
-		const id = store.openAgentSession({ id: 'ops', name: 'Ops', cwd: '/srv/ops' });
-		expect(store.projects.map((p) => [p.path, p.agents])).toEqual([['/srv/ops', true]]);
-		const s = store.projects[0].sessions[0];
-		expect(s.id).toBe(id);
-		// Named by the daemon after its first message, not after the agent.
-		expect(s.chat.title).toBe(UNTITLED);
-		expect(s.chat.agent).toBe('ops');
-		expect(store.activeId).toBe(id);
-		// The workbench shows it; the sidebar, canvas, save and sync do not.
-		expect(store.shownSessions).toEqual([]);
-		expect(store.serialize()).toEqual([]);
-		await flush();
-		expect(hostSession).toHaveBeenCalledWith(id, '/srv/ops', undefined, 'ops', false, undefined);
-	});
-
-	it("reuses the open session of the agent, or reopens it by id, apart from the user's project", async () => {
+describe('daemon sessions', () => {
+	it('opens a daemon session in the project for its directory, or its open tab', async () => {
 		const store = new SessionStore();
 		const p = proj();
 		p.path = '/srv/ops';
 		store.projects.push(p);
-		const first = store.openAgentSession({ id: 'ops', name: 'Ops', cwd: '/srv/ops' }, 'daemon-1', '处理今日工单');
+		const first = store.openDaemonSession('/srv/ops', 'daemon-1', '处理今日工单');
+		expect(p.sessions.some((s) => s.id === first)).toBe(true);
 		expect(store.allSessions.find((x) => x.id === first)?.chat.title).toBe('处理今日工单');
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(first, '/srv/ops', 'daemon-1', undefined, false, undefined);
-		expect(p.sessions.some((s) => s.id === first)).toBe(false);
-		expect(store.projects.filter((x) => x.agents)).toHaveLength(1);
+		expect(hostSession).toHaveBeenCalledWith(first, '/srv/ops', 'daemon-1', false, undefined);
 		vi.mocked(hostSession).mockClear();
-		expect(store.openAgentSession({ id: 'ops', name: 'Ops', cwd: '/srv/ops' }, 'daemon-1')).toBe(first);
+		expect(store.openDaemonSession('/srv/ops', 'daemon-1')).toBe(first);
 		await flush();
 		expect(hostSession).not.toHaveBeenCalled();
-		// A plain hosted session (no agent) still opens in the user's project.
-		const plain = store.openAgentSession({ id: '', name: 'p', cwd: '/srv/ops' }, 'daemon-2');
-		expect(p.sessions.some((s) => s.id === plain)).toBe(true);
-	});
-
-	it("moves an agent's session out of a user project", () => {
-		const store = new SessionStore();
-		const p = proj();
-		store.projects.push(p);
-		const id = store.addSession(p);
-		store.adoptAgentSession(id, '/srv/ops');
-		expect(p.sessions).toHaveLength(0);
-		const host = store.projects.find((x) => x.agents)!;
-		expect([host.path, host.sessions.map((s) => s.id)]).toEqual(['/srv/ops', [id]]);
+		// A directory with no project gets one.
+		store.openDaemonSession('/srv/other', 'daemon-2');
+		expect(store.projects.map((x) => x.path)).toEqual(['/srv/ops', '/srv/other']);
 	});
 });
 

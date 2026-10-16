@@ -42,7 +42,6 @@
 	const projects = $derived(conn.projects.workspaces.flatMap((w) => w.projects));
 	function sub(r: Requirement): string {
 		const where = projectLabel(r.project, projects);
-		if (r.proposal?.reason) return `${where} · ${statusLabel(r.status)} · ${r.proposal.reason}`;
 		if (r.last_reply && (r.status === 'review' || r.status === 'failed' || r.status === 'confirm'))
 			return `${where} · ${r.status === 'confirm' ? `${statusLabel(r.status)} · ` : ''}${r.last_reply.replace(/\s+/g, ' ')}`;
 		if (r.status === 'idea') return `${where} · ${when(r.created_at)}`;

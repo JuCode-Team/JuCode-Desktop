@@ -2,7 +2,7 @@
 const chat = {
 	zh: {
 		reasoning: '推理',
-		actionDeferred: '没有人在看，{name}（{summary}）已记为待确认动作，可在工作台处理',
+		actionDeferred: '没有人在看，{name}（{summary}）已记为待确认动作，可在工作台的待处理里处理',
 		actionAllowed: '待确认动作 {id} 已批准',
 		actionDenied: '待确认动作 {id} 已拒绝',
 		rewindTitle: '回退到此轮并重写（会还原文件改动）',
@@ -16,7 +16,6 @@ const chat = {
 		approvalEdits: '自动改文件',
 		approvalAll: '全自动',
 		approvalQuestion: '工具调用如何审批？',
-		approvalAgent: '跟随 Agent 的设置，在 Agent 页面修改',
 		approvalAskDesc: '修改文件和执行命令前都先询问',
 		approvalPlanDesc: '先调研并给出计划，确认后再动手',
 		approvalAutoDesc: '由模型判断，仅对有风险的操作询问',
@@ -37,8 +36,6 @@ const chat = {
 		voiceStopTitle: '停止录音并转写',
 		voiceBusyTitle: '转写中…',
 		voiceMicError: '无法访问麦克风：{error}',
-		agentSession: '{name} 的会话',
-		agentOnDesk: '在工作台查看',
 		videoMeta: '{s} 秒 · {n} 帧',
 		webRefTitle: '网页元素引用',
 		switchModel: '切换模型',
@@ -320,7 +317,7 @@ const chat = {
 		phaseCompacting: '压缩上下文'
 	},
 	en: {
-		actionDeferred: 'Nobody was watching: {name} ({summary}) was recorded as a pending action; decide it on the desk',
+		actionDeferred: 'Nobody was watching: {name} ({summary}) was recorded as a pending action; decide it in the workbench under Waiting for you',
 		actionAllowed: 'Pending action {id} allowed',
 		actionDenied: 'Pending action {id} denied',
 		reasoning: 'Reasoning',
@@ -334,7 +331,6 @@ const chat = {
 		approvalEdits: 'Auto-edit files',
 		approvalAll: 'Full auto',
 		approvalQuestion: 'How should tool calls be approved?',
-		approvalAgent: "Follows the agent's setting; change it on the agent's page",
 		approvalAskDesc: 'Ask before editing files or running commands',
 		approvalPlanDesc: 'Research and propose a plan; work once you approve',
 		approvalAutoDesc: 'The model decides; ask only for risky actions',
@@ -355,8 +351,6 @@ const chat = {
 		voiceStopTitle: 'Stop recording and transcribe',
 		voiceBusyTitle: 'Transcribing…',
 		voiceMicError: 'Cannot access the microphone: {error}',
-		agentSession: "{name}'s session",
-		agentOnDesk: 'Show in the workbench',
 		videoMeta: '{s}s · {n} frames',
 		webRefTitle: 'Web element reference',
 		switchModel: 'Switch model',

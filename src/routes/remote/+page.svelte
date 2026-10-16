@@ -140,7 +140,7 @@
 		const conn = active;
 		if (!conn) return;
 		try {
-			if (!pushSupported()) throw new Error(t(isIos() ? 'shell.remote.pushIosHint' : 'shell.dispatch.notifyUnsupported'));
+			if (!pushSupported()) throw new Error(t(isIos() ? 'shell.remote.pushIosHint' : 'shell.remote.notifyUnsupported'));
 			if (!pushOn()) await enablePush([conn.daemon]);
 			const reply = await conn.daemon.request({ op: 'push_test' });
 			const results = (reply.results as { service: string; status?: number; error?: string }[]) ?? [];
@@ -483,7 +483,7 @@
 								<span class="pop-label">{nameOf(conn)}</span>
 								<span class="pop-desc">{t(conn === active ? conn.state.text : conn.state.short)}</span>
 							</span>
-							{#if conn !== active && conn.agents.pending > 0}<span class="count">{conn.agents.pending}</span>{/if}
+							{#if conn !== active && conn.daemonState.actions.length > 0}<span class="count">{conn.daemonState.actions.length}</span>{/if}
 							{#if conn === active}<span class="pop-check"><CheckIcon size={16} /></span>{/if}
 						</button>
 					{/each}

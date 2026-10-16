@@ -3,8 +3,7 @@
 	// what comes next on top (what the user looks at when notified), then a
 	// reply (to the last session, or a new one with the progress), done and
 	// park; below, the user's words, screenshots, project, full progress and
-	// sessions. An agent's proposal is accepted or rejected here, and the
-	// start's confirmation given. An idea starts here too: in its project or
+	// sessions. The start's confirmation is given here. An idea starts here too: in its project or
 	// another, on a chosen backend, with a plan first if the user wants.
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
@@ -46,10 +45,10 @@
 
 	const sessions = $derived(
 		(r?.sessions ?? []).map((sid) => {
-			const view = conn.agents.sessions.find((s) => s.session === sid);
+			const view = conn.daemonState.sessions.find((s) => s.session === sid);
 			return {
 				id: sid,
-				title: view?.title || t('shell.agentPage.untitled'),
+				title: view?.title || t('shell.untitled'),
 				engine: BACKEND_LABELS[normalizeBackendId(view?.engine ?? 'jucode')],
 				at: view?.updated_at ?? view?.created_at,
 				state: r?.session_states?.[sid]
@@ -104,11 +103,7 @@
 	]);
 	const setProject = (project: string) => run(() => conn.requirements.update(id, { project: project || null }));
 
-	// What waits for the user: an agent's proposal, or the start's gate.
-	const proposer = $derived(
-		r?.proposal ? (conn.agents.agents.find((a) => a.id === r.proposal!.agent)?.name ?? r.proposal.agent) : ''
-	);
-	const answer = (accept: boolean) => run(() => conn.requirements.answerProposal(id, accept));
+	// What waits for the user: the start's gate.
 	const confirmGate = () => run(() => conn.requirements.confirm(id));
 
 	// Starting an idea: where (its project first) and on which backend.
@@ -155,20 +150,7 @@
 				<span class="status {r.status}">{statusLabel(r.status)}</span>
 			</div>
 
-			{#if r.proposal || r.state === 'proposed'}
-				<section class="waiting">
-					<p class="w-title">
-						{r.proposal?.kind === 'close'
-							? t('shell.requirement.proposalClose', { agent: proposer, outcome: statusLabel(r.proposal.outcome ?? 'done') })
-							: t('shell.requirement.proposalCreate', { agent: proposer || t('shell.requirement.fromAgent') })}
-					</p>
-					{#if r.proposal?.reason}<p class="w-sub">{r.proposal.reason}</p>{/if}
-					<div class="actions">
-						<Button size="sm" variant="primary" disabled={busy} onclick={() => answer(true)}>{t('shell.requirement.accept')}</Button>
-						<Button size="sm" variant="ghost" disabled={busy} onclick={() => answer(false)}>{t('shell.requirement.reject')}</Button>
-					</div>
-				</section>
-			{:else if r.status === 'confirm' && r.gate}
+			{#if r.status === 'confirm' && r.gate}
 				{@const gate = r.gate}
 				<section class="waiting">
 					<p class="w-title">{gate.stage === 'plan' ? t('shell.requirement.gatePlan') : t('shell.requirement.gateUnderstand')}</p>
@@ -306,9 +288,7 @@
 		color: var(--dim);
 	}
 	.status.review,
-	.status.confirm,
-	.status.proposed,
-	.status.proposal {
+	.status.confirm {
 		color: var(--warn);
 	}
 	.status.approval,

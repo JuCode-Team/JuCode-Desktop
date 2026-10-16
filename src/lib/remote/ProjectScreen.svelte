@@ -29,7 +29,7 @@
 		onFiles: () => void;
 		onChanges: () => void;
 	} = $props();
-	const { agents: agentDirectory, projects: remoteProjects } = useHost();
+	const { daemonState, projects: remoteProjects } = useHost();
 
 	let items = $state<HistoryItem[]>([]);
 	let loading = $state(true);
@@ -41,8 +41,8 @@
 	 *  the session list changes, which can be before the save lands). */
 	let overrides = $state<Record<string, { title?: string; archived?: boolean }>>({});
 	const shown = $derived(items.map((s) => (overrides[s.session] ? { ...s, ...overrides[s.session] } : s)));
-	const active = $derived(shown.filter((s) => !s.archived && !s.agent));
-	const archived = $derived(shown.filter((s) => s.archived && !s.agent));
+	const active = $derived(shown.filter((s) => !s.archived));
+	const archived = $derived(shown.filter((s) => s.archived));
 	const ENGINE_LABELS: Record<string, string> = { claude: 'Claude Code', codex: 'Codex' };
 	const title = $derived(project.chats ? t('shell.remote.chats') : project.name);
 	/** A session with no messages yet is labelled with its id. */
@@ -62,7 +62,7 @@
 	// Loads on mount and again whenever hosted sessions change anywhere
 	// (opened, closed, renamed).
 	$effect(() => {
-		void agentDirectory.sessions;
+		void daemonState.sessions;
 		void load();
 	});
 
