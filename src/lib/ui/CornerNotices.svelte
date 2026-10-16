@@ -4,6 +4,7 @@
 	// window above the page, so a notice under it could not be seen.
 	import XIcon from '@lucide/svelte/icons/x';
 	import { fly } from 'svelte/transition';
+	import { flip } from 'svelte/animate';
 	import { cubicOut } from 'svelte/easing';
 	import { T_FAST, T_MED, motionMs } from './motion';
 	import { notices } from './notices.svelte';
@@ -32,35 +33,36 @@
 
 <svelte:window bind:innerWidth={vw} bind:innerHeight={vh} />
 
-{#if notices.items.length}
-	<div class="notices" style:right="{right}px" role="region" aria-live="polite">
-		{#each notices.items as n (n.id)}
-			<div
-				class="notice"
-				role="status"
-				onpointerenter={() => notices.hold(n.id)}
-				onpointerleave={() => notices.resume(n.id)}
-				in:fly={{ y: 8, duration: motionMs(T_MED), easing: cubicOut }}
-				out:fly={{ x: 12, duration: motionMs(T_FAST), easing: cubicOut }}
-			>
-				<div class="body">
-					<div class="title">{n.title}</div>
-					{#if n.detail}<div class="detail selectable">{n.detail}</div>{/if}
-				</div>
-				{#if n.action}
-					<button
-						class="act"
-						onclick={() => {
-							n.action?.run();
-							notices.dismiss(n.id);
-						}}>{n.action.label}</button
-					>
-				{/if}
-				<button class="close" aria-label={t('common.close')} onclick={() => notices.dismiss(n.id)}><XIcon size={14} /></button>
+<!-- Not under an {#if}: the first notice's entrance and the last one's exit
+     would not play (transitions are local to their block). -->
+<div class="notices" style:right="{right}px" role="region" aria-live="polite">
+	{#each notices.items as n (n.id)}
+		<div
+			class="notice"
+			role="status"
+			onpointerenter={() => notices.hold(n.id)}
+			onpointerleave={() => notices.resume(n.id)}
+			animate:flip={{ duration: motionMs(T_MED), easing: cubicOut }}
+			in:fly={{ y: 8, duration: motionMs(T_MED), easing: cubicOut }}
+			out:fly={{ x: 12, duration: motionMs(T_FAST), easing: cubicOut }}
+		>
+			<div class="body">
+				<div class="title">{n.title}</div>
+				{#if n.detail}<div class="detail selectable">{n.detail}</div>{/if}
 			</div>
-		{/each}
-	</div>
-{/if}
+			{#if n.action}
+				<button
+					class="act"
+					onclick={() => {
+						n.action?.run();
+						notices.dismiss(n.id);
+					}}>{n.action.label}</button
+				>
+			{/if}
+			<button class="close" aria-label={t('common.close')} onclick={() => notices.dismiss(n.id)}><XIcon size={14} /></button>
+		</div>
+	{/each}
+</div>
 
 <style>
 	.notices {
@@ -72,6 +74,7 @@
 		align-items: flex-end;
 		gap: 8px;
 		max-width: calc(100vw - 32px);
+		transition: right var(--t-med) var(--ease-out);
 	}
 	.notice {
 		display: flex;
