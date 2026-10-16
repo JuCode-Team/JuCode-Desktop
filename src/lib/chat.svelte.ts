@@ -15,6 +15,7 @@ import {
 	type Question
 } from './approval';
 import { t } from './i18n';
+import { runState } from './agentTrace';
 import { costUsd } from './pricing';
 import { pendingCost, sumCosts, type BillingCost } from './sessionCost';
 import { CacheWatch } from './cacheMiss';
@@ -230,13 +231,16 @@ export interface WorkflowRun {
 
 function agentRun(raw: Record<string, unknown>): AgentRun {
 	const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+	const state = str(raw.state) || str(raw.status);
+	const startedAt = n(raw.started_at);
 	return {
 		id: str(raw.id),
 		label: str(raw.label),
 		phase: n(raw.phase),
 		model: str(raw.model),
-		state: str(raw.state) || str(raw.status),
-		startedAt: n(raw.started_at),
+		// A Workflow agent is `start` from when it is queued; it has begun once it has a start time.
+		state: state === 'start' && !startedAt ? 'queued' : state,
+		startedAt,
 		durationMs: n(raw.duration_ms),
 		tokens: n(raw.tokens),
 		toolCalls: n(raw.tool_calls),
@@ -443,7 +447,9 @@ export class ChatState {
 	agentRuns = $state<{ workflows: WorkflowRun[]; agents: AgentRun[] }>({ workflows: [], agents: [] });
 	/** A subagent's own conversation by agent id: its task, then its messages. */
 	subagentTranscripts = $state<Record<string, { task: string; messages: Msg[]; error: string }>>({});
-	/** The subagent the agent trace panel shows (null: the run list). */
+	/** The background tasks region beside the conversation is open. */
+	tasksOpen = $state(false);
+	/** The subagent the background tasks region shows (null: the task list). */
 	agentFocus = $state<string | null>(null);
 	/** Claude's permission rules (list_permission_rules), once asked for. */
 	permissionRules = $state<{
@@ -1528,19 +1534,26 @@ export class ChatState {
 				this.agentRunsSeen = true;
 				const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 				this.agentRuns = {
-					workflows: arr<Record<string, unknown>>(ev.workflows).map((w) => ({
-						id: str(w.id),
-						toolUseId: str(w.tool_use_id),
-						name: str(w.name),
-						description: str(w.description),
-						status: str(w.status),
-						startedAt: n(w.started_at),
-						durationMs: n(w.duration_ms),
-						tokens: n(w.tokens),
-						toolCalls: n(w.tool_calls),
-						phases: arr<Record<string, unknown>>(w.phases).map((p) => ({ index: n(p.index), title: str(p.title) })),
-						agents: arr<Record<string, unknown>>(w.agents).map(agentRun)
-					})),
+					workflows: arr<Record<string, unknown>>(ev.workflows).map((w) => {
+						const run = {
+							id: str(w.id),
+							toolUseId: str(w.tool_use_id),
+							name: str(w.name),
+							description: str(w.description),
+							status: str(w.status),
+							startedAt: n(w.started_at),
+							durationMs: n(w.duration_ms),
+							tokens: n(w.tokens),
+							toolCalls: n(w.tool_calls),
+							phases: arr<Record<string, unknown>>(w.phases).map((p) => ({ index: n(p.index), title: str(p.title) })),
+							agents: arr<Record<string, unknown>>(w.agents).map(agentRun)
+						};
+						// A Workflow stopped or failed leaves its agents at their last
+						// state (the engine updates the run only): they are not running.
+						if (runState(run.status) !== 'running')
+							for (const a of run.agents) if (['running', 'queued'].includes(runState(a.state))) a.state = 'stopped';
+						return run;
+					}),
 					agents: arr<Record<string, unknown>>(ev.agents).map(agentRun)
 				};
 				break;

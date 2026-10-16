@@ -72,8 +72,7 @@ const chat = {
 			loading: '读取中',
 			truncated: '只显示最后 8 KB',
 			noOutput: '暂无输出',
-			refresh: '刷新',
-			list: '后台任务'
+			refresh: '刷新'
 		},
 		btw: { label: '顺便问', dismiss: '关闭', pending: '回答中', empty: '没有回答' },
 		modelFallback: '模型已从 {from} 切换到 {to}（{reason}）',
@@ -188,6 +187,7 @@ const chat = {
 		sessionOut: '输出',
 		cost: '成本',
 		costEstimate: '估算 ${cost}',
+		sessionCost: '会话 {cost}',
 		costSettled: '{cost} 积分',
 		costSettledHint: '实际扣费，已包含分组倍率',
 		costPending: '待结算',
@@ -281,21 +281,8 @@ const chat = {
 		questionCancelDesc: '不回答，拒绝这次提问',
 		// Progress card (top right of the conversation) and subagent cards
 		progress: {
-			label: '进度',
-			todo: '待办',
-			agents: '子智能体',
-			count: '{done}/{total}',
-			agentsN: '{n} 个子智能体',
-			runningN: '{n} 个运行中',
-			fold: '收起进度',
-			unfold: '展开进度',
 			step: { pending: '待开始', active: '进行中', done: '已完成', skipped: '已跳过' },
-			open: '查看 {name} 在做什么',
-			noActivity: '还没有动作',
-			openSide: '在右侧分栏打开',
-			openTab: '在新标签页打开',
-			allDone: '全部完成',
-			waiting: '等待开始'
+			open: '查看 {name} 在做什么'
 		},
 		subagentCard: {
 			spawn: '子智能体',
@@ -403,8 +390,7 @@ const chat = {
 			loading: 'Loading',
 			truncated: 'Showing the last 8 KB',
 			noOutput: 'No output yet',
-			refresh: 'Refresh',
-			list: 'Background tasks'
+			refresh: 'Refresh'
 		},
 		btw: { label: 'By the way', dismiss: 'Dismiss', pending: 'Answering', empty: 'No answer' },
 		modelFallback: 'Switched from {from} to {to} ({reason})',
@@ -519,6 +505,7 @@ const chat = {
 		sessionOut: 'Output',
 		cost: 'Cost',
 		costEstimate: 'Est. ${cost}',
+		sessionCost: 'Session {cost}',
 		costSettled: '{cost} points',
 		costSettledHint: 'Settled charges, including group rates',
 		costPending: 'Pending settlement',
@@ -612,21 +599,8 @@ const chat = {
 		questionCancelDesc: 'Skip the question and deny it',
 		// Progress card (top right of the conversation) and subagent cards
 		progress: {
-			label: 'Progress',
-			todo: 'To-dos',
-			agents: 'Subagents',
-			count: '{done}/{total}',
-			agentsN: '{n} subagents',
-			runningN: '{n} running',
-			fold: 'Fold progress',
-			unfold: 'Show progress',
 			step: { pending: 'To do', active: 'In progress', done: 'Done', skipped: 'Skipped' },
-			open: 'See what {name} is doing',
-			noActivity: 'No actions yet',
-			openSide: 'Open in the side column',
-			openTab: 'Open in a new tab',
-			allDone: 'All done',
-			waiting: 'Not started'
+			open: 'See what {name} is doing'
 		},
 		subagentCard: {
 			spawn: 'Subagent',

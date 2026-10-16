@@ -3,8 +3,8 @@ import {
 	agentOfCall,
 	agentRows,
 	handedOffWork,
-	trayMode,
-	pillParts,
+	backgroundCommands,
+	tasksEntry,
 	planShown,
 	planSummary,
 	rowElapsed,
@@ -179,30 +179,30 @@ describe('spawn and wait payloads', () => {
 	});
 });
 
-describe('progress tray', () => {
+describe('background tasks entry', () => {
 	const plan = planSummary([
 		{ step: 'a', status: 'completed' },
 		{ step: 'b', status: 'in_progress' }
 	]);
 	const runningRow = { state: 'running' } as AgentRow;
+	const queuedRow = { state: 'queued' } as AgentRow;
 	const doneRow = { state: 'done' } as AgentRow;
-	const empty = planSummary([]);
 
-	it('shows while a turn has a plan or subagents, as a bar until opened', () => {
-		expect(trayMode(plan, [], true, true, false)).toBe('bar');
-		expect(trayMode(plan, [], true, true, true)).toBe('open');
-		expect(trayMode(empty, [runningRow], true, false, false)).toBe('bar');
-		expect(trayMode(empty, [], true, false, true)).toBe('hidden');
+	it('counts the plan while steps are left, and the tasks that run', () => {
+		expect(tasksEntry(plan, true, [runningRow, queuedRow, doneRow], 1)).toEqual({ plan: '1/2', running: 3 });
+		expect(tasksEntry(plan, false, [doneRow], 0)).toEqual({ plan: '', running: 0 });
+		const finished = planSummary([{ step: 'a', status: 'completed' }]);
+		expect(tasksEntry(finished, true, [], 0).plan).toBe('');
 	});
 
-	it('keeps an old plan out once its turn is over', () => {
-		expect(trayMode(plan, [], false, false, false)).toBe('hidden');
-		expect(trayMode(plan, [doneRow], false, false, false)).toBe('bar');
-	});
-
-	it('writes the bar counts', () => {
-		expect(pillParts(plan, [runningRow, doneRow], true)).toEqual({ steps: '1/2', agents: 2, running: 1 });
-		expect(pillParts(plan, [], false).steps).toBe('');
+	it('lists background commands apart from subagents and Workflows', () => {
+		const tasks = [
+			{ id: 'b1', kind: 'local_bash' },
+			{ id: 'a1', kind: 'local_agent' },
+			{ id: 'w1', kind: 'local_workflow' },
+			{ id: 's1', kind: 'monitor' }
+		];
+		expect(backgroundCommands(tasks, { s1: {} }).map((x) => x.id)).toEqual(['b1']);
 	});
 });
 

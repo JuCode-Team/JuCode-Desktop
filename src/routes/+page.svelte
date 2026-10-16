@@ -15,7 +15,6 @@
 	import GitBranchIcon from '@lucide/svelte/icons/git-branch';
 	import FolderIcon from '@lucide/svelte/icons/folder';
 	import GlobeIcon from '@lucide/svelte/icons/globe';
-	import NetworkIcon from '@lucide/svelte/icons/network';
 	import Toaster from '$lib/ui/Toaster.svelte';
 	import CornerNotices from '$lib/ui/CornerNotices.svelte';
 	import ModelSetup from '$lib/ModelSetup.svelte';
@@ -117,18 +116,12 @@
 	import PlanPanel from '$lib/PlanPanel.svelte';
 	import ProposalPane from '$lib/ProposalPane.svelte';
 	import { planPages, proposalOf, proposalPanel } from '$lib/planPages.svelte';
-	import { subagentPages, subagentOf, subagentPanel, type SubagentPlace } from '$lib/agents/subagentPages.svelte';
-	import SubagentPane from '$lib/agents/SubagentPane.svelte';
-	import StateIcon from '$lib/agents/StateIcon.svelte';
-	import { runState } from '$lib/agentTrace';
-	import { shortPath } from '$lib/agentProgress';
 	import type { ApprovalMode } from '$lib/approval';
 	import GoalPanel from '$lib/GoalPanel.svelte';
 	import FilesPanel from '$lib/FilesPanel.svelte';
 	import GitPanel from '$lib/GitPanel.svelte';
 	import TerminalPanel from '$lib/TerminalPanel.svelte';
 	import BrowserPanel from '$lib/BrowserPanel.svelte';
-	import AgentRunsPanel from '$lib/AgentRunsPanel.svelte';
 	import TuiPanel from '$lib/TuiPanel.svelte';
 	import EditorPane from '$lib/editor/EditorPane.svelte';
 	import QuickOpen from '$lib/editor/QuickOpen.svelte';
@@ -410,14 +403,13 @@
 	let tilesReady = $state(false);
 	let focusedLeaf = $state<string | null>(null);
 
-	const ALL_PANELS = ['plan', 'goal', 'agents', 'files', 'git', 'term', 'browser'] as const;
+	const ALL_PANELS = ['plan', 'goal', 'files', 'git', 'term', 'browser'] as const;
 	// Plan/Goal are engine features. Goal stays gated by the backend cap; the plan
 	// tab also appears whenever there's an actual plan (e.g. claude's TodoWrite),
 	// even on backends that don't advertise goals.
 	const panelKeys = $derived(
 		ALL_PANELS.filter((k) => {
 			if (k === 'goal') return caps(chat).goals;
-			if (k === 'agents') return caps(chat).agentTrace;
 			if (k === 'plan') return caps(chat).goals || (chat?.plan ?? []).length > 0;
 			return true;
 		})
@@ -426,7 +418,7 @@
 	// session (model popup), never at tab creation. Persisted `tui:*` tabs
 	// still render, but TUI tabs are no longer offered as new options.
 	const PANEL_ICONS: Record<(typeof ALL_PANELS)[number], typeof PlusIcon> = {
-		plan: ListChecksIcon, goal: TargetIcon, agents: NetworkIcon,
+		plan: ListChecksIcon, goal: TargetIcon,
 		files: FilesIcon, git: GitBranchIcon, term: SquareTerminalIcon, browser: GlobeIcon
 	};
 	const addOptions = $derived([
@@ -444,8 +436,6 @@
 		if (pid) return store.userProjects.find((p) => p.id === pid)?.name ?? pid;
 		const proposal = proposalOf(tab.panel);
 		if (proposal) return planOf(proposal.sessionId, proposal.planId)?.title || t('chat.planCard.label');
-		const sub = subagentOf(tab.panel);
-		if (sub) return subagentInfo(sub.sessionId, sub.agentId).label;
 		return (ALL_PANELS as readonly string[]).includes(tab.panel) ? t(`dock.tabs.${tab.panel}`) : tab.panel;
 	}
 	function tuiReady(sid: string): boolean {
@@ -583,7 +573,7 @@
 		applyTiles(openElsewhere({ id: newTabId(), panel: key }, { leafId }));
 	}
 
-	/** A subagent or tool window, where settings say (canvas.openElsewhere). */
+	/** A tool window, where settings say (canvas.openElsewhere). */
 	function openElsewhere(
 		tab: TileTab,
 		{ leafId = null, place = prefs.openElsewhere, sessionId = store.activeId }: { leafId?: string | null; place?: 'side' | 'tab'; sessionId?: string | null } = {}
@@ -625,33 +615,6 @@
 		untrack(() => openPlanPage(request.sessionId, request.planId));
 	});
 
-	/** A subagent of a session, for its tab: its name and state. */
-	function subagentInfo(sessionId: string, agentId: string): { label: string; state: ReturnType<typeof runState> | 'unknown' } {
-		const chat = sessionById(sessionId)?.chat;
-		const run =
-			chat?.agentRuns.agents.find((a) => a.id === agentId) ??
-			chat?.agentRuns.workflows.flatMap((w) => w.agents).find((a) => a.id === agentId);
-		const life = chat?.subagents[agentId];
-		const status = run?.state || life?.status;
-		return {
-			label: run?.label || shortPath(life?.label || agentId),
-			state: status ? runState(status) : 'unknown'
-		};
-	}
-	/** A subagent's page: shown again if open; else beside the chat (one
-	 *  column, a tab per subagent) or as a tab next to the chat. */
-	function openSubagentPage(sessionId: string, agentId: string, place: SubagentPlace) {
-		const panel = subagentPanel(sessionId, agentId);
-		const existing = findPanelTab(panel);
-		if (existing) return applyTiles(activateTab(tiles, existing.id));
-		applyTiles(openElsewhere({ id: newTabId(), panel }, { place, sessionId }));
-	}
-	$effect(() => {
-		const request = subagentPages.request;
-		if (!request || !tilesReady) return;
-		untrack(() => openSubagentPage(request.sessionId, request.agentId, request.place));
-	});
-
 	/** A sidebar click: the session becomes active and its tab comes to the
 	 *  front, also when it already was the active one behind another tab. */
 	function showSession(id: string) {
@@ -688,11 +651,6 @@
 			for (const tab of leavesOf(next.root).flatMap((l) => l.tabs)) {
 				const pid = projectOf(tab.panel);
 				if (pid && !projectIds.has(pid)) next = closeTab(next, tab.id);
-			}
-			// A closed session's subagent pages go with it.
-			for (const tab of leavesOf(next.root).flatMap((l) => l.tabs)) {
-				const sub = subagentOf(tab.panel);
-				if (sub && !ids.has(sub.sessionId)) next = closeTab(next, tab.id);
 			}
 			applyTiles(next);
 		});
@@ -1438,8 +1396,6 @@
 	{@const sid = chatSessionOf(tab.panel)}
 	{@const s = sid ? sessionById(sid) : undefined}
 	{#if s}<SessionMark status={sessionStatus(s.chat)} />{/if}
-	{@const sub = subagentOf(tab.panel)}
-	{#if sub}<StateIcon state={subagentInfo(sub.sessionId, sub.agentId).state} size={12} />{/if}
 {/snippet}
 
 <Toaster />
@@ -1606,7 +1562,6 @@
 													onOpenSettings={openSettings}
 													onOpenAgent={openDesk}
 													onOpenRequirement={openRequirements}
-													onOpenTrace={() => openPanelTile('agents')}
 												/>
 												{#snippet failed(error, reset)}
 													<div class="pane-error">
@@ -1648,13 +1603,7 @@
 											if (action.decision === 'revise') panes.get(p.sessionId)?.focusComposer();
 										}}
 									/>
-								{:else if subagentOf(tab.panel)}
-									{@const sub = subagentOf(tab.panel)!}
-									{#key tab.panel}
-										<SubagentPane chat={sessionById(sub.sessionId)?.chat} agentId={sub.agentId} onOp={(op) => dispatch(sub.sessionId, op)} />
-									{/key}
 								{:else if tab.panel === 'goal'}<GoalPanel goal={chat?.goal ?? null} />
-								{:else if tab.panel === 'agents'}{#if chat && activeId}{#key activeId}<AgentRunsPanel {chat} onOp={(op) => activeId && dispatch(activeId, op)} />{/key}{/if}
 								{:else if tab.panel === 'files'}<FilesPanel rootDir={activeProject?.path ?? ''} />
 								{:else if tab.panel === 'git'}<GitPanel cwd={activeProject?.path ?? ''} worktree={activeProject?.worktree ?? null} llm={llmTarget} onOpenTask={(path, meta) => openTaskProject(path, meta)} onTaskRemoved={closeTaskProject} />
 								{:else if tab.panel === 'term'}<TerminalPanel cwd={activeProject?.path ?? ''} />

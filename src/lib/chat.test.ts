@@ -580,13 +580,22 @@ describe('claude session extras', () => {
 					started_at: 100,
 					tokens: 900,
 					phases: [{ index: 1, title: 'Find' }],
-					agents: [{ id: 'a1', label: 'bugs-0', phase: 1, state: 'running', started_at: 120, tokens: 900, tool_calls: 2 }]
+					agents: [
+						{ id: 'a1', label: 'bugs-0', phase: 1, state: 'running', started_at: 120, tokens: 900, tool_calls: 2 },
+						{ id: 'a2', label: 'bugs-1', phase: 1, state: 'start', started_at: 130 },
+						{ label: 'bugs-2', phase: 1, state: 'start' }
+					]
 				}
 			],
 			agents: [{ id: 'a9', label: 'Read a.txt', status: 'completed', tool_use_id: 't1', tokens: 30420, duration_ms: 4529 }]
 		});
 		expect(c.agentRuns.workflows[0].agents[0]).toMatchObject({ id: 'a1', phase: 1, state: 'running', toolCalls: 2 });
+		// A Workflow agent is `start` while queued too: it has begun once it has a start time.
+		expect(c.agentRuns.workflows[0].agents.slice(1).map((a) => a.state)).toEqual(['start', 'queued']);
 		expect(c.agentRuns.agents[0]).toMatchObject({ id: 'a9', state: 'completed', toolUseId: 't1', durationMs: 4529 });
+		// Stopped, its agents left mid-run are not running.
+		c.handle({ type: 'agent_runs', workflows: [{ id: 'w1', status: 'killed', agents: [{ id: 'a1', state: 'progress', started_at: 120 }, { id: 'a2', state: 'done' }] }], agents: [] });
+		expect(c.agentRuns.workflows[0].agents.map((a) => a.state)).toEqual(['stopped', 'done']);
 		c.handle({
 			type: 'subagent_transcript',
 			agent_id: 'a1',

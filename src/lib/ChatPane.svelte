@@ -74,10 +74,9 @@
 	import RateLimitBanner from '$lib/RateLimitBanner.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import SideAnswers from '$lib/composer/SideAnswers.svelte';
-	import ProgressTray from '$lib/agents/ProgressTray.svelte';
+	import TaskPanel from '$lib/agents/TaskPanel.svelte';
 	import NewSessionPicker from '$lib/NewSessionPicker.svelte';
-	import { placeFor, subagentPages, type OpenHow } from '$lib/agents/subagentPages.svelte';
-	import { agentRows, handedOffWork, type AgentRow } from '$lib/agentProgress';
+	import { agentRows, backgroundCommands, handedOffWork, planShown, planSummary, tasksEntry, type AgentRow } from '$lib/agentProgress';
 	import { parseToolOutput, toolTarget, toolVerb } from '$lib/toolSummary';
 	import { joinPath, parseFileHref, pathExt } from '$lib/fileRefs';
 	import type { Msg } from '$lib/chat.svelte';
@@ -113,8 +112,7 @@
 		onUnregister,
 		onOpenSettings,
 		onOpenAgent,
-		onOpenRequirement,
-		onOpenTrace
+		onOpenRequirement
 	}: {
 		session: Session;
 		store: SessionStore;
@@ -134,8 +132,6 @@
 		onOpenAgent?: (agent: string) => void;
 		/** Show a requirement on the workbench. */
 		onOpenRequirement?: (id: string) => void;
-		/** Opens the agent trace panel (it shows `chat.agentFocus`). */
-		onOpenTrace?: () => void;
 	} = $props();
 
 	const chat = $derived(session.chat);
@@ -449,23 +445,24 @@
 
 	const isImage = (p: string) => /\.(png|jpe?g|gif|webp|bmp)$/i.test(p);
 	const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
-	// The agent trace (AgentRunsPanel, a workbench panel) of this session.
-	const traceable = $derived(caps(chat).agentTrace && !!onOpenTrace);
-	function openTrace(agentId: string | null) {
-		chat.agentFocus = agentId;
-		store.activeId = session.id;
-		onOpenTrace?.();
+	// The session's background tasks (TaskPanel), a region beside the
+	// conversation; a subagent opens there on its own conversation where the
+	// engine can read it back.
+	const canOpenAgent = $derived(caps(chat).agentTrace);
+	function openTasks(agentId: string | null) {
+		chat.agentFocus = canOpenAgent ? agentId : null;
+		chat.tasksOpen = true;
 	}
 	function traceOf(m: Msg): { label: string; run: () => void } | null {
 		if (m.kind !== 'tool' || !m.callId) return null;
 		const agent = chat.agentRuns.agents.find((a) => a.toolUseId === m.callId);
-		if (agent) return { label: t('dock.agents.openAgent'), run: () => openTrace(agent.id) };
-		if (chat.agentRuns.workflows.some((w) => w.toolUseId === m.callId)) return { label: t('dock.agents.open'), run: () => openTrace(null) };
+		if (agent) return { label: t('dock.agents.openAgent'), run: () => openTasks(agent.id) };
+		if (chat.agentRuns.workflows.some((w) => w.toolUseId === m.callId)) return { label: t('dock.agents.open'), run: () => openTasks(null) };
 		return null;
 	}
-	// The subagents of this conversation: every run (the message list's cards
-	// find theirs), and the current turn's (the progress card). Derived from
-	// the trace and lifecycle state, never from the streaming text.
+	// The subagents of this conversation (the message list's cards find
+	// theirs). Derived from the trace and lifecycle state, never from the
+	// streaming text.
 	const lastTool = (label: string) => {
 		const m = chat.subagentLastTool[label];
 		return m ? `${toolVerb(m.name)} ${toolTarget(m.name, parseToolOutput(m.output))}`.trim() : '';
@@ -473,15 +470,17 @@
 	const allAgents = $derived(agentRows({ runs: chat.agentRuns, subagents: chat.subagents, lastTool }));
 	// The turn goes on while work it handed off runs (its work stays unfolded).
 	const turnOpen = $derived(chat.busy || handedOffWork(allAgents, chat.bgTasks));
-	const turnAgents = $derived(
-		agentRows({ runs: chat.agentRuns, subagents: chat.subagents, lastTool, since: chat.turnStartedAt || Number.MAX_SAFE_INTEGER })
+	// The entry under the conversation: the plan's steps and the tasks that run.
+	const plan = $derived(planSummary(chat.plan));
+	const entry = $derived(
+		tasksEntry(
+			plan,
+			planShown(plan, chat.busy, chat.turnStartedAt > 0 && chat.planAt >= chat.turnStartedAt),
+			allAgents,
+			backgroundCommands(chat.bgTasks, chat.subagents).length
+		)
 	);
-	/** A subagent's conversation in a page of its own (see OpenHow); a
-	 *  Workflow opens the trace's run list. */
-	function openAgent(row: AgentRow, how: OpenHow = 'default') {
-		if (row.workflow) return openTrace(null);
-		subagentPages.open(session.id, row.id, placeFor(how, prefs.openElsewhere));
-	}
+	const openAgent = (row: AgentRow) => openTasks(row.workflow ? null : row.id);
 
 	// Plan mode: a proposed plan runs once approved, in the mode picked on its
 	// card; revising it sends the next message as the user's feedback.
@@ -1134,182 +1133,190 @@
 
 <svelte:window onkeydown={onWindowKey} onfocus={() => isActive && refreshGitBranch()} />
 
-<div class="chatpane" style:--chat-w="{chatW}px" style:--chat-pad="{chatPad}px">
-	{#if owner}
-		<div class="owner">
-			<AgentAvatar agent={owner} size={16} />
-			<span class="owner-name">{t('chat.agentSession', { name: owner.name })}</span>
-			{#if owner.summary}<span class="owner-role">{owner.summary}</span>{/if}
-			{#if onOpenAgent}<button class="owner-link" onclick={() => onOpenAgent(owner.id)}>{t('chat.agentOnDesk')}</button>{/if}
-		</div>
+{#snippet tasksEntryButton()}
+	{#if entry.plan || entry.running}
+		<button class="tasks-entry" class:on={chat.tasksOpen} onclick={() => (chat.tasksOpen ? (chat.tasksOpen = false) : openTasks(null))} aria-expanded={chat.tasksOpen}>
+			{#if entry.running}<LoaderCircleIcon size={12} class="spin" />{/if}
+			{[entry.plan ? t('dock.agents.pillPlan', { done: plan.done, total: plan.total }) : '', entry.running ? t('dock.agents.pill', { n: entry.running }) : ''].filter(Boolean).join(' · ')}
+		</button>
 	{/if}
-	{#if linked}
-		<div class="owner">
-			<RequirementTag id={linked.id} />
-			<span class="owner-name">{linked.title}</span>
-			<span class="owner-role">{statusLabel(linked.status)}</span>
-			{#if onOpenRequirement}<button class="owner-link" onclick={() => onOpenRequirement(linked.id)}>{t('shell.requirement.viewRequirement')}</button>{/if}
-		</div>
-	{:else if willLink}
-		<div class="owner">
-			<RequirementTag id={willLink.id} />
-			<span class="owner-name">{t('shell.requirement.willLink', { id: willLink.id })}</span>
-			<span class="owner-role">{willLink.title}</span>
-			<button class="owner-link" onclick={() => ((session.requirement = undefined), (session.requirementStart = undefined))}>{t('shell.requirement.unlink')}</button>
-		</div>
-	{/if}
+{/snippet}
 
-	{#if showFind}
-		<FindBar
-			bind:value={findInput}
-			bind:inputEl={findInputEl}
-			hitCount={findHits.length}
-			activeIndex={findIdx}
-			onInput={onFindInput}
-			onKey={findKey}
-			onPrev={findPrev}
-			onNext={findNext}
-			onClose={closeFind}
-		/>
-	{/if}
-
-	<div class="mainwrap" bind:clientWidth={wrapW}>
-	<main bind:this={scroller} onscroll={onScroll} onwheel={onWheel}>
-		<!-- Pressing inside the conversation (opening a card, selecting text) stops following the end: what was pressed stays under the pointer instead of being pushed up as the reply grows. -->
-		<div bind:this={contentEl} onpointerdowncapture={() => (atBottom = false)} role="presentation">
-			<MessageList bind:this={messageList} bind:mark messages={chat.messages} busy={turnOpen} foldTurns={prefs.foldTurns} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onNote={noteRequirement} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} traceOf={traceable ? traceOf : undefined} agents={allAgents} onOpenAgent={traceable ? openAgent : undefined} onPlan={planAction} {planMode} onOpenPlan={(id) => planPages.open(session.id, id)} />
-		</div>
-		{#if chat.booting && chat.engineState !== 'exited'}
-			<div class="welcome spawning">
-				<span class="spawn-spin"><LoaderCircleIcon size={28} class="spin" /></span>
-				<p class="welcome-tip">{t('shell.spawning')}</p>
-			</div>
-		{:else if starting && chat.messages.length === 0}
-			<div class="welcome">
-				<RequirementStart requirement={starting} {session} />
-			</div>
-		{:else if chat.messages.length === 0 && !chat.busy}
-			<div class="welcome">
-				{#if session.draft && !project?.chats}<NewSessionPicker {store} {session} />{:else}<p class="welcome-tip">{t('shell.welcomeTip')}</p>{/if}
-				<div class="welcome-hints">
-					<span><kbd>/</kbd> {t('shell.hintCommand')}</span>
-					<span><kbd>@</kbd> {t('shell.hintRef')}</span>
-					<span><kbd>⌘K</kbd> {t('shell.hintPalette')}</span>
-					<span>{t('shell.hintImage')}</span>
-				</div>
+<div class="chatpane">
+	<div class="chatcol" style:--chat-w="{chatW}px" style:--chat-pad="{chatPad}px">
+		{#if owner}
+			<div class="owner">
+				<AgentAvatar agent={owner} size={16} />
+				<span class="owner-name">{t('chat.agentSession', { name: owner.name })}</span>
+				{#if owner.summary}<span class="owner-role">{owner.summary}</span>{/if}
+				{#if onOpenAgent}<button class="owner-link" onclick={() => onOpenAgent(owner.id)}>{t('chat.agentOnDesk')}</button>{/if}
 			</div>
 		{/if}
-	</main>
-	{#if marks.length > 1}
-		<TurnRail {marks} current={mark} onJump={(n) => messageList?.jumpToMark(n)} />
-	{/if}
+		{#if linked}
+			<div class="owner">
+				<RequirementTag id={linked.id} />
+				<span class="owner-name">{linked.title}</span>
+				<span class="owner-role">{statusLabel(linked.status)}</span>
+				{#if onOpenRequirement}<button class="owner-link" onclick={() => onOpenRequirement(linked.id)}>{t('shell.requirement.viewRequirement')}</button>{/if}
+			</div>
+		{:else if willLink}
+			<div class="owner">
+				<RequirementTag id={willLink.id} />
+				<span class="owner-name">{t('shell.requirement.willLink', { id: willLink.id })}</span>
+				<span class="owner-role">{willLink.title}</span>
+				<button class="owner-link" onclick={() => ((session.requirement = undefined), (session.requirementStart = undefined))}>{t('shell.requirement.unlink')}</button>
+			</div>
+		{/if}
+
+		{#if showFind}
+			<FindBar
+				bind:value={findInput}
+				bind:inputEl={findInputEl}
+				hitCount={findHits.length}
+				activeIndex={findIdx}
+				onInput={onFindInput}
+				onKey={findKey}
+				onPrev={findPrev}
+				onNext={findNext}
+				onClose={closeFind}
+			/>
+		{/if}
+
+		<div class="mainwrap" bind:clientWidth={wrapW}>
+		<main bind:this={scroller} onscroll={onScroll} onwheel={onWheel}>
+			<!-- Pressing inside the conversation (opening a card, selecting text) stops following the end: what was pressed stays under the pointer instead of being pushed up as the reply grows. -->
+			<div bind:this={contentEl} onpointerdowncapture={() => (atBottom = false)} role="presentation">
+				<MessageList bind:this={messageList} bind:mark messages={chat.messages} busy={turnOpen} foldTurns={prefs.foldTurns} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onNote={noteRequirement} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} traceOf={traceOf} agents={allAgents} onOpenAgent={openAgent} tail={tasksEntryButton} onPlan={planAction} {planMode} onOpenPlan={(id) => planPages.open(session.id, id)} />
+			</div>
+			{#if chat.booting && chat.engineState !== 'exited'}
+				<div class="welcome spawning">
+					<span class="spawn-spin"><LoaderCircleIcon size={28} class="spin" /></span>
+					<p class="welcome-tip">{t('shell.spawning')}</p>
+				</div>
+			{:else if starting && chat.messages.length === 0}
+				<div class="welcome">
+					<RequirementStart requirement={starting} {session} />
+				</div>
+			{:else if chat.messages.length === 0 && !chat.busy}
+				<div class="welcome">
+					{#if session.draft && !project?.chats}<NewSessionPicker {store} {session} />{:else}<p class="welcome-tip">{t('shell.welcomeTip')}</p>{/if}
+					<div class="welcome-hints">
+						<span><kbd>/</kbd> {t('shell.hintCommand')}</span>
+						<span><kbd>@</kbd> {t('shell.hintRef')}</span>
+						<span><kbd>⌘K</kbd> {t('shell.hintPalette')}</span>
+						<span>{t('shell.hintImage')}</span>
+					</div>
+				</div>
+			{/if}
+		</main>
+		{#if marks.length > 1}
+			<TurnRail {marks} current={mark} onJump={(n) => messageList?.jumpToMark(n)} />
+		{/if}
+		</div>
+		{#if farFromEnd}
+			<button class="jump" style:bottom="{bottomH + 14}px" onclick={jumpToBottom} aria-label="scroll to bottom"><ChevronDownIcon size={16} /></button>
+		{/if}
+
+		<div class="bottom" bind:clientHeight={bottomH}>
+			{#if chat.engineState === 'exited'}
+				<div class="approval-wrap">
+					<div class="enginedown">
+						<span class="ed-text">{t('shell.engineDown')}</span>
+						<Button variant="primary" size="sm" onclick={() => store.restartSession(session.id, true)}>{t('shell.restartEngine')}</Button>
+					</div>
+				</div>
+			{/if}
+			<!-- Agent questions render in the composer tray; the card keeps plain
+			     tool approvals (commands, edits, plans). -->
+			{#if chat.pendingApproval && !chat.pendingApproval.questions?.length}
+				<div class="approval-wrap">
+					{#key chat.pendingApproval.callId}
+						<ApprovalCard approval={chat.pendingApproval} onRespond={respondApproval} ruleScopes={caps(chat).ruleScopes} keys={isActive} />
+					{/key}
+				</div>
+			{/if}
+
+			{#if chat.inTerminal}
+				<p class="interm">{t('chat.inTerminal')}</p>
+			{/if}
+			{#if chat.rateLimit}
+				<RateLimitBanner rateLimit={chat.rateLimit} onDismiss={() => (chat.rateLimit = null)} />
+			{/if}
+
+			<SideAnswers {chat} />
+
+			{#if chat.planRevising}
+				<div class="approval-wrap">
+					<div class="revising">
+						<ClipboardListIcon size={14} />
+						<span class="rv-label">{t('chat.planCard.revising')}</span>
+						<span class="rv-hint">{t('chat.planCard.revisingHint')}</span>
+						<button class="rv-x" onclick={() => (chat.planRevising = null)} aria-label={t('chat.planCard.cancelRevise')} title={t('chat.planCard.cancelRevise')}><XIcon size={14} /></button>
+					</div>
+				</div>
+			{/if}
+
+			{#if gate && !chat.pendingApproval}
+				<div class="approval-wrap">
+					<div class="gate">
+						<span class="gate-hint">{t('shell.requirement.confirmHint')}</span>
+						<Button size="sm" variant="primary" disabled={confirming} onclick={confirmGate}>{t(`shell.requirement.${gateNext(gate)}`)}</Button>
+					</div>
+				</div>
+			{/if}
+
+			<Composer
+				{chat}
+				foot={statusBell}
+				onContextBreakdown={session.draft || chat.engineState === 'exited' ? undefined : () => send({ op: 'context_usage' })}
+				bind:this={composerRef}
+				bind:input
+				bind:attachments
+				onImage={addImage}
+				bind:videos
+				bind:el={composerEl}
+				onSubmit={submit}
+				onStop={stop}
+				onSteer={() => send({ op: 'steer' })}
+				onPick={pickFiles}
+				onModel={openModelPicker}
+				onModelSelect={selectRow}
+				onModelClose={() => chat.closePicker()}
+				modelRows={filteredRows}
+				modelSearch={showPickerSearch}
+				{backendLocked}
+				toolProvider={toolModel
+					? {
+							model: toolModel.jucode ?? toolModel.key,
+							name: BACKEND_LABELS[chat.backendId],
+							local: toolModel.local !== undefined,
+							jucode: toolModel.jucode !== undefined,
+							onJucode: toolMode === 'jucode',
+							group: session.group ?? '',
+							groups: store.takesSessionGroup(session),
+							onPick: (choice) => pickProvider(toolModel, choice)
+						}
+					: undefined}
+				{gitBranch}
+				gitCwd={project?.path || chat.cwd}
+				repoName={project?.name ?? ''}
+				onBranchChanged={refreshGitBranch}
+				onBackend={(b, acpAgent) => store.switchBackend(session.id, b, acpAgent)}
+				bind:pickerQuery
+			bind:pickerSelIdx={selIdx}
+				onEffort={setEffort}
+				onSwitch={setSwitch}
+				effortDisabled={!!pendingModel || chat.switching}
+				onApproval={setApprovalMode}
+				onRespond={respondApproval}
+			/>
+		</div>
 	</div>
-	{#if farFromEnd}
-		<button class="jump" style:bottom="{bottomH + 14}px" onclick={jumpToBottom} aria-label="scroll to bottom"><ChevronDownIcon size={16} /></button>
+	{#if chat.tasksOpen}
+		<aside class="tasks" aria-label={t('dock.agents.title')}>
+			<TaskPanel {chat} rows={allAgents} canOpen={canOpenAgent} onOp={send} onClose={() => (chat.tasksOpen = false)} />
+		</aside>
 	{/if}
-
-	<div class="bottom" bind:clientHeight={bottomH}>
-		{#if chat.engineState === 'exited'}
-			<div class="approval-wrap">
-				<div class="enginedown">
-					<span class="ed-text">{t('shell.engineDown')}</span>
-					<Button variant="primary" size="sm" onclick={() => store.restartSession(session.id, true)}>{t('shell.restartEngine')}</Button>
-				</div>
-			</div>
-		{/if}
-		<!-- Agent questions render in the composer tray; the card keeps plain
-		     tool approvals (commands, edits, plans). -->
-		{#if chat.pendingApproval && !chat.pendingApproval.questions?.length}
-			<div class="approval-wrap">
-				{#key chat.pendingApproval.callId}
-					<ApprovalCard approval={chat.pendingApproval} onRespond={respondApproval} ruleScopes={caps(chat).ruleScopes} keys={isActive} />
-				{/key}
-			</div>
-		{/if}
-
-		{#if chat.inTerminal}
-			<p class="interm">{t('chat.inTerminal')}</p>
-		{/if}
-		{#if chat.rateLimit}
-			<RateLimitBanner rateLimit={chat.rateLimit} onDismiss={() => (chat.rateLimit = null)} />
-		{/if}
-
-		<SideAnswers {chat} />
-		<ProgressTray
-			{chat}
-			sessionId={session.id}
-			rows={turnAgents}
-			onOpen={traceable ? openAgent : undefined}
-			onStop={(id) => send({ op: 'stop_task', task_id: id })}
-			onOutput={(id) => send({ op: 'task_output', task_id: id })}
-		/>
-
-		{#if chat.planRevising}
-			<div class="approval-wrap">
-				<div class="revising">
-					<ClipboardListIcon size={14} />
-					<span class="rv-label">{t('chat.planCard.revising')}</span>
-					<span class="rv-hint">{t('chat.planCard.revisingHint')}</span>
-					<button class="rv-x" onclick={() => (chat.planRevising = null)} aria-label={t('chat.planCard.cancelRevise')} title={t('chat.planCard.cancelRevise')}><XIcon size={14} /></button>
-				</div>
-			</div>
-		{/if}
-
-		{#if gate && !chat.pendingApproval}
-			<div class="approval-wrap">
-				<div class="gate">
-					<span class="gate-hint">{t('shell.requirement.confirmHint')}</span>
-					<Button size="sm" variant="primary" disabled={confirming} onclick={confirmGate}>{t(`shell.requirement.${gateNext(gate)}`)}</Button>
-				</div>
-			</div>
-		{/if}
-
-		<Composer
-			{chat}
-			foot={statusBell}
-			onContextBreakdown={session.draft || chat.engineState === 'exited' ? undefined : () => send({ op: 'context_usage' })}
-			bind:this={composerRef}
-			bind:input
-			bind:attachments
-			onImage={addImage}
-			bind:videos
-			bind:el={composerEl}
-			onSubmit={submit}
-			onStop={stop}
-			onSteer={() => send({ op: 'steer' })}
-			onPick={pickFiles}
-			onModel={openModelPicker}
-			onModelSelect={selectRow}
-			onModelClose={() => chat.closePicker()}
-			modelRows={filteredRows}
-			modelSearch={showPickerSearch}
-			{backendLocked}
-			toolProvider={toolModel
-				? {
-						model: toolModel.jucode ?? toolModel.key,
-						name: BACKEND_LABELS[chat.backendId],
-						local: toolModel.local !== undefined,
-						jucode: toolModel.jucode !== undefined,
-						onJucode: toolMode === 'jucode',
-						group: session.group ?? '',
-						groups: store.takesSessionGroup(session),
-						onPick: (choice) => pickProvider(toolModel, choice)
-					}
-				: undefined}
-			{gitBranch}
-			gitCwd={project?.path || chat.cwd}
-			repoName={project?.name ?? ''}
-			onBranchChanged={refreshGitBranch}
-			onBackend={(b, acpAgent) => store.switchBackend(session.id, b, acpAgent)}
-			bind:pickerQuery
-		bind:pickerSelIdx={selIdx}
-			onEffort={setEffort}
-			onSwitch={setSwitch}
-			effortDisabled={!!pendingModel || chat.switching}
-			onApproval={setApprovalMode}
-			onRespond={respondApproval}
-		/>
-	</div>
 </div>
 
 {#if isActive && chat.trustPrompt}
@@ -1410,10 +1417,55 @@
 		position: relative;
 		height: 100%;
 		display: flex;
-		flex-direction: column;
 		min-width: 0;
 		min-height: 0;
 		background: var(--bg);
+		container-type: inline-size;
+	}
+	.chatcol {
+		position: relative;
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		min-height: 0;
+	}
+	/* The background tasks region: beside the conversation, or over it when
+	   the pane is too narrow for both. */
+	.tasks {
+		flex: none;
+		width: clamp(340px, 34%, 460px);
+		min-height: 0;
+		border-left: 1px solid var(--hairline);
+		background: var(--bg);
+	}
+	@container (max-width: 760px) {
+		.tasks {
+			position: absolute;
+			inset: 0;
+			z-index: 20;
+			width: auto;
+			border-left: none;
+		}
+	}
+	.tasks-entry {
+		align-self: flex-start;
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 3px 10px;
+		border: none;
+		border-radius: 8px;
+		background: var(--surface2);
+		color: var(--text);
+		font: inherit;
+		font-size: var(--fs-xs);
+		font-variant-numeric: tabular-nums;
+		cursor: pointer;
+	}
+	.tasks-entry:hover,
+	.tasks-entry.on {
+		box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--text) 22%, transparent);
 	}
 	.jump {
 		position: absolute;

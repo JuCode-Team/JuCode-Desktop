@@ -72,7 +72,7 @@ export function openChatTab(
 }
 
 /** Tool panels that no longer exist: saved layouts may still hold their tabs. */
-const REMOVED_PANELS = new Set(['changes', 'turns', 'diag']);
+const REMOVED_PANELS = new Set(['changes', 'turns', 'diag', 'agents']);
 
 /**
  * Build the canvas from a persisted layout blob when a workspace loads:
@@ -97,7 +97,8 @@ export function reconcileLayout(
 	for (const leaf of leavesOf(layout.root)) {
 		for (const tab of leaf.tabs) {
 			const sid = chatSessionOf(tab.panel);
-			if ((sid && !live.has(sid)) || REMOVED_PANELS.has(tab.panel)) layout = closeTab(layout, tab.id);
+			// Subagent pages (`subagent:*`) moved into the conversation's background tasks.
+			if ((sid && !live.has(sid)) || REMOVED_PANELS.has(tab.panel) || tab.panel.startsWith('subagent:')) layout = closeTab(layout, tab.id);
 		}
 	}
 	if (!seedSessionId || chatSessionsIn(layout).length) return layout;

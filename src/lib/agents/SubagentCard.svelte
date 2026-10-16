@@ -17,7 +17,6 @@
 	} from '$lib/agentProgress';
 	import StateIcon from './StateIcon.svelte';
 	import Elapsed from './Elapsed.svelte';
-	import type { OpenHow } from './subagentPages.svelte';
 
 	let {
 		name,
@@ -37,7 +36,7 @@
 		isError: boolean;
 		/** Every subagent of the conversation (see agentRows). */
 		rows: AgentRow[];
-		onOpen?: (row: AgentRow, how: OpenHow) => void;
+		onOpen?: (row: AgentRow) => void;
 	} = $props();
 
 	const wait = $derived(WAIT_TOOLS.has(name));
@@ -92,7 +91,7 @@
 		{#if waitingOn.length}
 			<div class="targets">
 				{#each waitingOn as w (w.id)}
-					<button class="target" disabled={!onOpen || !w.row} onclick={(e) => w.row && onOpen?.(w.row, e.metaKey || e.ctrlKey ? 'other' : 'default')} title={w.id}>
+					<button class="target" disabled={!onOpen || !w.row} onclick={() => w.row && onOpen?.(w.row)} title={w.id}>
 						<StateIcon state={w.state} size={12} label={t(`dock.agents.state.${w.state === 'unknown' ? 'queued' : w.state}`)} />
 						<span>{w.label}</span>
 					</button>
@@ -101,12 +100,13 @@
 		{/if}
 	</div>
 {:else}
-	<button class="sa spawn" class:link={!!onOpen && !!agent} disabled={!onOpen || !agent} onclick={(e) => agent && onOpen?.(agent, e.metaKey || e.ctrlKey ? 'other' : 'default')} aria-label={t('chat.progress.open', { name: label })}>
+	<button class="sa spawn" class:link={!!onOpen && !!agent} disabled={!onOpen || !agent} onclick={() => agent && onOpen?.(agent)} aria-label={t('chat.progress.open', { name: label })}>
 		<span class="ico"><BotIcon size={16} /></span>
 		<span class="col">
 			<span class="line">
 				<span class="name">{label}</span>
 				{#if agent?.model}<span class="model">{agent.model.replace(/^claude-/, '')}</span>{/if}
+				{#if agent?.progress}<span class="model">{agent.progress.done}/{agent.progress.total}</span>{/if}
 				<span class="grow"></span>
 				{#if agent}<Elapsed row={agent} />{/if}
 				<StateIcon state={state} size={14} label={state === 'unknown' ? '' : t(`dock.agents.state.${state}`)} />

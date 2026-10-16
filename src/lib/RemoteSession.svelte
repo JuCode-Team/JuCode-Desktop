@@ -31,7 +31,7 @@
 	import ModelMenu from '$lib/remote/ModelMenu.svelte';
 	import SideAnswers from '$lib/composer/SideAnswers.svelte';
 	import { joinPath, parseFileHref } from '$lib/fileRefs';
-	import AgentRunsPanel from '$lib/AgentRunsPanel.svelte';
+	import TaskPanel from '$lib/agents/TaskPanel.svelte';
 	import NetworkIcon from '@lucide/svelte/icons/network';
 	import type { Msg } from '$lib/chat.svelte';
 	import type { SessionSwitch } from '$lib/composer/SessionSwitches.svelte';
@@ -53,10 +53,9 @@
 	import { loadComposerText, saveComposerText } from '$lib/composerText';
 	import { t } from '$lib/i18n';
 	import { imageViewer } from '$lib/ui/imageViewer.svelte';
-	import ProgressTray from '$lib/agents/ProgressTray.svelte';
 	import StatusStrip from '$lib/composer/StatusStrip.svelte';
 	import ContextIndicator from '$lib/composer/ContextIndicator.svelte';
-	import { agentRows, handedOffWork, type AgentRow } from '$lib/agentProgress';
+	import { agentRows, backgroundCommands, handedOffWork, planShown, planSummary, tasksEntry, type AgentRow } from '$lib/agentProgress';
 	import { parseToolOutput, toolTarget, toolVerb } from '$lib/toolSummary';
 	import { costText } from '$lib/sessionCost';
 	import { prefs } from '$lib/prefs.svelte';
@@ -599,21 +598,21 @@
 		if (!ref.path) return;
 		onFile?.(joinPath(cwd ?? '', ref.path), ref.line);
 	}
-	// The agent trace sheet (AgentRunsPanel).
-	let traceOpen = $state(false);
-	function openTrace(agentId: string | null) {
-		chat.agentFocus = agentId;
-		traceOpen = true;
+	// The background tasks (TaskPanel), full screen over the session; a
+	// subagent opens there on its own conversation where the engine can
+	// read it back.
+	function openTasks(agentId: string | null) {
+		chat.agentFocus = bcaps.agentTrace ? agentId : null;
+		chat.tasksOpen = true;
 	}
 	function traceOf(m: Msg): { label: string; run: () => void } | null {
 		if (m.kind !== 'tool' || !m.callId) return null;
 		const agent = chat.agentRuns.agents.find((a) => a.toolUseId === m.callId);
-		if (agent) return { label: t('dock.agents.openAgent'), run: () => openTrace(agent.id) };
-		if (chat.agentRuns.workflows.some((w) => w.toolUseId === m.callId)) return { label: t('dock.agents.open'), run: () => openTrace(null) };
+		if (agent) return { label: t('dock.agents.openAgent'), run: () => openTasks(agent.id) };
+		if (chat.agentRuns.workflows.some((w) => w.toolUseId === m.callId)) return { label: t('dock.agents.open'), run: () => openTasks(null) };
 		return null;
 	}
-	// The subagents of this conversation, as Desktop's chat shows them: every
-	// run (the message list's cards) and the current turn's (the progress tray).
+	// The subagents of this conversation, as Desktop's chat shows them.
 	const lastTool = (label: string) => {
 		const m = chat.subagentLastTool[label];
 		return m ? `${toolVerb(m.name)} ${toolTarget(m.name, parseToolOutput(m.output))}`.trim() : '';
@@ -621,14 +620,17 @@
 	const allAgents = $derived(agentRows({ runs: chat.agentRuns, subagents: chat.subagents, lastTool }));
 	// The turn goes on while work it handed off runs (its work stays unfolded).
 	const turnOpen = $derived(chat.busy || handedOffWork(allAgents, chat.bgTasks));
-	const turnAgents = $derived(
-		agentRows({ runs: chat.agentRuns, subagents: chat.subagents, lastTool, since: chat.turnStartedAt || Number.MAX_SAFE_INTEGER })
+	// The entry under the conversation: the plan's steps and the tasks that run.
+	const plan = $derived(planSummary(chat.plan));
+	const entry = $derived(
+		tasksEntry(
+			plan,
+			planShown(plan, chat.busy, chat.turnStartedAt > 0 && chat.planAt >= chat.turnStartedAt),
+			allAgents,
+			backgroundCommands(chat.bgTasks, chat.subagents).length
+		)
 	);
-	// A subagent opens in the trace sheet on its own conversation (one place
-	// on a phone, whatever Desktop's setting); a Workflow on the run list.
-	function openAgent(row: AgentRow) {
-		openTrace(row.workflow ? null : row.id);
-	}
+	const openAgent = (row: AgentRow) => openTasks(row.workflow ? null : row.id);
 	// Under the composer, as on Desktop: notices, cost, context in use.
 	const ctxLimit = $derived(chat.contextLimit || chat.contextWindow);
 	const ctxPct = $derived(ctxLimit > 0 ? Math.min(100, Math.round((chat.contextTokens / ctxLimit) * 100)) : 0);
@@ -656,6 +658,15 @@
 	const opening = $derived(!draft && !asleep && !connected && !exited);
 </script>
 
+{#snippet tasksEntryButton()}
+	{#if entry.plan || entry.running}
+		<button class="tasks-entry" onclick={() => openTasks(null)}>
+			{#if entry.running}<LoaderCircleIcon size={12} class="spin" />{/if}
+			{[entry.plan ? t('dock.agents.pillPlan', { done: plan.done, total: plan.total }) : '', entry.running ? t('dock.agents.pill', { n: entry.running }) : ''].filter(Boolean).join(' · ')}
+		</button>
+	{/if}
+{/snippet}
+
 <div class="session">
 	<header>
 		{#if onBack}<button class="back" onclick={onBack} aria-label={t('shell.remote.back')}><ArrowLeftIcon size={16} /></button>{/if}
@@ -664,21 +675,18 @@
 			{#if hostName}<span class="host"><MonitorIcon size={12} /><span>{hostName}</span></span>{/if}
 		</span>
 		{#if chat.busy}<span class="busy pulse"></span>{/if}
-		{#if bcaps.agentTrace && connected}<button class="back" onclick={() => openTrace(null)} aria-label={t('dock.agents.title')}><NetworkIcon size={16} /></button>{/if}
+		{#if connected}<button class="back" onclick={() => openTasks(null)} aria-label={t('dock.agents.title')}><NetworkIcon size={16} /></button>{/if}
 		{#if onFiles}<button class="back" onclick={onFiles} aria-label={t('shell.remote.files')}><FilesIcon size={16} /></button>{/if}
 		{#if onChanges}<button class="back" onclick={onChanges} aria-label={t('shell.remote.changes')}><GitCompareIcon size={16} /></button>{/if}
 	</header>
 
-	{#if traceOpen}
-		<!-- The agent trace, full screen over the session. -->
+	{#if chat.tasksOpen}
+		<!-- The background tasks, full screen over the session. -->
 		<div class="trace-sheet" role="dialog" aria-label={t('dock.agents.title')}>
-			<header>
-				<button class="back" onclick={() => (traceOpen = false)} aria-label={t('shell.remote.back')}><ArrowLeftIcon size={16} /></button>
-				<span class="heading"><span class="title">{t('dock.agents.title')}</span></span>
-			</header>
-			<div class="trace-body"><AgentRunsPanel {chat} onOp={send} /></div>
+			<TaskPanel {chat} rows={allAgents} canOpen={bcaps.agentTrace} onOp={send} onClose={() => (chat.tasksOpen = false)} />
 		</div>
 	{/if}
+
 	<main
 		class="scroll"
 		bind:this={scroller}
@@ -698,9 +706,10 @@
 				phase={chat.phase}
 				call={chat.call}
 				compactionTokens={chat.compactionTokens}
-				traceOf={bcaps.agentTrace ? traceOf : undefined}
+				{traceOf}
 				agents={allAgents}
-				onOpenAgent={bcaps.agentTrace ? openAgent : undefined}
+				onOpenAgent={openAgent}
+				tail={tasksEntryButton}
 				{loadImage}
 				onFile={onFile ? openReplyFile : undefined}
 				{scroller}
@@ -789,14 +798,6 @@
 		{/if}
 
 		<SideAnswers {chat} />
-		<ProgressTray
-			{chat}
-			sessionId={sid || 'draft'}
-			rows={turnAgents}
-			onOpen={bcaps.agentTrace ? openAgent : undefined}
-			onStop={(id) => send({ op: 'stop_task', task_id: id })}
-			onOutput={(id) => send({ op: 'task_output', task_id: id })}
-		/>
 		<div class="composer-wrap">
 			{#if chat.approvalPending && chat.busy}
 				<div class="queued">
@@ -924,7 +925,7 @@
 			{#if chat.statusLog.length || showCost || showCtx}
 				<div class="composer-foot">
 					<StatusStrip {chat} />
-					{#if showCost}<span class="foot-cost">{costText(chat.cost, chat.billing)}</span>{/if}
+					{#if showCost}<span class="foot-cost">{t('chat.sessionCost', { cost: costText(chat.cost, chat.billing) })}</span>{/if}
 					{#if showCtx}
 						<ContextIndicator
 							pct={ctxPct}
@@ -976,17 +977,26 @@
 		color: var(--dim);
 		text-align: center;
 	}
+	.tasks-entry {
+		align-self: flex-start;
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 4px 10px;
+		border: none;
+		border-radius: 8px;
+		background: var(--surface2);
+		color: var(--text);
+		font: inherit;
+		font-size: var(--fs-xs);
+		font-variant-numeric: tabular-nums;
+	}
 	.trace-sheet {
 		position: fixed;
 		inset: 0;
 		z-index: 20;
-		display: flex;
-		flex-direction: column;
+		padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
 		background: var(--bg);
-	}
-	.trace-body {
-		flex: 1;
-		min-height: 0;
 	}
 	.session {
 		position: fixed;

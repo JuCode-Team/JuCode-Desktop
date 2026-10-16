@@ -86,7 +86,7 @@ is (re)starting; `dispatch(sessionId, op)` is how every UI call site sends.
 | `mcpEngineOwned` | Settings → 扩展 MCP lists the engine's own servers: switch and reconnect only, no add/edit/delete |
 | `ruleScopes` | 始终允许 asks for a scope (session / project / all projects); Settings → 编程智能体 lists the permission rules |
 | `sideQuestions` | `/btw <question>` answers in the task strip (`side_answer`) |
-| `agentTrace` | the 智能体 workbench panel (`AgentRunsPanel.svelte`), its links from the task strip, the subagent strip and Agent / Workflow tool cards |
+| `agentTrace` | Workflow traces in the background tasks region (`agents/TaskPanel.svelte`) and a subagent's own conversation, opened from it and from Agent / Workflow tool cards |
 
 The single gating helper is `caps(chat)` from `$lib/backends` — components
 never test `backendId` directly.
@@ -116,15 +116,16 @@ never test `backendId` directly.
   `model_status` offers it; they send `/effort ultracode`, `/fast`,
   `/thinking` `on|off`. A respawn passes `ultracode`, `fast`, `effort` and
   `thinking` so the new engine keeps them.
-- **Agent trace** (`AgentRunsPanel.svelte`, `agentTrace.ts`): each Workflow
-  as a timeline of its agents by phase (state, model, time, tokens, tool
-  calls), the Task subagents below, and a picked subagent's conversation,
-  read-only (`subagent_transcript`, re-read every 2.5 s while it runs).
-  `chat.agentFocus` says which subagent it shows. The desktop opens it as a
-  workbench panel, the web page as a full-screen sheet.
-- **Background tasks** (the progress tray, `agents/ProgressTray.svelte`): `background_tasks` is the live
-  set, with a stop button each and a shell's output on demand; a finished
-  one is a system line (`task_done`).
+- **Background tasks** (`agents/TaskPanel.svelte`, `agentTrace.ts`): a
+  region of the session beside the conversation (the web page: a sheet over
+  it), opened from the entry under the last message and from the subagent
+  cards (`chat.tasksOpen`). It lists the turn's plan, then what runs — each
+  Workflow by phase (state, time, tokens, tool calls per agent), Task
+  subagents and the live `background_tasks` (a shell's output on demand) —
+  each with a stop button, then what finished, one line each. A picked
+  subagent's conversation shows in place, read-only (`subagent_transcript`,
+  re-read every 2.5 s while it runs); `chat.agentFocus` says which. A
+  finished command is a system line (`task_done`).
 - `/resume` has no wire form in stream-json mode: ChatPane builds the picker
   from the daemon's `session_history` for the project and opens a pick in a
   new tab.

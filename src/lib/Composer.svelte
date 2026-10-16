@@ -963,7 +963,7 @@
 		{/if}
 		<div class="fspace"></div>
 		{#if foot}{@render foot()}{/if}
-		{#if showCost}<span class="foot-cost" title={t('chat.cost')}>{costText(chat.cost, chat.billing)}</span>{/if}
+		{#if showCost}<span class="foot-cost" title={t('chat.cost')}>{t('chat.sessionCost', { cost: costText(chat.cost, chat.billing) })}</span>{/if}
 		{#if showCtx}
 			<div class="foot-ctx">
 				<ContextIndicator pct={ctxPct} atThreshold={ctxAtThreshold} contextTokens={chat.contextTokens} contextLimit={ctxLimit} totalIn={chat.totalIn} totalOut={chat.totalOut} cost={chat.cost} billing={chat.billing} billingError={chat.billingError} runMs={chat.runMs} breakdown={chat.contextBreakdown} onBreakdown={bcaps.contextBreakdown ? onContextBreakdown : undefined} />

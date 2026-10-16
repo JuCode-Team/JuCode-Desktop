@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { byPhase, elapsed, formatDuration, runState, timeline } from './agentTrace';
+import { byPhase, elapsed, formatDuration, runState } from './agentTrace';
 import type { AgentRun, WorkflowRun } from './chat.svelte';
 
 const agent = (id: string, startedAt: number, durationMs: number, state = 'done', phase = 1): AgentRun => ({
@@ -23,9 +23,10 @@ const agent = (id: string, startedAt: number, durationMs: number, state = 'done'
 
 describe('agent trace', () => {
 	it('reads the engine state words as five', () => {
-		expect(['done', 'completed', 'start', 'failed', 'killed', 'pending'].map(runState)).toEqual([
+		expect(['done', 'completed', 'start', 'progress', 'failed', 'killed', 'pending'].map(runState)).toEqual([
 			'done',
 			'done',
+			'running',
 			'running',
 			'failed',
 			'stopped',
@@ -43,12 +44,6 @@ describe('agent trace', () => {
 		expect(formatDuration(1843, u)).toBe('1.8 s');
 		expect(formatDuration(125_000, u)).toBe('2 m 05 s');
 		expect(formatDuration(3_720_000, u)).toBe('1 h 02 m');
-	});
-
-	it('lays agents out on one time axis', () => {
-		const { bars } = timeline([agent('a', 0 + 1000, 1000), agent('b', 1500, 1500)], 0);
-		expect(bars.get('a')).toEqual({ left: 0, width: 50 });
-		expect(bars.get('b')).toEqual({ left: 25, width: 75 });
 	});
 
 	it('groups a workflow by phase, unphased agents last', () => {

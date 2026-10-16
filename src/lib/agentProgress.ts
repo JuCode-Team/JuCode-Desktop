@@ -203,8 +203,8 @@ export function rowElapsed(row: AgentRow, now: number): number {
 /** The subagent a spawn call started (by the call's id). */
 export const agentOfCall = (rows: AgentRow[], callId: string) => (callId ? rows.find((r) => r.toolUseId === callId) : undefined);
 
-/** Tool names that start a subagent, and the ones that wait for subagents. */
-export const SPAWN_TOOLS = new Set(['spawn_agent', 'Task', 'Agent']);
+/** Tool names that start a subagent (or a Workflow of them), and the ones that wait for subagents. */
+export const SPAWN_TOOLS = new Set(['spawn_agent', 'Task', 'Agent', 'Workflow']);
 export const WAIT_TOOLS = new Set(['wait_agent', 'agent_wait']);
 
 /** What a spawn call's own payload says (its arguments or its output):
@@ -271,22 +271,18 @@ function parse(output: string): Record<string, unknown> | null {
 export const planShown = (plan: PlanSummary, busy: boolean, planFresh: boolean) =>
 	plan.total > 0 && (planFresh || (busy && plan.done < plan.total));
 
-/** The progress tray above the composer: hidden (nothing to show), its one-line
- *  bar, or open (the bar plus the to-dos and subagents) when the user opened
- *  it for this session. */
-export type TrayMode = 'hidden' | 'bar' | 'open';
-
-export function trayMode(plan: PlanSummary, rows: AgentRow[], busy: boolean, planFresh: boolean, open: boolean): TrayMode {
-	if (!planShown(plan, busy, planFresh) && !rows.length) return 'hidden';
-	return open ? 'open' : 'bar';
+/** Background commands (shells, monitors): the engine's tasks that are not
+ *  a subagent or a Workflow (those are listed as such). */
+export function backgroundCommands<T extends { id: string; kind: string }>(tasks: T[], subagents: Record<string, unknown>): T[] {
+	return tasks.filter((x) => !(x.id in subagents) && !x.kind.startsWith('local_agent') && !x.kind.startsWith('local_workflow'));
 }
 
-/** The bar's counts: steps done of all, and subagents (running ones while any run). */
-export function pillParts(plan: PlanSummary, rows: AgentRow[], showPlan: boolean): { steps: string; agents: number; running: number } {
+/** What the entry to the background tasks says: the plan's steps while some
+ *  are left to do (`3/7`, else ''), and how many tasks run. */
+export function tasksEntry(plan: PlanSummary, showPlan: boolean, rows: Pick<AgentRow, 'state'>[], commands: number): { plan: string; running: number } {
 	return {
-		steps: showPlan ? `${plan.done}/${plan.total}` : '',
-		agents: rows.length,
-		running: rows.filter((r) => r.state === 'running' || r.state === 'queued').length
+		plan: showPlan && plan.done < plan.total ? `${plan.done}/${plan.total}` : '',
+		running: rows.filter((r) => r.state === 'running' || r.state === 'queued').length + commands
 	};
 }
 

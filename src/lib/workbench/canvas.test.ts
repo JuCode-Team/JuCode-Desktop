@@ -95,7 +95,7 @@ describe('reconcileLayout', () => {
 	});
 
 	it('drops tabs of removed tool panels', () => {
-		const layout = singleLeafLayout([chatTab('s1'), panelTab('c', 'changes'), panelTab('t', 'turns'), panelTab('d', 'diag'), panelTab('g', 'git')]);
+		const layout = singleLeafLayout([chatTab('s1'), panelTab('c', 'changes'), panelTab('t', 'turns'), panelTab('d', 'diag'), panelTab('a', 'agents'), panelTab('s', 'subagent:s1:x'), panelTab('g', 'git')]);
 		const next = reconcileLayout(serializeLayout(layout), ['s1'], 's1');
 		expect(leavesOf(next.root).flatMap((l) => l.tabs.map((t) => t.panel))).toEqual(['chat:s1', 'git']);
 	});

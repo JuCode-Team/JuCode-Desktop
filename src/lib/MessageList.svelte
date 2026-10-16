@@ -3,7 +3,7 @@
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
 	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
-	import { flushSync, untrack } from 'svelte';
+	import { flushSync, untrack, type Snippet } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import Markdown from '$lib/Markdown.svelte';
 	import Collapse from '$lib/ui/Collapse.svelte';
@@ -11,8 +11,7 @@
 	import SubagentCard from '$lib/agents/SubagentCard.svelte';
 	import PlanCard, { type PlanAction } from '$lib/PlanCard.svelte';
 	import type { ApprovalMode } from '$lib/approval';
-	import { SPAWN_TOOLS, WAIT_TOOLS, type AgentRow } from '$lib/agentProgress';
-	import type { OpenHow } from '$lib/agents/subagentPages.svelte';
+	import { agentOfCall, SPAWN_TOOLS, WAIT_TOOLS, type AgentRow } from '$lib/agentProgress';
 	import DeliveryNotice from '$lib/DeliveryNotice.svelte';
 	import { parseDelivery } from '$lib/delivery';
 	import { stableBlocks } from '$lib/streamBlocks';
@@ -63,6 +62,7 @@
 		loadImage,
 		busy = false,
 		foldTurns = false,
+		tail,
 		mark = $bindable(-1)
 	}: {
 		messages: Msg[];
@@ -102,7 +102,7 @@
 		 *  cards (absent: plain tool rows). */
 		agents?: AgentRow[];
 		/** Shows a subagent's own conversation. */
-		onOpenAgent?: (row: AgentRow, how: OpenHow) => void;
+		onOpenAgent?: (row: AgentRow) => void;
 		/** Approves or revises a proposed plan (absent: plans have no actions). */
 		onPlan?: (id: string, action: PlanAction) => void;
 		/** The mode a plan's approval offers first. */
@@ -117,6 +117,8 @@
 		busy?: boolean;
 		/** Finished turns fold their work into one line (turnFold.ts). */
 		foldTurns?: boolean;
+		/** Shown after the last message (the background tasks entry). */
+		tail?: Snippet;
 	} = $props();
 
 	// ── Virtual list (dynamic-height windowing) ─────────────────────────────
@@ -522,7 +524,10 @@
 	const lastShown = $derived(messages.findLast((m) => hasContent(m)));
 	/** A spawn or wait call that renders as a subagent card. */
 	function isAgentCall(m: Msg): boolean {
-		return !!agents && m.kind === 'tool' && (SPAWN_TOOLS.has(m.name) || WAIT_TOOLS.has(m.name));
+		if (!agents || m.kind !== 'tool') return false;
+		// A Workflow is a card once its run is known (agent_runs), else a plain tool row.
+		if (m.name === 'Workflow') return !!agentOfCall(agents, m.callId);
+		return SPAWN_TOOLS.has(m.name) || WAIT_TOOLS.has(m.name);
 	}
 	// Finished turns' work, folded into a line on its first row; a turn's
 	// open state is kept by its user message.
@@ -654,6 +659,8 @@
 			</div>
 		{/if}
 	{/each}
+	<!-- After the last message: not while the window ends above it. -->
+	{#if range.last >= messages.length - 1}{@render tail?.()}{/if}
 	{#if retry}
 		<RetryNotice {retry} {backend} />
 	{:else if autoRetry}
