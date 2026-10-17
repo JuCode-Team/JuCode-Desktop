@@ -800,7 +800,7 @@ export class ChatState {
 
 	#turnBilling(ids: string[]): BillingCost | undefined {
 		const rows = ids.map(id => this.#billingTurns[id]).filter(Boolean);
-		return rows.some(row => row.gateway_requests > 0) ? sumCosts(rows) : undefined;
+		return rows.length ? sumCosts(rows) : undefined;
 	}
 
 	get busy() {
@@ -1200,10 +1200,16 @@ export class ChatState {
 			case 'session_usage': {
 				this.billingError = str(ev.billing_error);
 				if (ev.totals) {
-					const totals = ev.totals as unknown as BillingCost;
+					const totals = ev.totals as unknown as BillingCost & { turns?: number; input_tokens?: number; output_tokens?: number };
 					// Keep the last settled figures visible if the ledger is offline.
 					if (!this.billingError || !this.billing) {
-						this.billing = totals.gateway_requests > 0 ? totals : null;
+						// The daemon's ledger keeps every turn this session ran, across
+						// restarts: its figures stand over what this client counted.
+						this.billing = (totals.turns ?? 0) > 0 ? totals : null;
+						if (this.billing) {
+							this.totalIn = num(totals.input_tokens);
+							this.totalOut = num(totals.output_tokens);
+						}
 						for (const row of arr<BillingCost & { turn_id: string }>(ev.turns)) this.#billingTurns[row.turn_id] = row;
 						for (const m of this.messages) {
 							if (m.kind === 'assistant' && m.turn) m.turn.billing = this.#turnBilling(m.turn.billingTurns ?? []);

@@ -22,7 +22,7 @@ export function turnParts(s: TurnStats, keys: readonly TurnStatKey[]): { text: s
 			out.push({ text: `↑${fmtTokens(s.inTokens)} ↓${fmtTokens(s.outTokens)}`, title: t('chat.stat.tokens'), mono: true });
 		else if (k === 'tools' && s.tools) out.push({ text: t('chat.stat.toolsShort', { n: s.tools }), title: t('chat.stat.tools') });
 		else if (k === 'cost' && (s.cost > 0 || s.billing))
-			out.push({ text: costText(s.cost, s.billing), title: t(s.billing ? 'chat.costSettledHint' : 'chat.stat.cost'), mono: true });
+			out.push({ text: costText(s.cost, s.billing), title: t(s.billing?.gateway_requests ? 'chat.costSettledHint' : 'chat.stat.cost'), mono: true });
 		else if (k === 'model' && s.model) out.push({ text: s.model, title: t('chat.stat.model') });
 	}
 	return out;

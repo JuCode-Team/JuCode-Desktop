@@ -725,7 +725,7 @@ describe('gateway session costs', () => {
 			c.handle({ type: 'status', message: 'ready' });
 		}
 		const charge = (gateway_cost: number) => ({ gateway_cost, estimated_cost_usd: null, gateway_requests: 1, pending_requests: 0, unpriced_requests: 0 });
-		const snapshot = { type: 'session_usage', totals: { ...charge(0.08), gateway_requests: 2 }, turns: [
+		const snapshot = { type: 'session_usage', totals: { ...charge(0.08), gateway_requests: 2, turns: 2, input_tokens: 2000, output_tokens: 1000 }, turns: [
 			{ ...charge(0.05), turn_id: 't-first' }, { ...charge(0.03), turn_id: 't-second' }
 		] };
 		c.handle(snapshot);
@@ -747,10 +747,23 @@ describe('gateway session costs', () => {
 		c.handle({ type: 'usage', input_tokens: 10, output_tokens: 2, billing_turn: 't-free', billing_gateway: true });
 		expect(c.billing?.pending_requests).toBeGreaterThan(0);
 		const free = { gateway_cost: 0, estimated_cost_usd: null, gateway_requests: 1, pending_requests: 0, unpriced_requests: 0 };
-		c.handle({ type: 'session_usage', totals: free, turns: [{ ...free, turn_id: 't-free' }] });
+		c.handle({ type: 'session_usage', totals: { ...free, turns: 1, input_tokens: 10, output_tokens: 2 }, turns: [{ ...free, turn_id: 't-free' }] });
 		expect(c.billing?.gateway_cost).toBe(0);
 		const last = c.messages.at(-1);
 		expect(last?.kind === 'assistant' && last.turn?.billing?.gateway_cost).toBe(0);
+	});
+
+	it('takes the ledger’s figures for a session off the gateway too, tokens included', () => {
+		const c = new ChatState();
+		const row = { gateway_cost: null, estimated_cost_usd: 0.12, gateway_requests: 0, pending_requests: 0, unpriced_requests: 0 };
+		c.handle({ type: 'session_usage', totals: { ...row, turns: 2, input_tokens: 3000, output_tokens: 400 }, turns: [{ ...row, turn_id: 't-1' }] });
+		expect(c.billing?.estimated_cost_usd).toBe(0.12);
+		expect(c.totalIn).toBe(3000);
+		expect(c.totalOut).toBe(400);
+		// A session the ledger has not seen keeps what this client counted.
+		const fresh = new ChatState();
+		fresh.handle({ type: 'session_usage', totals: { ...row, estimated_cost_usd: null, turns: 0 }, turns: [] });
+		expect(fresh.billing).toBeNull();
 	});
 });
 

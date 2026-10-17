@@ -121,7 +121,7 @@
 					<div class="ctx-row"><span>{t('chat.sessionIn')}</span><span class="ctx-num">{fmtTokens(totalIn)}</span></div>
 					<div class="ctx-row"><span>{t('chat.sessionOut')}</span><span class="ctx-num">{fmtTokens(totalOut)}</span></div>
 				{/if}
-				{#if cost > 0 || billing}<div class="ctx-row" title={billing ? t('chat.costSettledHint') : undefined}><span>{t('chat.cost')}</span><span class="ctx-num">{costText(cost, billing)}</span></div>{/if}
+				{#if cost > 0 || billing}<div class="ctx-row" title={billing?.gateway_requests ? t('chat.costSettledHint') : undefined}><span>{t('chat.cost')}</span><span class="ctx-num">{costText(cost, billing)}</span></div>{/if}
 				{#if billingError}<div class="ctx-sub">{t('chat.costError', { error: billingError })}</div>{/if}
 				{#if runMs > 0}<div class="ctx-row"><span>{t('chat.sessionRun')}</span><span class="ctx-num">{fmtDur(runMs)}</span></div>{/if}
 			</div>

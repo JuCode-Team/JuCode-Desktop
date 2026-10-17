@@ -14,6 +14,10 @@ describe('session cost display', () => {
 		expect(costText(99, { ...settled, gateway_cost: 0 })).toBe('0.0000 积分');
 		expect(costText(0.05)).toBe('估算 $0.0500');
 		expect(costText(0)).toBe('—');
+		// The ledger could price none of it: the client's estimate shows instead.
+		const unpriced = { ...pendingCost(), gateway_requests: 0, pending_requests: 0, unpriced_requests: 2 };
+		expect(costText(0.3, unpriced)).toBe('估算 $0.3000');
+		expect(costText(0, unpriced)).toBe('部分费用未知');
 		const turn = { cost: 99, billing: settled } as TurnStats;
 		expect(turnParts(turn, ['cost'])).toEqual([{ text: '0.0500 积分', title: '实际扣费，已包含分组倍率', mono: true }]);
 	});

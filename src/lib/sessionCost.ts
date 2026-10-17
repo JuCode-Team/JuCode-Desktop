@@ -28,6 +28,10 @@ export function sumCosts(rows: BillingCost[]): BillingCost {
 
 export function costText(estimate: number, billing?: BillingCost | null): string {
 	if (!billing) return estimate > 0 ? t('chat.costEstimate', { cost: estimate.toFixed(4) }) : '—';
+	// The ledger priced nothing (no gateway charge, no reference price for the
+	// provider): this client's rough estimate is all there is.
+	if (billing.gateway_cost === null && billing.estimated_cost_usd === null && !billing.pending_requests && estimate > 0)
+		return t('chat.costEstimate', { cost: estimate.toFixed(4) });
 	const parts: string[] = [];
 	if (billing.gateway_cost !== null) parts.push(t('chat.costSettled', { cost: billing.gateway_cost.toFixed(4) }));
 	if (billing.estimated_cost_usd !== null) parts.push(t('chat.costEstimate', { cost: billing.estimated_cost_usd.toFixed(4) }));
