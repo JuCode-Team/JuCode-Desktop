@@ -50,6 +50,8 @@
 	--warn: #e5bd5c;
 
 	--font-sans: 'Inter Variable', Inter, -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif;
+	/* The conversation's text (Settings → fonts); follows the interface. */
+	--font-chat: var(--font-sans);
 	--font-mono: 'Geist Mono Variable', 'Geist Mono', 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 
 	--fs-2xs: 12px; /* mono labels, badges */

@@ -67,6 +67,7 @@
 	import { toast } from '$lib/ui/toast.svelte';
 	import SettingsSection from './SettingsSection.svelte';
 	import SettingsRow from './SettingsRow.svelte';
+	import { offeredFonts, type FontChoice, type FontSlot } from '$lib/fonts';
 	import BackendSection from './BackendSection.svelte';
 	import AcpSection from './AcpSection.svelte';
 	import DaemonSection from './DaemonSection.svelte';
@@ -219,6 +220,13 @@
 	const models = $derived<ModelCfg[]>(Array.isArray(cfg.models) ? cfg.models : []);
 	const efforts = $derived(models.find((m) => m.name === cfg.model)?.reasoning_efforts ?? []);
 	const fmt = (n?: number) => (!n ? '' : n >= 1_000_000 ? `${(n / 1e6).toFixed(2)}M` : n >= 1000 ? `${Math.round(n / 1000)}k` : `${n}`);
+	const fontLabel = (slot: FontSlot, c: FontChoice) =>
+		c.family ??
+		(c.id === 'system'
+			? t('settings.behavior.fontSystem')
+			: c.id === 'serif'
+				? t('settings.behavior.fontSerif')
+				: t(slot === 'chat' ? 'settings.behavior.fontFollowUi' : 'settings.behavior.fontDefault'));
 	const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 	const allProviders = $derived<Provider[]>([
@@ -639,6 +647,15 @@
 								onChange={(v) => prefs.setOpenElsewhere(v === 'tab' ? 'tab' : 'side')}
 							/>
 						</SettingsRow>
+						{#each [['ui', 'ui-font', 'uiFont'], ['chat', 'chat-font', 'chatFont'], ['code', 'code-font', 'codeFont']] as const as [slot, id, key] (slot)}
+							<SettingsRow {id} title={t(`settings.behavior.${key}`)} description={t(`settings.behavior.${key}Hint`)}>
+								<Select
+									value={prefs[key]}
+									options={offeredFonts(slot, prefs[key]).map((c) => ({ value: c.id, label: fontLabel(slot, c) }))}
+									onChange={(v) => prefs.setFont(slot, v)}
+								/>
+							</SettingsRow>
+						{/each}
 						<SettingsRow id="terminal-font" title={t('settings.behavior.terminalFont')} description={t('settings.behavior.terminalFontHint')}>
 							<TextField mono placeholder="MesloLGS NF" bind:value={() => prefs.terminalFont, (v) => prefs.setTerminalFont(String(v ?? ''))} />
 						</SettingsRow>

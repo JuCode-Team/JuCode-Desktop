@@ -995,7 +995,7 @@
 		outline: none;
 		background: transparent;
 		color: var(--text);
-		font-family: var(--font-sans);
+		font-family: var(--font-chat);
 		font-size: var(--fs-md);
 		line-height: 1.55;
 		padding: 2px 0 6px;

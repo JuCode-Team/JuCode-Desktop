@@ -725,6 +725,7 @@
 		}
 	}
 	.list {
+		font-family: var(--font-chat);
 		display: flex;
 		flex-direction: column;
 		gap: 16px;

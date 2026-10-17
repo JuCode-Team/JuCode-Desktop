@@ -2,6 +2,7 @@
 // from engine/backend settings — these are pure UI choices.
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
+import { applyFont, fontChoice, type FontSlot } from './fonts';
 
 const KEY = 'jucode-prefs';
 
@@ -29,6 +30,10 @@ type PrefsShape = {
 	 *  for the defaults. */
 	terminalFont: string;
 	terminalFontSize: number;
+	/** The interface, conversation and code fonts: ids from FONT_CHOICES. */
+	uiFont: string;
+	chatFont: string;
+	codeFont: string;
 	/** The view an existing conversation opens in: the chat, or its
 	 *  engine's own TUI. */
 	defaultSurface: 'gui' | 'tui';
@@ -66,6 +71,9 @@ const DEFAULTS: PrefsShape = {
 	telemetry: true,
 	terminalFont: '',
 	terminalFontSize: 12.5,
+	uiFont: 'default',
+	chatFont: 'default',
+	codeFont: 'default',
 	defaultSurface: 'gui',
 	openElsewhere: 'side',
 	scrollOnSend: true,
@@ -128,6 +136,9 @@ class PrefsStore {
 	telemetry = $state(DEFAULTS.telemetry);
 	terminalFont = $state(DEFAULTS.terminalFont);
 	terminalFontSize = $state(DEFAULTS.terminalFontSize);
+	uiFont = $state(DEFAULTS.uiFont);
+	chatFont = $state(DEFAULTS.chatFont);
+	codeFont = $state(DEFAULTS.codeFont);
 	defaultSurface = $state(DEFAULTS.defaultSurface);
 	openElsewhere = $state(DEFAULTS.openElsewhere);
 	scrollOnSend = $state(DEFAULTS.scrollOnSend);
@@ -150,6 +161,12 @@ class PrefsStore {
 		this.telemetry = p.telemetry !== false;
 		this.terminalFont = typeof p.terminalFont === 'string' ? p.terminalFont : DEFAULTS.terminalFont;
 		this.terminalFontSize = fontSize(p.terminalFontSize);
+		this.uiFont = fontChoice('ui', p.uiFont);
+		this.chatFont = fontChoice('chat', p.chatFont);
+		this.codeFont = fontChoice('code', p.codeFont);
+		applyFont('ui', this.uiFont);
+		applyFont('chat', this.chatFont);
+		applyFont('code', this.codeFont);
 		this.defaultSurface = p.defaultSurface === 'tui' ? 'tui' : 'gui';
 		this.openElsewhere = p.openElsewhere === 'tab' ? 'tab' : 'side';
 		this.scrollOnSend = p.scrollOnSend !== false;
@@ -184,6 +201,9 @@ class PrefsStore {
 					telemetry: this.telemetry,
 					terminalFont: this.terminalFont,
 					terminalFontSize: this.terminalFontSize,
+					uiFont: this.uiFont,
+					chatFont: this.chatFont,
+					codeFont: this.codeFont,
 					defaultSurface: this.defaultSurface,
 					openElsewhere: this.openElsewhere,
 					scrollOnSend: this.scrollOnSend,
@@ -265,6 +285,13 @@ class PrefsStore {
 
 	setTerminalFontSize(v: number) {
 		this.terminalFontSize = fontSize(v);
+		this.#save();
+	}
+
+	setFont(slot: FontSlot, id: string) {
+		const choice = fontChoice(slot, id);
+		this[`${slot}Font`] = choice;
+		applyFont(slot, choice);
 		this.#save();
 	}
 
