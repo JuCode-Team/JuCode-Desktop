@@ -211,8 +211,11 @@
 	// [first, last] inclusive window of rows to render.
 	const range = $derived.by(() => {
 		if (!virtual) return { first: 0, last: messages.length - 1 };
-		const top = scrollTop - OVERSCAN;
-		const bottom = scrollTop + viewH + OVERSCAN;
+		// Rows sit `shift` px off their offsets until it settles, so the view
+		// covers the offsets from scrollTop - shift.
+		const at = scrollTop - shift;
+		const top = at - OVERSCAN;
+		const bottom = at + viewH + OVERSCAN;
 		let first = 0;
 		while (first < messages.length && offsets[first + 1] < top) first++;
 		let last = first;
