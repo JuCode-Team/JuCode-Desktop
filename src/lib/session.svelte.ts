@@ -90,6 +90,10 @@ export class SessionStore {
 	/** The saved tabs of stale projects, by project id: kept so they are saved
 	 *  back as they were, should the worktree come back. */
 	#staleTabs = new Map<string, SavedProject['tabs']>();
+	/** Sessions of projects taken off this window (switching workspaces), by
+	 *  daemon session id: they come back as they were, with the token totals,
+	 *  context and timings that the daemon's replay does not carry. */
+	#parked = new Map<string, Session>();
 	uid() {
 		return `s${Date.now().toString(36)}-${(this.#counter++).toString(36)}`;
 	}
@@ -221,7 +225,10 @@ export class SessionStore {
 		s.chat.taskOutputs = {};
 		// What this chat already shows of a claude conversation is richer than
 		// the daemon's replay of it.
-		if (s.backendId === 'claude' && s.chat.messages.some((m) => m.kind === 'user')) s.chat.keepNextTranscript = true;
+		// A session coming back to this window takes the replay: its conversation
+		// may have gone on meanwhile.
+		if (s.backendId === 'claude' && !s.chat.rejoining && s.chat.messages.some((m) => m.kind === 'user'))
+			s.chat.keepNextTranscript = true;
 		const program = {
 			...(base?.bin_override ? { bin: base.bin_override } : {}),
 			...(base?.env ? { env: base.env } : {})
@@ -567,6 +574,18 @@ export class SessionStore {
 		reuseId?: string,
 		atStart = false
 	): string {
+		const parked = this.#parked.get(rec.session);
+		if (parked) {
+			this.#parked.delete(rec.session);
+			registerAdapter(parked.id, parked.adapter);
+			parked.dormant = true;
+			parked.archived = !!rec.archived;
+			if (rec.title) parked.chat.title = rec.title;
+			parked.chat.rejoining = true;
+			if (atStart) project.sessions.unshift(parked);
+			else project.sessions.push(parked);
+			return parked.id;
+		}
 		const s = this.#newSession(normalizeBackendId(rec.engine), undefined, reuseId);
 		if (rec.gateway) s.gateway = true;
 		s.dormant = true;
@@ -1145,6 +1164,7 @@ export class SessionStore {
 				if (close) closeSession(s.id).catch(() => {});
 				else daemon.detach(s.id);
 			}
+			if (!close && !s.draft && s.chat.sessionId) this.#parked.set(s.chat.sessionId, s);
 			unregisterAdapter(s.id);
 			clearDraft(s.id);
 			dropHeldOps(s.id);

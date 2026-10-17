@@ -284,6 +284,29 @@ export function boundedOutput(output: string): string {
 	return cut(output, TOOL_OUTPUT_MAX);
 }
 
+/** Puts back on replayed messages what a replay does not carry (timings,
+ *  token counts, turn totals, uuids), from the messages they replace: the
+ *  i-th reply when its text is the same, the i-th tool call when its name is. */
+function carryStats(from: Msg[], to: Msg[]) {
+	const replies = from.filter((m) => m.kind === 'assistant');
+	const tools = from.filter((m) => m.kind === 'tool');
+	let r = 0;
+	let k = 0;
+	for (const m of to) {
+		if (m.kind === 'assistant') {
+			const old = replies[r++];
+			if (old?.text !== m.text) continue;
+			const { tokens, elapsed, segMs, uuid, turn } = old;
+			Object.assign(m, { tokens, elapsed, segMs, uuid, turn });
+		} else if (m.kind === 'tool') {
+			const old = tools[k++];
+			if (old?.name !== m.name) continue;
+			const { subagent, args, startedAt, endedAt } = old;
+			Object.assign(m, { subagent, args, startedAt, endedAt });
+		}
+	}
+}
+
 export const AUTO_CONTINUE = '继续（连接中断后自动重试）';
 
 export interface RetryState {
@@ -519,6 +542,9 @@ export class ChatState {
 	resumeBroken = false;
 	/** Skip the next `transcript` replay (see its handler). */
 	keepNextTranscript = false;
+	/** This chat is coming back to a session it stopped watching (switching
+	 *  workspaces): the next replay keeps what it knew of the messages. */
+	rejoining = false;
 	/** A request of the running turn that missed the prompt cache. One-shot —
 	 *  consumed by the page, which offers to stop the turn. */
 	cacheMiss: { input: number; cached: number } | null = null;
@@ -1266,6 +1292,7 @@ export class ChatState {
 				// If the snapshot already has it, its echo came with it.
 				const pending = this.#pendingUserEcho;
 				const sent = pending === null ? undefined : this.messages.findLast((m) => m.kind === 'user' && m.text === pending);
+				const before = this.messages;
 				this.messages = items
 					.map((it): Msg | null => {
 						const role = str(it.role);
@@ -1295,6 +1322,17 @@ export class ChatState {
 					const last = this.messages.findLast((m) => m.kind === 'user');
 					if (last?.kind === 'user' && last.text === pending) this.#pendingUserEcho = null;
 					else if (sent) this.messages.push(sent);
+				}
+				if (this.rejoining) {
+					this.rejoining = false;
+					carryStats(before, this.messages);
+					// The turn ended while this chat was not watching: when is unknown.
+					if (!this.busy && this.#turnStart !== null) {
+						this.#turnStart = null;
+						this.#firstOutput = null;
+						this.call = null;
+						this.#setSend(null);
+					}
 				}
 				this.#resetCurrent();
 				break;

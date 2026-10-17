@@ -936,6 +936,37 @@ describe('switching workspaces', () => {
 		store.removeProject(p);
 		expect(closeSession).toHaveBeenCalledWith(id);
 	});
+
+	it('a session comes back with its token totals, context and timings', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p);
+		begin(id);
+		await flush();
+		const chat = store.allSessions[0].chat;
+		chat.sessionId = 'conv-1';
+		chat.totalIn = 1200;
+		chat.contextTokens = 5000;
+		chat.messages = [
+			{ kind: 'user', text: 'hi' },
+			{ kind: 'assistant', text: 'hello', elapsed: 3000 }
+		];
+		const saved = store.serialize();
+		store.detachProject(p);
+		store.loaded = false;
+		await store.restore(saved);
+		const back = store.allSessions[0];
+		expect(back.id).toBe(id);
+		expect(back.chat).toBe(chat);
+		expect(back.dormant).toBe(true);
+		// Woken, the daemon's replay rebuilds the messages; their timings stay.
+		back.chat.handle({ type: 'transcript', items: [{ role: 'user', content: 'hi' }, { role: 'assistant', content: 'hello' }, { role: 'user', content: 'more' }] });
+		expect(back.chat.totalIn).toBe(1200);
+		expect(back.chat.contextTokens).toBe(5000);
+		expect(back.chat.messages[1]).toMatchObject({ kind: 'assistant', text: 'hello', elapsed: 3000 });
+		expect(back.chat.messages).toHaveLength(3);
+	});
 });
 
 describe('session order and pins', () => {
