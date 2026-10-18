@@ -31,6 +31,7 @@
 	import { matches, withShortcut } from '$lib/shortcuts';
 	import MentionMenu from '$lib/composer/MentionMenu.svelte';
 	import AttachmentChips from '$lib/composer/AttachmentChips.svelte';
+	import { takeTransfer } from '$lib/composer/transfer';
 	import ContextIndicator from '$lib/composer/ContextIndicator.svelte';
 	import ModelMenu from '$lib/composer/ModelMenu.svelte';
 	import type { SessionSwitch } from '$lib/composer/SessionSwitches.svelte';
@@ -682,37 +683,43 @@
 		}
 	}
 
-	// Paste an image straight from the clipboard: write it to a temp file and
-	// attach the path (screenshots, copied images — no need to save to disk first).
-	async function onPaste(e: ClipboardEvent) {
-		const dt = e.clipboardData;
-		if (!dt) return;
-		// Image paste → temp-file attachment (screenshots, copied images).
-		let imaged = false;
-		for (const it of dt.items) {
-			if (it.kind !== 'file' || !it.type.startsWith('image/')) continue;
-			const file = it.getAsFile();
-			if (!file) continue;
-			imaged = true;
-			const ext = (it.type.split('/')[1] || 'png').replace(/[^a-z0-9]/gi, '') || 'png';
-			try {
-				const buf = new Uint8Array(await file.arrayBuffer());
-				const path = await saveTempImage(buf, ext);
-				onImage(path);
-			} catch {
-				/* ignore */
+	// A paste or a drop: its images become attachments (saved to temp files, so
+	// screenshots and copied images need no saving first), its plain text goes in
+	// at the caret, and nothing else enters the editor. The default insertion is
+	// stopped before anything is awaited, or WebKit puts the image inline.
+	function onPaste(e: ClipboardEvent) {
+		if (!e.clipboardData) return;
+		e.preventDefault();
+		insertTransfer(e.clipboardData);
+	}
+	// Drops and other pastes (Paste and Match Style) as the editor would take them.
+	function onBeforeInput(e: InputEvent) {
+		if (!e.inputType.startsWith('insertFrom') || !e.dataTransfer) return;
+		e.preventDefault();
+		// At the drop point, not where the caret was.
+		const at = e.getTargetRanges()[0];
+		if (at) {
+			const r = document.createRange();
+			r.setStart(at.startContainer, at.startOffset);
+			r.setEnd(at.endContainer, at.endOffset);
+			window.getSelection()?.removeAllRanges();
+			window.getSelection()?.addRange(r);
+		}
+		insertTransfer(e.dataTransfer);
+	}
+	function insertTransfer(dt: DataTransfer) {
+		const { images, text } = takeTransfer(dt);
+		if (text) insertTextAtCaret(text);
+		if (!images.length) return;
+		void (async () => {
+			for (const { file, ext } of images) {
+				try {
+					onImage(await saveTempImage(new Uint8Array(await file.arrayBuffer()), ext));
+				} catch (err) {
+					toast.error(String(err));
+				}
 			}
-		}
-		if (imaged) {
-			e.preventDefault();
-			return;
-		}
-		// Plain-text paste: insert as text so no rich HTML lands in the editor.
-		const text = dt.getData('text/plain');
-		if (text) {
-			e.preventDefault();
-			insertTextAtCaret(text);
-		}
+		})();
 	}
 
 	// Voice input: mic → utterances split at pauses → 16 kHz WAV → ASR (Tauri
@@ -835,6 +842,7 @@
 			oninput={syncFromDom}
 			onkeydown={onKey}
 			onpaste={onPaste}
+			onbeforeinput={onBeforeInput}
 			oncompositionstart={() => (composing = true)}
 			oncompositionend={() => {
 				composing = false;
