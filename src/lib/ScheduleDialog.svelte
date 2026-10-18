@@ -20,11 +20,14 @@
 
 	let {
 		schedule,
+		preset,
 		projects,
 		onClose
 	}: {
 		/** The task to edit; omitted for a new one. */
 		schedule?: Schedule;
+		/** A new task's fields filled in beforehand (an agent's proposal). */
+		preset?: Partial<ScheduleDraft>;
 		/** The folders offered to run in. */
 		projects: { id: string; path: string; name: string }[];
 		onClose: () => void;
@@ -47,7 +50,8 @@
 					repeat: 'daily',
 					time: '09:00',
 					days: [1],
-					date: ''
+					date: '',
+					...preset
 				}
 	);
 	let draft = $state<ScheduleDraft>({

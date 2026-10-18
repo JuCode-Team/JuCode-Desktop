@@ -789,12 +789,13 @@ export class SessionStore {
 
 	/** Show daemon session `sid` (one the daemon hosts in `cwd`) in its
 	 *  open tab or a new one, in the project for `cwd`, which is added when
-	 *  missing. `title`, `engine`, `gateway`: the daemon's record of it. */
-	openDaemonSession(cwd: string, sid: string, title?: string | null, engine?: string, gateway?: boolean) {
+	 *  missing. `title`, `engine`, `gateway`: the daemon's record of it.
+	 *  `activate`: false lists it without switching to it. */
+	openDaemonSession(cwd: string, sid: string, title?: string | null, engine?: string, gateway?: boolean, activate = true) {
 		const open = this.allSessions.find((s) => s.chat.sessionId === sid);
 		if (open) {
 			open.archived = false;
-			this.activeId = open.id;
+			if (activate) this.activeId = open.id;
 			return open.id;
 		}
 		let project = this.projects.find((p) => p.path === cwd && !p.worktree);
@@ -809,7 +810,7 @@ export class SessionStore {
 		s.restored = true;
 		s.chat.sessionId = sid;
 		project.sessions.push(s);
-		this.activeId = s.id;
+		if (activate) this.activeId = s.id;
 		this.#spawn(s, project.path, undefined, undefined, sid).catch((e) => this.#engineFailed(s.chat, e));
 		return s.id;
 	}

@@ -79,6 +79,10 @@
 	import { parseToolOutput, toolTarget, toolVerb } from '$lib/toolSummary';
 	import { parseFileHref, pathExt, type FileRef } from '$lib/fileRefs';
 	import { revealItemInDir } from '@tauri-apps/plugin-opener';
+	import ScheduleDialog from '$lib/ScheduleDialog.svelte';
+	import { daemonState } from '$lib/daemonState.svelte';
+	import type { ScheduleDraft } from '$lib/schedules';
+	import type { Proposal } from '$lib/turnSummary';
 	import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 	import PopMenu, { type PopMenuItem } from '$lib/ui/PopMenu.svelte';
 	import { imageViewer } from '$lib/ui/imageViewer.svelte';
@@ -1095,6 +1099,31 @@
 		}
 	}
 
+	// A scheduled task the agent proposed opens the task dialog filled in:
+	// this session's folder and engine, the proposal's prompt and times.
+	let proposing = $state<Partial<ScheduleDraft> | null>(null);
+	function scheduleFrom(p: Proposal) {
+		const engine = chat.backendId === 'claude' || chat.backendId === 'codex' ? chat.backendId : 'jucode';
+		proposing = {
+			name: p.name,
+			prompt: p.prompt,
+			repeat: p.repeat,
+			time: p.time,
+			...(p.days ? { days: p.days } : {}),
+			...(p.date ? { date: p.date } : {}),
+			cwd: project?.path || chat.cwd || '',
+			engine,
+			options: engine === 'jucode' ? {} : { jucode_gateway: !!session.gateway },
+			origin: p.id
+		};
+	}
+	const revealFile = (path: string) => revealItemInDir(path).catch((e) => toast.error(String(e)));
+	/** A session this one started (`start_session`). */
+	function openChild(id: string) {
+		const listed = daemonState.sessions.find((s) => s.session === id);
+		store.openDaemonSession(listed?.cwd ?? project?.path ?? chat.cwd ?? '', id, listed?.title, listed?.engine, listed?.gateway);
+	}
+
 	// Right-click on a file link (or a file the user attached): open, attach,
 	// copy its path, show it in the file manager.
 	let fileMenu = $state<{ x: number; y: number; ref: FileRef; target: FileTarget | null } | null>(null);
@@ -1272,8 +1301,11 @@
 		<main bind:this={scroller} onscroll={onScroll} onwheel={onWheel}>
 			<!-- Pressing inside the conversation (opening a card, selecting text) stops following the end: what was pressed stays under the pointer instead of being pushed up as the reply grows. -->
 			<div bind:this={contentEl} onpointerdowncapture={() => (atBottom = false)} oncontextmenu={onFileMenu} role="presentation">
-				<MessageList bind:this={messageList} bind:mark messages={chat.messages} busy={turnOpen} foldTurns={prefs.foldTurns} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onNote={noteRequirement} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} traceOf={traceOf} agents={allAgents} onOpenAgent={openAgent} tail={tasksEntryButton} onPlan={planAction} {planMode} onOpenPlan={(id) => planPages.open(session.id, id)} />
+				<MessageList bind:this={messageList} bind:mark messages={chat.messages} busy={turnOpen} foldTurns={prefs.foldTurns} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onNote={noteRequirement} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} traceOf={traceOf} agents={allAgents} onOpenAgent={openAgent} tail={tasksEntryButton} onPlan={planAction} {planMode} onOpenPlan={(id) => planPages.open(session.id, id)} root={project?.path || chat.cwd || ''} onReveal={revealFile} onSchedule={scheduleFrom} scheduleCreated={(id) => daemonState.schedules.some((s) => s.origin === id)} onOpenSession={openChild} />
 			</div>
+			{#if proposing}
+				<ScheduleDialog preset={proposing} projects={store.projects} onClose={() => (proposing = null)} />
+			{/if}
 			{#if fileMenu}
 				<div class="file-menu" bind:this={fileMenuEl} style:left="{fileMenuPos.x}px" style:top="{fileMenuPos.y}px">
 					<PopMenu items={fileMenuItems} title={fileMenu.target ? undefined : t('chat.fileMenu.missing')} placement="down-left" onSelect={runFileMenu} onClose={() => (fileMenu = null)} />

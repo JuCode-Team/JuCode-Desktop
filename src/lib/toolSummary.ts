@@ -42,7 +42,10 @@ const VERBS: Record<string, string> = {
 	agent_closeAgent: 'Closed subagent',
 	agent_interruptAgent: 'Interrupted subagent',
 	agent_resumeAgent: 'Resumed subagent',
-	agent_listAgents: 'Listed subagents'
+	agent_listAgents: 'Listed subagents',
+	start_session: 'Started session',
+	wait_session: 'Waited for session',
+	send_session: 'Messaged session'
 };
 
 // One glyph per kind of tool, so a run of calls scans at a glance.
@@ -70,7 +73,10 @@ const ICONS: Record<string, typeof WrenchIcon> = {
 	close_agent: BotIcon,
 	agent_wait: BotIcon,
 	TodoWrite: ListChecksIcon,
-	update_plan: ListChecksIcon
+	update_plan: ListChecksIcon,
+	start_session: BotIcon,
+	wait_session: BotIcon,
+	send_session: BotIcon
 };
 
 export const toolVerb = (name: string) => VERBS[name] ?? name;
@@ -135,6 +141,8 @@ export function toolTarget(name: string, parsed: Record<string, unknown> | null)
 	}
 	if (typeof parsed.path === 'string') return parsed.path.split('/').pop() || parsed.path;
 	if (name === 'web_search') return str(parsed.query);
+	if (name === 'start_session') return str(parsed.title);
+	if (name === 'wait_session') return str(parsed.status);
 	if (name === 'generate_image' && Array.isArray(parsed.paths)) return parsed.paths.map(String).join(', ');
 	return '';
 }

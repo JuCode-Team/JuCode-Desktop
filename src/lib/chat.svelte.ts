@@ -19,6 +19,7 @@ import { runState } from './agentTrace';
 import { costUsd } from './pricing';
 import { pendingCost, sumCosts, type BillingCost } from './sessionCost';
 import { CacheWatch } from './cacheMiss';
+import { parseToolOutput } from './toolSummary';
 import { parseMcpServersEvent, type McpServerView } from './mcp';
 
 /** Where a sent message is before its reply starts: accepted locally, the
@@ -338,6 +339,9 @@ export class ChatState {
 	/** Set by the page: invoked with the file paths a successful edit tool
 	 *  touched, so the built-in editor can auto-reload open tabs (⌘K flow). */
 	static onFilesEdited: ((paths: string[]) => void) | null = null;
+	/** A session this one started (`start_session`): the folder it runs in
+	 *  and the tool's output (session, engine, title). */
+	static onSessionStarted: ((cwd: string, started: Record<string, unknown>) => void) | null = null;
 	/** A turn failed (see autoRetry.ts). `started`: the engine had begun it. */
 	static onTurnFailed: ((chat: ChatState, message: string, started: boolean) => void) | null = null;
 
@@ -1164,6 +1168,10 @@ export class ChatState {
 					t.endedAt = Date.now();
 				}
 				if (str(ev.name) === 'spawn_agent' && ev.is_error !== true) this.#spawned(str(ev.call_id), str(ev.output));
+				if (str(ev.name) === 'start_session' && ev.is_error !== true) {
+					const started = parseToolOutput(str(ev.output));
+					if (started && typeof started.session === 'string') ChatState.onSessionStarted?.(this.cwd, started);
+				}
 				// Reload editor tabs of files a successful edit tool touched.
 				if (ev.is_error !== true && EDIT_TOOLS.includes(str(ev.name))) {
 					try {

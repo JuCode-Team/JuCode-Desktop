@@ -1323,6 +1323,13 @@
 			// (and resolve pending ⌘K AI edits).
 			ChatState.onFilesEdited = (paths) => editorStore.handleEngineEdit(paths);
 			cleanups.push(() => (ChatState.onFilesEdited = null));
+			// A session another started joins the list, without taking the view.
+			ChatState.onSessionStarted = (cwd, started) => {
+				const id = String(started.session);
+				const listed = daemonState.sessions.find((s) => s.session === id);
+				store.openDaemonSession(listed?.cwd ?? cwd, id, listed?.title ?? String(started.title ?? ''), String(started.engine ?? ''), listed?.gateway, false);
+			};
+			cleanups.push(() => (ChatState.onSessionStarted = null));
 			// A turn that failed on the connection is picked back up (autoRetry.ts).
 			autoRetry.store = store;
 			ChatState.onTurnFailed = (c, message, started) => autoRetry.failed(c, message, started);

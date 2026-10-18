@@ -67,11 +67,15 @@ export interface Schedule {
 	last_run: ScheduleRun | null;
 	/** Times skipped in a row while the last run was still going. */
 	skipped: number;
+	/** The agent proposal it was created from (`propose_schedule`). */
+	origin?: string | null;
 }
 
 /** What `schedule_save` takes: no id creates one. */
 export type ScheduleDraft = Pick<Schedule, 'name' | 'prompt' | 'engine' | 'mode' | 'options' | 'enabled' | 'repeat' | 'time'> & {
 	id?: string;
+	/** Set once, when a task is created from an agent's proposal. */
+	origin?: string;
 	cwd: string;
 	days: number[];
 	date: string;

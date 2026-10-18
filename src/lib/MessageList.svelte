@@ -31,6 +31,11 @@
 	import UserImage from '$lib/UserImage.svelte';
 	import QuoteIcon from '@lucide/svelte/icons/quote';
 	import ListPlusIcon from '@lucide/svelte/icons/list-plus';
+	import EditedFiles from '$lib/EditedFiles.svelte';
+	import ArtifactCards from '$lib/ArtifactCards.svelte';
+	import ScheduleProposal from '$lib/ScheduleProposal.svelte';
+	import ChildSessions from '$lib/ChildSessions.svelte';
+	import { turnSummary, USER_TOOLS, type Proposal, type TurnSummary } from '$lib/turnSummary';
 
 	let {
 		messages,
@@ -63,6 +68,11 @@
 		busy = false,
 		foldTurns = false,
 		tail,
+		root = '',
+		onReveal,
+		onSchedule,
+		scheduleCreated,
+		onOpenSession,
 		mark = $bindable(-1)
 	}: {
 		messages: Msg[];
@@ -119,6 +129,16 @@
 		foldTurns?: boolean;
 		/** Shown after the last message (the background tasks entry). */
 		tail?: Snippet;
+		/** The session's folder: edited files show relative to it. */
+		root?: string;
+		/** Shows a deliverable in the file manager (absent: no button). */
+		onReveal?: (path: string) => void;
+		/** Opens the task dialog for a proposed scheduled task (absent: no button). */
+		onSchedule?: (proposal: Proposal) => void;
+		/** Whether a task was created from proposal `id`. */
+		scheduleCreated?: (id: string) => boolean;
+		/** Opens a session this one started (absent: rows don't open). */
+		onOpenSession?: (session: string) => void;
 	} = $props();
 
 	// ── Rendered rows ────────────────────────────────────────────────────────
@@ -422,7 +442,8 @@
 	function hasContent(m: Msg): boolean {
 		// Meta/status notices render in the collapsible status strip, not inline.
 		if (m.kind === 'system') return false;
-		if (m.kind === 'tool') return !!(m.name || m.output);
+		// present_files / propose_schedule show in the turn's summary instead.
+		if (m.kind === 'tool') return !!(m.name || m.output) && !USER_TOOLS.has(m.name);
 		if (m.kind === 'plan') return !!(m.title || m.text);
 		// Not trim(): this runs over every message whenever a reply grows.
 		return /\S/.test(m.text);
@@ -486,6 +507,23 @@
 	function shown(m: Msg): boolean {
 		return hasContent(m) && (!toolGroups.headOf.has(m) || toolGroups.members.has(m)) && (!folded(m) || folds.head.has(m));
 	}
+	// Each finished turn's edited files, deliverables and proposals, under
+	// its last row in view (its final reply, as a rule).
+	const summaries = $derived.by(() => {
+		const out = new Map<Msg, TurnSummary>();
+		const turns: Msg[][] = [];
+		for (const m of messages) {
+			if (m.kind === 'user' && !parseDelivery(m.text)) turns.push([m]);
+			else turns.at(-1)?.push(m);
+		}
+		turns.forEach((turn, i) => {
+			if (busy && i === turns.length - 1) return;
+			const summary = turnSummary(turn);
+			if (summary) out.set(turn.findLast((m) => shown(m)) ?? turn[0]!, summary);
+		});
+		return out;
+	});
+
 	function foldLine(f: TurnFold): string {
 		const parts = [f.elapsed !== null ? t('chat.fold.worked', { t: fmtDur(f.elapsed) }) : t('chat.fold.steps', { n: f.calls })];
 		if (f.files) parts.push(t('chat.fold.files', { n: f.files }));
@@ -502,6 +540,7 @@
 		{#if shown(m)}
 			{@const run = toolGroups.members.get(m)}
 			{@const fold = folds.head.get(m)}
+			{@const summary = summaries.get(m)}
 			<div class="mwrap" class:animate={arriving.has(m)} class:hit={i === findActive} bind:this={rowEls[i]}>
 				{#if fold}
 					{@const open = openFolds.has(fold.key)}
@@ -592,6 +631,14 @@
 			<PlanCard id={m.id} title={m.title} text={m.text} status={m.status} actionable={m === lastShown} defaultMode={planMode} onAction={onPlan} onOpen={onOpenPlan} />
 		{:else if m.kind === 'error'}
 			<ErrorNotice text={m.text} {backend} onAction={onErrorAction} onDismiss={onDismiss ? () => onDismiss(m) : undefined} />
+				{/if}
+				{#if summary}
+					{#if summary.children.length}<ChildSessions sessions={summary.children} onOpen={onOpenSession} />{/if}
+					{#if summary.edited.length}<EditedFiles files={summary.edited} {root} {onFile} />{/if}
+					{#if summary.artifacts.length}<ArtifactCards files={summary.artifacts} onOpen={onFile} {onReveal} />{/if}
+					{#each summary.proposals as p (p.id)}
+						<ScheduleProposal proposal={p} created={scheduleCreated?.(p.id) ?? false} onCreate={onSchedule} />
+					{/each}
 				{/if}
 			</div>
 		{/if}
