@@ -179,7 +179,7 @@ const settings = {
 			needKey: '请填写 API key。',
 			loadFailed: '无法读取自定义提供商：{msg}',
 			deleteTitle: '删除提供商「{name}」？',
-			deleteMessage: '保存的密钥会一并删除。正在运行的会话继续使用它，重新打开后不再使用。'
+			deleteMessage: '保存的密钥会一并删除。正在运行的会话继续使用它；这些会话重新打开时无法启动，需要先在模型菜单中改用 JuCode 网关。'
 		},
 		backend: {
 			groupLabel: '引擎后端',
@@ -734,7 +734,7 @@ const settings = {
 			needKey: 'Enter an API key.',
 			loadFailed: 'Couldn’t load custom providers: {msg}',
 			deleteTitle: 'Delete provider "{name}"?',
-			deleteMessage: 'Its saved key is deleted too. Running sessions keep using it until they are reopened.'
+			deleteMessage: 'Its saved key is deleted too. Running sessions keep using it; reopened, they cannot start until switched to the JuCode gateway in the model menu.'
 		},
 		backend: {
 			groupLabel: 'Engine backends',
