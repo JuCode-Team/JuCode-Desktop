@@ -195,6 +195,22 @@ describe('ChatState.handle', () => {
 		expect(c.sessionOptions).toEqual(options);
 	});
 
+	it('stores the custom provider a Claude Code / Codex process runs on', () => {
+		const c = new ChatState();
+		c.backendId = 'claude';
+		expect(c.toolProvider).toBeNull();
+		// It may come before the process's startup, which leaves it.
+		c.handle({ type: 'tool_provider', session: 's1', provider: { id: 'my-api', name: 'My API', model: 'glm-4.6' } });
+		c.handle({ type: 'startup', model: 'glm-4.6', cwd: '/w', session_id: '', context_window: 0 });
+		expect(c.toolProvider).toEqual({ id: 'my-api', name: 'My API', model: 'glm-4.6' });
+		// The next process (moved to the gateway, or the tool's own config) clears it.
+		c.handle({ type: 'tool_provider', session: 's1', provider: null });
+		expect(c.toolProvider).toBeNull();
+		// A nameless provider shows its id.
+		c.handle({ type: 'tool_provider', session: 's1', provider: { id: 'p2', name: '', model: 'm' } });
+		expect(c.toolProvider?.name).toBe('p2');
+	});
+
 	it('stores the latest mcp_servers view on the state', () => {
 		const c = new ChatState();
 		expect(c.mcpServers).toBeNull();

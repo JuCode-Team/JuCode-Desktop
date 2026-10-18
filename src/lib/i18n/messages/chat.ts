@@ -109,6 +109,8 @@ const chat = {
 		windowUnset: '未设置窗口',
 		manageModels: '管理模型',
 		providerLocalDesc: '用这台电脑上 {tool} 的登录或配置',
+		providerCustom: '本机 · {name}',
+		providerCustomDesc: '在设置中为 {tool} 添加的提供商',
 		providerAuto: 'JuCode 自动',
 		quota: {
 			title: '套餐额度',
@@ -453,6 +455,8 @@ const chat = {
 		windowUnset: 'Window not set',
 		manageModels: 'Manage models',
 		providerLocalDesc: 'The login or config of {tool} on this computer',
+		providerCustom: 'This machine · {name}',
+		providerCustomDesc: 'A provider added for {tool} in Settings',
 		providerAuto: 'JuCode auto',
 		quota: {
 			title: 'Plan usage',

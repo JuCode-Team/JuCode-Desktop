@@ -1020,6 +1020,7 @@
 				? {
 						name: BACKEND_LABELS[engine as 'claude' | 'codex'],
 						onJucode: !!view?.gateway,
+						custom: chat.toolProvider?.name,
 						group: view?.group ?? '',
 						catalog,
 						onSwitch: switchSide,

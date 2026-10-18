@@ -42,6 +42,8 @@
 		tool?: {
 			name: string;
 			onJucode: boolean;
+			/** On this machine through one of the tool's custom providers: its name. */
+			custom?: string;
 			group: string;
 			catalog: { models: { name: string; context_window?: number }[]; groups: JucodeGroup[] } | null;
 			onSwitch: (gateway: boolean, model: string, group?: string) => void;
@@ -104,6 +106,8 @@
 	);
 	const groups = $derived(served.length > 1 ? served : []);
 	const providerCount = $derived((running?.local !== undefined ? 1 : 0) + (running?.jucode !== undefined ? 1 : 0) + groups.length);
+	// A custom provider is named even with nothing else to choose.
+	const custom = $derived(tool && !tool.onJucode ? (tool.custom ?? '') : '');
 	function pickProvider(group: string | null) {
 		if (!tool || !running) return;
 		if (group === null) {
@@ -162,14 +166,14 @@
 			<EffortSlider efforts={chat.efforts} effort={chat.effort} disabled={!!pendingModel} {onEffort} {accent} bind:current={shownEffort} />
 		</section>
 		<SessionSwitches {chat} {onSwitch} />
-		{#if tool && running && providerCount > 1}
+		{#if tool && running && (providerCount > 1 || custom)}
 			<section class="providers" aria-label={t('chat.provider')}>
 				<div class="elabel phead">{t('chat.provider')}</div>
-				{#if running.local !== undefined}
+				{#if running.local !== undefined || custom}
 					<button class="pop-row" onclick={() => pickProvider(null)}>
 						<span class="pop-txt">
-							<span class="pop-label">{t('chat.providerLocal')}</span>
-							<span class="pop-desc">{t('chat.providerLocalDesc', { tool: tool.name })}</span>
+							<span class="pop-label">{custom ? t('chat.providerCustom', { name: custom }) : t('chat.providerLocal')}</span>
+							<span class="pop-desc">{t(custom ? 'chat.providerCustomDesc' : 'chat.providerLocalDesc', { tool: tool.name })}</span>
 						</span>
 						<span class="pop-check" class:off={tool.onJucode}><CheckIcon size={16} /></span>
 					</button>

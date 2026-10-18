@@ -1421,6 +1421,7 @@
 							local: toolModel.local !== undefined,
 							jucode: toolModel.jucode !== undefined,
 							onJucode: toolMode === 'jucode',
+							custom: chat.toolProvider?.name,
 							group: session.group ?? '',
 							groups: store.takesSessionGroup(session),
 							onPick: (choice) => pickProvider(toolModel, choice)

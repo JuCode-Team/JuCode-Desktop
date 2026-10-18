@@ -18,6 +18,9 @@
 		local: boolean;
 		jucode: boolean;
 		onJucode: boolean;
+		/** On this machine through one of the tool's custom providers (set in
+		 *  Settings): its name. */
+		custom?: string;
 		group: string;
 		/** The session's group reaches its requests (it runs in the daemon). */
 		groups: boolean;
@@ -67,14 +70,17 @@
 	const current = $derived(local ? undefined : served.find((g) => g.id === chosen));
 	// One group is what "auto" picks anyway: no rows of its own.
 	const listed = $derived(served.length > 1 ? served : []);
+	// A custom provider is named even with nothing else to choose.
+	const custom = $derived(local ? (tool?.custom ?? '') : '');
 	const shown = $derived(
-		tool ? (tool.local ? 1 : 0) + (tool.jucode ? 1 : 0) + listed.length > 1 : listed.length > 0
+		tool ? !!custom || (tool.local ? 1 : 0) + (tool.jucode ? 1 : 0) + listed.length > 1 : listed.length > 0
 	);
 	const mult = (n: number) => `×${Number(n.toFixed(3))}`;
 	const billing = (g: JucodeGroup) =>
 		g.billing_source === 'plan_only' ? t('chat.groupPlan') : g.billing_source === 'balance_only' ? t('chat.groupBalance') : '';
 	const autoLabel = $derived(tool ? t('chat.providerAuto') : t('chat.groupAuto'));
-	const currentLabel = $derived(local ? t('chat.providerLocal') : current ? current.name : autoLabel);
+	const localLabel = $derived(custom ? t('chat.providerCustom', { name: custom }) : t('chat.providerLocal'));
+	const currentLabel = $derived(local ? localLabel : current ? current.name : autoLabel);
 
 	onMount(() => {
 		Promise.all([loadGroups(), tool ? null : readConfig()])
@@ -124,11 +130,11 @@
 		</button>
 		{#if open}
 			<div use:overBrowser class="list" role="listbox" aria-label={tool ? t('chat.provider') : t('chat.groupTitle')}>
-				{#if tool?.local}
+				{#if tool?.local || custom}
 					<button class="pop-row" role="option" aria-selected={local} onclick={pickLocal}>
 						<span class="pop-txt">
-							<span class="pop-label">{t('chat.providerLocal')}</span>
-							<span class="pop-desc">{t('chat.providerLocalDesc', { tool: tool.name })}</span>
+							<span class="pop-label">{localLabel}</span>
+							<span class="pop-desc">{t(custom ? 'chat.providerCustomDesc' : 'chat.providerLocalDesc', { tool: tool?.name ?? '' })}</span>
 						</span>
 						<span class="pop-check" class:off={!local}><CheckIcon size={16} /></span>
 					</button>

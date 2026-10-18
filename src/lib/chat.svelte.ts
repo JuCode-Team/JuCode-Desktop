@@ -1,4 +1,4 @@
-import type { AgentEvent, SessionOption } from './protocol';
+import type { AgentEvent, SessionOption, SessionToolProvider } from './protocol';
 import { loadProfile, profileKey, rememberProfile, type BackendProfile } from '$lib/backendProfile';
 import { isBackendId, type BackendCaps, type BackendId } from './backends/types';
 import {
@@ -373,6 +373,9 @@ export class ChatState {
 	agentInfo = $state<{ id: string | null; name: string; version: string } | null>(null);
 	/** ACP: the agent's session options besides model and effort. */
 	sessionOptions = $state<SessionOption[]>([]);
+	/** Claude Code / Codex: the custom provider the engine process runs on
+	 *  (`tool_provider`); null on the tool's own configuration or the gateway. */
+	toolProvider = $state<SessionToolProvider | null>(null);
 
 	messages = $state<Msg[]>([]);
 	provider = $state('');
@@ -1016,9 +1019,9 @@ export class ChatState {
 				if (str(ev.session_id)) this.sessionId = str(ev.session_id);
 				this.contextWindow = num(ev.context_window);
 				this.#cacheWatch.reset();
-				// An ACP agent's engine_caps and session_options stay: the daemon
-				// sends engine_caps only when it changes, and it may come before
-				// this startup.
+				// An ACP agent's engine_caps and session_options, and a tool's
+				// tool_provider, stay: the daemon sends them per process or on
+				// change, and they may come before this startup.
 				// A fresh engine incarnation (first start, crash auto-restart or
 				// provider switch) announces its approval mode next — re-arm the
 				// startup sync so the desktop's persisted mode is pushed again.
@@ -1452,6 +1455,14 @@ export class ChatState {
 				this.agentInfo = agent
 					? { id: typeof agent.id === 'string' ? agent.id : null, name: str(agent.name), version: str(agent.version) }
 					: null;
+				break;
+			}
+			// Sent for each engine process and kept in watch snapshots; like
+			// engine_caps it may come before that process's startup, so startup
+			// leaves it and the next process's event replaces it.
+			case 'tool_provider': {
+				const p = ev.provider as Record<string, unknown> | null | undefined;
+				this.toolProvider = p && typeof p === 'object' && str(p.id) ? { id: str(p.id), name: str(p.name) || str(p.id), model: str(p.model) } : null;
 				break;
 			}
 			case 'session_options':
