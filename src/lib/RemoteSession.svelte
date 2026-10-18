@@ -727,7 +727,7 @@
 			<span class="title">{title}</span>
 			{#if hostName}<span class="host"><MonitorIcon size={12} /><span>{hostName}</span></span>{/if}
 		</span>
-		{#if chat.busy}<span class="busy pulse"></span>{/if}
+		{#if chat.busy || entry.running}<span class="busy pulse"></span>{/if}
 		{#if chat.terminal || tuiOpening}
 			<Button size="sm" variant="ghost" onclick={backToChat} disabled={!chat.terminal}>{t('chat.backToChat')}</Button>
 		{:else}

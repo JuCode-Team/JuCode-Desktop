@@ -282,8 +282,18 @@ export function backgroundCommands<T extends { id: string; kind: string }>(tasks
 export function tasksEntry(plan: PlanSummary, showPlan: boolean, rows: Pick<AgentRow, 'state'>[], commands: number): { plan: string; running: number } {
 	return {
 		plan: showPlan && plan.done < plan.total ? `${plan.done}/${plan.total}` : '',
-		running: rows.filter((r) => r.state === 'running' || r.state === 'queued').length + commands
+		running: runningCount(rows, commands)
 	};
+}
+
+const runningCount = (rows: Pick<AgentRow, 'state'>[], commands: number) =>
+	rows.filter((r) => r.state === 'running' || r.state === 'queued').length + commands;
+
+/** How many background tasks run, as the tasks entry counts them: subagents
+ *  and Workflows running or queued, and background commands. They go on
+ *  after the turn ends, and the session counts as working while they do. */
+export function runningTasks(c: Pick<RowInput, 'subagents'> & { agentRuns: RowInput['runs']; bgTasks: { id: string; kind: string }[] }): number {
+	return runningCount(agentRows({ runs: c.agentRuns, subagents: c.subagents }), backgroundCommands(c.bgTasks, c.subagents).length);
 }
 
 /** A running time as the cards show it: 8s, 1m05s, 1h02m. */
