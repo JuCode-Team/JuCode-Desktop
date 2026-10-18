@@ -31,7 +31,7 @@
 	import { matches, withShortcut } from '$lib/shortcuts';
 	import MentionMenu from '$lib/composer/MentionMenu.svelte';
 	import AttachmentChips from '$lib/composer/AttachmentChips.svelte';
-	import { takeTransfer } from '$lib/composer/transfer';
+	import { PendingSaves, takeTransfer } from '$lib/composer/transfer';
 	import ContextIndicator from '$lib/composer/ContextIndicator.svelte';
 	import ModelMenu from '$lib/composer/ModelMenu.svelte';
 	import type { SessionSwitch } from '$lib/composer/SessionSwitches.svelte';
@@ -538,9 +538,10 @@
 	function onComposerFocusOut(e: FocusEvent) {
 		if (showAdd && !(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null)) showAdd = false;
 	}
+	const saves = new PendingSaves();
 	// A pending question turns a typed message into its free-form answer.
 	function submit() {
-		if (!currentQ) return onSubmit();
+		if (!currentQ) return saves.send(onSubmit);
 		const text = input.trim();
 		if (!text) return;
 		answerQuestion(text);
@@ -711,7 +712,7 @@
 		const { images, text } = takeTransfer(dt);
 		if (text) insertTextAtCaret(text);
 		if (!images.length) return;
-		void (async () => {
+		void saves.track(async () => {
 			for (const { file, ext } of images) {
 				try {
 					onImage(await saveTempImage(new Uint8Array(await file.arrayBuffer()), ext));
@@ -719,7 +720,7 @@
 					toast.error(String(err));
 				}
 			}
-		})();
+		});
 	}
 
 	// Voice input: mic → utterances split at pauses → 16 kHz WAV → ASR (Tauri

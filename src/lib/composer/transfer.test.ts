@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { takeTransfer } from './transfer';
+import { PendingSaves, takeTransfer } from './transfer';
 
 type Item = { kind: string; type: string; getAsFile: () => File | null };
 
@@ -34,5 +34,37 @@ describe('takeTransfer', () => {
 
 	it('names an image of unknown subtype png', () => {
 		expect(takeTransfer(transfer([file('image/')], {})).images[0]!.ext).toBe('png');
+	});
+});
+
+describe('PendingSaves', () => {
+	it('holds a send until the pasted images are saved', async () => {
+		const saves = new PendingSaves();
+		const attached: string[] = [];
+		const sent: string[][] = [];
+		let save!: () => void;
+		const saving = saves.track(async () => {
+			await new Promise<void>((r) => (save = r));
+			attached.push('/tmp/paste.png');
+		});
+		// Enter right after the paste.
+		saves.send(() => sent.push([...attached]));
+		expect(sent).toEqual([]);
+		save();
+		await saving;
+		expect(sent).toEqual([['/tmp/paste.png']]);
+	});
+
+	it('sends at once with nothing being saved, and after a failed save', async () => {
+		const saves = new PendingSaves();
+		let sent = 0;
+		saves.send(() => sent++);
+		expect(sent).toBe(1);
+		const failed = saves.track(async () => {
+			throw new Error('disk full');
+		});
+		saves.send(() => sent++);
+		await failed.catch(() => {});
+		expect(sent).toBe(2);
 	});
 });

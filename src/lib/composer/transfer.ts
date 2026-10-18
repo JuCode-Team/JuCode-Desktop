@@ -20,3 +20,29 @@ export function takeTransfer(dt: Transfer): Taken {
 	// A copied image file also carries its name as text: the image is what was meant.
 	return { images, text: images.length ? '' : dt.getData('text/plain') };
 }
+
+// Pasted images take a moment to save. A send asked for meanwhile waits for
+// them, or it would go without them (and, with no text, not at all).
+export class PendingSaves {
+	#count = 0;
+	#then: (() => void) | null = null;
+
+	async track(work: () => Promise<void>) {
+		this.#count++;
+		try {
+			await work();
+		} finally {
+			if (--this.#count === 0 && this.#then) {
+				const then = this.#then;
+				this.#then = null;
+				then();
+			}
+		}
+	}
+
+	/** `send` now, or once nothing is being saved. */
+	send(send: () => void) {
+		if (this.#count) this.#then = send;
+		else send();
+	}
+}
