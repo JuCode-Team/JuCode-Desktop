@@ -29,7 +29,6 @@
 	// layout through `onchange` (and pointer focus through `onFocus`).
 	let {
 		layout,
-		hideSoloBar = false,
 		onchange,
 		panel,
 		label,
@@ -47,9 +46,6 @@
 		onTabRename
 	}: {
 		layout: TileLayout;
-		/** Hide the tab bar while the canvas holds a single tab: the window title
-		 *  bar already names it. It returns once there is a split or a second tab. */
-		hideSoloBar?: boolean;
 		onchange: (next: TileLayout) => void;
 		/** One tab's content. Every tab stays mounted; inactive ones are hidden
 		 *  (so e.g. terminals survive tab switches). */
@@ -100,11 +96,6 @@
 	const zoneOf = (h: Landing | null) => (h && 'zone' in h ? h : null);
 	const slotOf = (h: Landing | null) => (h && 'index' in h ? h : null);
 	let addMenuFor = $state<string | null>(null);
-	const solo = $derived.by(() => {
-		if (!hideSoloBar || layout.maximized) return false;
-		const leaves = leavesOf(layout.root);
-		return leaves.length === 1 && leaves[0].tabs.length <= 1;
-	});
 	// Measured so the floating drag ghost can be clamped inside the viewport.
 	let ghostW = $state(0);
 	let ghostH = $state(0);
@@ -337,7 +328,6 @@
 		data-leaf={leaf.id}
 		onpointerdowncapture={() => onFocus?.(leaf.id)}
 	>
-		{#if !solo}
 		<div class="lbar" data-tauri-drag-region data-bar={leaf.id} ondblclick={(e) => barDblClick(e, leaf)} role="tablist" tabindex="-1">
 			<div class="ltabs">
 				{#each leaf.tabs as tab, j (tab.id)}
@@ -401,7 +391,6 @@
 				/>
 			{/if}
 		</div>
-		{/if}
 		<div class="lbody">
 			{#each leaf.tabs as tab (tab.id)}
 				<div class="lpane" class:hidden={leaf.active !== tab.id}>{@render panel(tab)}</div>

@@ -138,6 +138,8 @@ const shell = {
 			svgPlaceholder: '粘贴 <svg>…</svg>',
 			svgInvalid: 'SVG 无效或包含不允许的内容',
 			delete: '删除',
+			closeOthers: '关闭其他',
+			closeAll: '关闭全部',
 			avatar: '头像',
 			shuffle: '换一个'
 		},
@@ -893,6 +895,8 @@ const shell = {
 			svgPlaceholder: 'Paste <svg>…</svg>',
 			svgInvalid: 'Invalid SVG or disallowed content',
 			delete: 'Delete',
+			closeOthers: 'Close others',
+			closeAll: 'Close all',
 			avatar: 'Avatar',
 			shuffle: 'Shuffle'
 		},

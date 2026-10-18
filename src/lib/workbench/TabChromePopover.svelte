@@ -15,8 +15,9 @@
 
 	// Shared chrome editor for workspace tabs, session tabs, project folders
 	// and agents: rename, tag color, and icon (builtin grid / slug / pasted
-	// SVG). Fixed-position at the invoking pointer/anchor, clamped to the
-	// viewport.
+	// SVG), the latter two folded under 外观. Mosaic tabs add close actions;
+	// tabs without chrome get only those. Fixed-position at the invoking
+	// pointer/anchor, clamped to the viewport.
 	let {
 		x,
 		y,
@@ -32,6 +33,8 @@
 		onPin,
 		moveTargets = [],
 		onMove,
+		onCloseOthers,
+		onCloseAll,
 		onClose,
 		defaultIcon,
 		children
@@ -43,8 +46,9 @@
 		icon?: TabIcon | null;
 		/** Without it there is no name field. */
 		onRename?: (name: string) => void;
-		onColor: (color: string | null) => void;
-		onIcon: (icon: TabIcon | null) => void;
+		/** Without them there is no 外观 section. */
+		onColor?: (color: string | null) => void;
+		onIcon?: (icon: TabIcon | null) => void;
 		onDelete?: () => void;
 		deleteLabel?: string;
 		/** Sessions: pin or unpin it in the sidebar. */
@@ -53,6 +57,9 @@
 		/** Projects and agents: the other workspaces it can move to. */
 		moveTargets?: { id: string; name: string }[];
 		onMove?: (workspace: string) => void;
+		/** Mosaic tabs: close the other tabs / every tab of its group. */
+		onCloseOthers?: () => void;
+		onCloseAll?: () => void;
 		onClose: () => void;
 		/** What shows with no icon set (a project's folder, an agent's
 		 *  generated avatar): the first choice, so it can be picked back. */
@@ -73,6 +80,7 @@
 	// Name/emoji and SVG are rarely used: folded unless the icon is one.
 	// svelte-ignore state_referenced_locally
 	let custom = $state(icon?.kind === 'slug' || icon?.kind === 'svg');
+	let looks = $state(false);
 	let nameEl = $state<HTMLInputElement | null>(null);
 	let popW = $state(0);
 	let popH = $state(0);
@@ -91,13 +99,13 @@
 	}
 	function commitSlug() {
 		const parsed = parseTabIcon({ kind: 'slug', value: slugVal });
-		if (parsed) onIcon(parsed);
+		if (parsed) onIcon?.(parsed);
 	}
 	function commitSvg() {
 		if (!svgVal.trim()) return;
 		const clean = sanitizeSvg(svgVal);
 		svgError = !clean;
-		if (clean) onIcon({ kind: 'svg', markup: clean });
+		if (clean) onIcon?.({ kind: 'svg', markup: clean });
 	}
 	function onKey(e: KeyboardEvent) {
 		if (e.key === 'Escape') {
@@ -139,82 +147,89 @@
 		</label>
 	{/if}
 
-	<div class="lbl">{t('shell.chrome.color')}</div>
-	<div class="swatches">
-		<button
-			class="swatch none"
-			class:on={!color}
-			title={t('shell.chrome.noColor')}
-			aria-label={t('shell.chrome.noColor')}
-			onclick={() => onColor(null)}><BanIcon size={12} /></button
-		>
-		{#each TAB_COLORS as c (c)}
+	{#if onColor && onIcon}
+	<button class="more" onclick={() => (looks = !looks)} aria-expanded={looks}>
+		{#if looks}<ChevronDownIcon size={12} />{:else}<ChevronRightIcon size={12} />{/if}{t('shell.chrome.title')}
+	</button>
+	{#if looks}
+		<div class="lbl">{t('shell.chrome.color')}</div>
+		<div class="swatches">
 			<button
-				class="swatch"
-				class:on={color === c}
-				style:background={c}
-				title={c}
-				aria-label={c}
-				onclick={() => onColor(c)}
-			></button>
-		{/each}
-	</div>
+				class="swatch none"
+				class:on={!color}
+				title={t('shell.chrome.noColor')}
+				aria-label={t('shell.chrome.noColor')}
+				onclick={() => onColor!(null)}><BanIcon size={12} /></button
+			>
+			{#each TAB_COLORS as c (c)}
+				<button
+					class="swatch"
+					class:on={color === c}
+					style:background={c}
+					title={c}
+					aria-label={c}
+					onclick={() => onColor!(c)}
+				></button>
+			{/each}
+		</div>
 
-	<div class="lbl">{t('shell.chrome.icon')}</div>
-	<div class="icons">
-		<button
-			class="ic"
-			class:on={!icon}
-			title={defaultIcon ? t('shell.chrome.defaultIcon') : t('shell.chrome.clearIcon')}
-			aria-label={defaultIcon ? t('shell.chrome.defaultIcon') : t('shell.chrome.clearIcon')}
-			onclick={() => onIcon(null)}
-		>
-			{#if defaultIcon}{@render defaultIcon()}{:else}<BanIcon size={14} />{/if}
-		</button>
-		{#each PICKER_ICONS as id (id)}
+		<div class="lbl">{t('shell.chrome.icon')}</div>
+		<div class="icons">
 			<button
 				class="ic"
-				class:on={icon?.kind === 'builtin' && icon.id === id}
-				title={id}
-				aria-label={id}
-				onclick={() => onIcon({ kind: 'builtin', id })}
+				class:on={!icon}
+				title={defaultIcon ? t('shell.chrome.defaultIcon') : t('shell.chrome.clearIcon')}
+				aria-label={defaultIcon ? t('shell.chrome.defaultIcon') : t('shell.chrome.clearIcon')}
+				onclick={() => onIcon!(null)}
 			>
-				<TabGlyph icon={{ kind: 'builtin', id }} size={14} />
+				{#if defaultIcon}{@render defaultIcon()}{:else}<BanIcon size={14} />{/if}
 			</button>
-		{/each}
-	</div>
+			{#each PICKER_ICONS as id (id)}
+				<button
+					class="ic"
+					class:on={icon?.kind === 'builtin' && icon.id === id}
+					title={id}
+					aria-label={id}
+					onclick={() => onIcon!({ kind: 'builtin', id })}
+				>
+					<TabGlyph icon={{ kind: 'builtin', id }} size={14} />
+				</button>
+			{/each}
+		</div>
 
-	<button class="more" onclick={() => (custom = !custom)} aria-expanded={custom}>
-		{#if custom}<ChevronDownIcon size={12} />{:else}<ChevronRightIcon size={12} />{/if}{t('shell.chrome.custom')}
-	</button>
-	{#if custom}
-	<label class="field">
-		<span class="lbl">{t('shell.chrome.slug')}</span>
-		<input
-			class="txt mono"
-			placeholder={t('shell.chrome.slugPlaceholder')}
-			bind:value={slugVal}
-			onkeydown={(e) => {
-				if (e.key === 'Enter') {
-					e.preventDefault();
-					commitSlug();
-				}
-			}}
-			onblur={commitSlug}
-		/>
-	</label>
+		<button class="more" onclick={() => (custom = !custom)} aria-expanded={custom}>
+			{#if custom}<ChevronDownIcon size={12} />{:else}<ChevronRightIcon size={12} />{/if}{t('shell.chrome.custom')}
+		</button>
+		{#if custom}
+		<label class="field">
+			<span class="lbl">{t('shell.chrome.slug')}</span>
+			<input
+				class="txt mono"
+				placeholder={t('shell.chrome.slugPlaceholder')}
+				bind:value={slugVal}
+				onkeydown={(e) => {
+					if (e.key === 'Enter') {
+						e.preventDefault();
+						commitSlug();
+					}
+				}}
+				onblur={commitSlug}
+			/>
+		</label>
 
-	<label class="field">
-		<span class="lbl">{t('shell.chrome.svg')}</span>
-		<textarea
-			class="txt mono"
-			rows="2"
-			placeholder={t('shell.chrome.svgPlaceholder')}
-			bind:value={svgVal}
-			onblur={commitSvg}
-		></textarea>
-		{#if svgError}<span class="err">{t('shell.chrome.svgInvalid')}</span>{/if}
-	</label>
+		<label class="field">
+			<span class="lbl">{t('shell.chrome.svg')}</span>
+			<textarea
+				class="txt mono"
+				rows="2"
+				placeholder={t('shell.chrome.svgPlaceholder')}
+				bind:value={svgVal}
+				onblur={commitSvg}
+			></textarea>
+			{#if svgError}<span class="err">{t('shell.chrome.svgInvalid')}</span>{/if}
+		</label>
+		{/if}
+	{/if}
 	{/if}
 
 	{@render children?.()}
@@ -229,6 +244,12 @@
 		{#each moveTargets as w (w.id)}
 			<Button size="sm" full onclick={() => onMove(w.id)}><ArrowRightLeftIcon size={12} />{w.name}</Button>
 		{/each}
+	{/if}
+	{#if onCloseOthers}
+		<Button size="sm" full onclick={onCloseOthers}>{t('shell.chrome.closeOthers')}</Button>
+	{/if}
+	{#if onCloseAll}
+		<Button size="sm" full onclick={onCloseAll}>{t('shell.chrome.closeAll')}</Button>
 	{/if}
 	{#if onDelete}
 		<Button variant="danger" size="sm" full onclick={onDelete}><TrashIcon size={12} />{deleteLabel || t('shell.chrome.delete')}</Button>

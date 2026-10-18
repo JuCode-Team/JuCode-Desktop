@@ -875,7 +875,8 @@
 
 	// ---------- session tab chrome (color / icon / rename) ----------
 	// One shared popover serves the mosaic tabs and the sidebar rows.
-	let sessionChromeFor = $state<{ sid: string; x: number; y: number } | null>(null);
+	// `tab` is set when opened from a mosaic tab: the menu then offers 关闭其他/全部.
+	let sessionChromeFor = $state<{ sid: string; x: number; y: number; tab?: string } | null>(null);
 	const chromeSession = $derived(sessionChromeFor ? (sessionById(sessionChromeFor.sid) ?? null) : null);
 
 	function tileChrome(tab: TileTab): { color?: string; icon?: TabIcon } | null {
@@ -889,16 +890,40 @@
 		if (!s || (!s.color && !s.icon)) return null;
 		return { color: s.color, icon: s.icon };
 	}
-	/** Open the chrome popover for a chat tab (context menu / dblclick).
-	 *  Tool/TUI/audit tabs have no chrome and keep their default behavior. */
+	/** Open the popover for a tab (context menu / dblclick). Chat and
+	 *  project tabs get their chrome editor; other tabs only the close
+	 *  actions, and only on right-click. */
+	let tabMenuFor = $state<{ tab: string; label: string; x: number; y: number } | null>(null);
 	function openTileChrome(tab: TileTab, ev: MouseEvent) {
 		const pid = projectOf(tab.panel);
 		const p = pid ? store.projects.find((x) => x.id === pid) : undefined;
-		if (p) return openProjectMenu(p, ev);
+		if (p) return openProjectMenu(p, ev, tab.id);
 		const sid = chatSessionOf(tab.panel);
-		if (!sid || !!!sessionById(sid)) return;
+		if (sid && sessionById(sid)) {
+			ev.preventDefault();
+			sessionChromeFor = { sid, x: ev.clientX, y: ev.clientY, tab: tab.id };
+			return;
+		}
+		if (ev.type !== 'contextmenu') return;
 		ev.preventDefault();
-		sessionChromeFor = { sid, x: ev.clientX, y: ev.clientY };
+		tabMenuFor = { tab: tab.id, label: tileLabel(tab), x: ev.clientX, y: ev.clientY };
+	}
+	/** The popover's close actions for a tab (none when opened elsewhere). */
+	function tabCloseActions(tab: string | undefined, dismiss: () => void) {
+		if (!tab) return {};
+		const leaf = leafOfTab(tiles.root, tab);
+		return {
+			onCloseOthers: leaf && leaf.tabs.length > 1 ? () => (dismiss(), closeTabGroup(tab, true)) : undefined,
+			onCloseAll: () => (dismiss(), closeTabGroup(tab, false))
+		};
+	}
+	/** 关闭其他 / 关闭全部: the other tabs (or all) of the tab's own group. */
+	function closeTabGroup(tabId: string, keep: boolean) {
+		const leaf = leafOfTab(tiles.root, tabId);
+		if (!leaf) return;
+		let next = tiles;
+		for (const tab of leaf.tabs) if (!keep || tab.id !== tabId) next = closeTab(next, tab.id);
+		onMosaicChange(next);
 	}
 	function openSessionMenu(sid: string, ev: MouseEvent) {
 		if (!!!sessionById(sid)) return;
@@ -906,11 +931,11 @@
 		sessionChromeFor = { sid, x: ev.clientX, y: ev.clientY };
 	}
 	// The same popover colours a sidebar project folder and sets its icon.
-	let projectChromeFor = $state<{ id: string; x: number; y: number } | null>(null);
+	let projectChromeFor = $state<{ id: string; x: number; y: number; tab?: string } | null>(null);
 	const chromeProject = $derived(projectChromeFor ? (projects.find((p) => p.id === projectChromeFor!.id) ?? null) : null);
-	function openProjectMenu(p: Project, ev: MouseEvent) {
+	function openProjectMenu(p: Project, ev: MouseEvent, tab?: string) {
 		ev.preventDefault();
-		projectChromeFor = { id: p.id, x: ev.clientX, y: ev.clientY };
+		projectChromeFor = { id: p.id, x: ev.clientX, y: ev.clientY, tab };
 	}
 	/** The workspaces other than the open one, for 移到工作区. */
 	const otherWorkspaces = $derived(workspaces.workspaces.filter((w) => w.id !== workspaces.activeId).map((w) => ({ id: w.id, name: w.name })));
@@ -1462,7 +1487,6 @@
 						</div>
 					{:else}
 						<Mosaic
-							hideSoloBar
 							layout={tiles}
 							onchange={onMosaicChange}
 							label={tileLabel}
@@ -1678,7 +1702,18 @@
 			onIcon={(i) => store.setSessionChrome(chromeSession.id, { icon: i })}
 			pinned={!!chromeSession.pinned}
 			onPin={(v) => store.setPinned(chromeSession.id, v)}
+			{...tabCloseActions(sessionChromeFor.tab, () => (sessionChromeFor = null))}
 			onClose={() => (sessionChromeFor = null)}
+		/>
+	{/if}
+
+	{#if tabMenuFor}
+		<TabChromePopover
+			x={tabMenuFor.x}
+			y={tabMenuFor.y}
+			name={tabMenuFor.label}
+			{...tabCloseActions(tabMenuFor.tab, () => (tabMenuFor = null))}
+			onClose={() => (tabMenuFor = null)}
 		/>
 	{/if}
 
@@ -1697,6 +1732,7 @@
 				projectChromeFor = null;
 				moveProjectToWorkspace(p, ws);
 			}}
+			{...tabCloseActions(projectChromeFor.tab, () => (projectChromeFor = null))}
 			onClose={() => (projectChromeFor = null)}
 		>
 			{#snippet defaultIcon()}
