@@ -48,6 +48,7 @@
 	import { browser, type WebRef } from '$lib/browser.svelte';
 	import { devServers } from '$lib/devServers.svelte';
 	import { prefs } from '$lib/prefs.svelte';
+	import { playChime, unlockChimes, type Chime } from '$lib/chime';
 	import { fmtTokens } from '$lib/usageStats';
 	import { cloudSync } from '$lib/cloudSync.svelte';
 	import { t } from '$lib/i18n';
@@ -164,12 +165,16 @@
 			/* ignore */
 		}
 	}
+	const chime = (kind: Chime) => {
+		if (prefs.sounds) playChime(kind);
+	};
 	const notifyDone = (title: string) =>
 		notify('JuCode', t('shell.notifyDone', { title: title || t('shell.untitled') }));
 	// An approval a session deferred while nobody watched it, and a
 	// scheduled run that needs the user: an OS notification while the window
 	// is in the background, else a notice that leads there.
 	function tell(title: string, message: string, open: () => void) {
+		chime('attention');
 		if (!document.hasFocus()) void notify(title, message);
 		else toast.info(`${title} · ${message}`, { action: { label: t('shell.notify.open'), run: open } });
 	}
@@ -1157,6 +1162,7 @@
 
 	onMount(() => {
 		cloudSync.start();
+		unlockChimes();
 		// Anonymous usage counts; told once, off in Settings → General.
 		if (telemetry.start(sendTelemetry))
 			toast.info(t('settings.help.notice'), {
@@ -1239,6 +1245,14 @@
 				if (wasBusy && !s.chat.busy && s.id !== curActive) {
 					s.chat.unseen = true;
 					notifyDone(s.chat.title);
+				}
+				// A sound unless the user is looking at this session: its turn
+				// ended, or an action, a question or a plan waits on them.
+				if (!document.hasFocus() || s.id !== curActive) {
+					const asking = s.chat.pendingApproval;
+					const planning = s.chat.messages.findLast((m) => m.kind === 'plan' && m.status === 'pending');
+					if ((asking && asking.callId !== hadApproval) || (planning && planning !== hadPlan)) chime('attention');
+					else if (wasBusy && !s.chat.busy) chime('done');
 				}
 				// Something waits on the user while the window is in the
 				// background: an action to allow, or a plan to approve.

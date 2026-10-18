@@ -52,6 +52,8 @@ type PrefsShape = {
 	thinkingSummaries: boolean;
 	/** A dev server an agent starts opens in the built-in browser (else a notice offers it). */
 	devServerAutoOpen: boolean;
+	/** A sound when a task ends or needs the user, unless they are watching it (chime.ts). */
+	sounds: boolean;
 	/** Interface zoom (the webview's page zoom), one of ZOOM_STEPS. */
 	zoom: number;
 };
@@ -82,6 +84,7 @@ const DEFAULTS: PrefsShape = {
 	footCost: true,
 	thinkingSummaries: true,
 	devServerAutoOpen: false,
+	sounds: true,
 	zoom: 1
 };
 
@@ -147,6 +150,7 @@ class PrefsStore {
 	footCost = $state(DEFAULTS.footCost);
 	thinkingSummaries = $state(DEFAULTS.thinkingSummaries);
 	devServerAutoOpen = $state(DEFAULTS.devServerAutoOpen);
+	sounds = $state(DEFAULTS.sounds);
 	zoom = $state(DEFAULTS.zoom);
 
 	init() {
@@ -175,6 +179,7 @@ class PrefsStore {
 		this.footCost = p.footCost !== false;
 		this.thinkingSummaries = p.thinkingSummaries !== false;
 		this.devServerAutoOpen = p.devServerAutoOpen === true;
+		this.sounds = p.sounds !== false;
 		this.zoom = zoomLevel(p.zoom);
 		this.#applyVibrancy();
 		if (inTauri()) {
@@ -212,6 +217,7 @@ class PrefsStore {
 					footCost: this.footCost,
 					thinkingSummaries: this.thinkingSummaries,
 					devServerAutoOpen: this.devServerAutoOpen,
+					sounds: this.sounds,
 					zoom: this.zoom
 				})
 			);
@@ -273,7 +279,7 @@ class PrefsStore {
 	}
 
 	/** The switches without side effects of their own. */
-	setFlag(name: 'foldTurns' | 'footContext' | 'footCost' | 'thinkingSummaries' | 'devServerAutoOpen', v: boolean) {
+	setFlag(name: 'foldTurns' | 'footContext' | 'footCost' | 'thinkingSummaries' | 'devServerAutoOpen' | 'sounds', v: boolean) {
 		this[name] = v;
 		this.#save();
 	}

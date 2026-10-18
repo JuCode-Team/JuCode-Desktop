@@ -64,6 +64,7 @@ export const ROWS: SearchRow[] = [
 	{ section: 'general', id: 'foot-cost', titleKey: 'settings.behavior.footCost', descKey: 'settings.behavior.footCostHint' },
 	{ section: 'general', id: 'thinking-summaries', titleKey: 'settings.behavior.thinkingSummaries', descKey: 'settings.behavior.thinkingSummariesHint' },
 	{ section: 'general', id: 'cache-miss', titleKey: 'settings.behavior.cacheMissAlert', descKey: 'settings.behavior.cacheMissAlertHint' },
+	{ section: 'general', id: 'sounds', titleKey: 'settings.behavior.sounds', descKey: 'settings.behavior.soundsHint' },
 	{ section: 'general', id: 'html-open', titleKey: 'settings.behavior.htmlOpen', descKey: 'settings.behavior.htmlOpenHint' },
 	{ section: 'general', id: 'dev-server-open', titleKey: 'settings.behavior.devServerAutoOpen', descKey: 'settings.behavior.devServerAutoOpenHint' },
 	{ section: 'general', id: 'feedback', titleKey: 'settings.help.feedback', descKey: 'settings.help.feedbackHint' },

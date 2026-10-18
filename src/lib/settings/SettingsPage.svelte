@@ -44,6 +44,7 @@
 	import { dispatch } from '$lib/backends/router';
 	import { caps } from '$lib/backends';
 	import { prefs, TURN_STAT_KEYS, vibrancySupported } from '$lib/prefs.svelte';
+	import { playChime } from '$lib/chime';
 	import { turnParts } from '$lib/turnStats';
 	import { themeState, setTheme, type ThemePref } from '$lib/theme.svelte';
 	import type { ChatState, TurnStats } from '$lib/chat.svelte';
@@ -707,6 +708,11 @@
 						</SettingsRow>
 						<SettingsRow id="cache-miss" title={t('settings.behavior.cacheMissAlert')} description={t('settings.behavior.cacheMissAlertHint')}>
 							<Switch checked={prefs.cacheMissAlert} label={t('settings.behavior.cacheMissAlert')} onChange={(on) => prefs.setCacheMissAlert(on)} />
+						</SettingsRow>
+						<SettingsRow id="sounds" title={t('settings.behavior.sounds')} description={t('settings.behavior.soundsHint')}>
+							<Button size="sm" variant="ghost" onclick={() => playChime('done')}>{t('settings.behavior.soundsDone')}</Button>
+							<Button size="sm" variant="ghost" onclick={() => playChime('attention')}>{t('settings.behavior.soundsAttention')}</Button>
+							<Switch checked={prefs.sounds} label={t('settings.behavior.sounds')} onChange={(on) => prefs.setFlag('sounds', on)} />
 						</SettingsRow>
 					</SettingsSection>
 					<SettingsSection title={t('settings.page.files')}>
