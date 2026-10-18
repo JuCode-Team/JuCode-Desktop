@@ -9,7 +9,7 @@ export const CLAUDE_CAPS: BackendCaps = {
 	extendedApprovalModes: true, // native plan + auto permission modes
 	planMode: true,
 	hunkApproval: true, // MultiEdit splits into per-edit hunks (single Edit stays whole-call)
-	steer: false, // stdin is already a queue: mid-turn messages run as the next turn
+	steer: false, // stdin is the queue: steer stops the turn and the queued messages run next
 	interrupt: true, // control_request subtype interrupt
 	branchTree: false,
 	goals: false,
@@ -67,7 +67,7 @@ export const ACP_CAPS: BackendCaps = {
 	extendedApprovalModes: false,
 	planMode: false, // an agent's own plan mode is a session option, not the desktop's
 	hunkApproval: false, // permission responses are whole-call option picks
-	steer: false, // no mid-turn injection; queued messages run as the next turn
+	steer: false, // no mid-turn injection: steer cancels the turn and the chosen message runs next
 	interrupt: false, // engine_caps: session/cancel
 	branchTree: false,
 	goals: false, // plan updates still render (the plan tile shows them when present)

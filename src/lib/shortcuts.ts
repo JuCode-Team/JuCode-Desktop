@@ -13,6 +13,7 @@ export type ShortcutId =
 	| 'audit'
 	| 'focusComposer'
 	| 'stop'
+	| 'sendNow'
 	| 'model'
 	| 'history'
 	| 'prevSession'
@@ -59,7 +60,8 @@ export const SHORTCUTS: Record<ShortcutId, Shortcut> = {
 	focusComposer: { key: 'l', mod: true, group: 'composer' },
 	model: { key: 'm', mod: true, shift: true, group: 'composer' },
 	approvalMode: { key: 'Tab', shift: true, group: 'composer' },
-	stop: { key: '.', mod: true, group: 'composer' }
+	stop: { key: '.', mod: true, group: 'composer' },
+	sendNow: { key: 'Enter', mod: true, group: 'composer' }
 };
 
 export const isMac = () => typeof navigator !== 'undefined' && /Macintosh|Mac OS X/.test(navigator.userAgent);
@@ -95,7 +97,7 @@ export function shortcutLabel(id: ShortcutId, mac = isMac()): string {
 	const s = SHORTCUTS[id];
 	// The zoom-in key reads as +, as other apps show it.
 	const key = s.key === '1-9' ? '1…9' : s.key === '=' ? '+' : s.key.length === 1 ? s.key.toUpperCase() : s.key;
-	if (mac) return `${s.ctrl ? '⌃' : ''}${s.shift ? '⇧' : ''}${s.mod ? '⌘' : ''}${key === 'Tab' ? '⇥' : key}`;
+	if (mac) return `${s.ctrl ? '⌃' : ''}${s.shift ? '⇧' : ''}${s.mod ? '⌘' : ''}${key === 'Tab' ? '⇥' : key === 'Enter' ? '↵' : key}`;
 	return [s.ctrl || s.mod ? 'Ctrl' : '', s.shift ? 'Shift' : '', key].filter(Boolean).join('+');
 }
 

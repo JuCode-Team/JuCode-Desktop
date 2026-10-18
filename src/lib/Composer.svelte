@@ -8,7 +8,6 @@
 	import PaperclipIcon from '@lucide/svelte/icons/paperclip';
 	import TargetIcon from '@lucide/svelte/icons/target';
 	import ListChecksIcon from '@lucide/svelte/icons/list-checks';
-	import FastForwardIcon from '@lucide/svelte/icons/fast-forward';
 	import ShieldCheckIcon from '@lucide/svelte/icons/shield-check';
 	import ShieldAlertIcon from '@lucide/svelte/icons/shield-alert';
 	import HandIcon from '@lucide/svelte/icons/hand';
@@ -28,7 +27,7 @@
 	import VoiceWave from '$lib/composer/VoiceWave.svelte';
 	import { buildEntries, mentionMatches, type AtEntry } from '$lib/mention';
 	import { t } from '$lib/i18n';
-	import { matches, withShortcut } from '$lib/shortcuts';
+	import { matches, shortcutLabel, withShortcut } from '$lib/shortcuts';
 	import MentionMenu from '$lib/composer/MentionMenu.svelte';
 	import AttachmentChips from '$lib/composer/AttachmentChips.svelte';
 	import { PendingSaves, takeTransfer } from '$lib/composer/transfer';
@@ -39,6 +38,7 @@
 	import Vendor from '$lib/Vendor.svelte';
 	import { modelColor, isTopEffort } from '$lib/modelColor';
 	import ComposerTray, { type TrayItem, type TraySection } from '$lib/composer/ComposerTray.svelte';
+	import QueueTray from '$lib/composer/QueueTray.svelte';
 	import { answerStep, startFlow, togglePick, type QuestionFlow } from '$lib/composer/tray';
 	import { effortLabel } from '$lib/composer/effort';
 	import type { ModelRow } from '$lib/composer/modelRows';
@@ -113,9 +113,11 @@
 		onSessionOption?: (id: string, value: string | boolean) => void;
 		/** ACP agents with a gateway mode (see ModelMenu). */
 		acpGateway?: { on: boolean; onChange: (on: boolean) => void };
-		onSubmit: () => void;
+		/** `now`: a message sent while a reply runs goes in at once (steer). */
+		onSubmit: (now?: boolean) => void;
 		onStop: () => void;
-		onSteer: () => void;
+		/** Sends queued message `index` now. */
+		onSteer: (index: number) => void;
 		onPick: () => void;
 		/** A pasted image, saved to a temp file: the pane adds it. */
 		onImage: (path: string) => void;
@@ -540,8 +542,8 @@
 	}
 	const saves = new PendingSaves();
 	// A pending question turns a typed message into its free-form answer.
-	function submit() {
-		if (!currentQ) return saves.send(onSubmit);
+	function submit(now = false) {
+		if (!currentQ) return saves.send(() => onSubmit(now));
 		const text = input.trim();
 		if (!text) return;
 		answerQuestion(text);
@@ -677,10 +679,11 @@
 		}
 		if (e.key === 'Enter') {
 			// contenteditable would otherwise insert a <div>/<br>; we control both:
-			// plain Enter submits, Shift+Enter inserts a newline (rendered via pre-wrap).
+			// plain Enter submits, Shift+Enter inserts a newline (rendered via pre-wrap),
+			// ⌘Enter while a reply runs sends the message in at once.
 			e.preventDefault();
 			if (e.shiftKey) insertTextAtCaret('\n');
-			else submit();
+			else submit(chat.busy && !!matches(e, 'sendNow'));
 		}
 	}
 
@@ -806,18 +809,10 @@
 			<button class="qsteer" onclick={onStop}>{t('chat.modeApplyNow')}</button>
 		</div>
 	{/if}
-	{#if chat.pendingMessages.length}
-		<div class="queued" in:paneIn out:paneOut>
-			<span class="queued-label">{t('chat.queuedLabel', { n: chat.pendingMessages.length })}</span>
-			{#each chat.pendingMessages as q, i (i)}
-				<span class="qchip" title={q}>{q}</span>
-			{/each}
-			{#if bcaps.steer}
-				<button class="qsteer" onclick={onSteer} title={t('chat.steerTitle')}><FastForwardIcon size={12} />{t('chat.steerAction')}</button>
-			{/if}
-		</div>
-	{/if}
 	<div class="composer" onfocusout={onComposerFocusOut}>
+		{#if chat.pendingMessages.length}
+			<QueueTray messages={chat.pendingMessages} joins={bcaps.steer} hint={shortcutLabel('sendNow')} onSteer={chat.busy ? onSteer : undefined} />
+		{/if}
 		{#if trayMode}
 			<ComposerTray
 				bind:this={tray}
@@ -951,7 +946,7 @@
 			{#if chat.busy && !currentQ}
 				<button class="cact stop" onclick={onStop} aria-label="stop" title={withShortcut(t('chat.stopTitle'), 'stop')}><SquareIcon size={14} /></button>
 			{:else}
-				<button class="cact send" onclick={submit} disabled={!input.trim() && !attachments.length && !videos.length} aria-label="send" title={t('chat.sendTitle')}><ArrowUpIcon size={16} /></button>
+				<button class="cact send" onclick={() => submit()} disabled={!input.trim() && !attachments.length && !videos.length} aria-label="send" title={t('chat.sendTitle')}><ArrowUpIcon size={16} /></button>
 			{/if}
 		</div>
 	</div>
@@ -1350,19 +1345,6 @@
 		border-radius: var(--r);
 		padding: 2px 9px;
 		flex-shrink: 0;
-	}
-	.qchip {
-		font-size: var(--fs-xs);
-		max-width: 260px;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		color: var(--dim);
-		background: var(--surface2);
-		border: 1px solid var(--border);
-		border-radius: var(--r);
-		padding: 3px 9px;
-		animation: rise var(--t-med) var(--ease-out);
 	}
 	.qsteer {
 		display: inline-flex;

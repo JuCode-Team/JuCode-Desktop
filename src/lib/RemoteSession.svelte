@@ -16,7 +16,7 @@
 	import FilesIcon from '@lucide/svelte/icons/files';
 	import GitCompareIcon from '@lucide/svelte/icons/git-compare';
 	import MonitorIcon from '@lucide/svelte/icons/monitor';
-	import FastForwardIcon from '@lucide/svelte/icons/fast-forward';
+	import QueueTray from '$lib/composer/QueueTray.svelte';
 	import HandIcon from '@lucide/svelte/icons/hand';
 	import ClipboardListIcon from '@lucide/svelte/icons/clipboard-list';
 	import ShieldCheckIcon from '@lucide/svelte/icons/shield-check';
@@ -878,20 +878,11 @@
 						<button type="button" class="qsteer" onclick={stop}>{t('chat.modeApplyNow')}</button>
 					</div>
 				{/if}
-				{#if waiting.length}
-					<div class="queued">
-						<span class="queued-label">{t('chat.queuedLabel', { n: waiting.length })}</span>
-						{#each waiting as q, i (i)}
-							<span class="qchip">{q}</span>
-						{/each}
-						{#if bcaps.steer && chat.pendingMessages.length}
-							<button type="button" class="qsteer" onclick={() => send({ op: 'steer' })} title={t('chat.steerTitle')}
-								><FastForwardIcon size={12} />{t('chat.steerAction')}</button
-							>
-						{/if}
-					</div>
-				{/if}
 				<form class="composer" onsubmit={(e) => (e.preventDefault(), submit())}>
+					{#if waiting.length}
+						<!-- Only messages the engine lists can be sent ahead (by their place in its queue). -->
+						<QueueTray messages={waiting} joins={bcaps.steer} onSteer={chat.busy && chat.pendingMessages.length ? (index) => send({ op: 'steer', index }) : undefined} />
+					{/if}
 					<textarea
 						rows="1"
 						bind:this={input}
@@ -1543,16 +1534,6 @@
 	}
 	.queued-label {
 		flex-shrink: 0;
-	}
-	.qchip {
-		max-width: 180px;
-		padding: 2px 8px;
-		border-radius: var(--r);
-		background: var(--surface2);
-		color: var(--text);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
 	}
 	.qsteer {
 		display: inline-flex;

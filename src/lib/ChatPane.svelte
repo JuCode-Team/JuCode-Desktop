@@ -712,7 +712,9 @@
 		insertRefToken(picked.id, picked.text || picked.tag || 'element');
 	}
 
-	function submit() {
+	/** `now`: sent while a reply runs, the message goes in at once instead of
+	 *  waiting for the turn to end (the engine's `steer`). */
+	function submit(now = false) {
 		const text = input.trim();
 		if (!text && attachments.length === 0 && videos.length === 0) return;
 		// A draft made for a requirement starts from it; the words go with it.
@@ -773,6 +775,8 @@
 				chat.optimisticUser(content, sent);
 			}
 			send({ op: 'user_message', content, images: imagePaths.length ? imagePaths : undefined });
+			// The engine queues it last: that one goes now.
+			if (now && chat.busy && !chat.restarting) send({ op: 'steer', index: -1 });
 		}
 		input = '';
 		attachments = [];
@@ -1425,7 +1429,7 @@
 				bind:el={composerEl}
 				onSubmit={submit}
 				onStop={stop}
-				onSteer={() => send({ op: 'steer' })}
+				onSteer={(index) => send({ op: 'steer', index })}
 				onPick={pickFiles}
 				onModel={openModelPicker}
 				onModelSelect={selectRow}

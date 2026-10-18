@@ -39,7 +39,8 @@ export function hostSession(
 export type Op =
 	| { op: 'user_message'; content: string; images?: string[] }
 	| { op: 'command'; input: string }
-	| { op: 'steer' }
+	/** A queued message into the running turn: `index`, negative from the last. */
+	| { op: 'steer'; index?: number }
 	// JuCode: runs a failed turn again with no new message (SessionStore.retryTurn).
 	| { op: 'continue' }
 	| { op: 'interrupt' }

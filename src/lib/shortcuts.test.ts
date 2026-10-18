@@ -11,6 +11,8 @@ describe('shortcuts', () => {
 		expect(matches(key({ key: 'k', ctrlKey: true }), 'searchSessions', true)).toBe(false);
 		expect(matches(key({ key: 'k', ctrlKey: true }), 'searchSessions', false)).toBe(true);
 		expect(matches(key({ key: 'k', metaKey: true, shiftKey: true }), 'searchSessions', true)).toBe(false);
+		expect(matches(key({ key: 'Enter', metaKey: true }), 'sendNow', true)).toBe(true);
+		expect(matches(key({ key: 'Enter' }), 'sendNow', true)).toBe(false);
 	});
 
 	it('read shifted punctuation by its key, and digits as their number', () => {
@@ -28,5 +30,7 @@ describe('shortcuts', () => {
 		expect(shortcutLabel('terminal', true)).toBe('⌃`');
 		expect(shortcutLabel('approvalMode', true)).toBe('⇧⇥');
 		expect(shortcutLabel('sessionN', false)).toBe('Ctrl+1…9');
+		expect(shortcutLabel('sendNow', true)).toBe('⌘↵');
+		expect(shortcutLabel('sendNow', false)).toBe('Ctrl+Enter');
 	});
 });

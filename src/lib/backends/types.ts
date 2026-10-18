@@ -48,7 +48,8 @@ export interface BackendCaps {
 	planMode: boolean;
 	/** Per-hunk partial approval of edit tools (approve op with `hunks`). */
 	hunkApproval: boolean;
-	/** Queue-jumping a busy turn (steer op + queued-messages strip). */
+	/** A queued message sent now (`steer`) joins the running turn; without
+	 *  it, sending one now stops the turn and the queue runs next. */
 	steer: boolean;
 	/** Interrupting a running turn. */
 	interrupt: boolean;
