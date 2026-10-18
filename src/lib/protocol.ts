@@ -590,9 +590,14 @@ export interface InstallDoneEvent {
 export function listFiles(cwd?: string): Promise<string[]> {
 	return invoke('list_files', { cwd });
 }
-/** A reply's relative path → the one file it names under `root` (maybe in a nested repo). */
-export function resolveFileRef(root: string, rel: string): Promise<string | null> {
-	return invoke('resolve_file_ref', { root, rel });
+/** A file a reply names → the one file it is under the first of `roots` that
+ *  has it (maybe in a nested repo); `text` when the editor can show it. */
+export interface FileTarget {
+	path: string;
+	text: boolean;
+}
+export function resolveFileRef(roots: string[], rel: string): Promise<FileTarget | null> {
+	return invoke('resolve_file_ref', { roots, rel });
 }
 
 export interface ProviderInfo {

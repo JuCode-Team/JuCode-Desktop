@@ -2079,31 +2079,67 @@ fn walk_files(root: &Path, dir: &Path, out: &mut Vec<String>) {
 
 /// Resolves a file path a reply names: absolute, from the home directory
 /// (`~/`), or relative. Agents write relative paths from the directory they
-/// worked in, which in a multi-repo project is often a nested repo rather than
-/// the project root: try `root/rel` first, then `dir/rel` for every directory
-/// up to REF_DEPTH below the root, and answer only when exactly one file matches.
+/// worked in: the session's directory, the project root, one of the project's
+/// added directories, or a nested repo in one of them. Try `root/rel` for
+/// every root in order, then `dir/rel` for every directory up to REF_DEPTH
+/// below the roots, and answer only when exactly one file matches.
 #[tauri::command]
-fn resolve_file_ref(root: String, rel: String) -> Option<String> {
+fn resolve_file_ref(roots: Vec<String>, rel: String) -> Option<FileTarget> {
     let home = rel.strip_prefix("~/").or_else(|| rel.strip_prefix("~\\"));
     let rel = match home {
         Some(rest) => backend::home_dir().join(rest),
         None => PathBuf::from(&rel),
     };
     if rel.is_absolute() {
-        return rel.is_file().then(|| ui_path(&rel));
+        return rel.is_file().then(|| FileTarget::of(&rel));
     }
-    let root = PathBuf::from(root).canonicalize().ok()?;
-    let rel = rel.as_path();
-    let direct = root.join(rel);
-    if direct.is_file() {
-        return Some(ui_path(&direct));
+    let roots: Vec<PathBuf> = roots.iter().filter_map(|r| PathBuf::from(r).canonicalize().ok()).collect();
+    if let Some(direct) = roots.iter().map(|r| r.join(&rel)).find(|p| p.is_file()) {
+        return Some(FileTarget::of(&direct));
     }
     let mut found = Vec::new();
-    find_ref(&root, rel, 0, &mut found);
+    for root in &roots {
+        let mut here = Vec::new();
+        find_ref(root, &rel, 0, &mut here);
+        for p in here.iter().filter_map(|p| p.canonicalize().ok()) {
+            // The session's directory is often inside the project root: the
+            // same file is found from both.
+            if p.starts_with(root) && !found.contains(&p) {
+                found.push(p);
+            }
+        }
+    }
     match found.as_slice() {
-        [one] => one.canonicalize().ok().filter(|p| p.starts_with(&root)).map(|p| ui_path(&p)),
+        [one] => Some(FileTarget::of(one)),
         _ => None,
     }
+}
+
+#[derive(Serialize, Debug, PartialEq)]
+struct FileTarget {
+    path: String,
+    /// The editor can show it: UTF-8 without NUL bytes, within MAX_TEXT_READ.
+    /// Anything else (an .apk, a PDF, a 50 MB log) is shown in the file manager.
+    text: bool,
+}
+
+impl FileTarget {
+    fn of(path: &Path) -> Self {
+        FileTarget { path: ui_path(path), text: looks_like_text(path) }
+    }
+}
+
+fn looks_like_text(path: &Path) -> bool {
+    if std::fs::metadata(path).map(|m| m.len() > MAX_TEXT_READ).unwrap_or(true) {
+        return false;
+    }
+    let mut head = [0u8; 8192];
+    let Ok(n) = std::fs::File::open(path).and_then(|mut f| f.read(&mut head)) else {
+        return false;
+    };
+    let head = &head[..n];
+    // A UTF-8 character cut at the end of the sample is still text.
+    !head.contains(&0) && std::str::from_utf8(head).map(|_| true).unwrap_or_else(|e| e.error_len().is_none())
 }
 
 /// A canonical path as the UI opens it: on Windows `canonicalize` adds a
@@ -3412,7 +3448,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{read_json_strict, resolve_file_ref, ui_path, valid_app_data_name};
+    use super::{read_json_strict, resolve_file_ref, ui_path, valid_app_data_name, FileTarget};
     use std::path::Path;
 
     #[test]
@@ -3426,23 +3462,44 @@ mod tests {
     fn resolve_file_ref_finds_a_unique_nested_match() {
         let root = std::env::temp_dir().join(format!("jucode-ref-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
-        for p in ["a/repo/src/x.ts", "a/repo/src/y.ts", "b/src/y.ts", "top.ts"] {
+        for p in ["a/repo/src/x.ts", "a/repo/src/y.ts", "b/src/y.ts", "top.ts", "extra/only.ts"] {
             let f = root.join(p);
             std::fs::create_dir_all(f.parent().unwrap()).unwrap();
             std::fs::write(&f, "").unwrap();
         }
         let r = root.display().to_string();
         let canon = root.canonicalize().unwrap();
+        let path = |roots: Vec<String>, rel: &str| resolve_file_ref(roots, rel.into()).map(|t| t.path);
         // As the UI gets it: without the `\\?\` prefix canonicalize adds on Windows.
-        assert_eq!(resolve_file_ref(r.clone(), "top.ts".into()), Some(ui_path(&canon.join("top.ts"))));
-        assert_eq!(resolve_file_ref(r.clone(), "src/x.ts".into()), Some(ui_path(&canon.join("a/repo/src/x.ts"))));
-        assert_eq!(resolve_file_ref(r.clone(), "src/y.ts".into()), None);
-        assert_eq!(resolve_file_ref(r.clone(), "src/z.ts".into()), None);
+        assert_eq!(path(vec![r.clone()], "top.ts"), Some(ui_path(&canon.join("top.ts"))));
+        assert_eq!(path(vec![r.clone()], "src/x.ts"), Some(ui_path(&canon.join("a/repo/src/x.ts"))));
+        assert_eq!(path(vec![r.clone()], "src/y.ts"), None);
+        assert_eq!(path(vec![r.clone()], "src/z.ts"), None);
+        // The session's directory first, then the project root; a directory
+        // inside the root does not count its files twice.
+        let repo = canon.join("a/repo").display().to_string();
+        assert_eq!(path(vec![repo.clone(), r.clone()], "src/y.ts"), Some(ui_path(&canon.join("a/repo/src/y.ts"))));
+        assert_eq!(path(vec![repo.clone(), r.clone()], "x.ts"), Some(ui_path(&canon.join("a/repo/src/x.ts"))));
+        // An added directory outside the root.
+        assert_eq!(path(vec!["/nonexistent".into(), canon.join("extra").display().to_string()], "only.ts"), Some(ui_path(&canon.join("extra/only.ts"))));
         // An absolute path is taken as it is, wherever the project is.
         let abs = canon.join("b/src/y.ts").display().to_string();
-        assert_eq!(resolve_file_ref("/nonexistent".into(), abs.clone()), Some(ui_path(Path::new(&abs))));
-        assert_eq!(resolve_file_ref(r.clone(), canon.join("b/src/none.ts").display().to_string()), None);
+        assert_eq!(path(vec!["/nonexistent".into()], &abs), Some(ui_path(Path::new(&abs))));
+        assert_eq!(path(vec![r.clone()], &canon.join("b/src/none.ts").display().to_string()), None);
         std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn file_target_tells_text_from_binary() {
+        let dir = std::env::temp_dir().join(format!("jucode-kind-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let text = dir.join("a.md");
+        std::fs::write(&text, "路径 ".repeat(3000)).unwrap(); // the 8 KB sample cuts a character
+        let bin = dir.join("app.apk");
+        std::fs::write(&bin, b"PK\x03\x04\x00\x00").unwrap();
+        assert!(FileTarget::of(&text).text);
+        assert!(!FileTarget::of(&bin).text);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

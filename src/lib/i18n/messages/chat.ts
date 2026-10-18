@@ -150,6 +150,19 @@ const chat = {
 		tuiNewHint: '选择后端，对话在它的 TUI 中打开。',
 		tuiInterruptMessage: '当前回复或后台任务还在运行。切换会中断它们，之后需要手动恢复。',
 		fileOpenFailed: '打不开 {path}：{error}',
+		fileNotFound: '找不到 {path}',
+		fileMenu: {
+			missing: '找不到这个文件',
+			open: '打开',
+			attach: '添加为附件',
+			copyAbs: '复制绝对路径',
+			copyRel: '复制相对路径',
+			copyPath: '复制路径',
+			copyName: '复制文件名',
+			revealMac: '在访达中显示',
+			revealWin: '在资源管理器中显示',
+			revealLinux: '在文件管理器中显示'
+		},
 		tuiContinueTitle: '在引擎自己的终端界面中继续此会话，退出后回到这里',
 		tuiContinueUnavailable: '发送第一条消息后可在 TUI 中继续',
 		contextCat: {
@@ -465,6 +478,19 @@ const chat = {
 		tuiNewHint: 'Pick a backend; the conversation opens in its TUI.',
 		tuiInterruptMessage: 'A reply or background task is still running. Switching stops it, and you will need to resume it yourself.',
 		fileOpenFailed: 'Cannot open {path}: {error}',
+		fileNotFound: 'Cannot find {path}',
+		fileMenu: {
+			missing: 'Cannot find this file',
+			open: 'Open',
+			attach: 'Attach',
+			copyAbs: 'Copy absolute path',
+			copyRel: 'Copy relative path',
+			copyPath: 'Copy path',
+			copyName: 'Copy file name',
+			revealMac: 'Show in Finder',
+			revealWin: 'Show in File Explorer',
+			revealLinux: 'Show in file manager'
+		},
 		tuiContinueTitle: 'Continue this conversation in the engine’s own terminal UI; quit it to come back',
 		tuiContinueUnavailable: 'Send the first message before continuing in TUI',
 		contextCat: {
