@@ -1445,8 +1445,9 @@ export class ChatState {
 				}
 				const out = num(ev.output_tokens);
 				const inn = num(ev.input_tokens);
-				// Engines without cache figures (acp) leave the field out.
-				if (typeof ev.cached_input_tokens === 'number') {
+				// Engines without cache figures (acp) leave the field out; an
+				// aggregate (claude's subagents, summed) is no one request's prefix.
+				if (typeof ev.cached_input_tokens === 'number' && ev.aggregate !== true) {
 					const cached = ev.cached_input_tokens;
 					if (this.#cacheWatch.check(inn, cached) && this.busy) this.cacheMiss = { input: inn, cached };
 				}
