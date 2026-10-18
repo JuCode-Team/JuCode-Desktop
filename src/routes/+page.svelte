@@ -1501,7 +1501,7 @@
 										{:else}
 											<!-- A render error in one conversation must not blank the
 											     pane silently: it shows, is logged, and can be retried. -->
-											<svelte:boundary onerror={(e) => reportUiError(e, sid)}>
+											<svelte:boundary onerror={(e: unknown) => reportUiError(e, sid)}>
 												<ChatPane
 													session={sess}
 													{store}
@@ -1513,7 +1513,7 @@
 													onOpenSettings={openSettings}
 													onOpenRequirement={openRequirements}
 												/>
-												{#snippet failed(error, reset)}
+												{#snippet failed(error: unknown, reset: () => void)}
 													<div class="pane-error">
 														<p>{t('shell.paneError')}</p>
 														<code>{String((error as Error)?.message ?? error).slice(0, 300)}</code>
