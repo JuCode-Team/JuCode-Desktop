@@ -30,6 +30,7 @@ struct Editor {
     family: Family,
     /// macOS app bundle names, without `.app` (JetBrains Toolbox and the
     /// standalone installers name some differently).
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     apps: &'static [&'static str],
     /// The command line tool inside the bundle, relative to `Contents/`.
     bundle_cli: &'static str,
