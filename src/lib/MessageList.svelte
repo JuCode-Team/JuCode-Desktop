@@ -3,7 +3,7 @@
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
 	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
-	import { flushSync, untrack, type Snippet } from 'svelte';
+	import { flushSync, tick, untrack, type Snippet } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import Markdown from '$lib/Markdown.svelte';
 	import Collapse from '$lib/ui/Collapse.svelte';
@@ -121,226 +121,159 @@
 		tail?: Snippet;
 	} = $props();
 
-	// ── Virtual list (dynamic-height windowing) ─────────────────────────────
-	// Only long histories are windowed; short conversations render in full so the
-	// streaming/auto-scroll path is completely untouched. Heights are measured per
-	// message (cached by object identity) with an estimate for not-yet-seen rows.
-	const VIRTUAL_MIN = 40; // messages before windowing engages
-	// An unmeasured row's height, px, from what it holds: a row that enters the
-	// window above the view moves the view by however far this is off, which
-	// measure() then takes back.
-	function estimate(m: Msg): number {
-		if (folds.head.has(m) && folded(m)) return 26; // the fold's line
-		const lines = (text: string, perLine: number) =>
-			text.split('\n').reduce((n, l) => n + Math.max(1, Math.ceil(l.length / perLine)), 0);
-		switch (m.kind) {
-			case 'tool':
-				return 36; // a folded card
-			case 'reasoning':
-				return m.collapsed ? 26 : 30 + lines(m.text, 45) * 25;
-			case 'user':
-				return 46 + lines(m.text, 36) * 25;
-			case 'assistant':
-				return 8 + lines(m.text, 45) * 26;
-			default:
-				return 120;
-		}
-	}
-	const GAP = 16; // px, matches .list gap
-	const OVERSCAN = 800; // px rendered beyond the viewport on each side
-	const SETTLE_MS = 150; // quiet after the last scroll event before the padding settles
+	// ── Rendered rows ────────────────────────────────────────────────────────
+	// The rows from `start` to the end are in the page. A rendered row stays
+	// while the reader is away from the end, so scrolling never swaps rows in
+	// or out under the view: the scroll is the browser's alone, with no
+	// guessed heights to correct. Older rows join above in batches before the
+	// reader reaches them; the browser's scroll anchoring keeps the view
+	// still (where it has none, the position moves by the height they add).
+	// Back at the end, rows far above are let go again, so a long
+	// conversation stays light while a reply streams.
+	const KEEP = 120; // messages rendered at the end
+	const BATCH = 20; // messages added above at a time
+	const AHEAD = 3; // viewports of rendered room kept above the view
+	const TRIM_MS = 1500; // at the end this long before rows above are let go
+	const nativeAnchor = typeof CSS !== 'undefined' && CSS.supports('overflow-anchor', 'auto');
 
-	// Weak: a transcript replay replaces the messages, and the old ones (with
-	// their tool output) must not stay alive here.
-	const heights = new WeakMap<Msg, number>();
-	let measureVersion = $state(0);
-	let scrollTop = $state(0);
-	let viewH = $state(0);
-	let atEnd = $state(true);
-	// The list's top within the scroller's content (the scroller's padding).
-	let listTop = $state(0);
+	let start = $state(0);
 	let listEl: HTMLElement;
-	let raf = 0;
+	let rowEls: (HTMLElement | null)[] = [];
+	// Messages arriving one or two at a time after the list is shown come
+	// in with an entrance; a conversation loading, a replay or older rows
+	// joining above do not.
+	const arriving = new WeakSet<Msg>();
+	let shownList: Msg[] | null = null;
+	let shownCount = -1;
+	$effect.pre(() => {
+		const list = messages;
+		const n = list.length;
+		// Driven by the list and its length only.
+		untrack(() => {
+			if (list !== shownList) {
+				// Another list (a replay, a closed notice): keep the first rendered
+				// row if it is still there, else start near the end.
+				const kept = shownList?.[start];
+				const at = kept ? list.indexOf(kept) : -1;
+				start = at >= 0 ? at : Math.max(0, n - KEEP);
+				shownList = list;
+			} else if (shownCount >= 0 && n > shownCount && n - shownCount <= 2) {
+				for (let i = shownCount; i < n; i++) arriving.add(list[i]!);
+			}
+			if (start > n) start = Math.max(0, n - KEEP);
+			shownCount = n;
+		});
+	});
 
-	// Track the viewport's scroll position + height.
+	/** Render older rows down to `to`, keeping the view where it is. */
+	function extend(to: number) {
+		to = Math.max(0, to);
+		if (to >= start) return;
+		const el = scroller;
+		const height = el?.scrollHeight ?? 0;
+		const top = el?.scrollTop ?? 0;
+		start = to;
+		flushSync();
+		if (el && !nativeAnchor) el.scrollTop = top + el.scrollHeight - height;
+	}
+
+	// One pass per frame while scrolling: add rows above before the reader
+	// gets there, follow the user message in view for the rail, and let
+	// rows far above go once the reader has stayed at the end.
+	let atEnd = $state(true);
+	let frame = 0;
+	let trimTimer: ReturnType<typeof setTimeout> | undefined;
+	function onScrollFrame() {
+		frame = 0;
+		const el = scroller;
+		if (!el || !listEl) return;
+		const viewH = el.clientHeight;
+		// How far the rendered rows reach above the view.
+		const above = el.getBoundingClientRect().top - listEl.getBoundingClientRect().top;
+		if (start > 0 && above < AHEAD * viewH) extend(start - BATCH);
+		atEnd = el.scrollHeight - el.scrollTop - viewH < 8;
+		updateMark();
+		// Following a reply scrolls every frame: count from reaching the end,
+		// not from the last scroll.
+		if (!atEnd) {
+			clearTimeout(trimTimer);
+			trimTimer = undefined;
+		} else if (!trimTimer && start < messages.length - KEEP - BATCH) trimTimer = setTimeout(trim, TRIM_MS);
+	}
+	function trim() {
+		trimTimer = undefined;
+		if (atEnd) start = Math.max(start, messages.length - KEEP);
+	}
 	$effect(() => {
 		const el = scroller;
 		if (!el) return;
-		const sync = () => {
-			lastScroll = performance.now();
-			scrollTop = el.scrollTop;
-			// Near the top the padding has no room left to give: settle now.
-			if (shift && padBase + shift < 0) {
-				const was = shift;
-				shift = 0;
-				flushSync();
-				el.scrollTop -= was;
-			}
-			viewH = el.clientHeight;
-			atEnd = el.scrollHeight - el.scrollTop - el.clientHeight < 8;
-			cite = null;
-			listTop = listEl.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop;
+		const onScroll = () => {
+			if (cite) cite = null;
+			if (!frame) frame = requestAnimationFrame(onScrollFrame);
 		};
-		sync();
-		el.addEventListener('scroll', sync, { passive: true });
-		const ro = new ResizeObserver(sync);
+		el.addEventListener('scroll', onScroll, { passive: true });
+		// The view's height or the content changing (a reply growing, a row
+		// folding) can leave too little rendered above, or move the rail's mark.
+		const ro = new ResizeObserver(onScroll);
 		ro.observe(el);
+		ro.observe(listEl);
+		onScroll();
 		return () => {
-			el.removeEventListener('scroll', sync);
+			el.removeEventListener('scroll', onScroll);
 			ro.disconnect();
+			cancelAnimationFrame(frame);
+			frame = 0;
+			clearTimeout(trimTimer);
 		};
 	});
 
-	const virtual = $derived(!!scroller && messages.length >= VIRTUAL_MIN);
-
-	// Cumulative top offset of each row (offsets[i] = top of row i, offsets[n] = end).
-	const offsets = $derived.by(() => {
-		measureVersion; // recompute when a measurement lands
-		const offs = new Array(messages.length + 1);
-		offs[0] = 0;
-		for (let i = 0; i < messages.length; i++) {
-			const m = messages[i];
-			// Unshown placeholders occupy no row (and no gap).
-			const h = shown(m) ? (heights.get(m) ?? estimate(m)) + GAP : 0;
-			offs[i + 1] = offs[i] + h;
-		}
-		return offs;
-	});
-	const totalH = $derived(offsets[messages.length] ?? 0);
-
-	// [first, last] inclusive window of rows to render.
-	const range = $derived.by(() => {
-		if (!virtual) return { first: 0, last: messages.length - 1 };
-		// Rows sit `shift` px off their offsets until it settles, so the view
-		// covers the offsets from scrollTop - shift.
-		const at = scrollTop - shift;
-		const top = at - OVERSCAN;
-		const bottom = at + viewH + OVERSCAN;
-		let first = 0;
-		while (first < messages.length && offsets[first + 1] < top) first++;
-		let last = first;
-		while (last < messages.length - 1 && offsets[last] < bottom) last++;
-		return { first, last };
-	});
-	const windowRows = $derived(messages.slice(range.first, range.last + 1));
-	// Rows above the view that change height while the reader scrolls give or
-	// take room in the top padding, so nothing below them moves and the
-	// scroll position is not touched mid-scroll (WebKit cuts a momentum
-	// scroll short when it is). Once scrolling stops, the padding goes back
-	// to the offsets' value and the position moves with it, in one step.
-	let shift = $state(0);
-	let lastScroll = 0;
-	let settleTimer: ReturnType<typeof setTimeout> | undefined;
-	const padBase = $derived(virtual ? offsets[range.first] : 0);
-	const padTop = $derived(Math.max(0, padBase + shift));
-	/** Rows above the view grew by `delta` px. */
-	function correct(delta: number) {
-		if (!scroller) return;
-		if (performance.now() - lastScroll < SETTLE_MS && padBase + shift - delta >= 0) {
-			shift -= delta;
-			clearTimeout(settleTimer);
-			settleTimer = setTimeout(settle, SETTLE_MS);
-		} else scroller.scrollTop += delta;
-	}
-	function settle() {
-		if (!shift || !scroller) return;
-		const left = SETTLE_MS - (performance.now() - lastScroll);
-		if (left > 0) {
-			settleTimer = setTimeout(settle, left);
-			return;
-		}
-		const was = shift;
-		shift = 0;
-		flushSync();
-		scroller.scrollTop -= was;
-	}
-	const padBottom = $derived(virtual ? Math.max(0, totalH - offsets[range.last + 1]) : 0);
-
-	let clickedAt = 0;
-	// Measure a rendered row and cache its height, coalescing recomputes into one rAF.
-	function measure(node: HTMLElement, msg: Msg) {
-		const record = () => {
-			const h = node.getBoundingClientRect().height;
-			const prev = heights.get(msg);
-			if (h > 0 && prev !== h) {
-				heights.set(msg, h);
-				// A row that starts above the view has a height other than the one
-				// the window laid out for it: windowed in on the way up, it took
-				// the room of its estimate; or it changed on its own (an image
-				// loaded). It grows upwards, so what is being read stays put. A
-				// change right after a click opens or folds something in view and
-				// is left alone.
-				const was = prev ?? estimate(msg);
-				const own = prev === undefined || performance.now() - clickedAt > 1000;
-				if (scroller && own && h !== was && node.getBoundingClientRect().top < scroller.getBoundingClientRect().top)
-					correct(h - was);
-				if (!raf)
-					raf = requestAnimationFrame(() => {
-						raf = 0;
-						measureVersion++;
-					});
-			}
-		};
-		record();
-		const ro = new ResizeObserver(record);
-		ro.observe(node);
-		return {
-			update(next: Msg) {
-				msg = next;
-				record();
-			},
-			destroy() {
-				ro.disconnect();
-			}
-		};
-	}
-
-	// Scroll the current find hit into view. Under windowing the row may be unrendered,
-	// so scroll the viewport to the row's computed offset (which brings it into range).
+	// Scroll the current find hit into view (rendering down to it first).
+	// A hit inside a folded turn opens it.
 	$effect(() => {
 		if (findActive == null) return;
-		// A hit inside a folded turn opens it.
-		const fold = folds.of.get(messages[findActive]!);
-		if (fold) untrack(() => openFolds.add(fold.key));
-		if (virtual && scroller) {
-			scroller.scrollTo({ top: Math.max(0, offsets[findActive] - viewH / 2), behavior: 'smooth' });
-		} else {
-			rowEls[findActive]?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-		}
+		const i = findActive;
+		const fold = folds.of.get(messages[i]!);
+		untrack(() => {
+			if (fold) openFolds.add(fold.key);
+			// A jump: no view to keep, and no flushSync inside an effect.
+			if (i < start) start = Math.max(0, i - 2);
+		});
+		tick().then(() => rowEls[i]?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
 	});
-	let rowEls: (HTMLElement | null)[] = [];
 
 	// Index in `messages` of each message the user wrote, in order: the rail's marks.
 	const markRows = $derived(messages.flatMap((m, i) => (m.kind === 'user' && !parseDelivery(m.text) ? [i] : [])));
-	$effect(() => {
+	/** The mark at or above the upper third of the view; the last at the end. */
+	function updateMark() {
 		const rows = markRows;
-		if (atEnd) {
-			mark = rows.length - 1;
-			return;
+		if (!rows.length) return void (mark = -1);
+		if (atEnd || !scroller) return void (mark = rows.length - 1);
+		const line = scroller.getBoundingClientRect().top + scroller.clientHeight / 3;
+		const topOf = (k: number) => (rows[k]! < start ? -Infinity : (rowEls[rows[k]!]?.getBoundingClientRect().top ?? -Infinity));
+		// The last mark whose row starts above the line (rows are in order).
+		let lo = 0;
+		let hi = rows.length - 1;
+		while (lo < hi) {
+			const mid = (lo + hi + 1) >> 1;
+			if (topOf(mid) <= line) lo = mid;
+			else hi = mid - 1;
 		}
-		const line = scrollTop + viewH / 3 - listTop;
-		let n = 0;
-		while (n + 1 < rows.length && offsets[rows[n + 1]!]! <= line) n++;
-		mark = rows.length ? n : -1;
+		mark = lo;
+	}
+	$effect(() => {
+		void markRows;
+		untrack(updateMark);
 	});
 
 	/** Scroll mark `n`'s message to the top of the viewport. */
 	export function jumpToMark(n: number) {
 		const i = markRows[n];
 		if (i === undefined || !scroller) return;
-		const el = scroller;
-		const alignRow = (behavior: ScrollBehavior) => {
-			const row = rowEls[i];
-			if (!row?.isConnected) return false;
-			const top = el.scrollTop + row.getBoundingClientRect().top - el.getBoundingClientRect().top - 16;
-			el.scrollTo({ top, behavior });
-			return true;
-		};
-		if (alignRow('smooth')) return;
-		// Windowed out: go to its estimated offset, which renders it, then align
-		// on the real row once it has been measured.
-		el.scrollTo({ top: listTop + offsets[i]! - 16 });
-		requestAnimationFrame(() => requestAnimationFrame(() => alignRow('auto')));
+		extend(Math.min(start, i - 2));
+		const row = rowEls[i];
+		if (!row) return;
+		const top = scroller.scrollTop + row.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 16;
+		scroller.scrollTo({ top, behavior: 'smooth' });
 	}
 
 	// Map each user message to its 0-based ordinal so a rewind can target the
@@ -491,7 +424,8 @@
 		if (m.kind === 'system') return false;
 		if (m.kind === 'tool') return !!(m.name || m.output);
 		if (m.kind === 'plan') return !!(m.title || m.text);
-		return !!m.text && m.text.trim().length > 0;
+		// Not trim(): this runs over every message whenever a reply grows.
+		return /\S/.test(m.text);
 	}
 
 	// A run of consecutive tool calls (rows that show nothing don't break it),
@@ -562,13 +496,13 @@
 
 <svelte:document onselectionchange={() => cite && window.getSelection()?.isCollapsed && (cite = null)} />
 
-<div class="list" bind:this={listEl} onclickcapture={() => (clickedAt = performance.now())} onmouseup={() => setTimeout(offerCite)} role="presentation" style:padding-top="{padTop}px" style:padding-bottom="{padBottom}px">
-	{#each windowRows as m, k (m)}
-		{@const i = range.first + k}
+<div class="list" bind:this={listEl} onmouseup={() => setTimeout(offerCite)} role="presentation">
+	{#each messages.slice(start) as m, k (m)}
+		{@const i = start + k}
 		{#if shown(m)}
 			{@const run = toolGroups.members.get(m)}
 			{@const fold = folds.head.get(m)}
-			<div class="mwrap" class:animate={!virtual} class:hit={i === findActive} bind:this={rowEls[i]} use:measure={m}>
+			<div class="mwrap" class:animate={arriving.has(m)} class:hit={i === findActive} bind:this={rowEls[i]}>
 				{#if fold}
 					{@const open = openFolds.has(fold.key)}
 					<button class="fold" class:open onclick={() => (open ? openFolds.delete(fold.key) : openFolds.add(fold.key))} aria-expanded={open}>
@@ -662,8 +596,7 @@
 			</div>
 		{/if}
 	{/each}
-	<!-- After the last message: not while the window ends above it. -->
-	{#if range.last >= messages.length - 1}{@render tail?.()}{/if}
+	{@render tail?.()}
 	{#if retry}
 		<RetryNotice {retry} {backend} />
 	{:else if autoRetry}
@@ -742,10 +675,10 @@
 		border-radius: var(--r);
 		transition: background var(--t-slow) var(--ease-out), box-shadow var(--t-slow) var(--ease-out);
 	}
-	/* New rows come in once: unblur and rise over --t-enter. Suppressed under
-	   windowing so rows scrolling back into the window don't replay. */
+	/* A message arriving while the conversation is shown comes in once;
+	   rows loading or joining above do not. */
 	.mwrap.animate {
-		animation: msg-in var(--t-enter) var(--ease-enter) both;
+		animation: rise var(--t-med) var(--ease-out) both;
 	}
 	.mwrap.hit {
 		background: var(--accent-soft);
@@ -983,7 +916,7 @@
 	.rchev {
 		display: inline-flex;
 		color: var(--dim2);
-		transition: transform var(--t-base) var(--ease-base);
+		transition: transform var(--t-med) var(--ease-out);
 	}
 	.reason.open .rchev,
 	.fold.open .rchev {

@@ -1692,10 +1692,6 @@
 		flex: 1;
 		min-height: 0;
 		overflow-y: auto;
-		/* Rows that change height above the view keep it in place
-		   themselves (MessageList); the browser's own anchoring (Chromium)
-		   would do it twice. */
-		overflow-anchor: none;
 		padding: 22px 18px 26px;
 		display: flex;
 		flex-direction: column;
