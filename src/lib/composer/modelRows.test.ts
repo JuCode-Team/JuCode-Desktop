@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildModelRows } from './modelRows';
+import { buildModelRows, providerModels } from './modelRows';
 
 const groups = { codex: 'Codex', claude: 'Claude', jucode: 'JuCode', byok: 'BYOK', system: 'System' };
 
@@ -212,5 +212,22 @@ describe('buildModelRows', () => {
 	it('lists only this machine when not logged in to JuCode', () => {
 		const rows = buildModelRows({ ...claude, configured: [], toolMode: 'system' });
 		expect(rows.map((r) => r.command)).toEqual(['/model opus', '/model claude-fable-5[1m]']);
+	});
+
+	it('lists a provider catalog for a draft that never had a model list, its model marked', () => {
+		const models = providerModels(
+			{ id: 'jucode', models: [{ name: 'gpt-6.1-sol', display_name: 'GPT-6.1 Sol', context_window: 1_050_000, reasoning_efforts: ['low', 'high'] }, { name: 'glm-5' }] },
+			'glm-5'
+		);
+		expect(models.map((m) => [m.model, m.label, m.active, m.reasoning_efforts])).toEqual([
+			['gpt-6.1-sol', 'GPT-6.1 Sol', false, ['low', 'high']],
+			['glm-5', '', true, []]
+		]);
+		const rows = buildModelRows({ ...base, backendId: 'jucode', provider: 'jucode', configured: ['jucode'], models });
+		expect(rows.map((r) => [r.label, r.command, r.active])).toEqual([
+			['GPT-6.1 Sol', '/model gpt-6.1-sol', false],
+			['glm-5', '/model glm-5', true]
+		]);
+		expect(providerModels(undefined, 'x')).toEqual([]);
 	});
 });

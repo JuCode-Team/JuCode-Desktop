@@ -52,7 +52,7 @@
 		type FileTarget,
 		type Op
 	} from '$lib/protocol';
-	import { buildModelRows, toolModels, type ToolModel } from '$lib/composer/modelRows';
+	import { buildModelRows, providerModels, toolModels, type ToolModel } from '$lib/composer/modelRows';
 	import { confirm } from '$lib/ui/confirm.svelte';
 	import { BACKEND_LABELS, caps } from '$lib/backends';
 	import { defaultEffort } from '$lib/composer/effort';
@@ -394,6 +394,12 @@
 		// reported last time, marked with the draft's own pick.
 		if (session.draft) {
 			const pick = session.draftPick?.model;
+			// Never listed here yet: the provider's own catalog (a JuCode draft).
+			if (!chat.modelCatalog.length && chat.backendId === 'jucode')
+				chat.modelCatalog = providerModels(
+					providersList.find((p) => p.id === chat.provider),
+					chat.model
+				);
 			const models = chat.modelCatalog.map((m) => ({ ...m, active: pick ? m.model === pick : m.active }));
 			chat.picker = { kind: 'model', models, activeEffort: chat.effort };
 			const act = models.findIndex((m) => m.active);
@@ -409,6 +415,8 @@
 			const act = chat.modelCatalog.findIndex((m) => m.active);
 			selIdx = act >= 0 ? act : 0;
 		}
+		// This answer opens the list, whatever was asked before it.
+		chat.catalogQuiet = false;
 		send({ op: 'command', input: '/model' });
 	}
 

@@ -534,6 +534,12 @@ export class ChatState {
 	// with this value and clear it. Re-armed on every engine `startup` event, so
 	// crash auto-restarts / provider switches re-push the mode too.
 	pendingModeSync = $state<EngineApprovalMode | null>(null);
+	/** The engine reported its model and its backend has no model list cached
+	 *  for drafts: the page asks for one (`/model`, answered quietly). */
+	wantsCatalog = false;
+	/** The next `model_view` answers that ask: cached, no picker. */
+	catalogQuiet = false;
+	#catalogAsked = false;
 	// A mode the user picked that the engine applies only once the running
 	// turn ends (Codex, or Claude in or out of full access); null otherwise.
 	approvalPending = $state<ApprovalMode | null>(null);
@@ -995,6 +1001,7 @@ export class ChatState {
 		this.modelCatalog = p.catalog ?? [];
 		this.modelCatalogEffort = p.catalogEffort ?? '';
 		this.commands = p.commands ?? [];
+		if (this.backendId === 'acp') this.engineCaps = p.caps ?? null;
 	}
 
 	/** A spawn_agent call finished: an engine that reports its subagents
@@ -1078,6 +1085,12 @@ export class ChatState {
 				this.effort = str(ev.reasoning_effort);
 				this.efforts = arr<string>(ev.reasoning_efforts);
 				this.effortDefault = str(ev.default_effort);
+				// A draft of this backend lists the models a running session
+				// does; the cache otherwise fills only from a menu opened here.
+				if (this.model && !this.#catalogAsked) {
+					this.#catalogAsked = true;
+					this.wantsCatalog = !loadProfile(profileKey(this.backendId, this.acpAgentId)).catalog?.length;
+				}
 				this.ultracode = ev.ultracode === true;
 				this.ultracodeAvailable = ev.ultracode_available === true;
 				this.fast = ev.fast === true;
@@ -1297,6 +1310,10 @@ export class ChatState {
 				this.modelCatalog = arr<ModelOption>(ev.models);
 				this.modelCatalogEffort = str(ev.active_effort);
 				this.#remember({ catalog: this.modelCatalog, catalogEffort: this.modelCatalogEffort });
+				if (this.catalogQuiet) {
+					this.catalogQuiet = false;
+					break;
+				}
 				this.picker = {
 					kind: 'model',
 					models: arr<ModelOption>(ev.models),
@@ -1470,6 +1487,8 @@ export class ChatState {
 			case 'engine_caps': {
 				const agent = ev.agent as Record<string, unknown> | null | undefined;
 				this.engineCaps = (ev.caps as Partial<BackendCaps> | undefined) ?? null;
+				// A draft of this agent can pick a model (and more) before it starts.
+				if (this.engineCaps) this.#remember({ caps: this.engineCaps });
 				this.agentApprovals = typeof ev.approvals === 'boolean' ? ev.approvals : null;
 				this.agentGateway = ev.gateway === true;
 				this.agentInfo = agent

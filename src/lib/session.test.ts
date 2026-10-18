@@ -150,6 +150,25 @@ describe('SessionStore lifecycle', () => {
 		]);
 	});
 
+	it('an ACP draft starts with its picks as start options, not a /model the agent cannot take yet', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p);
+		await store.switchBackend(id, 'acp', { id: 'opencode', name: 'OpenCode', preset: true });
+		const s = p.sessions[0];
+		expect(s.draft).toBe(true);
+		s.draftPick = { model: 'deepseek/deepseek-v4-pro', effort: 'high' };
+		begin(id);
+		await flush();
+		expect(lastSpec()).toEqual({
+			engine: 'acp',
+			options: { agent: 'opencode', approval_mode: 'read-only', model: 'deepseek/deepseek-v4-pro', effort: 'high' }
+		});
+		const lines = vi.mocked(sendLine).mock.calls.filter(([sid]) => sid === id).map(([, l]) => l);
+		expect(lines).toEqual([JSON.stringify({ op: 'user_message', content: 'hi' })]);
+	});
+
 	it('ops of every backend go out as jucode lines, approval modes in jucode names', async () => {
 		const store = new SessionStore();
 		const p = proj();
@@ -198,6 +217,19 @@ describe('SessionStore lifecycle', () => {
 		begin(id);
 		await flush();
 		expect(lastSpec()).toEqual({ engine: 'codex', options: { approval_mode: 'read-only', jucode_gateway: true } });
+	});
+
+	it('a draft keeps its picked effort when a model pick moves it to the gateway', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p, undefined, 'codex');
+		p.sessions[0].draftPick = { effort: 'high' };
+		await store.applyToolProfile(id, 'jucode', 'gpt-5.5');
+		begin(id);
+		await flush();
+		const lines = vi.mocked(sendLine).mock.calls.filter(([sid]) => sid === id).map(([, l]) => l);
+		expect(lines[0]).toBe(JSON.stringify({ op: 'command', input: '/model gpt-5.5 high' }));
 	});
 
 	it('a draft renamed before it starts gives the daemon its name', async () => {

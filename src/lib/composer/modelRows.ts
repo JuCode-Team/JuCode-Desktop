@@ -27,7 +27,7 @@ export interface EngineModel {
 
 export interface CatalogProvider {
 	id: string;
-	models: { name: string; display_name?: string | null; context_window?: number }[];
+	models: { name: string; display_name?: string | null; context_window?: number; reasoning_efforts?: string[] }[];
 }
 
 export interface ModelGroupLabels {
@@ -129,6 +129,25 @@ export function toolModels(
 			});
 	}
 	return list;
+}
+
+/**
+ * What a draft lists when its backend never sent a model list here (the
+ * cache fills only from a model menu opened in a running session): the
+ * models the provider's catalog names, the draft's model marked.
+ */
+export function providerModels(
+	provider: CatalogProvider | undefined,
+	current: string
+): (EngineModel & { label: string; max_output_tokens: number; reasoning_efforts: string[]; context_window: number })[] {
+	return (provider?.models ?? []).map((m) => ({
+		model: m.name,
+		label: m.display_name || '',
+		active: m.name === current,
+		context_window: m.context_window ?? 0,
+		max_output_tokens: 0,
+		reasoning_efforts: m.reasoning_efforts ?? []
+	}));
 }
 
 /**

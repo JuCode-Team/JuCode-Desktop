@@ -1224,6 +1224,11 @@
 					}
 				}
 				flushModeSync(s.chat, s.id);
+				if (s.chat.wantsCatalog) {
+					s.chat.wantsCatalog = false;
+					s.chat.catalogQuiet = true;
+					dispatch(s.id, { op: 'command', input: '/model' });
+				}
 				const miss = s.chat.cacheMiss;
 				if (miss) {
 					s.chat.cacheMiss = null;

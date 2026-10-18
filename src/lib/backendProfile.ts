@@ -4,6 +4,7 @@
 // anything is started. A backend that never ran here has no profile.
 
 import type { CommandItem, ModelOption } from '$lib/chat.svelte';
+import type { BackendCaps } from '$lib/backends/types';
 
 export interface BackendProfile {
 	provider?: string;
@@ -16,6 +17,8 @@ export interface BackendProfile {
 	catalog?: ModelOption[];
 	catalogEffort?: string;
 	commands?: CommandItem[];
+	/** An ACP agent's engine_caps (whether it has a model picker, say). */
+	caps?: Partial<BackendCaps>;
 }
 
 const KEY = 'jucode-backend-profiles';

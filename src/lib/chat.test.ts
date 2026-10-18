@@ -311,6 +311,62 @@ describe('ChatState.handle', () => {
 		expect(c.effortDefault).toBe('');
 	});
 
+	it('asks once for a model list a draft can show, and takes the answer without opening a picker', () => {
+		const store = new Map<string, string>();
+		vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v) });
+		try {
+			const c = new ChatState();
+			c.backendId = 'jucode';
+			c.handle({ type: 'model_status', provider: 'jucode', model: 'glm-5', state: 'ready' });
+			expect(c.wantsCatalog).toBe(true);
+			// The page sends /model and marks the answer quiet.
+			c.wantsCatalog = false;
+			c.catalogQuiet = true;
+			c.handle({ type: 'model_status', provider: 'jucode', model: 'glm-5', state: 'ready' });
+			expect(c.wantsCatalog).toBe(false);
+			c.handle({ type: 'model_view', models: [{ model: 'glm-5', active: true }], active_effort: '' });
+			expect(c.picker).toBeNull();
+			// A draft of the backend lists it.
+			const draft = new ChatState();
+			draft.backendId = 'jucode';
+			draft.seedFromProfile();
+			expect(draft.modelCatalog.map((m) => m.model)).toEqual(['glm-5']);
+			// Opened by the user later: a picker.
+			c.handle({ type: 'model_view', models: [{ model: 'glm-5', active: true }], active_effort: '' });
+			expect(c.picker?.kind).toBe('model');
+			// Cached already: a new engine does not ask.
+			const next = new ChatState();
+			next.backendId = 'jucode';
+			next.handle({ type: 'model_status', provider: 'jucode', model: 'glm-5', state: 'ready' });
+			expect(next.wantsCatalog).toBe(false);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
+	it("a draft of an ACP agent takes the agent's caps from last time, so it can pick a model", () => {
+		const store = new Map<string, string>();
+		vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v) });
+		try {
+			const c = new ChatState();
+			c.backendId = 'acp';
+			c.acpAgentId = 'opencode';
+			c.handle({ type: 'engine_caps', agent: { id: 'opencode', name: 'OpenCode', version: '2.0.20' }, caps: { modelPicker: true } });
+			const draft = new ChatState();
+			draft.backendId = 'acp';
+			draft.acpAgentId = 'opencode';
+			draft.seedFromProfile();
+			expect(draft.engineCaps).toEqual({ modelPicker: true });
+			const other = new ChatState();
+			other.backendId = 'acp';
+			other.acpAgentId = 'pi';
+			other.seedFromProfile();
+			expect(other.engineCaps).toBeNull();
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
 	it('defers to the engine cost once it reports one (no double count)', () => {
 		const c = new ChatState();
 		c.handle({ type: 'model_status', model: 'gpt-5.5', state: 'idle' });

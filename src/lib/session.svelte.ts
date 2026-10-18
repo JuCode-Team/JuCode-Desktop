@@ -282,7 +282,8 @@ export class SessionStore {
 									agent: s.acpAgent.id,
 									approval_mode: mode,
 									...gateway,
-									...(extraOpts?.model ? { model: extraOpts.model } : {})
+									...(extraOpts?.model ? { model: extraOpts.model } : {}),
+									...(extraOpts?.effort ? { effort: extraOpts.effort } : {})
 								}
 							})
 					: s.backendId === 'acp'
@@ -293,7 +294,13 @@ export class SessionStore {
 								return {
 									engine: 'acp',
 									// The agent's own environment wins over the backend's.
-									options: { command: entry.command, args: entry.args, env: { ...(base?.env ?? {}), ...entry.env } }
+									options: {
+										command: entry.command,
+										args: entry.args,
+										env: { ...(base?.env ?? {}), ...entry.env },
+										...(extraOpts?.model ? { model: extraOpts.model } : {}),
+										...(extraOpts?.effort ? { effort: extraOpts.effort } : {})
+									}
 								};
 							})
 						: Promise.resolve(undefined);
@@ -412,14 +419,18 @@ export class SessionStore {
 		const pick = s.draftPick;
 		s.draftPick = undefined;
 		const model = pick?.model || s.chat.model;
+		// An ACP agent takes no /model before its conversation opens: the
+		// picks are start options it applies once open.
+		const acp = s.backendId === 'acp';
 		// The model and effort picked while a draft go first; the held first
 		// message follows.
 		const applyPick = () => {
-			if (!pick || !model) return;
+			if (acp || !pick || !model) return;
 			const effort = pick.effort ?? '';
 			dispatch(s.id, { op: 'command', input: effort ? `/model ${model} ${effort}` : `/model ${model}` });
 		};
-		this.#spawn(s, project.path, applyPick)
+		const startOpts = acp && pick ? { ...(pick.model ? { model: pick.model } : {}), ...(pick.effort ? { effort: pick.effort } : {}) } : undefined;
+		this.#spawn(s, project.path, applyPick, startOpts)
 			.then(() => {
 				// Renamed while a draft, before it had a daemon session.
 				if (s.chat.title !== UNTITLED) this.#share(s, { title: s.chat.title });
@@ -1009,7 +1020,7 @@ export class SessionStore {
 		// A draft starts that way with its first message.
 		if (s.draft) {
 			if (model) {
-				s.draftPick = { model };
+				s.draftPick = { ...s.draftPick, model };
 				s.chat.model = model;
 				s.chat.modelLabel = '';
 			}
