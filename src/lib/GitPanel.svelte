@@ -373,6 +373,7 @@
 	}
 	import Select from '$lib/ui/Select.svelte';
 	import Checkbox from '$lib/ui/Checkbox.svelte';
+	import { popOut } from '$lib/ui/motion';
 </script>
 
 <div class="git">
@@ -402,7 +403,7 @@
 		</div>
 		{#if branchOpen}
 			<div class="pop-catch" role="presentation" onclick={() => (branchOpen = false)}></div>
-			<div class="pop branchpop" role="menu">
+			<div class="pop branchpop" role="menu" out:popOut>
 				<div class="poplist">
 					{#each branches as b (b)}
 						<button class="pop-row popitem" class:cur={b === branch} role="menuitem" onclick={() => switchBranch(b)} disabled={busy}>

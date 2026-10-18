@@ -22,6 +22,7 @@
 	import PlanQuota from './PlanQuota.svelte';
 	import { modelColor, isTopEffort } from '$lib/modelColor';
 	import { modelSetup } from '$lib/modelSetupState.svelte';
+	import { popOut } from '$lib/ui/motion';
 
 	// The composer's model menu, opened from the model button: everything about
 	// "who answers and how hard it thinks" in one place. The first page shows
@@ -159,7 +160,7 @@
 
 <svelte:window onkeydowncapture={onKeyCapture} />
 <button class="mm-backdrop" aria-label="close" tabindex="-1" onclick={onClose}></button>
-<div use:overBrowser class="pop mm" role="dialog" aria-label={t('chat.switchModel')} bind:this={popEl} style:left="{popLeft}px" style:top="{popTop}px">
+<div use:overBrowser class="pop mm" out:popOut={{ y: 3 }} role="dialog" aria-label={t('chat.switchModel')} bind:this={popEl} style:left="{popLeft}px" style:top="{popTop}px">
 	{#if page === 'main'}
 		<section class="current">
 			{#if canPickModel}

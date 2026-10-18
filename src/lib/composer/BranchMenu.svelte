@@ -12,6 +12,7 @@
 	import { git } from '$lib/protocol';
 	import { isValidBranchName, parseBranches } from '$lib/gitops';
 	import { t } from '$lib/i18n';
+	import { popOut } from '$lib/ui/motion';
 
 	let {
 		cwd,
@@ -96,7 +97,7 @@
 <svelte:window onkeydown={(e) => e.key === 'Escape' && !creating && onClose()} />
 
 <button class="bm-backdrop" aria-label="close menu" tabindex="-1" onclick={onClose}></button>
-<div use:overBrowser class="pop bm" role="dialog" aria-label={t('chat.branchMenu.title')}>
+<div use:overBrowser class="pop bm" out:popOut={{ y: 3 }} role="dialog" aria-label={t('chat.branchMenu.title')}>
 	{#if creating}
 		<label class="field">
 			<GitBranchIcon size={16} />

@@ -8,6 +8,7 @@
 	import type { WebRef } from '$lib/browser.svelte';
 	import { t } from '$lib/i18n';
 	import { imageViewer } from '$lib/ui/imageViewer.svelte';
+	import { fadeOut } from '$lib/ui/motion';
 
 	let {
 		attachments,
@@ -34,16 +35,16 @@
 	}
 </script>
 
-<div class="chips">
+<div class="chips" out:fadeOut>
 	<!-- Images as thumbnails (click: full size), other files as name chips. -->
 	{#each attachments as a, i (a.path)}
 		{#if a.image}
-			<span class="imgcard">
+			<span class="imgcard" out:fadeOut>
 				<button class="thumb-btn" onclick={() => view(a.path)} aria-label={t('common.image.open')} title={t('common.image.open')}><img src={convertFileSrc(a.path)} alt={base(a.path)} /></button>
 				<button class="img-x" onclick={() => onRemove(i)} aria-label={t('common.remove')} title={t('common.remove')}><XIcon size={12} /></button>
 			</span>
 		{:else}
-			<span class="chip">
+			<span class="chip" out:fadeOut>
 				<FileTextIcon size={12} />
 				<span class="chip-name">{base(a.path)}</span>
 				<IconButton size="xs" onclick={() => onRemove(i)} label="remove"><XIcon size={12} /></IconButton>
@@ -51,7 +52,7 @@
 		{/if}
 	{/each}
 	{#each videos as v, i (v.path)}
-		<span class="chip videochip">
+		<span class="chip videochip" out:fadeOut>
 			{#if v.frames.length}<img class="chip-thumb" src={convertFileSrc(v.frames[0])} alt="" />{:else}<FilmIcon size={12} />{/if}
 			<span class="chip-name">{base(v.path)}</span>
 			<span class="chip-meta">{t('chat.videoMeta', { s: v.duration.toFixed(0), n: v.frames.length })}</span>
@@ -59,7 +60,7 @@
 		</span>
 	{/each}
 	{#each webRefs as r, i (r.url + r.selector + i)}
-		<span class="chip refchip" title={`${r.url}\n${r.selector}`}>
+		<span class="chip refchip" out:fadeOut title={`${r.url}\n${r.selector}`}>
 			<GlobeIcon size={12} />
 			<span class="chip-name">{refLabel(r)}</span>
 			<span class="chip-meta">&lt;{r.tag}&gt;</span>

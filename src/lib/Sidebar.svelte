@@ -18,7 +18,7 @@
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import PinIcon from '@lucide/svelte/icons/pin';
 	import PinOffIcon from '@lucide/svelte/icons/pin-off';
-	import { rowIn } from '$lib/ui/motion';
+	import { rowIn, rowOut } from '$lib/ui/motion';
 	import Collapse from '$lib/ui/Collapse.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import { t } from '$lib/i18n';
@@ -341,6 +341,7 @@
 		<!-- Listed rows (`p` given) drag within their project and pinned group. -->
 		<button
 			in:rowIn
+			out:rowOut
 			class="sess"
 			class:nested
 			class:on={!selectable && s.id === activeId}
@@ -455,7 +456,7 @@
 					</button>
 				{/if}
 			</div>
-			{#if open}
+			<Collapse {open}>
 				{#each arch as s (s.id)}{@render sessRow(s, nested, sel)}{/each}
 				{#if sel}
 					{@const all = arch.every((s) => picked.includes(s.id))}
@@ -469,7 +470,7 @@
 						</Button>
 					</div>
 				{/if}
-			{/if}
+			</Collapse>
 		{/if}
 	{/snippet}
 
@@ -967,7 +968,7 @@
 		color: var(--text);
 	}
 	.caret :global(svg) {
-		transition: transform var(--t-base) var(--ease-base);
+		transition: transform var(--t-med) var(--ease-out);
 	}
 	.caret.open :global(svg) {
 		transform: rotate(90deg);

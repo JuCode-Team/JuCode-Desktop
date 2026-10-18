@@ -44,6 +44,7 @@
 	import type { ChatState } from '$lib/chat.svelte';
 	import { buildApproveOp, type ApprovalMode, type ApproveOp } from '$lib/approval';
 	import { caps, BACKEND_LABELS, type BackendId } from '$lib/backends';
+	import { paneIn, paneOut } from '$lib/ui/motion';
 
 	let {
 		chat,
@@ -785,13 +786,13 @@
 	{/if}
 	{#if chat.approvalPending && chat.busy}
 		<!-- The engine applies the picked mode only from the next turn. -->
-		<div class="queued">
+		<div class="queued" in:paneIn out:paneOut>
 			<span class="queued-label">{t('chat.modePending', { mode: APPROVAL_MODES[chat.approvalPending]?.label ?? chat.approvalPending })}</span>
 			<button class="qsteer" onclick={onStop}>{t('chat.modeApplyNow')}</button>
 		</div>
 	{/if}
 	{#if chat.pendingMessages.length}
-		<div class="queued">
+		<div class="queued" in:paneIn out:paneOut>
 			<span class="queued-label">{t('chat.queuedLabel', { n: chat.pendingMessages.length })}</span>
 			{#each chat.pendingMessages as q, i (i)}
 				<span class="qchip" title={q}>{q}</span>

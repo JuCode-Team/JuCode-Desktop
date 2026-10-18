@@ -5,14 +5,16 @@
 	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import { t } from '$lib/i18n';
 	import type { ChatState } from '$lib/chat.svelte';
+	import { paneIn, rowOut } from '$lib/ui/motion';
 
 	let { chat }: { chat: ChatState } = $props();
 </script>
 
 {#if chat.sideAnswers.length}
 	<div class="side">
-		{#each chat.sideAnswers as a, i (i)}
-			<div class="card">
+		{#each chat.sideAnswers as a, i (a)}
+			<!-- global: the last card's exit plays as the strip goes too. -->
+			<div class="card" in:paneIn out:rowOut|global>
 				<div class="head">
 					<span class="label">{t('chat.btw.label')}</span>
 					<span class="q" title={a.question}>{a.question}</span>

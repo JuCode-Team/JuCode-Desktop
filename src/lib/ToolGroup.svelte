@@ -212,7 +212,7 @@
 		display: inline-flex;
 		flex-shrink: 0;
 		color: var(--dim2);
-		transition: transform var(--t-base) var(--ease-base);
+		transition: transform var(--t-med) var(--ease-out);
 	}
 	.head.open .chev,
 	.rhead.open .chev {

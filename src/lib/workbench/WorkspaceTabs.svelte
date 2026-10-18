@@ -8,6 +8,7 @@
 	import type { WorkspaceEntry } from './workspaces';
 	import TabGlyph from './TabGlyph.svelte';
 	import TabChromePopover from './TabChromePopover.svelte';
+	import { rowIn, tabOut } from '$lib/ui/motion';
 
 	// The virtual-desktop tab bar at the very top of the canvas: one tab per
 	// workspace, a + to create more. Doubles as the window drag strip (the
@@ -76,6 +77,8 @@
 		{#each workspaces as w (w.id)}
 			<div
 				class="wstab"
+				in:rowIn
+				out:tabOut
 				class:on={w.id === activeId}
 				style:--ws-accent={w.color ?? 'var(--accent)'}
 				role="tab"

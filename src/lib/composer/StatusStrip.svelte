@@ -7,7 +7,8 @@
 	import XIcon from '@lucide/svelte/icons/x';
 	import { t } from '$lib/i18n';
 	import type { ChatState } from '$lib/chat.svelte';
-	import { sheet } from '$lib/ui/motion';
+	import { fadeOut, motionMs, sheet, T_FAST } from '$lib/ui/motion';
+	import { fade } from 'svelte/transition';
 
 	let { chat }: { chat: ChatState } = $props();
 	let open = $state(false);
@@ -46,7 +47,7 @@
 <svelte:document onpointerdown={onDocDown} onkeydown={onKey} />
 
 {#if items.length}
-	<span class="anchor" bind:this={root}>
+	<span class="anchor" bind:this={root} in:fade={{ duration: motionMs(T_FAST) }} out:fadeOut>
 		<button
 			class="bell"
 			class:on={open}

@@ -1,5 +1,6 @@
 <script lang="ts" module>
 	import type PlusIcon from '@lucide/svelte/icons/plus';
+	import { popOut } from '$lib/ui/motion';
 
 	export interface TrayItem {
 		id: string;
@@ -87,7 +88,7 @@
 	}
 </script>
 
-<div class="tray">
+<div class="tray" out:popOut={{ y: 3 }}>
 	{#if heading || meta}
 		<div class="tray-head">
 			{#if heading}<span class="heading">{heading}</span>{/if}

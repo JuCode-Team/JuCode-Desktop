@@ -244,7 +244,7 @@
 	.chev {
 		display: inline-flex;
 		color: var(--dim2);
-		transition: transform var(--t-base) var(--ease-base);
+		transition: transform var(--t-med) var(--ease-out);
 		flex-shrink: 0;
 	}
 	.chev.open {

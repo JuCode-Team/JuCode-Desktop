@@ -67,3 +67,72 @@ export function rowIn(_node: Element, { x = -6, duration = 180 } = {}): () => Tr
 		};
 	};
 }
+
+/** A menu or popover closing: fade and draw back a little towards its
+ *  anchor (`y` is the way back: negative for a menu below its anchor). */
+export function popOut(_node: Element, { y = -3, duration = 110 } = {}): TransitionConfig {
+	return {
+		duration: motionMs(duration),
+		easing: cubicOut,
+		css: (t, u) => `opacity: ${t}; transform: translateY(${u * y}px)`
+	};
+}
+
+let leaving = 0;
+
+/** A row leaving a list (a session closed or archived): fade while the
+ *  rows below close the gap. Many at once (a search narrowing the list)
+ *  go without it, as rowIn's arrive. */
+export function rowOut(node: Element, { duration = T_FAST } = {}): () => TransitionConfig {
+	leaving++;
+	const h = (node as HTMLElement).offsetHeight;
+	return () => {
+		const together = leaving;
+		queueMicrotask(() => (leaving = 0));
+		if (together > 2) return { duration: 0 };
+		return {
+			duration: motionMs(duration),
+			easing: cubicOut,
+			css: (t) => `opacity: ${t}; height: ${t * h}px; overflow: hidden`
+		};
+	};
+}
+
+/** Small controls going away (a jump button, a chip): fade only. */
+export function fadeOut(_node: Element, { duration = T_FAST } = {}): TransitionConfig {
+	return { duration: motionMs(duration), easing: cubicOut, css: (t) => `opacity: ${t}` };
+}
+
+/** A side region opening beside the content (background tasks): slide in
+ *  from its edge a little and fade; it leaves the same way, quicker. */
+export function sideIn(_node: Element, { x = 16, duration = T_MED } = {}): TransitionConfig {
+	return {
+		duration: motionMs(duration),
+		easing: cubicOut,
+		css: (t, u) => `opacity: ${t}; transform: translateX(${u * x}px)`
+	};
+}
+export function sideOut(_node: Element, { x = 12, duration = T_FAST } = {}): TransitionConfig {
+	return {
+		duration: motionMs(duration),
+		easing: cubicOut,
+		css: (t, u) => `opacity: ${t}; transform: translateX(${u * x}px)`
+	};
+}
+
+/** A tab closing: fade while the tabs beside it close the gap. Several at
+ *  once (关闭其他 / 关闭全部) go without it. */
+export function tabOut(node: Element, { duration = T_FAST } = {}): () => TransitionConfig {
+	leaving++;
+	const w = (node as HTMLElement).offsetWidth;
+	return () => {
+		const together = leaving;
+		queueMicrotask(() => (leaving = 0));
+		if (together > 2) return { duration: 0 };
+		return {
+			duration: motionMs(duration),
+			easing: cubicOut,
+			css: (t) => `opacity: ${t}; width: ${t * w}px; min-width: 0; overflow: hidden`
+		};
+	};
+}

@@ -8,6 +8,8 @@
 	import { describeError, stripEngineHint } from '$lib/errorInfo';
 	import type { RetryState } from '$lib/chat.svelte';
 	import { t } from '$lib/i18n';
+	import { fadeOut, motionMs, paneIn } from '$lib/ui/motion';
+	import { slide } from 'svelte/transition';
 
 	// `onNow` / `onCancel`: the app's own retry of a failed turn (autoRetry.ts),
 	// which the user can bring forward or call off; the engine's has neither.
@@ -36,7 +38,7 @@
 	let showRaw = $state(false);
 </script>
 
-<div class="retry" role="status">
+<div class="retry" role="status" in:paneIn out:fadeOut>
 	<div class="head">
 		<span class="ico" class:spin={left === 0}><RotateCwIcon size={16} /></span>
 		<span class="title">{t(onCancel ? 'chat.autoRetry.title' : 'chat.retry.title')}</span>
@@ -63,7 +65,7 @@
 				</button>
 			{/if}
 		</div>
-		{#if showRaw}<pre class="raw">{stripEngineHint(retry.reason)}</pre>{/if}
+		{#if showRaw}<pre class="raw" transition:slide={{ duration: motionMs(160) }}>{stripEngineHint(retry.reason)}</pre>{/if}
 	{/if}
 </div>
 

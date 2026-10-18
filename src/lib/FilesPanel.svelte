@@ -179,6 +179,11 @@
 		overflow: auto;
 		padding: 6px;
 	}
+	/* Rows a folder opens drop in once (keyed rows keep theirs). */
+	.ent,
+	.note {
+		animation: drop-in var(--t-fast) var(--ease-out);
+	}
 	.ent {
 		position: relative;
 		display: flex;

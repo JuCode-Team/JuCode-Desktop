@@ -84,6 +84,7 @@
 	import { imageViewer } from '$lib/ui/imageViewer.svelte';
 	import { isMac } from '$lib/shortcuts';
 	import { editors } from '$lib/editors.svelte';
+	import { fadeOut, paneIn, paneOut, sideIn, sideOut } from '$lib/ui/motion';
 	import type { Msg } from '$lib/chat.svelte';
 	import type { SessionSwitch } from '$lib/composer/SessionSwitches.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
@@ -1297,12 +1298,12 @@
 		{/if}
 		</div>
 		{#if farFromEnd}
-			<button class="jump" style:bottom="{bottomH + 14}px" onclick={jumpToBottom} aria-label="scroll to bottom"><ChevronDownIcon size={16} /></button>
+			<button class="jump" style:bottom="{bottomH + 14}px" onclick={jumpToBottom} aria-label="scroll to bottom" out:fadeOut><ChevronDownIcon size={16} /></button>
 		{/if}
 
 		<div class="bottom" bind:clientHeight={bottomH}>
 			{#if chat.engineState === 'exited'}
-				<div class="approval-wrap">
+				<div class="approval-wrap" in:paneIn out:paneOut>
 					<div class="enginedown">
 						<span class="ed-text">{t('shell.engineDown')}</span>
 						<Button variant="primary" size="sm" onclick={() => store.restartSession(session.id, true)}>{t('shell.restartEngine')}</Button>
@@ -1312,7 +1313,7 @@
 			<!-- Agent questions render in the composer tray; the card keeps plain
 			     tool approvals (commands, edits, plans). -->
 			{#if chat.pendingApproval && !chat.pendingApproval.questions?.length}
-				<div class="approval-wrap">
+				<div class="approval-wrap" out:paneOut>
 					{#key chat.pendingApproval.callId}
 						<ApprovalCard approval={chat.pendingApproval} onRespond={respondApproval} ruleScopes={caps(chat).ruleScopes} keys={isActive} />
 					{/key}
@@ -1320,7 +1321,7 @@
 			{/if}
 
 			{#if chat.inTerminal}
-				<p class="interm">{t('chat.inTerminal')}</p>
+				<p class="interm" in:paneIn out:paneOut>{t('chat.inTerminal')}</p>
 			{/if}
 			{#if chat.rateLimit}
 				<RateLimitBanner rateLimit={chat.rateLimit} onDismiss={() => (chat.rateLimit = null)} />
@@ -1329,7 +1330,7 @@
 			<SideAnswers {chat} />
 
 			{#if chat.planRevising}
-				<div class="approval-wrap">
+				<div class="approval-wrap" in:paneIn out:paneOut>
 					<div class="revising">
 						<ClipboardListIcon size={14} />
 						<span class="rv-label">{t('chat.planCard.revising')}</span>
@@ -1340,7 +1341,7 @@
 			{/if}
 
 			{#if gate && !chat.pendingApproval}
-				<div class="approval-wrap">
+				<div class="approval-wrap" in:paneIn out:paneOut>
 					<div class="gate">
 						<span class="gate-hint">{t('shell.requirement.confirmHint')}</span>
 						<Button size="sm" variant="primary" disabled={confirming} onclick={confirmGate}>{t(`shell.requirement.${gateNext(gate)}`)}</Button>
@@ -1396,7 +1397,7 @@
 		</div>
 	</div>
 	{#if chat.tasksOpen}
-		<aside class="tasks" aria-label={t('dock.agents.title')}>
+		<aside class="tasks" aria-label={t('dock.agents.title')} in:sideIn out:sideOut>
 			<TaskPanel {chat} rows={allAgents} canOpen={canOpenAgent} onOp={send} onClose={() => (chat.tasksOpen = false)} />
 		</aside>
 	{/if}

@@ -20,6 +20,7 @@
 
 <script lang="ts">
 	import { overBrowser } from '$lib/browser.svelte';
+	import { popOut } from './motion';
 	// The app's list popover: an optional gray question on top, then rows of
 	// icon · label (· gray description) with a check on the current choice.
 	// Anchored to its positioned parent; `placement` says which way it opens.
@@ -45,7 +46,7 @@
 <svelte:window onkeydown={(e) => e.key === 'Escape' && onClose()} />
 
 <button class="pm-backdrop" aria-label="close menu" tabindex="-1" onclick={onClose}></button>
-<div use:overBrowser class="pop pm {placement}" role="menu">
+<div use:overBrowser class="pop pm {placement}" role="menu" out:popOut={{ y: placement.startsWith('up') ? 3 : -3 }}>
 	{#if title}<div class="pop-head">{title}</div>{/if}
 	{#each items as it (it.key)}
 		<button class="pop-row" class:warn={it.tone === 'warn'} class:two={!!it.desc} role={it.checked === undefined ? 'menuitem' : 'menuitemradio'} aria-checked={it.checked} disabled={it.disabled} onmousedown={(e) => e.preventDefault()} onclick={() => onSelect(it.key)}>

@@ -5,6 +5,7 @@
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import { t } from '$lib/i18n';
+	import { paneIn, paneOut } from '$lib/ui/motion';
 
 	let {
 		value = $bindable(),
@@ -29,7 +30,7 @@
 	} = $props();
 </script>
 
-<div class="findbar">
+<div class="findbar" in:paneIn={{ y: -4 }} out:paneOut={{ y: -4 }}>
 	<SearchIcon size={14} />
 	<input bind:this={inputEl} bind:value oninput={onInput} onkeydown={onKey} placeholder={t('shell.findPlaceholder')} />
 	<span class="findcount">{value.trim() ? (hitCount ? `${Math.min(activeIndex + 1, hitCount)}/${hitCount}` : t('shell.findNoResult')) : ''}</span>

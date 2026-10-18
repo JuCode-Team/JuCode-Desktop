@@ -12,6 +12,7 @@
 	import TabGlyph from './TabGlyph.svelte';
 	import TabChromePopover from './TabChromePopover.svelte';
 	import AccountCard from './AccountCard.svelte';
+	import { rowIn, rowOut } from '$lib/ui/motion';
 
 	// The outermost column: one entry per workspace (the top-level context —
 	// switching it swaps the sidebar's projects and the canvas layout) and + to
@@ -99,6 +100,8 @@
 		{#each workspaces as w (w.id)}
 			<button
 				class="ws"
+				in:rowIn
+				out:rowOut
 				class:on={w.id === activeId}
 				role="tab"
 				aria-selected={w.id === activeId}

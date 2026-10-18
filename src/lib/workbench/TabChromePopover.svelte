@@ -12,6 +12,8 @@
 	import { PICKER_ICONS, parseTabIcon, sanitizeSvg, TAB_COLORS, type TabIcon } from './tabChrome';
 	import TabGlyph from './TabGlyph.svelte';
 	import Button from '$lib/ui/Button.svelte';
+	import { popOut } from '$lib/ui/motion';
+	import Collapse from '$lib/ui/Collapse.svelte';
 
 	// Shared chrome editor for workspace tabs, session tabs, project folders
 	// and agents: rename, tag color, and icon (builtin grid / slug / pasted
@@ -121,6 +123,7 @@
 <div
 	use:overBrowser
 	class="pop"
+	out:popOut
 	role="dialog"
 	aria-label={t('shell.chrome.title')}
 	bind:clientWidth={popW}
@@ -151,7 +154,7 @@
 	<button class="more" onclick={() => (looks = !looks)} aria-expanded={looks}>
 		{#if looks}<ChevronDownIcon size={12} />{:else}<ChevronRightIcon size={12} />{/if}{t('shell.chrome.title')}
 	</button>
-	{#if looks}
+	<Collapse open={looks}>
 		<div class="lbl">{t('shell.chrome.color')}</div>
 		<div class="swatches">
 			<button
@@ -200,7 +203,7 @@
 		<button class="more" onclick={() => (custom = !custom)} aria-expanded={custom}>
 			{#if custom}<ChevronDownIcon size={12} />{:else}<ChevronRightIcon size={12} />{/if}{t('shell.chrome.custom')}
 		</button>
-		{#if custom}
+		<Collapse open={custom}>
 		<label class="field">
 			<span class="lbl">{t('shell.chrome.slug')}</span>
 			<input
@@ -228,8 +231,8 @@
 			></textarea>
 			{#if svgError}<span class="err">{t('shell.chrome.svgInvalid')}</span>{/if}
 		</label>
-		{/if}
-	{/if}
+		</Collapse>
+	</Collapse>
 	{/if}
 
 	{@render children?.()}
@@ -281,7 +284,7 @@
 		background: var(--panel);
 		border-radius: var(--r);
 		box-shadow: var(--shadow-pop);
-		animation: pop-in var(--t-med) var(--ease-out);
+		animation: drop-in var(--t-med) var(--ease-out);
 	}
 	.field {
 		display: flex;

@@ -3,6 +3,7 @@
 	import FolderIcon from '@lucide/svelte/icons/folder';
 	import { fuzzyPositions, type AtEntry } from '$lib/mention';
 	import { t } from '$lib/i18n';
+	import { popOut } from '$lib/ui/motion';
 
 	// @-mention completion list. Selection/keyboard nav lives in the parent; the
 	// `composer-menu` / `cmp-opt-{i}` ids are preserved for the textarea's aria wiring.
@@ -40,7 +41,7 @@
 	}
 </script>
 
-<div class="slash" id="composer-menu" role="listbox" aria-label={t('chat.atMenuLabel')}>
+<div class="slash" out:popOut={{ y: 3 }} id="composer-menu" role="listbox" aria-label={t('chat.atMenuLabel')}>
 	{#each matches as e, i (e.path)}
 		<button class="slash-item" id="cmp-opt-{i}" role="option" aria-selected={i === selected} class:sel={i === selected} onclick={() => onSelect(e)} onmouseenter={() => onHover(i)}>
 			{#if e.dir}<FolderIcon size={14} class="atfolder" />{:else}<FileIcon size={14} />{/if}

@@ -17,6 +17,7 @@
 	import { backgroundCommands, planShown, planSummary, rowElapsed, shortElapsed, type AgentRow } from '$lib/agentProgress';
 	import AgentDetail from './AgentDetail.svelte';
 	import StateIcon from './StateIcon.svelte';
+	import Collapse from '$lib/ui/Collapse.svelte';
 
 	let {
 		chat,
@@ -112,7 +113,7 @@
 				<span class="num">{done}/{g.agents.length}</span>
 				<span class="caret" class:open><ChevronRightIcon size={12} /></span>
 			</button>
-			{#if open}
+			<Collapse {open}>
 				<div class="agents">
 					<div class="arow head">
 						<span></span>
@@ -136,7 +137,7 @@
 						</button>
 					{/each}
 				</div>
-			{/if}
+			</Collapse>
 		{:else}
 			<p class="dim pad">{t('dock.agents.noAgentsYet')}</p>
 		{/each}
@@ -249,7 +250,7 @@
 					</span>
 					{#if r.workflow}<span class="caret" class:open={openRun[r.id]}><ChevronRightIcon size={12} /></span>{/if}
 				</button>
-				{#if r.workflow && openRun[r.id]}{@render card(r)}{/if}
+				{#if r.workflow}<Collapse open={!!openRun[r.id]}>{@render card(r)}</Collapse>{/if}
 			{/each}
 		{/if}
 	{:else}

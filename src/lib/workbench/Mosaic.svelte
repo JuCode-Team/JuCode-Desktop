@@ -257,6 +257,7 @@
 		onchange(toggleMaximize(layout, leaf.id));
 	}
 	import PopMenu from '$lib/ui/PopMenu.svelte';
+	import { rowIn, tabOut } from '$lib/ui/motion';
 </script>
 
 <svelte:window onkeydown={windowKeydown} />
@@ -336,6 +337,8 @@
 					{@const shift = shiftOf(leaf, j)}
 					<div
 						class="ltab"
+						in:rowIn
+						out:tabOut
 						class:on={leaf.active === tab.id}
 						class:lifted={dragged && slotOf(hover)?.leafId !== leaf.id}
 						class:held={dragged && slotOf(hover)?.leafId === leaf.id}

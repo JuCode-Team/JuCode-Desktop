@@ -4,6 +4,7 @@
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import type { Snippet } from 'svelte';
 	import { t } from '$lib/i18n';
+	import { popOut } from '$lib/ui/motion';
 
 	type Opt = { value: string; label?: string; group?: string } & Record<string, unknown>;
 	let {
@@ -44,7 +45,7 @@
 	</button>
 	{#if open}
 		<button class="backdrop" aria-label="close" onclick={() => (open = false)}></button>
-		<div use:overBrowser class="menu">
+		<div use:overBrowser class="menu" out:popOut={{ y: 3 }}>
 			{#each options as o, i (o.value)}
 				{#if o.group && (i === 0 || options[i - 1]?.group !== o.group)}
 					<div class="opt-group">{o.group}</div>

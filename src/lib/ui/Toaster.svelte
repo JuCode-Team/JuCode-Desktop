@@ -29,42 +29,42 @@
 	}
 </script>
 
-{#if toast.items.length}
-	<div
-		class="toaster"
-		role="region"
-		aria-live="polite"
-		onpointerenter={() => (expanded = true)}
-		onpointerleave={() => (expanded = false)}
-	>
-		{#each toast.items as it, i (it.id)}
-			{@const Icon = ICONS[it.tone]}
-			<div
-				class="toast {it.tone}"
-				role={it.tone === 'error' ? 'alert' : 'status'}
-				bind:offsetHeight={heights[it.id]}
-				style:z-index={toast.items.length - i}
-				style:transform="translate(-50%, {offset(i)}px) scale({expanded ? 1 : 1 - i * 0.04})"
-				style:opacity={!expanded && i > 2 ? 0 : 1}
-				in:fly={{ y: -8, duration: motionMs(T_MED), easing: cubicOut }}
-				out:fly={{ y: -6, duration: motionMs(T_FAST), easing: cubicOut }}
-			>
-				<span class="ico"><Icon size={16} /></span>
-				<span class="msg selectable">{it.message}</span>
-				{#if it.action}
-					<button
-						class="act"
-						onclick={() => {
-							it.action?.run();
-							toast.dismiss(it.id);
-						}}>{it.action.label}</button
-					>
-				{/if}
-				<button class="close" aria-label={t('common.close')} onclick={() => toast.dismiss(it.id)}><XIcon size={16} /></button>
-			</div>
-		{/each}
-	</div>
-{/if}
+<!-- Always there, so the first notice's entrance and the last one's exit
+     play (transitions are local to their block). -->
+<div
+	class="toaster"
+	role="region"
+	aria-live="polite"
+	onpointerenter={() => (expanded = true)}
+	onpointerleave={() => (expanded = false)}
+>
+	{#each toast.items as it, i (it.id)}
+		{@const Icon = ICONS[it.tone]}
+		<div
+			class="toast {it.tone}"
+			role={it.tone === 'error' ? 'alert' : 'status'}
+			bind:offsetHeight={heights[it.id]}
+			style:z-index={toast.items.length - i}
+			style:transform="translate(-50%, {offset(i)}px) scale({expanded ? 1 : 1 - i * 0.04})"
+			style:opacity={!expanded && i > 2 ? 0 : 1}
+			in:fly={{ y: -8, duration: motionMs(T_MED), easing: cubicOut }}
+			out:fly={{ y: -6, duration: motionMs(T_FAST), easing: cubicOut }}
+		>
+			<span class="ico"><Icon size={16} /></span>
+			<span class="msg selectable">{it.message}</span>
+			{#if it.action}
+				<button
+					class="act"
+					onclick={() => {
+						it.action?.run();
+						toast.dismiss(it.id);
+					}}>{it.action.label}</button
+				>
+			{/if}
+			<button class="close" aria-label={t('common.close')} onclick={() => toast.dismiss(it.id)}><XIcon size={16} /></button>
+		</div>
+	{/each}
+</div>
 
 <style>
 	.toaster {

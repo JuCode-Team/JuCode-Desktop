@@ -183,6 +183,7 @@
 	const lineCls = (line: string) =>
 		line.startsWith('+') ? 'add' : line.startsWith('-') ? 'del' : 'ctx';
 	import Checkbox from '$lib/ui/Checkbox.svelte';
+	import Collapse from '$lib/ui/Collapse.svelte';
 </script>
 
 <svelte:window onkeydowncapture={onKey} />
@@ -277,10 +278,10 @@
 							<span class="chev" class:open={expanded[h.id]}><ChevronRightIcon size={14} /></span>
 						</button>
 					</div>
-					{#if expanded[h.id]}
+					<Collapse open={!!expanded[h.id]}>
 						<pre class="diff">{#each h.lines as line, i (i)}<span class={lineCls(line)}>{line}
 </span>{/each}</pre>
-					{/if}
+					</Collapse>
 				</div>
 			{/each}
 		</div>

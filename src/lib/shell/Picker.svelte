@@ -9,6 +9,7 @@
 	import Vendor from '$lib/Vendor.svelte';
 	import type { ChatState } from '$lib/chat.svelte';
 	import type { Snippet } from 'svelte';
+	import { popOut } from '$lib/ui/motion';
 
 	type Row = {
 		id: string;
@@ -96,7 +97,7 @@
 
 {#if anchored}
 	<button class="pop-backdrop" aria-label="close" onclick={onClose}></button>
-	<div use:overBrowser class="modal anchored" role="dialog" aria-label={title}>
+	<div use:overBrowser class="modal anchored" out:popOut={{ y: 3 }} role="dialog" aria-label={title}>
 		{@render body()}
 	</div>
 {:else}

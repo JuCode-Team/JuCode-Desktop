@@ -137,7 +137,7 @@
 		padding: 6px;
 		user-select: text;
 		transform-origin: bottom left;
-		animation: pop-in var(--t-med) var(--ease-spring);
+		animation: pop-in var(--t-med) var(--ease-out);
 	}
 	.sec {
 		padding: 10px 12px;

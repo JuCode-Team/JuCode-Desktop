@@ -9,6 +9,7 @@
 	import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { t } from '$lib/i18n';
+	import { fadeOut } from './motion';
 
 	let {
 		tone = 'error',
@@ -26,7 +27,7 @@
 	const Icon = $derived(tone === 'error' ? CircleAlertIcon : tone === 'warn' ? TriangleAlertIcon : InfoIcon);
 </script>
 
-<div class="notice {tone}" role={tone === 'error' ? 'alert' : 'status'}>
+<div class="notice {tone}" role={tone === 'error' ? 'alert' : 'status'} out:fadeOut>
 	<span class="ico"><Icon size={16} /></span>
 	<div class="txt selectable" class:mono>{@render children()}</div>
 	{#if onDismiss}

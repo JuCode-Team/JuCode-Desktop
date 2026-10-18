@@ -40,8 +40,8 @@
 		grid-template-rows: 0fr;
 		opacity: 0;
 		transition:
-			grid-template-rows var(--t-base) var(--ease-base),
-			opacity var(--t-base) var(--ease-base);
+			grid-template-rows var(--t-med) var(--ease-out),
+			opacity var(--t-med) var(--ease-out);
 	}
 	.collapse.open {
 		grid-template-rows: 1fr;

@@ -10,6 +10,7 @@
 	import Notice from '$lib/ui/Notice.svelte';
 	import { t } from '$lib/i18n';
 	import { describeError, stripEngineHint, type ErrorAction } from '$lib/errorInfo';
+	import { motionMs } from '$lib/ui/motion';
 
 	let {
 		text,
@@ -48,7 +49,7 @@
 			</button>
 		</div>
 		{#if showRaw}
-			<pre class="raw selectable" transition:slide={{ duration: 160 }}>{stripEngineHint(text)}{#if info.requestId}
+			<pre class="raw selectable" transition:slide={{ duration: motionMs(160) }}>{stripEngineHint(text)}{#if info.requestId}
 
 {t('chat.err.requestId')}: {info.requestId}{/if}</pre>
 		{/if}

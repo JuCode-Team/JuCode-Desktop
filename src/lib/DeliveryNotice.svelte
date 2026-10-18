@@ -4,6 +4,7 @@
 	import ToolCard from '$lib/ToolCard.svelte';
 	import { t } from '$lib/i18n';
 	import type { Delivery } from '$lib/delivery';
+	import { motionMs } from '$lib/ui/motion';
 
 	let { delivery }: { delivery: Delivery } = $props();
 
@@ -19,7 +20,7 @@
 			{#if delivery.body.trim()}<span class="rchev"><ChevronRightIcon size={14} /></span>{/if}
 		</button>
 		{#if open}
-			<div class="dbody" transition:slide={{ duration: 180 }}>{delivery.body}</div>
+			<div class="dbody" transition:slide={{ duration: motionMs(180) }}>{delivery.body}</div>
 		{/if}
 	{:else}
 		<div class="dhead">
