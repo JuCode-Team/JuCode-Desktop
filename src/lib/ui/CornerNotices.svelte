@@ -81,7 +81,9 @@
 		align-items: center;
 		gap: 10px;
 		width: 340px;
-		max-width: 100%;
+		/* Not 100%: an outroing notice is taken out of flow (animate:flip), and
+		   the last one would leave the stack zero wide and squeeze it. */
+		max-width: calc(100vw - 32px);
 		padding: 10px 8px 10px 14px;
 		border-radius: var(--r);
 		background: var(--panel);

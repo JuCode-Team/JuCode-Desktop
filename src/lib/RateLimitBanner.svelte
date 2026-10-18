@@ -41,7 +41,10 @@
 
 <style>
 	.rl {
-		margin: 0 0 8px;
+		max-width: calc(var(--chat-w) + 2 * var(--chat-pad));
+		width: 100%;
+		margin: 0 auto 8px;
+		padding: 0 var(--chat-pad);
 	}
 	.rl-body {
 		display: flex;
