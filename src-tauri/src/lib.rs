@@ -23,6 +23,7 @@ mod plugins;
 mod secrets;
 mod shell_env;
 mod tool_switch;
+mod wheel;
 
 use backend::BackendKind;
 
@@ -3292,6 +3293,10 @@ pub fn run() {
             // 的结果决定是否半透明：没铺上时窗口是透明的，半透明会直接透出桌面。
             #[cfg(target_os = "macos")]
             if let Some(win) = app.get_webview_window("main") {
+                wheel::install(&win);
+            }
+            #[cfg(target_os = "macos")]
+            if let Some(win) = app.get_webview_window("main") {
                 use window_vibrancy::{
                     apply_vibrancy, NSVisualEffectMaterial, NSVisualEffectState,
                 };
@@ -3332,6 +3337,12 @@ pub fn run() {
         })
         // 关闭主窗口时隐藏到托盘而不是退出（macOS/Windows/Linux 一致），
         // 真正退出通过托盘菜单「退出」。
+        // A page loading has no wheel handler until smoothWheel.ts sets it again.
+        .on_page_load(|webview, payload| {
+            if webview.label() == "main" && payload.event() == tauri::webview::PageLoadEvent::Started {
+                wheel::page_loading();
+            }
+        })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" {
@@ -3387,6 +3398,7 @@ pub fn run() {
             resolve_file_ref,
             editors::list_editors,
             editors::open_in_editor,
+            wheel::smooth_wheel_ready,
             read_text,
             stat_text,
             write_text,
