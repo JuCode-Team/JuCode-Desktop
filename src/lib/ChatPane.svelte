@@ -819,7 +819,7 @@
 			chat.modelLabel = entry?.label ?? '';
 			if (entry?.reasoning_efforts?.length) {
 				chat.efforts = entry.reasoning_efforts;
-				if (!chat.efforts.includes(chat.effort)) chat.effort = defaultEffort(chat.efforts);
+				if (!chat.efforts.includes(chat.effort)) chat.effort = defaultEffort(chat.efforts, chat.effortDefault);
 			}
 			if (effort) chat.effort = effort;
 			session.draftPick = { model: name, effort: chat.effort || undefined };

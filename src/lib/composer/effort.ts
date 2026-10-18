@@ -1,14 +1,22 @@
 // Pure helpers for the composer's reasoning-effort slider.
 
+import { t } from '$lib/i18n';
+
 /** The effort the engine falls back to for a model (config.rs
- *  read_reasoning_effort): "medium" when offered, else the first tier. */
-export function defaultEffort(efforts: string[]): string {
+ *  read_reasoning_effort): "medium" when offered, else the first tier. An
+ *  agent whose effort can be left to it (`unset`, an ACP agent's
+ *  `default_effort`) falls back to that. */
+export function defaultEffort(efforts: string[], unset = ''): string {
+	if (unset) return unset;
 	return efforts.includes('medium') ? 'medium' : (efforts[0] ?? '');
 }
 
-/** Display label: "high" → "High", "xhigh" → "XHigh". */
+/** Display label: "high" → "High", "xhigh" → "XHigh"; an ACP agent's unset
+ *  values ("default", "auto") in the UI's language. */
 export function effortLabel(effort: string): string {
 	if (effort === 'xhigh') return 'XHigh';
+	if (effort === 'default') return t('chat.optionDefault');
+	if (effort === 'auto') return t('chat.optionAuto');
 	return effort ? effort[0].toUpperCase() + effort.slice(1) : effort;
 }
 

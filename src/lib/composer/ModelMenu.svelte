@@ -22,6 +22,7 @@
 	import type { ModelRow } from './modelRows';
 	import { defaultEffort, effortLabel } from './effort';
 	import EffortSlider from './EffortSlider.svelte';
+	import { choiceLabel, optionLabel } from './sessionOptions';
 	import GroupPicker, { type ToolProvider } from './GroupPicker.svelte';
 	import PlanQuota from './PlanQuota.svelte';
 	import { modelColor, isTopEffort } from '$lib/modelColor';
@@ -175,7 +176,7 @@
 	let shownEffort = $state('');
 	const accent = $derived(modelColor(chat.model));
 	const top = $derived(isTopEffort(shownEffort, chat.efforts));
-	const def = $derived(defaultEffort(chat.efforts));
+	const def = $derived(defaultEffort(chat.efforts, chat.effortDefault));
 	// Group headers only help when the list spans more than one source.
 	const grouped = $derived(new Set(rows.map((r) => r.group)).size > 1);
 </script>
@@ -235,19 +236,19 @@
 			<section class="options">
 				{#each chat.sessionOptions as o (o.id)}
 					<div class="opt" title={o.description ?? undefined}>
-						<span class="olabel">{o.name}</span>
+						<span class="olabel">{optionLabel(o)}</span>
 						{#if o.type === 'boolean'}
-							<Switch checked={o.value} label={o.name} onChange={(v) => onSessionOption?.(o.id, v)} />
+							<Switch checked={o.value} label={optionLabel(o)} onChange={(v) => onSessionOption?.(o.id, v)} />
 						{:else if o.choices.length <= 4}
 							<Segmented
 								value={o.value}
-								options={o.choices.map((c) => ({ value: c.value, label: c.name }))}
+								options={o.choices.map((c) => ({ value: c.value, label: choiceLabel(o, c) }))}
 								onChange={(v) => onSessionOption?.(o.id, v)}
 							/>
 						{:else}
 							<Select
 								value={o.value}
-								options={o.choices.map((c) => ({ value: c.value, label: c.name }))}
+								options={o.choices.map((c) => ({ value: c.value, label: choiceLabel(o, c) }))}
 								onChange={(v) => onSessionOption?.(o.id, v)}
 							/>
 						{/if}

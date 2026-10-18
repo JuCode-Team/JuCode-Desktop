@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { setLocale } from '$lib/i18n';
 import { defaultEffort, effortLabel, stepStop, stopAt } from './effort';
 
 describe('effort helpers', () => {
@@ -8,10 +9,18 @@ describe('effort helpers', () => {
 		expect(defaultEffort([])).toBe('');
 	});
 
+	it('defaults to the unset value of an agent that has one', () => {
+		expect(defaultEffort(['none', 'low', 'high', 'max'], 'default')).toBe('default');
+	});
+
 	it('labels efforts', () => {
 		expect(effortLabel('high')).toBe('High');
 		expect(effortLabel('xhigh')).toBe('XHigh');
 		expect(effortLabel('')).toBe('');
+		// An ACP agent's unset values read as the app's words, not levels.
+		setLocale('zh');
+		expect(effortLabel('default')).toBe('默认');
+		expect(effortLabel('auto')).toBe('自动');
 	});
 
 	it('snaps a pointer to the nearest stop', () => {

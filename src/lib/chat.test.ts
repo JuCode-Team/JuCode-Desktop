@@ -295,6 +295,22 @@ describe('ChatState.handle', () => {
 		expect([c.ultracode, c.ultracodeAvailable]).toEqual([false, false]);
 	});
 
+	it("keeps an ACP agent's unset effort apart from its levels", () => {
+		const c = new ChatState();
+		c.handle({
+			type: 'model_status',
+			provider: 'acp',
+			model: 'deepseek/deepseek-flash',
+			reasoning_effort: 'default',
+			reasoning_efforts: ['none', 'low', 'high', 'max'],
+			default_effort: 'default',
+			state: 'ready'
+		});
+		expect([c.effort, c.efforts, c.effortDefault]).toEqual(['default', ['none', 'low', 'high', 'max'], 'default']);
+		c.handle({ type: 'model_status', model: 'claude-opus-5-5', reasoning_effort: 'high', reasoning_efforts: ['low', 'high'], state: 'idle' });
+		expect(c.effortDefault).toBe('');
+	});
+
 	it('defers to the engine cost once it reports one (no double count)', () => {
 		const c = new ChatState();
 		c.handle({ type: 'model_status', model: 'gpt-5.5', state: 'idle' });

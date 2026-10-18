@@ -11,6 +11,7 @@ export interface BackendProfile {
 	modelLabel?: string;
 	effort?: string;
 	efforts?: string[];
+	effortDefault?: string;
 	contextWindow?: number;
 	catalog?: ModelOption[];
 	catalogEffort?: string;

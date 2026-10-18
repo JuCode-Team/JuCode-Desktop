@@ -124,7 +124,7 @@
 	let shownEffort = $state('');
 	const accent = $derived(modelColor(chat.model));
 	const top = $derived(isTopEffort(shownEffort, chat.efforts));
-	const def = $derived(defaultEffort(chat.efforts));
+	const def = $derived(defaultEffort(chat.efforts, chat.effortDefault));
 
 	// The page sits in a transformed pane on wide screens, which would make
 	// `position: fixed` relative to the pane; the menu measures the window,

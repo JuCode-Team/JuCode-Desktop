@@ -199,12 +199,14 @@ export function buildModelRows(input: {
 		id: `${cur}::${m.model}`,
 		label: m.label || m.model,
 		vendor: m.vendor || m.model,
-		// An ACP agent reports no context windows, and its provider id ("acp") is no source.
+		// An ACP agent reports no context windows, and its provider id ("acp")
+		// is no source: the agent's provider is the value's prefix
+		// ("deepseek/deepseek-flash"), which the daemon drops from the name.
 		detail:
 			cur === 'jucode'
 				? jucodeDetail(m.context_window, unsetWindow)
 				: cur === 'acp'
-					? ''
+					? m.model.slice(0, Math.max(0, m.model.indexOf('/')))
 					: detailOf(activeGroup === groups.byok ? cur : null, m.context_window),
 		active: m.active,
 		command: `/model ${m.model}`,

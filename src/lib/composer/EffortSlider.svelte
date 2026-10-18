@@ -5,7 +5,9 @@
 
 	// Reasoning-effort slider: one stop per effort the model offers, labels
 	// under the stops. A pick is committed on release so a drag sends one
-	// /model command, not one per stop crossed.
+	// /model command, not one per stop crossed. An effort that is none of the
+	// stops (an ACP agent's "default": the level is left to it) shows no
+	// thumb and no fill.
 	let {
 		efforts,
 		effort,
@@ -37,11 +39,12 @@
 	$effect(() => {
 		current = shownEffort;
 	});
-	const idx = $derived(Math.max(0, efforts.indexOf(shownEffort)));
+	const idx = $derived(efforts.indexOf(shownEffort));
 	const shown = $derived(drag ?? idx);
 	const last = $derived(Math.max(1, efforts.length - 1));
 	// The highest effort gets the sweeping fill (see .effort-max in app.css).
 	const top = $derived(efforts.length > 1 && shown === efforts.length - 1);
+	const unset = $derived(shown < 0);
 	const pct = (i: number) => (efforts.length > 1 ? (i / last) * 100 : 0);
 
 	function commit(i: number) {
@@ -89,8 +92,8 @@
 	aria-label={t('chat.effortTitle')}
 	aria-valuemin={0}
 	aria-valuemax={efforts.length - 1}
-	aria-valuenow={shown}
-	aria-valuetext={effortLabel(efforts[shown] ?? '')}
+	aria-valuenow={unset ? undefined : shown}
+	aria-valuetext={effortLabel(unset ? shownEffort : (efforts[shown] ?? ''))}
 	aria-disabled={disabled}
 	onpointerdown={onDown}
 	onpointermove={onMove}
@@ -100,11 +103,11 @@
 >
 	<div class="rail" bind:this={railEl}>
 		<div class="track"></div>
-		<div class="fill" style:width="calc({pct(shown)}% + 24px)"></div>
+		{#if !unset}<div class="fill" style:width="calc({pct(shown)}% + 24px)"></div>{/if}
 		{#each efforts as e, i (e)}
 			<span class="stop" class:passed={i <= shown} style:left="{pct(i)}%"></span>
 		{/each}
-		<span class="thumb" style:left="{pct(shown)}%"></span>
+		{#if !unset}<span class="thumb" style:left="{pct(shown)}%"></span>{/if}
 	</div>
 </div>
 <div class="ticks">
