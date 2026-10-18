@@ -6,13 +6,16 @@
 //! interface are taken here and handed to the page (`__jucodeWheel`,
 //! smoothWheel.ts), which scrolls by the same distance, animated.
 
-use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(target_os = "macos")]
+use std::sync::atomic::AtomicPtr;
 
 /// The page has its handler (set by smoothWheel.ts; cleared when a page
 /// starts loading, so no wheel is taken while there is none).
 static READY: AtomicBool = AtomicBool::new(false);
 /// The main window's WKWebView: events over other views (the built-in
 /// browser's webview) stay theirs.
+#[cfg(target_os = "macos")]
 static MAIN_VIEW: AtomicPtr<std::ffi::c_void> = AtomicPtr::new(std::ptr::null_mut());
 
 #[tauri::command]
