@@ -24,6 +24,9 @@ export interface DaemonSessionView {
 	chat?: boolean;
 	/** `jucode`, `claude`, `codex` or `acp` (newer daemons). */
 	engine?: string;
+	/** ACP: the built-in preset it runs (`opencode`, `omp`, `pi`); null for a
+	 *  registered agent, which only the desktop can reopen. */
+	agent?: string | null;
 }
 
 /** A tool call an unwatched session deferred for the user to decide. */

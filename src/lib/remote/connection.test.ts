@@ -154,6 +154,25 @@ describe('HostConnection', () => {
 		expect(a.conn.daemonState.status).toBe('on');
 	});
 
+	it('asks for the built-in ACP agents once per connection', async () => {
+		const a = computer('a');
+		started.push(a.conn);
+		a.conn.start();
+		await tick();
+		const asks = () => a.sockets.flatMap((s) => s.sent).filter((op) => op.op === 'acp_presets');
+		const first = a.conn.acpPresets();
+		const again = a.conn.acpPresets();
+		expect(asks()).toHaveLength(1);
+		a.sockets[0].push({ type: 'acp_presets', id: asks()[0].id, presets: [{ id: 'pi', name: 'Pi', status: 'ready', approvals: false }] });
+		expect((await first).map((p) => p.id)).toEqual(['pi']);
+		expect(await again).toBe(await first);
+		// A new connection may find other agents installed.
+		a.sockets[0].close();
+		await vi.waitFor(() => expect(a.conn.daemonState.status).toBe('on'), { timeout: 3000 });
+		void a.conn.acpPresets().catch(() => {});
+		expect(asks()).toHaveLength(2);
+	});
+
 	it('disconnects for good when stopped', async () => {
 		const a = computer('a');
 		a.conn.start();

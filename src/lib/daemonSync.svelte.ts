@@ -44,7 +44,8 @@ interface DaemonWorkspace {
 	projects: DaemonProject[];
 }
 
-/** Engines a listed session can be opened on (ACP needs its registry agent). */
+/** Engines a listed session can be opened on; ACP only with a built-in agent
+ *  (one of the registry's needs the tab that started it). */
 const LISTED_ENGINES = new Set(['jucode', 'claude', 'codex']);
 /** A session created this recently may still be on its way to its tab. */
 const NEW_SESSION_GRACE_MS = 10_000;
@@ -250,7 +251,7 @@ export class DaemonSync {
 			}
 			if (daemon.desktopOf(r.session)) continue;
 			if (opening && Date.now() - r.created_at < NEW_SESSION_GRACE_MS) continue;
-			if (!LISTED_ENGINES.has(r.engine ?? 'jucode')) continue;
+			if (!LISTED_ENGINES.has(r.engine ?? 'jucode') && !(r.engine === 'acp' && r.agent)) continue;
 			const home = this.#projectFor(r.cwd);
 			// At the start, with the project's newest: it came from elsewhere just now.
 			if (home) this.store.listDormant(home, r, undefined, true);

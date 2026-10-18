@@ -80,5 +80,10 @@ describe('requirements', () => {
 		expect(request).toHaveBeenLastCalledWith(
 			expect.objectContaining({ op: 'requirement_reply', new_session: true, plan: true, mode: 'auto' })
 		);
+		// A built-in ACP agent goes by its id alone.
+		await reqs.reply('R-1', { newSession: true, cwd: '/p', engine: 'acp', agent: 'omp', mode: 'auto' });
+		expect(request).toHaveBeenLastCalledWith(
+			expect.objectContaining({ op: 'requirement_reply', cwd: '/p', engine: 'acp', agent: 'omp', new_session: true })
+		);
 	});
 });

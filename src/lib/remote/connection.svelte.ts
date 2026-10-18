@@ -17,6 +17,7 @@ import { Requirements, provideRequirements, type Requirement } from '$lib/requir
 import { loadLists, saveLists } from './cache';
 import type { DaemonSessionView } from '$lib/daemonState.svelte';
 import type { WorkspaceView } from './store.svelte';
+import type { AcpPreset } from '$lib/protocol';
 
 /** A computer's lists as kept on the phone (see cache.ts). */
 type Lists = {
@@ -70,6 +71,7 @@ export class HostConnection {
 	#socket: SocketLike | null = null;
 	#stopped = false;
 	#saveTimer: ReturnType<typeof setTimeout> | undefined;
+	#presets: Promise<AcpPreset[]> | null = null;
 
 	constructor(
 		id: string,
@@ -157,6 +159,7 @@ export class HostConnection {
 			// The lists stay, as last seen, until the computer is back.
 			this.daemonState.disconnected();
 			this.projects.reset();
+			this.#presets = null;
 		};
 		this.daemon.onFrame = (id, raw) => this.#routes.get(id)?.onFrame(raw);
 		this.daemon.onExit = (id) => this.#routes.get(id)?.onExit();
@@ -184,6 +187,14 @@ export class HostConnection {
 			new Promise<boolean>((resolve) => setTimeout(() => resolve(false), WAKE_PING_MS))
 		]);
 		if (!answered && this.#socket === socket) socket?.close();
+	}
+
+	/** The computer's built-in ACP agents (`acp_presets`): asked once per
+	 *  connection, since the daemon probes their versions to answer. */
+	acpPresets(): Promise<AcpPreset[]> {
+		this.#presets ??= this.daemon.request({ op: 'acp_presets' }).then((reply) => (reply.presets as AcpPreset[]) ?? []);
+		this.#presets.catch(() => (this.#presets = null));
+		return this.#presets;
 	}
 
 	/** Keeps the lists on the phone, a moment after they last changed. */

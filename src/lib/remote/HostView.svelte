@@ -92,7 +92,7 @@
 	} as const;
 	/** Pages opened over the tabs, last on top. */
 	type Screen = { key: number } & (
-		| { kind: 'session'; session?: string; cwd?: string; chat?: boolean; engine?: string; title: string }
+		| { kind: 'session'; session?: string; cwd?: string; chat?: boolean; engine?: string; agent?: string; title: string }
 		| { kind: 'project'; project: ProjectView }
 		| { kind: 'add' }
 		| { kind: 'files' | 'changes'; root: string; title: string; file?: string; line?: number }
@@ -175,7 +175,7 @@
 		});
 	});
 	/** The new session's page moved to another project or engine. */
-	function picked(screen: Screen, where: { cwd: string; chat: boolean; engine?: string }) {
+	function picked(screen: Screen, where: { cwd: string; chat: boolean; engine?: string; agent?: string }) {
 		if (screen.kind !== 'session') return;
 		Object.assign(screen, where);
 		if (!where.chat) localStorage.setItem(`jucode-remote-last-project:${conn.id}`, where.cwd);
@@ -212,6 +212,7 @@
 			session,
 			cwd: known?.cwd,
 			engine: known?.engine && known.engine !== 'jucode' ? known.engine : undefined,
+			agent: known?.agent ?? undefined,
 			title: title ?? known?.title ?? session
 		};
 	}
@@ -293,6 +294,7 @@
 								cwd: s.cwd,
 								chat: project?.chats,
 								engine: s.engine && s.engine !== 'jucode' ? s.engine : undefined,
+								agent: s.agent ?? undefined,
 								title: s.title || t('shell.remote.untitled')
 							})}
 						onNewSession={(project) => newSession(project)}
@@ -351,6 +353,7 @@
 								cwd={screen.cwd}
 								chat={screen.chat}
 								engine={screen.engine}
+								agent={screen.agent}
 								title={screen.title}
 								{hostName}
 								register={conn.register}
@@ -358,7 +361,7 @@
 								onFiles={root ? () => push({ kind: 'files', root, title: baseName(root) }) : undefined}
 								onFile={root ? (file: string, line?: number) => push({ kind: 'files', root, title: baseName(root), file, line }) : undefined}
 								onChanges={root ? () => push({ kind: 'changes', root, title: baseName(root) }) : undefined}
-								onPick={(where: { cwd: string; chat: boolean; engine?: string }) => picked(screen, where)}
+								onPick={(where: { cwd: string; chat: boolean; engine?: string; agent?: string }) => picked(screen, where)}
 								active={!hidden && name === tab && i === stacks[name].length - 1}
 							/>
 						{:else}

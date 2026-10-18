@@ -33,6 +33,7 @@
 	import { joinPath, parseFileHref } from '$lib/fileRefs';
 	import TaskPanel from '$lib/agents/TaskPanel.svelte';
 	import NetworkIcon from '@lucide/svelte/icons/network';
+	import { engineKey, pickEngines } from '$lib/remote/engines';
 	import type { Msg } from '$lib/chat.svelte';
 	import type { SessionSwitch } from '$lib/composer/SessionSwitches.svelte';
 	import MessageList from '$lib/MessageList.svelte';
@@ -45,7 +46,7 @@
 	import { createJucodeAdapter } from '$lib/backends/jucode';
 	import { effortLabel } from '$lib/composer/effort';
 	import { modelColor, isTopEffort } from '$lib/modelColor';
-	import type { JucodeGroup, Op } from '$lib/protocol';
+	import type { AcpPreset, JucodeGroup, Op } from '$lib/protocol';
 	import { useHost } from '$lib/remote/connection.svelte';
 	import { confirm } from '$lib/ui/confirm.svelte';
 	import { BACKEND_LABELS, caps } from '$lib/backends';
@@ -67,6 +68,7 @@
 		cwd: cwdProp,
 		chat: chatProp = false,
 		engine: engineProp,
+		agent: agentProp,
 		title,
 		hostName,
 		register,
@@ -86,6 +88,8 @@
 		chat?: boolean;
 		/** Another engine the daemon runs the session on (`claude`). */
 		engine?: string;
+		/** `acp`: the built-in agent it runs (the daemon starts it by id). */
+		agent?: string;
 		title: string;
 		/** The computer the session runs on, when several are paired. */
 		hostName?: string;
@@ -101,13 +105,14 @@
 		/** The page on top of the shown tab: its approval card answers keys. */
 		active?: boolean;
 		/** A new session's project or engine was picked (before it starts). */
-		onPick?: (where: { cwd: string; chat: boolean; engine?: string }) => void;
+		onPick?: (where: { cwd: string; chat: boolean; engine?: string; agent?: string }) => void;
 	} = $props();
 	// Where a new session starts; picked on its empty page until the first
 	// message creates it there (as on the desktop).
 	let cwd = $state(untrack(() => cwdProp));
 	let isChat = $state(untrack(() => chatProp));
 	let engine = $state(untrack(() => engineProp));
+	let agent = $state(untrack(() => agentProp));
 	const host = useHost();
 	const { daemon, daemonState } = host;
 
@@ -119,7 +124,7 @@
 	// Unsent text is kept on this device per conversation (a new one by where
 	// it would start), so leaving the page or closing the app keeps it.
 	const textKey = untrack(
-		() => `${host.id}:${session ?? `new::${isChat ? 'chat' : (cwd ?? '')}:${engine ?? ''}`}`
+		() => `${host.id}:${session ?? `new::${isChat ? 'chat' : (cwd ?? '')}:${engine ?? ''}${agent ? `:${agent}` : ''}`}`
 	);
 	let text = $state(loadComposerText(textKey));
 	$effect(() => saveComposerText(textKey, text));
@@ -262,13 +267,7 @@
 			// A new session gets its id from the snapshot; later reconnects
 			// reopen that same session.
 			const resume = session ?? (chat.sessionId || undefined);
-			await daemon.open(
-				id,
-				cwd ?? '',
-				resume,
-				!resume && isChat,
-				engine && engine !== 'jucode' ? { engine, options: {} } : undefined
-			);
+			await daemon.open(id, cwd ?? '', resume, !resume && isChat, engineSpec(!resume));
 			connected = true;
 			dropped = false;
 			retries = 0;
@@ -281,6 +280,14 @@
 			error = e instanceof Error ? e.message : String(e);
 			exited = true;
 		}
+	}
+
+	/** How the daemon starts the engine: a new ACP session by its preset id
+	 *  only. An ACP session reopens from the daemon's record, as it last ran
+	 *  (a registered agent's is refused here). */
+	function engineSpec(create: boolean) {
+		if (engine === 'acp') return create && agent ? { engine, options: { agent } } : undefined;
+		return engine && engine !== 'jucode' ? { engine, options: {} } : undefined;
 	}
 
 	onMount(() => {
@@ -329,8 +336,11 @@
 		for (const line of adapter.encodeOp(op) ?? []) sendLine(line);
 	}
 
-	// The new-session picker: the open workspace's projects and the engines.
-	const PICK_ENGINES = ['jucode', 'claude', 'codex'] as const;
+	// The new-session picker: the open workspace's projects and the engines,
+	// the computer's built-in ACP agents included (asked for when it opens).
+	let presets = $state<AcpPreset[]>([]);
+	const engineRows = $derived(pickEngines(presets));
+	const pickedEngine = $derived(engineRows.find((r) => r.key === engineKey(engine, agent)));
 	let pickMenu = $state<'project' | 'engine' | null>(null);
 	const pickProjects = $derived((host.projects.active?.projects ?? []).filter((p) => CHATS_ENABLED || !p.chats));
 	const pickedProject = $derived(pickProjects.find((p) => (isChat ? p.chats : !p.chats && p.path === cwd)));
@@ -342,13 +352,23 @@
 		cwd = p.path;
 		isChat = !!p.chats;
 		// Chats run on JuCode only.
-		if (isChat) engine = undefined;
-		onPick?.({ cwd, chat: isChat, engine });
+		if (isChat) {
+			engine = undefined;
+			agent = undefined;
+		}
+		onPick?.({ cwd, chat: isChat, engine, agent });
+	}
+	function openEnginePicker() {
+		pickMenu = pickMenu === 'engine' ? null : 'engine';
+		if (pickMenu) host.acpPresets().then((list) => (presets = list), () => {});
 	}
 	function pickEngine(key: string) {
 		pickMenu = null;
-		engine = key === 'jucode' ? undefined : key;
-		onPick?.({ cwd: cwd ?? '', chat: isChat, engine });
+		const row = engineRows.find((r) => r.key === key);
+		if (!row || row.disabled) return;
+		engine = row.engine === 'jucode' ? undefined : row.engine;
+		agent = row.agent;
+		onPick?.({ cwd: cwd ?? '', chat: isChat, engine, agent });
 	}
 
 	/** Phones send with the button (Enter is a new line); keyboards with Enter. */
@@ -461,7 +481,10 @@
 
 	const sid = $derived(chat.sessionId || session || '');
 	const view = $derived(daemonState.sessions.find((x) => x.session === sid));
-	const bcaps = $derived(caps({ backendId: engine ?? view?.engine ?? 'jucode' }));
+	const bcaps = $derived(caps({ backendId: engine ?? view?.engine ?? 'jucode', engineCaps: chat.engineCaps }));
+	/** The built-in ACP agent it runs, if any. */
+	const agentId = $derived(agent ?? view?.agent ?? undefined);
+
 	/** Messages sent mid-turn to an engine that runs them as the next turn
 	 *  (it does not list them): shown until that turn starts. */
 	let queued = $state<string[]>([]);
@@ -740,13 +763,13 @@
 							</span>
 						{:else if part === '{backend}'}
 							<span class="anchor">
-								<button class="word" class:on={pickMenu === 'engine'} disabled={isChat} onclick={() => (pickMenu = pickMenu === 'engine' ? null : 'engine')} aria-haspopup="menu" aria-label={t('shell.startPicker.backend')}>
-									<BackendIcon backend={(engine ?? 'jucode') as 'jucode'} size={14} /><span class="wname">{BACKEND_LABELS[(engine ?? 'jucode') as 'jucode']}</span><ChevronDownIcon size={12} />
+								<button class="word" class:on={pickMenu === 'engine'} disabled={isChat} onclick={openEnginePicker} aria-haspopup="menu" aria-label={t('shell.startPicker.backend')}>
+									<BackendIcon backend={(engine ?? 'jucode') as 'jucode'} {agent} size={14} /><span class="wname">{pickedEngine?.label ?? agent ?? BACKEND_LABELS[(engine ?? 'jucode') as 'jucode']}</span><ChevronDownIcon size={12} />
 								</button>
 								{#if pickMenu === 'engine'}
 									<PopMenu
 										placement="down-left"
-										items={PICK_ENGINES.map((e) => ({ key: e, label: BACKEND_LABELS[e], checked: e === (engine ?? 'jucode') }))}
+										items={engineRows.map((r) => ({ key: r.key, label: r.label, desc: r.note, disabled: r.disabled, checked: r.key === engineKey(engine, agent) }))}
 										onSelect={pickEngine}
 										onClose={() => (pickMenu = null)}
 									/>
@@ -851,7 +874,9 @@
 							input.value = '';
 						}}
 					/>
-					{#if bcaps.approvalModes}
+					{#if chat.agentApprovals === false}
+						<span class="noapproval" title={t('chat.noApprovalHint')}>{t('chat.noApproval')}</span>
+					{:else if bcaps.approvalModes}
 						<div class="footsel">
 							<button
 								type="button"
@@ -893,7 +918,7 @@
 						>
 							{#key shownModel.id}
 								<span class="mswap">
-									{#if !engine || engine === 'jucode'}<Vendor model={shownModel.id} size={15} mono />{:else}<BackendIcon backend={engine as 'claude'} size={15} mono />{/if}
+									{#if !engine || engine === 'jucode'}<Vendor model={shownModel.id} size={15} mono />{:else}<BackendIcon backend={engine as 'claude'} agent={agentId} size={15} mono />{/if}
 									<span class="m">{shownModel.label}</span>
 								</span>
 							{/key}
@@ -966,6 +991,11 @@
 </div>
 
 <style>
+	.noapproval {
+		padding: 0 6px;
+		font-size: var(--fs-xs);
+		color: var(--dim);
+	}
 	.interm {
 		margin: 0 0 8px;
 		font-size: var(--fs-xs);

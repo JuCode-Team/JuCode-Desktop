@@ -32,6 +32,7 @@
 	import { toast } from '$lib/ui/toast.svelte';
 	import { t } from '$lib/i18n';
 	import { CHATS_ENABLED } from '$lib/types';
+	import { listable } from './engines';
 
 	let {
 		current,
@@ -59,12 +60,12 @@
 	const projects = $derived(remoteProjects.active?.projects ?? []);
 	const chats = $derived(CHATS_ENABLED ? projects.find((p) => p.chats) : undefined);
 	const code = $derived(projects.filter((p) => !p.chats));
-	/** The daemon's sessions, newest first. A closed ACP session cannot be
-	 *  reopened, so it is not listed (the desktop does the same); nor are
+	/** The daemon's sessions, newest first. A closed session of a registered
+	 *  ACP agent reopens on the desktop only, so it is not listed; nor are
 	 *  chats while they are hidden. */
 	const listed = $derived(
 		daemonState.sessions
-			.filter((s) => (s.engine !== 'acp' || s.open) && (CHATS_ENABLED || !s.chat))
+			.filter((s) => listable(s) && (CHATS_ENABLED || !s.chat))
 			.sort((a, b) => (b.updated_at ?? b.created_at) - (a.updated_at ?? a.created_at))
 	);
 	const sessionsOf = (p: ProjectView) => listed.filter((s) => trim(s.cwd) === trim(p.path));
@@ -150,7 +151,7 @@
 			<!-- A session outside the projects names its folder. -->
 			{#if !p}<span class="where" title={s.cwd}>{baseName(s.cwd)}</span>{/if}
 			{#if s.engine && s.engine !== 'jucode'}
-				<span class="chip"><BackendIcon backend={s.engine as 'claude'} size={12} /></span>
+				<span class="chip"><BackendIcon backend={s.engine as 'claude'} agent={s.agent ?? undefined} size={12} /></span>
 			{/if}
 			{#if waiting(s)}<span class="tag">{t('shell.awaitShort')}</span>{/if}
 		</button>

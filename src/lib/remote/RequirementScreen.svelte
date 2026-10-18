@@ -5,6 +5,7 @@
 	// park; below, the user's words, screenshots, project, full progress and
 	// sessions. The start's confirmation is given here. An idea starts here too: in its project or
 	// another, on a chosen backend, with a plan first if the user wants.
+	import { onMount } from 'svelte';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import SendIcon from '@lucide/svelte/icons/send';
@@ -20,6 +21,8 @@
 	import { t } from '$lib/i18n';
 	import { useHost } from './connection.svelte';
 	import RemoteScreen from './RemoteScreen.svelte';
+	import { pickEngines } from './engines';
+	import type { AcpPreset } from '$lib/protocol';
 
 	let {
 		id,
@@ -116,14 +119,25 @@
 	$effect(() => {
 		if (!startProject && startOptions.length) startProject = startOptions[0].value;
 	});
+	// The computer's ready built-in ACP agents are offered too.
 	let engine = $state('jucode');
-	const engines = (['jucode', 'claude', 'codex'] as const).map((b) => ({ value: b, label: BACKEND_LABELS[b] }));
+	let presets = $state<AcpPreset[]>([]);
+	onMount(() => {
+		conn.acpPresets().then((list) => (presets = list), () => {});
+	});
+	const engines = $derived(
+		pickEngines(presets)
+			.filter((row) => !row.disabled)
+			.map((row) => ({ value: row.key, label: row.note ? `${row.label} · ${row.note}` : row.label }))
+	);
 	function start() {
 		if (!startProject) return;
+		const row = pickEngines(presets).find((r) => r.key === engine);
 		void run(async () => {
 			const session = await conn.requirements.reply(id, {
 				cwd: startProject,
-				engine,
+				engine: row?.engine ?? 'jucode',
+				agent: row?.agent,
 				newSession: true,
 				plan: planFirst,
 				mode: 'auto'

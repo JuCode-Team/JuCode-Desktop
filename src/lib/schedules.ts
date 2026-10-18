@@ -4,6 +4,7 @@
 
 import { getLocale, t } from './i18n';
 import type { UsageTokens } from './protocol';
+import { BACKEND_LABELS } from './backends/types';
 
 export interface ScheduleUsageTotals extends UsageTokens {
 	/** Gateway-settled points, including group multipliers; null if unavailable. */
@@ -29,8 +30,9 @@ export function usageCost(usage: ScheduleUsageTotals): string {
 }
 
 export type Repeat = 'once' | 'hourly' | 'daily' | 'weekdays' | 'weekly';
-/** The engines a scheduled task can run on. */
-export type ScheduleEngine = 'jucode' | 'claude' | 'codex';
+/** The engines a scheduled task can run on; `acp` runs a built-in ACP
+ *  agent, named by `options.agent`. */
+export type ScheduleEngine = 'jucode' | 'claude' | 'codex' | 'acp';
 /** Permission modes, as the daemon names them for every engine. */
 export type ScheduleMode = 'ask' | 'edits' | 'auto' | 'all';
 
@@ -51,7 +53,7 @@ export interface Schedule {
 	cwd: string | null;
 	engine: ScheduleEngine;
 	mode: ScheduleMode;
-	/** Engine start options (`jucode_gateway`, `bin`, `env`). */
+	/** Engine start options (`jucode_gateway`, `bin`, `env`; ACP: `agent`). */
 	options: Record<string, unknown>;
 	enabled: boolean;
 	repeat: Repeat;
@@ -173,6 +175,13 @@ export function summary(s: Pick<Schedule, 'repeat' | 'time' | 'days' | 'date'>):
 
 /** Weekday chips in display order (Monday first). */
 export const WEEK = [1, 2, 3, 4, 5, 6, 0];
+
+/** The engine it runs on, for lists: an ACP task by its agent's name. */
+export function engineLabel(s: Pick<Schedule, 'engine' | 'options'>, presets: { id: string; name: string }[]): string {
+	if (s.engine !== 'acp') return BACKEND_LABELS[s.engine];
+	const agent = String(s.options?.agent ?? '');
+	return presets.find((p) => p.id === agent)?.name ?? (agent || BACKEND_LABELS.acp);
+}
 
 /** Insert or replace by id. */
 export function upsert(list: Schedule[], s: Schedule): Schedule[] {

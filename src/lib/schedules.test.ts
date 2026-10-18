@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { setLocale } from './i18n';
-import { summary, toWire, upsert, validate, usageCost, type Schedule, type ScheduleDraft, type ScheduleUsageTotals } from './schedules';
+import { engineLabel, summary, toWire, upsert, validate, usageCost, type Schedule, type ScheduleDraft, type ScheduleUsageTotals } from './schedules';
 
 const draft = (over: Partial<ScheduleDraft> = {}): ScheduleDraft => ({
 	name: 'Check',
@@ -79,6 +79,17 @@ describe('schedule wire shape', () => {
 		});
 		expect(toWire(draft({ id: 'sch-1', repeat: 'weekly', days: [5, 1] }))).toMatchObject({ id: 'sch-1', days: [1, 5] });
 		expect(toWire(draft({ repeat: 'once', date: '2026-10-02' })).date).toBe('2026-10-02');
+	});
+
+	it('runs a built-in ACP agent by its id alone, and lists it by name', () => {
+		const wire = toWire(draft({ engine: 'acp', mode: 'edits', options: { agent: 'omp', jucode_gateway: false } }));
+		expect(wire).toMatchObject({ engine: 'acp', mode: 'edits', options: { agent: 'omp', jucode_gateway: false } });
+		const saved = { ...wire, id: 'sch-1' } as unknown as Schedule;
+		expect(upsert([], saved)[0]).toMatchObject({ engine: 'acp', options: { agent: 'omp' } });
+		const presets = [{ id: 'omp', name: 'Oh My Pi' }];
+		expect(engineLabel(saved, presets)).toBe('Oh My Pi');
+		expect(engineLabel({ engine: 'acp', options: { agent: 'pi' } }, presets)).toBe('pi');
+		expect(engineLabel({ engine: 'codex', options: {} }, presets)).toBe('Codex');
 	});
 
 	it('replaces a saved schedule by id or appends a new one', () => {

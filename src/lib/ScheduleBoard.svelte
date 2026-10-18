@@ -14,8 +14,9 @@
 	import ScheduleDialog from '$lib/ScheduleDialog.svelte';
 	import ScheduleUsage from '$lib/ScheduleUsage.svelte';
 	import { daemonState } from '$lib/daemonState.svelte';
-	import { summary, type Schedule } from '$lib/schedules';
-	import { BACKEND_LABELS } from '$lib/backends/types';
+	import { engineLabel, summary, type Schedule } from '$lib/schedules';
+	import { acpPresets, type AcpPreset } from '$lib/protocol';
+	import { onMount } from 'svelte';
 	import { t } from '$lib/i18n';
 	import { when } from '$lib/time';
 
@@ -32,6 +33,11 @@
 	/** The task in the dialog: null for a new one; undefined while closed. */
 	let editing = $state<Schedule | null | undefined>(undefined);
 	let showUsage = $state<Record<string, boolean>>({});
+	/** For the names of the ACP agents tasks run on. */
+	let presets = $state<AcpPreset[]>([]);
+	onMount(() => {
+		acpPresets().then((list) => (presets = list), () => {});
+	});
 
 	/** Where it runs: the project's name, else the folder's. */
 	function place(s: Schedule): string {
@@ -101,7 +107,7 @@
 					{:else if s.next_run_at}{t('shell.schedule.next', { time: when(s.next_run_at) })}
 					{:else}{t('shell.schedule.done')}{/if}
 				</span>
-				<span>· {place(s)} · {BACKEND_LABELS[s.engine]}</span>
+				<span>· {place(s)} · {engineLabel(s, presets)}</span>
 				{#if last}
 					<span>
 						·

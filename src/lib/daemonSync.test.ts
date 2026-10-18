@@ -217,6 +217,17 @@ describe('DaemonSync', () => {
 		expect(store.projects[0].sessions).toHaveLength(0);
 	});
 
+	it('lists a built-in ACP agent\'s session (a scheduled run, a phone\'s), never a registered agent\'s', async () => {
+		const { sync, store } = await setup();
+		sync.reconcile([
+			{ session: 's-omp', cwd: '/w/app', created_at: 0, open: false, engine: 'acp', agent: 'omp' },
+			{ session: 's-custom', cwd: '/w/app', created_at: 0, open: false, engine: 'acp', agent: null }
+		]);
+		const listed = store.projects[0].sessions;
+		expect(listed.map((s) => s.chat.sessionId)).toEqual(['s-omp']);
+		expect(listed[0]).toMatchObject({ dormant: true, backendId: 'acp', acpAgent: { id: 'omp', preset: true } });
+	});
+
 	it('never lists a session a tab here is opening', async () => {
 		const { sync, store } = await setup();
 		desktopOf.mockReturnValue('tab-1');

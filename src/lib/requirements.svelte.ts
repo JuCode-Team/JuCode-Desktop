@@ -215,11 +215,12 @@ export class Requirements {
 	}
 
 	/** Sends `text` to its latest session, or starts a new one (asked for,
-	 *  or none yet) in `cwd` on `engine`, through the confirmations (`plan`,
-	 *  then `mode`; see `begin`); resolves with that session. */
+	 *  or none yet) in `cwd` on `engine` (`acp`: the built-in `agent`),
+	 *  through the confirmations (`plan`, then `mode`; see `begin`); resolves
+	 *  with that session. */
 	async reply(
 		id: string,
-		fields: { text?: string; newSession?: boolean; cwd?: string; engine?: string; plan?: boolean; mode?: string }
+		fields: { text?: string; newSession?: boolean; cwd?: string; engine?: string; agent?: string; plan?: boolean; mode?: string }
 	): Promise<string> {
 		const reply = await this.daemon.request({
 			op: 'requirement_reply',
@@ -229,6 +230,7 @@ export class Requirements {
 			lang: getLocale(),
 			...(fields.cwd ? { cwd: fields.cwd } : {}),
 			...(fields.engine ? { engine: fields.engine } : {}),
+			...(fields.agent ? { agent: fields.agent } : {}),
 			...(fields.plan ? { plan: true } : {}),
 			...(fields.mode ? { mode: fields.mode } : {})
 		});
