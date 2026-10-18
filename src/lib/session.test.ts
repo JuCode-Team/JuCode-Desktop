@@ -1128,6 +1128,26 @@ describe('SessionStore GUI ⇄ TUI handoff', () => {
 		expect(busy.surface).toBe('tui');
 	});
 
+	it('openInTui takes an ACP preset\'s conversation, never a registered agent\'s', () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const ready = (agent: { id: string; name: string; preset?: boolean }) => {
+			const id = store.addSession(p, undefined, 'acp', agent);
+			const s = p.sessions.find((x) => x.id === id)!;
+			s.draft = false;
+			s.chat.sessionId = SID;
+			s.chat.messages.push({ kind: 'user', text: 'hi' });
+			return s;
+		};
+		const preset = ready({ id: 'omp', name: 'Oh My Pi', preset: true });
+		store.openInTui(preset.id);
+		expect(preset.surface).toBe('tui');
+		const custom = ready({ id: 'gemini', name: 'Gemini' });
+		store.openInTui(custom.id);
+		expect(custom.surface).toBeUndefined();
+	});
+
 	it('addTuiSession starts a new conversation in its TUI at once', () => {
 		const store = new SessionStore();
 		const p = proj();

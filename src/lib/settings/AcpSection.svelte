@@ -1,7 +1,8 @@
 <script lang="ts">
-	// Settings → 编程智能体 → ACP: manage the registry of Agent Client
-	// Protocol agents the desktop may launch (id, name, command, args, env).
-	// The registry itself is owned and validated by the Rust side
+	// Settings → 编程智能体 → ACP: the built-in agents the daemon starts by
+	// id (read-only: whether each is installed), then the registry of Agent
+	// Client Protocol agents the desktop may launch (id, name, command, args,
+	// env). The registry itself is owned and validated by the Rust side
 	// (acp_registry.rs) — this UI only reads it and submits whole entries.
 	import { onMount } from 'svelte';
 	import PlusIcon from '@lucide/svelte/icons/plus';
@@ -10,12 +11,16 @@
 	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
 	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import CopyIcon from '@lucide/svelte/icons/copy';
+	import CheckIcon from '@lucide/svelte/icons/check';
 	import {
+		acpPresets,
 		acpAgentCheck,
 		acpAgentRemove,
 		acpAgentUpsert,
 		acpAgentsList,
 		type AcpAgent,
+		type AcpPreset,
 		type BackendStatus
 	} from '$lib/protocol';
 	import { formatArgs, slugifyAgentId, tokenizeArgs } from '$lib/backends/acp-agents';
@@ -28,6 +33,9 @@
 	import { t } from '$lib/i18n';
 	import SettingsSection from './SettingsSection.svelte';
 
+	let presets = $state<AcpPreset[]>([]);
+	let presetsError = $state('');
+	let copied = $state('');
 	let agents = $state<AcpAgent[]>([]);
 	let status = $state<Record<string, BackendStatus | 'checking'>>({});
 	let open = $state<Record<string, boolean>>({});
@@ -47,6 +55,21 @@
 			argsText[a.id] = formatArgs(a.args);
 			envText[a.id] = formatEnvLines(a.env);
 		}
+	}
+
+	function loadPresets() {
+		acpPresets()
+			.then((list) => {
+				presets = list;
+				presetsError = '';
+			})
+			.catch((e) => (presetsError = String(e)));
+	}
+
+	async function copyInstall(p: AcpPreset) {
+		await navigator.clipboard.writeText(p.install);
+		copied = p.id;
+		setTimeout(() => (copied = ''), 1500);
 	}
 
 	function load() {
@@ -109,7 +132,8 @@
 			draftError = t('settings.acp.envInvalid', { lines: invalid.join(', ') });
 			return;
 		}
-		const id = slugifyAgentId(name, new Set(agents.map((a) => a.id)));
+		// A built-in agent's id is taken too: a session names its agent by id.
+		const id = slugifyAgentId(name, new Set([...agents, ...presets].map((a) => a.id)));
 		acpAgentUpsert({ id, name, command, args: tokenizeArgs(draft.args), env })
 			.then((list) => {
 				agents = list;
@@ -122,8 +146,55 @@
 			.catch((e) => (draftError = String(e)));
 	}
 
-	onMount(load);
+	onMount(() => {
+		loadPresets();
+		load();
+	});
 </script>
+
+<SettingsSection id="acp-presets" title={t('settings.acp.presets')} description={t('settings.acp.presetsHint')}>
+	{#snippet action()}
+		<IconButton onclick={loadPresets} label="re-check agents" title={t('settings.acp.recheck')}>
+			<RotateCwIcon size={14} />
+		</IconButton>
+	{/snippet}
+	{#if presetsError}
+		<div class="pad"><Notice>{presetsError}</Notice></div>
+	{/if}
+	{#each presets as p (p.id)}
+		<div class="arow">
+			<span class="atile"><BackendIcon backend="acp" agent={p.id} size={16} /></span>
+			<div class="amain">
+				<div class="ahead">
+					<span class="aname">{p.name}</span>
+					{#if p.status === 'ready'}
+						<span class="astate ok"><CircleCheckIcon size={12} /> {p.version || t('settings.acp.found')}</span>
+					{:else if p.status === 'unsupported'}
+						<span class="astate warn"><CircleAlertIcon size={12} /> {t('settings.acp.tooOld', { min: p.min_version ?? '' })}</span>
+					{:else}
+						<span class="astate dim">{t('settings.acp.notInstalled')}</span>
+					{/if}
+					{#if !p.approvals}<span class="astate dim">{t('chat.noApproval')}</span>{/if}
+				</div>
+				{#if p.status === 'ready' && p.path}
+					<span class="acmd" title={p.path}>{p.path}</span>
+				{/if}
+				{#if p.id === 'opencode'}
+					<span class="anote">{t('settings.acp.ownModels')}</span>
+				{/if}
+				{#if p.status !== 'ready'}
+					<div class="install">
+						<span class="anote">{t('settings.acp.installWith')}</span>
+						<code class="acmd" title={p.install}>{p.install}</code>
+						<IconButton size="sm" onclick={() => copyInstall(p)} label={t('common.copy')} title={copied === p.id ? t('common.copied') : t('common.copy')}>
+							{#if copied === p.id}<CheckIcon size={13} />{:else}<CopyIcon size={13} />{/if}
+						</IconButton>
+					</div>
+				{/if}
+			</div>
+		</div>
+	{/each}
+</SettingsSection>
 
 <SettingsSection id="acp-agents" title={t('settings.acp.groupLabel')} description={t('settings.acp.hint')}>
 	{#if listError}
@@ -353,6 +424,20 @@
 		resize: vertical;
 		min-height: 44px;
 		line-height: 1.5;
+	}
+	.anote {
+		font-size: var(--fs-2xs);
+		color: var(--dim);
+	}
+	.install {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		min-width: 0;
+	}
+	.install .acmd {
+		flex: 1;
+		min-width: 0;
 	}
 	.empty {
 		margin: 0;

@@ -1,7 +1,7 @@
 import { AUTO_CONTINUE, ChatState, UNTITLED } from './chat.svelte';
 import { acpAgentsList, closeSession, daemon, hostSession, sessionMeta, sessionHistory, projectRoot, chatsDir, writeConfig, git } from './protocol';
 import { DaemonError, type EngineSpec } from './daemon';
-import { canHandOffToTui, isValidResumeSessionId } from './tuiHandoff';
+import { canHandOffToTui, isValidResumeSessionId, presetOf } from './tuiHandoff';
 import { normalizeBackendId, type BackendId } from './backends';
 import { createJucodeAdapter } from './backends/jucode';
 import { clearAsleep, clearDraft, dispatch, dropHeldOps, holdOps, ioFor, isAsleep, markAsleep, markDraft, registerAdapter, startDraft, unregisterAdapter } from './backends/router';
@@ -14,7 +14,7 @@ import { saveComposerText } from './composerText';
 import { toast } from './ui/toast.svelte';
 import { telemetry } from './telemetry.svelte';
 import { normalizeColor, parseTabIcon, type TabIcon } from './workbench/tabChrome';
-import { CHATS_ENABLED, type Project, type Session, type WorktreeMeta } from './types';
+import { CHATS_ENABLED, type AcpAgentRef, type Project, type Session, type WorktreeMeta } from './types';
 
 /** Optional per-tab chrome persisted alongside the session id + title. */
 export interface SavedTabChrome {
@@ -35,14 +35,14 @@ export interface SavedProject extends SavedTabChrome {
 		sid?: string;
 		title: string;
 		backend?: string;
-		/** backend 为 'acp' 时：驱动该会话的 registry agent（重启动/恢复时必需）。 */
-		acpAgent?: { id: string; name: string };
+		/** backend 为 'acp' 时：驱动该会话的 ACP agent（内置预设或注册表条目，重启动/恢复时必需）。 */
+		acpAgent?: AcpAgentRef;
 		archived?: boolean;
 		pinned?: boolean;
 		/** The conversation was handed to the native TUI (resume by `sid`).
 		 *  Omitted for the default GUI surface so old layouts stay clean. */
 		surface?: 'tui';
-		/** Claude Code / Codex through the JuCode gateway (Session.gateway). */
+		/** Claude Code / Codex / an ACP preset through the JuCode gateway (Session.gateway). */
 		gateway?: boolean;
 		/** Claude Code: the model it last ran on (Session.model). */
 		model?: string;
@@ -52,7 +52,7 @@ export interface SavedProject extends SavedTabChrome {
 	/** 本项目最近一次新建会话所用的引擎后端（缺省 = jucode）。 */
 	lastBackend?: string;
 	/** lastBackend 为 'acp' 时：上次选择的 ACP agent。 */
-	lastAcpAgent?: { id: string; name: string };
+	lastAcpAgent?: AcpAgentRef;
 	/** 对话分组（见 Project.chats）。 */
 	chats?: boolean;
 	/** 附加目录（见 Project.dirs）。 */
@@ -66,6 +66,12 @@ const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
 /** A Unix, drive-letter or UNC absolute path (the daemon takes no other). */
 const isAbsolute = (p: string) => /^(\/|[A-Za-z]:[\\/]|\\\\)/.test(p);
 const samePath = (a: string, b: string) => a.replace(/[\\/]+$/, '') === b.replace(/[\\/]+$/, '');
+
+/** A saved ACP agent (user-editable file), re-validated. */
+function acpAgentRef(a: AcpAgentRef | undefined): AcpAgentRef | undefined {
+	if (!a || typeof a.id !== 'string' || typeof a.name !== 'string') return undefined;
+	return { id: a.id, name: a.name, ...(a.preset === true ? { preset: true } : {}) };
+}
 
 /** A project's sessions as the sidebar lists them: pinned first, each group
  *  in the project's own order (new sessions join at the start); archived
@@ -162,10 +168,10 @@ export class SessionStore {
 
 	/** Builds a session record (chat + per-session adapter) and registers the
 	 *  adapter with the op router. `acpAgent` (acp backend only) records which
-	 *  registry agent backs the session, for spawn opts and display. `reuseId`
+	 *  ACP agent backs the session, for spawn opts and display. `reuseId`
 	 *  re-applies a persisted desktop id (layout chat tiles key on it) unless
 	 *  this run already spawned it. */
-	#newSession(backendId: BackendId, acpAgent?: { id: string; name: string }, reuseId?: string): Session {
+	#newSession(backendId: BackendId, acpAgent?: AcpAgentRef, reuseId?: string): Session {
 		const id = reuseId && !this.allSessions.some((s) => s.id === reuseId) ? reuseId : this.uid();
 		const chat = new ChatState();
 		chat.backendId = backendId;
@@ -223,11 +229,15 @@ export class SessionStore {
 		// Background tasks belong to the engine process being replaced.
 		s.chat.bgTasks = [];
 		s.chat.taskOutputs = {};
-		// What this chat already shows of a claude conversation is richer than
-		// the daemon's replay of it.
+		// What this chat already shows of a claude or ACP conversation is richer
+		// than the daemon's replay of it.
 		// A session coming back to this window takes the replay: its conversation
 		// may have gone on meanwhile.
-		if (s.backendId === 'claude' && !s.chat.rejoining && s.chat.messages.some((m) => m.kind === 'user'))
+		if (
+			(s.backendId === 'claude' || s.backendId === 'acp') &&
+			!s.chat.rejoining &&
+			s.chat.messages.some((m) => m.kind === 'user')
+		)
 			s.chat.keepNextTranscript = true;
 		const program = {
 			...(base?.bin_override ? { bin: base.bin_override } : {}),
@@ -264,8 +274,19 @@ export class SessionStore {
 								...(!prefs.thinkingSummaries ? { thinking: false } : {})
 							}
 						})
+					: s.backendId === 'acp' && s.acpAgent?.preset
+						? // A built-in agent: the daemon resolves its command from the id.
+							Promise.resolve({
+								engine: 'acp',
+								options: {
+									agent: s.acpAgent.id,
+									approval_mode: mode,
+									...gateway,
+									...(extraOpts?.model ? { model: extraOpts.model } : {})
+								}
+							})
 					: s.backendId === 'acp'
-						? // An ACP agent runs the command its registry entry names.
+						? // A custom agent runs the command its registry entry names.
 							acpAgentsList().then((agents) => {
 								const entry = agents.find((a) => a.id === s.acpAgent?.id);
 								if (!entry) throw new Error(`unknown ACP agent ${s.acpAgent?.id ?? ''}`);
@@ -333,7 +354,7 @@ export class SessionStore {
 		project: Project,
 		firstMessage?: string,
 		backend?: BackendId,
-		acpAgent?: { id: string; name: string }
+		acpAgent?: AcpAgentRef
 	) {
 		// Only the jucode engine has a chat mode.
 		let backendId = project.chats ? 'jucode' : (backend ?? defaultBackendFor(project.lastBackend));
@@ -414,10 +435,14 @@ export class SessionStore {
 	 * (model catalog, commands, session id…). No-op once the first user message
 	 * has been sent — the conversation can't move engines.
 	 */
-	async switchBackend(id: string, backend: BackendId, acpAgent?: { id: string; name: string }) {
+	async switchBackend(id: string, backend: BackendId, acpAgent?: AcpAgentRef) {
 		const s = this.allSessions.find((x) => x.id === id);
 		if (!s) return;
-		if (s.backendId === backend && (backend !== 'acp' || s.acpAgent?.id === acpAgent?.id)) return;
+		if (
+			s.backendId === backend &&
+			(backend !== 'acp' || (s.acpAgent?.id === acpAgent?.id && !!s.acpAgent?.preset === !!acpAgent?.preset))
+		)
+			return;
 		if (s.chat.userTurns > 0 || s.restored) return;
 		if (backend === 'acp' && !acpAgent) return; // nothing to launch
 		if (s.draft) {
@@ -463,7 +488,7 @@ export class SessionStore {
 	}
 
 	/** A draft's backend changes: only the choice, nothing starts. */
-	#redraft(s: Session, backend: BackendId, acpAgent?: { id: string; name: string }) {
+	#redraft(s: Session, backend: BackendId, acpAgent?: AcpAgentRef) {
 		const chat = new ChatState();
 		chat.backendId = backend;
 		chat.bindRunKey(s.id);
@@ -568,6 +593,8 @@ export class SessionStore {
 			title?: string | null;
 			archived?: boolean;
 			engine?: string;
+			/** `acp`: the built-in agent it runs. */
+			agent?: string | null;
 			group?: string | null;
 			gateway?: boolean;
 		},
@@ -586,7 +613,8 @@ export class SessionStore {
 			else project.sessions.push(parked);
 			return parked.id;
 		}
-		const s = this.#newSession(normalizeBackendId(rec.engine), undefined, reuseId);
+		const agent = rec.engine === 'acp' && rec.agent ? { id: rec.agent, name: rec.agent, preset: true } : undefined;
+		const s = this.#newSession(normalizeBackendId(rec.engine), agent, reuseId);
 		if (rec.gateway) s.gateway = true;
 		s.dormant = true;
 		s.restored = true;
@@ -716,7 +744,7 @@ export class SessionStore {
 		archived = false,
 		chrome?: SavedTabChrome,
 		reuseId?: string,
-		acpAgent?: { id: string; name: string },
+		acpAgent?: AcpAgentRef,
 		surface?: 'tui',
 		gateway?: boolean,
 		model?: string
@@ -754,7 +782,7 @@ export class SessionStore {
 		backend: BackendId = 'jucode',
 		archived = false,
 		chrome?: SavedTabChrome,
-		acpAgent?: { id: string; name: string }
+		acpAgent?: AcpAgentRef
 	) {
 		const s = this.#newSession(backend, backend === 'acp' ? acpAgent : undefined, reuseId);
 		if (title) s.chat.title = title;
@@ -968,14 +996,14 @@ export class SessionStore {
 		}
 	}
 
-	/** Run this Claude Code / Codex session through the JuCode gateway
-	 *  (`jucode`, optionally on `model`) or the provider in the user's own
-	 *  config (`system`). Only this session's process changes; other Claude
-	 *  Code / Codex sessions on the machine keep their config. */
+	/** Run this Claude Code / Codex session (or an ACP agent with a gateway
+	 *  mode) through the JuCode gateway (`jucode`, optionally on `model`) or
+	 *  the provider in the user's own config (`system`). Only this session's
+	 *  process changes; other sessions on the machine keep their config. */
 	async applyToolProfile(id: string, mode: 'system' | 'jucode', model?: string) {
 		const s = this.allSessions.find((x) => x.id === id);
 		if (!s) return;
-		if (s.backendId !== 'claude' && s.backendId !== 'codex') return;
+		if (s.backendId !== 'claude' && s.backendId !== 'codex' && !(s.backendId === 'acp' && s.chat.agentGateway)) return;
 		s.gateway = mode === 'jucode';
 		// A draft starts that way with its first message.
 		if (s.draft) {
@@ -1228,10 +1256,11 @@ export class SessionStore {
 	 *  for this session, and the daemon stops the engine while the TUI runs
 	 *  (one process per conversation) with the session's gateway and mode.
 	 *  The session stays open for every client. Requires a conversation the
-	 *  TUI can resume, so a fresh empty chat and ACP sessions are a no-op. */
+	 *  TUI can resume, so a fresh empty chat and a registered ACP agent's
+	 *  session are a no-op. */
 	openInTui(id: string) {
 		const s = this.allSessions.find((x) => x.id === id);
-		if (!s || s.surface === 'tui' || s.chat.switching || !canHandOffToTui(s.backendId)) return;
+		if (!s || s.surface === 'tui' || s.chat.switching || !canHandOffToTui(s.backendId, presetOf(s.acpAgent))) return;
 		if (!isValidResumeSessionId(s.chat.sessionId) || !(s.chat.resumable || s.restored)) return;
 		// Asleep: the daemon hands over an open session only.
 		if (isAsleep(id)) return void this.wake(id)?.then(() => this.openInTui(id));
@@ -1307,10 +1336,7 @@ export class SessionStore {
 			// An 'acp' tab needs its agent back to respawn; older files carry
 			// none on the tab → fall back to the project's last agent. Without
 			// any, never start a bare 'acp' (there is no command to run).
-			const savedAgent =
-				t.acpAgent && typeof t.acpAgent.id === 'string' && typeof t.acpAgent.name === 'string'
-					? { id: t.acpAgent.id, name: t.acpAgent.name }
-					: undefined;
+			const savedAgent = acpAgentRef(t.acpAgent);
 			let acpAgent = backend === 'acp' ? (savedAgent ?? proj.lastAcpAgent) : undefined;
 			if (backend === 'acp' && !acpAgent) {
 				backend = 'jucode';
@@ -1370,14 +1396,8 @@ export class SessionStore {
 				this.setProjectDirs(proj, p.dirs);
 				this.setProjectChrome(proj, p);
 				if (p.lastBackend) proj.lastBackend = normalizeBackendId(p.lastBackend);
-				if (
-					proj.lastBackend === 'acp' &&
-					p.lastAcpAgent &&
-					typeof p.lastAcpAgent.id === 'string' &&
-					typeof p.lastAcpAgent.name === 'string'
-				) {
-					proj.lastAcpAgent = { id: p.lastAcpAgent.id, name: p.lastAcpAgent.name };
-				}
+				const lastAgent = proj.lastBackend === 'acp' ? acpAgentRef(p.lastAcpAgent) : undefined;
+				if (lastAgent) proj.lastAcpAgent = lastAgent;
 				if (p.worktree) {
 					proj.worktree = p.worktree;
 					try {

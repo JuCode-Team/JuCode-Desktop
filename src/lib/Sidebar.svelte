@@ -391,7 +391,7 @@
 			{#if req}<RequirementTag id={req.id} title={req.title} />{/if}
 			<!-- A draft belongs to no backend until its first message. -->
 			{#if s.backendId && s.backendId !== 'jucode' && !s.draft}
-				<span class="backend-chip" title={BACKEND_LABELS[s.backendId]}><BackendIcon backend={s.backendId} size={12} /></span>
+				<span class="backend-chip" title={BACKEND_LABELS[s.backendId]}><BackendIcon backend={s.backendId} agent={s.chat.acpAgentId} size={12} /></span>
 			{/if}
 			{#if s.pinned && !s.archived}<span class="pin-mark" title={t('shell.pin')}><PinIcon size={12} fill="currentColor" /></span>{/if}
 			<SessionMark status={status} />

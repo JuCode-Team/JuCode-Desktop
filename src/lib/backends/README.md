@@ -8,7 +8,7 @@ Every session runs in the local `jucode daemon` (JuCode-CLI
 | `jucode` | the JuCode engine, in-process |
 | `claude` | `claude --print --input-format stream-json …` |
 | `codex`  | `codex app-server` |
-| `acp`    | a registered ACP agent (`jucode acp`, `gemini --experimental-acp`, …), command line from the registry (`docs/acp.md`) |
+| `acp`    | an ACP agent: a built-in one by preset id (`opencode`, `omp`, `pi`; the daemon resolves its command) or a registered one with the registry's command line (`docs/acp.md`) |
 
 The daemon translates each engine into the jucode event protocol and client
 ops into the engine's own frames, so the desktop talks one protocol to all of
@@ -24,6 +24,8 @@ environment from Settings). `SessionStore.#spawn` opens a session with
 (restore, restart, provider or gateway switch). Claude Code and Codex
 sessions pass an engine spec: approval mode, the JuCode gateway switch, the
 binary and environment from Settings, and claude's `resume_at` for a rewind.
+A built-in ACP agent passes its preset id (`agent`), approval mode and
+gateway switch; a custom one passes its registry command line.
 
 - Closing the desktop only disconnects: sessions keep running, and deferred
   actions wait in the daemon.
@@ -37,8 +39,9 @@ binary and environment from Settings, and claude's `resume_at` for a rewind.
   `tui`; `TuiPanel` with `session` asks the daemon for `session_tui` and
   draws the engine's own TUI with xterm in the same tile. Quitting it returns
   the tab to the chat (`returnToGui`); the daemon restarts the engine and
-  sends the transcript with the TUI's turns. Other clients see a notice
-  while the conversation is in the terminal (`ChatState.inTerminal`).
+  sends the transcript with the TUI's turns. ACP sessions of a built-in
+  agent hand off too; a registered agent's cannot. Other clients see a
+  notice while the conversation is in the terminal (`ChatState.inTerminal`).
 - File paths in replies (`src/a.ts:12`, a code block titled with a path)
   become links (`fileRefs.ts`, `markdown.ts`); clicking one opens the file in
   the editor at that line, or in the files screen on a paired device.
@@ -64,6 +67,10 @@ is (re)starting; `dispatch(sessionId, op)` is how every UI call site sends.
 ### Capability flags → UI surfaces
 
 `caps.ts` says which protocol features each backend's engine supports.
+ACP is the exception: its table (`ACP_CAPS`) is all off, and each session
+takes what its agent supports from the daemon's `engine_caps` event
+(`ChatState.engineCaps`, merged over the table by `caps(chat)`; see
+`docs/acp.md`).
 
 | cap             | gated surface(s) |
 |-----------------|------------------|

@@ -76,6 +76,8 @@ export type Op =
 	// claude: the agent trace (Workflows, Task subagents) and one subagent's conversation.
 	| { op: 'agent_runs' }
 	| { op: 'subagent_transcript'; agent_id: string }
+	// ACP: one of the agent's session options (`session_options`).
+	| { op: 'set_session_option'; id: string; value: string | boolean }
 	// jucode plan mode: run a proposed plan in `mode`, or revise it with `feedback`.
 	| {
 			op: 'approve_plan';
@@ -137,6 +139,41 @@ export function acpAgentRemove(id: string): Promise<AcpAgent[]> {
 /** Availability probe for one registered ACP agent (`<command> --version`). */
 export function acpAgentCheck(id: string): Promise<BackendStatus> {
 	return invoke('acp_agent_check', { id });
+}
+
+/** One ACP session option the agent offers besides model and effort (its
+ *  mode, say), from `session_options`. */
+export type SessionOption = {
+	id: string;
+	name: string;
+	description: string | null;
+	category: string | null;
+} & (
+	| { type: 'select'; value: string; choices: { value: string; name: string; description: string | null }[] }
+	| { type: 'boolean'; value: boolean }
+);
+
+/** A built-in ACP agent the daemon starts by id (`acp_presets`). */
+export interface AcpPreset {
+	id: string;
+	name: string;
+	status: 'ready' | 'missing' | 'unsupported';
+	path: string | null;
+	version: string | null;
+	min_version: string | null;
+	/** The agent asks before it runs tools (false: Pi). */
+	approvals: boolean;
+	/** It can run on the JuCode gateway. */
+	gateway: boolean;
+	/** The command that installs it. */
+	install: string;
+	/** Its own TUI can take a session over (`session_tui`). */
+	tui: boolean;
+}
+export async function acpPresets(): Promise<AcpPreset[]> {
+	await daemon.connect();
+	const reply = await daemon.request({ op: 'acp_presets' });
+	return (reply.presets as AcpPreset[]) ?? [];
 }
 
 /** Login-shell environment snapshot state (see src-tauri/src/shell_env.rs). */

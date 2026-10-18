@@ -2,6 +2,14 @@ import type { ChatState } from './chat.svelte';
 import type { BackendId, EngineAdapter } from './backends/types';
 import type { TabIcon } from './workbench/tabChrome';
 
+/** The ACP agent behind an 'acp' session: a built-in preset the daemon
+ *  starts by id (`preset`), or an entry of the desktop's registry. */
+export interface AcpAgentRef {
+	id: string;
+	name: string;
+	preset?: boolean;
+}
+
 export interface Session {
 	id: string;
 	chat: ChatState;
@@ -11,9 +19,8 @@ export interface Session {
 	color?: string;
 	/** Tab icon: builtin id, slug/emoji, or sanitized SVG (persisted). */
 	icon?: TabIcon;
-	/** For 'acp' sessions: the registry id + display name of the launched agent
-	 *  (passed as the allowlisted `agent` spawn option on every (re)spawn). */
-	acpAgent?: { id: string; name: string };
+	/** For 'acp' sessions: the launched agent (needed on every (re)spawn). */
+	acpAgent?: AcpAgentRef;
 	/** Per-session adapter instance (the jucode one; not persisted). */
 	adapter: EngineAdapter;
 	/** Archived threads are hidden from the sidebar by default (persisted); the
@@ -41,9 +48,9 @@ export interface Session {
 	pinned?: boolean;
 	/** Model and effort picked while a draft, applied when it starts. */
 	draftPick?: { model?: string; effort?: string };
-	/** Claude Code / Codex: runs through the JuCode gateway on the user's
-	 *  JuCode login (only this session's process; their own config is left
-	 *  alone). Unset: as it last ran (the daemon remembers it). */
+	/** Claude Code / Codex / an ACP preset with a gateway mode: runs through
+	 *  the JuCode gateway on the user's JuCode login (only this session's
+	 *  process; their own config is left alone). Unset: as it last ran (the daemon remembers it). */
 	gateway?: boolean;
 	/** Gateway sessions: the JuCode group its requests route to, applied by
 	 *  the daemon's local gateway (unset: the model's default, else automatic). */
@@ -86,8 +93,8 @@ export interface Project {
 	stale?: boolean;
 	/** 本项目最近一次新建会话所用的引擎后端（新建会话的默认值）。 */
 	lastBackend?: BackendId;
-	/** lastBackend 为 'acp' 时：上次选择的 ACP agent（注册表 id + 名称）。 */
-	lastAcpAgent?: { id: string; name: string };
+	/** lastBackend 为 'acp' 时：上次选择的 ACP agent（内置预设或注册表条目）。 */
+	lastAcpAgent?: AcpAgentRef;
 	/** 对话分组：path 为 ~/.jucode/chats，会话以对话模式（非编程）运行，只用 jucode 引擎。 */
 	chats?: boolean;
 	/** 侧栏文件夹的颜色与自定义图标（同标签外观；随 workspaces.json 保存并同步给后台服务）。 */

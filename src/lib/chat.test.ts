@@ -140,6 +140,51 @@ describe('ChatState.handle', () => {
 		expect(c.pendingRewind).toBeNull();
 	});
 
+	it('stores an ACP agent\'s engine_caps and session_options, and drops them on startup', () => {
+		const c = new ChatState();
+		c.backendId = 'acp';
+		const options = [
+			{
+				id: 'mode',
+				name: 'Session Mode',
+				description: null,
+				category: 'mode',
+				type: 'select',
+				value: 'build',
+				choices: [
+					{ value: 'build', name: 'build', description: null },
+					{ value: 'plan', name: 'plan', description: null }
+				]
+			},
+			{ id: 'x', name: 'X', description: null, category: null, type: 'boolean', value: true }
+		];
+		c.handle({ type: 'startup', model: 'm', cwd: '/w', session_id: '', context_window: 0 });
+		c.handle({ type: 'session_options', options });
+		c.handle({
+			type: 'engine_caps',
+			agent: { id: 'pi', name: 'Pi', version: '1.2.0' },
+			approvals: false,
+			gateway: true,
+			caps: { interrupt: true, transcriptReplay: true }
+		});
+		expect(c.sessionOptions).toEqual(options);
+		expect(c.engineCaps).toEqual({ interrupt: true, transcriptReplay: true });
+		expect(c.agentApprovals).toBe(false);
+		expect(c.agentGateway).toBe(true);
+		expect(c.agentInfo).toEqual({ id: 'pi', name: 'Pi', version: '1.2.0' });
+		// A custom agent: no preset id, approvals unknown.
+		c.handle({ type: 'engine_caps', agent: { id: null, name: 'Gemini', version: '' }, approvals: null, gateway: false, caps: {} });
+		expect(c.agentInfo?.id).toBeNull();
+		expect(c.agentApprovals).toBeNull();
+		// engine_caps is sent only when it changes, possibly before startup: it stays.
+		c.handle({ type: 'startup', model: 'm', cwd: '/w', session_id: '', context_window: 0 });
+		expect(c.agentInfo?.name).toBe('Gemini');
+		expect(c.sessionOptions).toEqual(options);
+		// An option type the desktop cannot render is left out.
+		c.handle({ type: 'session_options', options: [...options, { id: 'n', name: 'N', type: 'number', value: 1 }] });
+		expect(c.sessionOptions).toEqual(options);
+	});
+
 	it('stores the latest mcp_servers view on the state', () => {
 		const c = new ChatState();
 		expect(c.mcpServers).toBeNull();

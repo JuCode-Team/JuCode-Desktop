@@ -28,6 +28,22 @@ describe('buildModelRows', () => {
 		});
 	});
 
+	it('lists an ACP agent\'s models with /model and no detail', () => {
+		const rows = buildModelRows({
+			...base,
+			backendId: 'acp',
+			provider: 'acp',
+			models: [
+				{ model: 'anthropic/claude-x', label: 'Claude X', active: true, context_window: 0 },
+				{ model: 'openai/gpt-y', label: 'GPT Y', active: false, context_window: 0 }
+			]
+		});
+		expect(rows.map((r) => [r.command, r.detail])).toEqual([
+			['/model anthropic/claude-x', ''],
+			['/model openai/gpt-y', '']
+		]);
+	});
+
 	it('shows the gateway display name, keeping the id for the command and the icon', () => {
 		const rows = buildModelRows({
 			...base,

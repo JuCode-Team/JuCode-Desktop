@@ -70,6 +70,44 @@ describe('caps() gating helper', () => {
 		expect(cx.mcpEngineOwned).toBe(true);
 	});
 
+	it('an ACP session takes its caps from engine_caps over the all-off baseline', () => {
+		const chat = new ChatState();
+		chat.backendId = 'acp';
+		// Before the agent reports anything: everything off.
+		expect(caps(chat)).toEqual(CAPS.acp);
+		expect(Object.values(caps(chat)).every((v) => v === false)).toBe(true);
+		chat.handle({
+			type: 'engine_caps',
+			agent: { id: 'omp', name: 'Oh My Pi', version: '18.1.21' },
+			approvals: true,
+			gateway: true,
+			caps: {
+				interrupt: true,
+				approvalModes: true,
+				modelPicker: true,
+				contextUsage: false,
+				slashCommands: true,
+				transcriptReplay: true,
+				// Unknown keys and non-boolean values are ignored.
+				teleport: true,
+				resume: 'yes'
+			}
+		});
+		const c = caps(chat);
+		expect(c.interrupt).toBe(true);
+		expect(c.approvalModes).toBe(true);
+		expect(c.modelPicker).toBe(true);
+		expect(c.slashCommands).toBe(true);
+		expect(c.transcriptReplay).toBe(true);
+		expect(c.contextUsage).toBe(false);
+		expect(c.resume).toBe(false);
+		expect('teleport' in c).toBe(false);
+		// The static table is left alone.
+		expect(CAPS.acp.interrupt).toBe(false);
+		// Another backend ignores engineCaps.
+		expect(caps({ backendId: 'claude', engineCaps: { goals: true } })).toBe(CAPS.claude);
+	});
+
 	it('every backend declares the full flag set', () => {
 		const keys = Object.keys(CAPS.jucode).sort();
 		for (const id of BACKEND_IDS) {

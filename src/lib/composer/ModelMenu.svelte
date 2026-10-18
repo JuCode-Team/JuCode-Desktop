@@ -10,7 +10,11 @@
 	import SessionSwitches, { type SessionSwitch } from '$lib/composer/SessionSwitches.svelte';
 	import Vendor from '$lib/Vendor.svelte';
 	import BackendIcon from '$lib/BackendIcon.svelte';
-	import { acpAgentsList, checkBackend, type AcpAgent } from '$lib/protocol';
+	import Segmented from '$lib/ui/Segmented.svelte';
+	import Select from '$lib/ui/Select.svelte';
+	import Switch from '$lib/ui/Switch.svelte';
+	import { acpAgentsList, acpPresets, checkBackend, type AcpAgent, type AcpPreset } from '$lib/protocol';
+	import type { AcpAgentRef } from '$lib/types';
 	import { loadBackendSettings, versionLabel } from '$lib/backends/settings';
 	import { CAPS, NATIVE_BACKEND_IDS, BACKEND_LABELS, type BackendId } from '$lib/backends';
 	import { t } from '$lib/i18n';
@@ -45,6 +49,8 @@
 		onEffort,
 		onSwitch,
 		onBackend,
+		onSessionOption,
+		acpGateway,
 		onRefreshModels
 	}: {
 		chat: ChatState;
@@ -65,7 +71,11 @@
 		onSelect: (command: string) => void;
 		onEffort: (effort: string) => void;
 		onSwitch: (name: SessionSwitch, on: boolean) => void;
-		onBackend?: (b: BackendId, acpAgent?: { id: string; name: string }) => void | Promise<void>;
+		onBackend?: (b: BackendId, acpAgent?: AcpAgentRef) => void | Promise<void>;
+		/** ACP: sets one of the agent's session options. */
+		onSessionOption?: (id: string, value: string | boolean) => void;
+		/** ACP agents with a gateway mode: whether this session uses it, and the switch. */
+		acpGateway?: { on: boolean; onChange: (on: boolean) => void };
 		/** Re-request the model catalog (after an agent switch). */
 		onRefreshModels: () => void;
 	} = $props();
@@ -91,8 +101,9 @@
 		return () => ro.disconnect();
 	});
 
-	// Agent availability (best-effort) and the registered ACP agents.
+	// Agent availability (best-effort), the built-in and the registered ACP agents.
 	let probe = $state<Partial<Record<BackendId, { found: boolean; version: string }>>>({});
+	let presets = $state<AcpPreset[]>([]);
 	let acpAgents = $state<AcpAgent[]>([]);
 	onMount(() => {
 		if (backendLocked) return;
@@ -102,10 +113,21 @@
 				.then((s) => (probe[id] = { found: s.found, version: versionLabel(s) }))
 				.catch(() => {});
 		}
+		acpPresets()
+			.then((p) => (presets = p))
+			.catch(() => {});
 		acpAgentsList()
 			.then((a) => (acpAgents = a))
 			.catch(() => {});
 	});
+	const presetTitle = (p: AcpPreset) =>
+		p.status === 'missing'
+			? `${p.name} · ${t('settings.acp.notInstalled')}`
+			: p.status === 'unsupported'
+				? `${p.name} · ${t('settings.acp.tooOld', { min: p.min_version ?? '' })}`
+				: p.version
+					? `${p.name} · ${p.version}`
+					: p.name;
 	const agentTitle = (id: BackendId) => {
 		const p = probe[id];
 		if (!p) return BACKEND_LABELS[id];
@@ -126,11 +148,11 @@
 			switching = false;
 		}
 	}
-	async function pickAcp(agent: AcpAgent) {
+	async function pickAcp(agent: AcpAgentRef) {
 		if (switching || (chat.backendId === 'acp' && chat.acpAgentId === agent.id)) return;
 		switching = true;
 		try {
-			await onBackend?.('acp', { id: agent.id, name: agent.name });
+			await onBackend?.('acp', agent);
 		} finally {
 			switching = false;
 		}
@@ -172,7 +194,7 @@
 				</button>
 			{:else}
 				<div class="pop-row static">
-					<span class="pop-ico"><BackendIcon backend={chat.backendId} size={15} /></span>
+					<span class="pop-ico"><BackendIcon backend={chat.backendId} agent={chat.acpAgentId} size={15} /></span>
 					<span class="pop-txt"><span class="pop-label">{modelName}</span></span>
 				</div>
 			{/if}
@@ -208,6 +230,38 @@
 
 		{#if chat.planUsage}<PlanQuota usage={chat.planUsage} />{/if}
 
+		{#if chat.backendId === 'acp' && (chat.sessionOptions.length || acpGateway)}
+			<!-- The agent's own options (its mode, say), as it names them. -->
+			<section class="options">
+				{#each chat.sessionOptions as o (o.id)}
+					<div class="opt" title={o.description ?? undefined}>
+						<span class="olabel">{o.name}</span>
+						{#if o.type === 'boolean'}
+							<Switch checked={o.value} label={o.name} onChange={(v) => onSessionOption?.(o.id, v)} />
+						{:else if o.choices.length <= 4}
+							<Segmented
+								value={o.value}
+								options={o.choices.map((c) => ({ value: c.value, label: c.name }))}
+								onChange={(v) => onSessionOption?.(o.id, v)}
+							/>
+						{:else}
+							<Select
+								value={o.value}
+								options={o.choices.map((c) => ({ value: c.value, label: c.name }))}
+								onChange={(v) => onSessionOption?.(o.id, v)}
+							/>
+						{/if}
+					</div>
+				{/each}
+				{#if acpGateway}
+					<div class="opt">
+						<span class="olabel">{t('chat.jucodeGateway')}</span>
+						<Switch checked={acpGateway.on} label={t('chat.jucodeGateway')} onChange={acpGateway.onChange} />
+					</div>
+				{/if}
+			</section>
+		{/if}
+
 		{#if !backendLocked}
 			<section class="agents" role="group" aria-label={t('chat.switchBackend')}>
 				{#each NATIVE_BACKEND_IDS as id (id)}
@@ -222,13 +276,26 @@
 						<BackendIcon backend={id} size={15} /><span>{BACKEND_LABELS[id]}</span>
 					</button>
 				{/each}
+				{#each presets as p (p.id)}
+					<button
+						class="agent"
+						class:on={chat.backendId === 'acp' && chat.acpAgentId === p.id}
+						class:miss={p.status !== 'ready'}
+						disabled={switching || p.status !== 'ready'}
+						title={presetTitle(p)}
+						onclick={() => pickAcp({ id: p.id, name: p.name, preset: true })}
+					>
+						<BackendIcon backend="acp" agent={p.id} size={15} /><span>{p.name}</span>
+						{#if !p.approvals}<span class="noappr">{t('chat.noApproval')}</span>{/if}
+					</button>
+				{/each}
 				{#each acpAgents as agent (agent.id)}
 					<button
 						class="agent"
 						class:on={chat.backendId === 'acp' && chat.acpAgentId === agent.id}
 						disabled={switching}
 						title={agent.name}
-						onclick={() => pickAcp(agent)}
+						onclick={() => pickAcp({ id: agent.id, name: agent.name })}
 					>
 						<BackendIcon backend="acp" size={15} /><span>{agent.name}</span>
 					</button>
@@ -396,6 +463,31 @@
 	}
 	.agent:disabled {
 		cursor: default;
+	}
+	.noappr {
+		color: var(--dim2);
+		font-size: var(--fs-2xs);
+	}
+	.options {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		padding: 4px 8px;
+	}
+	.opt {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 10px;
+		min-height: 32px;
+	}
+	.olabel {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: var(--dim);
+		font-size: var(--fs-xs);
 	}
 	.effort {
 		padding: 2px 8px 4px;

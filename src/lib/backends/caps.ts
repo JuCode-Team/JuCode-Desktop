@@ -58,28 +58,33 @@ export const CODEX_CAPS: BackendCaps = {
 	contextBreakdown: false // the app server reports a total only
 };
 
+// The baseline for an ACP session before its agent reports anything: what
+// stays off for every ACP agent. The daemon's `engine_caps` event turns on,
+// per session, what the agent's own ACP handshake offers; `caps(chat)`
+// merges it over this table.
 export const ACP_CAPS: BackendCaps = {
-	approvalModes: false, // ACP session modes are agent-defined ids — no safe mapping
+	approvalModes: false, // engine_caps: a preset with a launch mode per approval mode
 	extendedApprovalModes: false,
-	planMode: false,
+	planMode: false, // an agent's own plan mode is a session option, not the desktop's
 	hunkApproval: false, // permission responses are whole-call option picks
 	steer: false, // no mid-turn injection; queued messages run as the next turn
-	interrupt: true, // session/cancel (core protocol, all agents)
+	interrupt: false, // engine_caps: session/cancel
 	branchTree: false,
 	goals: false, // plan updates still render (the plan tile shows them when present)
 	skills: false,
 	mcpManage: false,
 	checkpoints: false,
-	contextUsage: false, // no usage/context telemetry in ACP v1
+	contextUsage: false, // engine_caps: once a usage_update arrived
 	compact: false,
-	modelPicker: false, // session/set_model is optional; kept off until provable
-	resume: false, // session/load is optional (jucode acp: loadSession false)
+	modelPicker: false, // engine_caps: the agent offers a model config option
+	resume: false, // no session/list picker (stable, not used yet)
 	subagents: false,
-	transcriptReplay: false,
-	slashCommands: false, // available_commands have no invocation RPC (prompt text only)
+	transcriptReplay: false, // engine_caps: session/load replays the conversation
+	slashCommands: false, // engine_caps: the agent listed commands (sent as prompt text)
 	mcpEngineOwned: false,
 	ruleScopes: false,
 	sideQuestions: false,
 	agentTrace: false,
 	contextBreakdown: false
 };
+

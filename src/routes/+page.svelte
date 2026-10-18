@@ -80,7 +80,7 @@
 		reconcileLayout
 	} from '$lib/workbench/canvas';
 	import { tuiBackendOf, tuiTabTitle } from '$lib/workbench/tuiTab';
-	import { canHandOffToTui, isValidResumeSessionId } from '$lib/tuiHandoff';
+	import { canHandOffToTui, isValidResumeSessionId, presetOf } from '$lib/tuiHandoff';
 	import type { WorkspaceEntry } from '$lib/workbench/workspaces';
 	import type { TabIcon } from '$lib/workbench/tabChrome';
 	import Mosaic from '$lib/workbench/Mosaic.svelte';
@@ -476,7 +476,7 @@
 		if (prefs.defaultSurface !== 'tui') return;
 		for (const session of store.allSessions) {
 			const sid = session.id;
-			if (openedInTui.has(sid) || !session.restored || !canHandOffToTui(session.backendId)) continue;
+			if (openedInTui.has(sid) || !session.restored || !canHandOffToTui(session.backendId, presetOf(session.acpAgent))) continue;
 			if (!tuiReady(sid) || !daemon.sessionOf(sid)) continue;
 			openedInTui.add(sid);
 			if (!session.chat.busy && !session.chat.bgTasks.length) store.openInTui(sid);
@@ -1428,7 +1428,7 @@
 				<button class="tile-action" title={t('dock.tui.backToGui')} aria-label={t('dock.tui.backToGui')} onclick={() => active && tuiPanels[active.id]?.backToGui()}>
 					<MessageSquareTextIcon size={16} />
 				</button>
-			{:else if !showSettings && !showDesk && active && canHandOffToTui(active.backendId)}
+			{:else if !showSettings && !showDesk && active && canHandOffToTui(active.backendId, presetOf(active.acpAgent))}
 				<button
 					class="tile-action"
 					disabled={!tuiReady(active.id)}
@@ -1802,7 +1802,7 @@
 			onHistory={() => activeProject && store.openHistory(activeProject)}
 			onShortcuts={() => (showShortcuts = true)}
 			onFeedback={() => (showFeedback = true)}
-			canOpenTui={!!active && active.surface !== 'tui' && canHandOffToTui(active.backendId) && tuiReady(active.id)}
+			canOpenTui={!!active && active.surface !== 'tui' && canHandOffToTui(active.backendId, presetOf(active.acpAgent)) && tuiReady(active.id)}
 			onOpenTui={() => active && continueInTui(active.id)}
 		/>
 	{/if}

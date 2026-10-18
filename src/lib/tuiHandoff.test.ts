@@ -28,10 +28,14 @@ describe('isValidResumeSessionId', () => {
 });
 
 describe('canHandOffToTui', () => {
-	it('allows the three native CLIs and never acp', () => {
+	it('allows the three native CLIs and the ACP presets, never a registered agent', () => {
 		expect(canHandOffToTui('jucode')).toBe(true);
 		expect(canHandOffToTui('claude')).toBe(true);
 		expect(canHandOffToTui('codex')).toBe(true);
-		expect(canHandOffToTui('acp')).toBe(false);
+		expect(canHandOffToTui('acp', 'omp')).toBe(true);
+		expect(canHandOffToTui('acp', 'pi')).toBe(true);
+		expect(canHandOffToTui('acp', 'opencode')).toBe(true);
+		expect(canHandOffToTui('acp', undefined)).toBe(false);
+		expect(canHandOffToTui('acp', 'my-agent')).toBe(false);
 	});
 });

@@ -1425,6 +1425,10 @@
 				repoName={project?.name ?? ''}
 				onBranchChanged={refreshGitBranch}
 				onBackend={(b, acpAgent) => store.switchBackend(session.id, b, acpAgent)}
+				onSessionOption={(id, value) => send({ op: 'set_session_option', id, value })}
+				acpGateway={chat.backendId === 'acp' && chat.agentGateway
+					? { on: toolMode === 'jucode', onChange: (on) => void store.applyToolProfile(session.id, on ? 'jucode' : 'system') }
+					: undefined}
 				bind:pickerQuery
 			bind:pickerSelIdx={selIdx}
 				onEffort={setEffort}

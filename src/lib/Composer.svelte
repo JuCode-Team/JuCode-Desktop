@@ -42,6 +42,7 @@
 	import { effortLabel } from '$lib/composer/effort';
 	import type { ModelRow } from '$lib/composer/modelRows';
 	import type { ChatState } from '$lib/chat.svelte';
+	import type { AcpAgentRef } from '$lib/types';
 	import { buildApproveOp, type ApprovalMode, type ApproveOp } from '$lib/approval';
 	import { caps, BACKEND_LABELS, type BackendId } from '$lib/backends';
 	import { paneIn, paneOut } from '$lib/ui/motion';
@@ -63,6 +64,8 @@
 		repoName = '',
 		onBranchChanged,
 		onBackend,
+		onSessionOption,
+		acpGateway,
 		onSubmit,
 		onStop,
 		onSteer,
@@ -104,7 +107,11 @@
 		repoName?: string;
 		/** A branch was switched to or created from the chip. */
 		onBranchChanged?: () => void;
-		onBackend?: (b: BackendId, acpAgent?: { id: string; name: string }) => void | Promise<void>;
+		onBackend?: (b: BackendId, acpAgent?: AcpAgentRef) => void | Promise<void>;
+		/** ACP: sets one of the agent's session options (see ModelMenu). */
+		onSessionOption?: (id: string, value: string | boolean) => void;
+		/** ACP agents with a gateway mode (see ModelMenu). */
+		acpGateway?: { on: boolean; onChange: (on: boolean) => void };
 		onSubmit: () => void;
 		onStop: () => void;
 		onSteer: () => void;
@@ -866,9 +873,11 @@
 						/>
 					{/if}
 				</div>
+			{:else if chat.backendId === 'acp' && chat.agentApprovals === false}
+				<span class="noappr" title={t('chat.noApprovalHint')}>{t('chat.noApproval')}</span>
 			{/if}
 			<div class="cspace"></div>
-			{#if chat.efforts.length || bcaps.modelPicker || !backendLocked}
+			{#if chat.efforts.length || bcaps.modelPicker || !backendLocked || chat.sessionOptions.length || acpGateway}
 				<!-- Model · effort: one button, one menu (agent, effort, models). -->
 				<button
 					class="flatbtn model"
@@ -882,7 +891,7 @@
 					<!-- Model changes slide the name in; the top effort sweeps in the model's colour. -->
 					{#key chat.model}
 						<span class="mswap">
-							{#if chat.backendId === 'jucode' && chat.model}<Vendor model={chat.model} size={15} mono />{:else}<BackendIcon backend={chat.backendId} size={15} mono />{/if}
+							{#if chat.backendId === 'jucode' && chat.model}<Vendor model={chat.model} size={15} mono />{:else}<BackendIcon backend={chat.backendId} agent={chat.acpAgentId} size={15} mono />{/if}
 							<span class="m">{chat.modelLabel || chat.model || backendLabel}</span>
 						</span>
 					{/key}
@@ -894,7 +903,7 @@
 					{#if chat.ultracode}<span class="e">· Ultracode</span>{/if}
 				</button>
 			{:else if chat.model}
-				<span class="flatbtn model static"><BackendIcon backend={chat.backendId} size={15} mono /><span>{chat.modelLabel || chat.model}</span></span>
+				<span class="flatbtn model static"><BackendIcon backend={chat.backendId} agent={chat.acpAgentId} size={15} mono /><span>{chat.modelLabel || chat.model}</span></span>
 			{/if}
 			{#if modelPopoverVisible}
 				<ModelMenu
@@ -913,6 +922,8 @@
 					onEffort={setEffort}
 					{onSwitch}
 					{onBackend}
+					{onSessionOption}
+					{acpGateway}
 					onRefreshModels={() => onModel()}
 				/>
 			{/if}
@@ -1275,6 +1286,13 @@
 		font-size: var(--fs-2xs);
 		font-variant-numeric: tabular-nums;
 		color: var(--dim);
+	}
+	.noappr {
+		padding: 0 6px;
+		color: var(--dim2);
+		font-size: var(--fs-xs);
+		white-space: nowrap;
+		cursor: default;
 	}
 	.foot-chip {
 		display: inline-flex;

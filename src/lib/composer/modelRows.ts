@@ -199,10 +199,13 @@ export function buildModelRows(input: {
 		id: `${cur}::${m.model}`,
 		label: m.label || m.model,
 		vendor: m.vendor || m.model,
+		// An ACP agent reports no context windows, and its provider id ("acp") is no source.
 		detail:
 			cur === 'jucode'
 				? jucodeDetail(m.context_window, unsetWindow)
-				: detailOf(activeGroup === groups.byok ? cur : null, m.context_window),
+				: cur === 'acp'
+					? ''
+					: detailOf(activeGroup === groups.byok ? cur : null, m.context_window),
 		active: m.active,
 		command: `/model ${m.model}`,
 		depth: undefined,

@@ -241,7 +241,13 @@ const settings = {
 			env: '环境变量',
 			envPlaceholder: 'KEY=VALUE，每行一条（仅对该智能体生效）',
 			envInvalid: '以下行无效：{lines}',
-			needNameCommand: '名称和命令不能为空'
+			needNameCommand: '名称和命令不能为空',
+			presets: '内置智能体',
+			presetsHint: '由 JuCode 直接启动的 ACP 智能体，需要先在本机安装。',
+			notInstalled: '未安装',
+			tooOld: '版本过低，需要 {min}',
+			installWith: '安装命令',
+			ownModels: '使用你在 OpenCode 中配置的模型，不经过 JuCode 网关。'
 		},
 		help: {
 			feedback: '反馈问题',
@@ -775,7 +781,13 @@ const settings = {
 			env: 'Environment variables',
 			envPlaceholder: 'KEY=VALUE, one per line (applied to this agent only)',
 			envInvalid: 'Invalid lines: {lines}',
-			needNameCommand: 'Name and command are required'
+			needNameCommand: 'Name and command are required',
+			presets: 'Built-in agents',
+			presetsHint: 'ACP agents JuCode starts itself. Install them on this computer first.',
+			notInstalled: 'Not installed',
+			tooOld: 'Too old, needs {min}',
+			installWith: 'Install with',
+			ownModels: 'Uses the models you set up in OpenCode, not the JuCode gateway.'
 		},
 		help: {
 			feedback: 'Send feedback',

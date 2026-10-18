@@ -1,14 +1,21 @@
 <script lang="ts">
 	// Engine-backend mark: a generic terminal icon for the native engine (the
 	// JuCode brand is a wordmark, no logo), vendor marks for codex (OpenAI) /
-	// claude and a generic plug for ACP agents. `mono` inside controls.
+	// claude and a generic plug for ACP agents (OpenCode has its own mark;
+	// lobehub's pi.svg is Inflection's Pi, not this one). `mono` inside controls.
 	import { modelBrand } from '$lib/brandIcons';
 	import openai from '@lobehub/icons-static-svg/icons/openai.svg?raw';
+	import opencode from '@lobehub/icons-static-svg/icons/opencode.svg?raw';
 	import PlugIcon from '@lucide/svelte/icons/plug';
 	import SquareTerminalIcon from '@lucide/svelte/icons/square-terminal';
 	import type { BackendId } from '$lib/backends';
 
-	let { backend, size = 14, mono = false }: { backend: BackendId; size?: number; mono?: boolean } = $props();
+	let {
+		backend,
+		agent,
+		size = 14,
+		mono = false
+	}: { backend: BackendId; /** ACP: the agent's preset id. */ agent?: string; size?: number; mono?: boolean } = $props();
 </script>
 
 {#if backend === 'jucode'}
@@ -17,6 +24,8 @@
 	<span class="mark" style:font-size="{size}px" aria-hidden="true">{@html openai}</span>
 {:else if backend === 'claude'}
 	<span class="mark" style:font-size="{size}px" aria-hidden="true">{@html modelBrand('claude', mono)}</span>
+{:else if backend === 'acp' && agent === 'opencode'}
+	<span class="mark" style:font-size="{size}px" aria-hidden="true">{@html opencode}</span>
 {:else if backend === 'acp'}
 	<span class="mark acp" style:font-size="{size}px" aria-hidden="true"><PlugIcon {size} /></span>
 {/if}

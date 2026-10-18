@@ -19,8 +19,16 @@ export const CAPS: Record<BackendId, BackendCaps> = {
  * THE capability-gating helper: every UI surface asks this one function.
  * Accepts anything carrying a `backendId` (ChatState does) — or nothing, which
  * gates like the native backend so pre-existing UI behavior is unchanged.
+ * An ACP session's caps are its agent's: the daemon's `engine_caps`
+ * (`engineCaps`) over the all-off ACP baseline.
  */
-export function caps(chat?: { backendId?: string } | null): BackendCaps {
+export function caps(chat?: { backendId?: string; engineCaps?: Partial<BackendCaps> | null } | null): BackendCaps {
 	const id = chat?.backendId;
+	if (id === 'acp') {
+		const merged = { ...ACP_CAPS };
+		for (const [k, v] of Object.entries(chat?.engineCaps ?? {}))
+			if (k in ACP_CAPS && typeof v === 'boolean') merged[k as keyof BackendCaps] = v;
+		return merged;
+	}
 	return (id && id in CAPS ? CAPS[id as BackendId] : CAPS.jucode);
 }

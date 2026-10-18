@@ -67,7 +67,7 @@
 		{:else if part === '{backend}'}
 			<span class="anchor">
 				<button class="word" class:on={menu === 'backend'} onclick={() => (menu = menu === 'backend' ? null : 'backend')} aria-haspopup="menu" aria-expanded={menu === 'backend'} aria-label={t('shell.startPicker.backend')}>
-					<BackendIcon backend={session.backendId} size={14} />
+					<BackendIcon backend={session.backendId} agent={session.chat.acpAgentId} size={14} />
 					<span class="wname">{BACKEND_LABELS[session.backendId]}</span>
 					<ChevronDownIcon size={12} />
 				</button>

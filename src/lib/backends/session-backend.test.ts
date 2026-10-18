@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Stub the Tauri-backed protocol layer (same pattern as session.test.ts).
 vi.mock('$lib/protocol', () => ({
 	hostSession: vi.fn(() => Promise.resolve()),
+	acpAgentsList: vi.fn(() => Promise.resolve([{ id: 'gemini', name: 'Gemini', command: 'gemini', args: ['--experimental-acp'], env: {} }])),
 	daemon: { sessionOf: vi.fn(() => 'conv-1') },
 	closeSession: vi.fn(() => Promise.resolve()),
 	sendOp: vi.fn(() => Promise.resolve()),
@@ -157,5 +158,77 @@ describe('SessionStore × backends', () => {
 		expect(adapterFor(id)).toBeDefined();
 		store.removeSession(id);
 		expect(adapterFor(id)).toBeUndefined();
+	});
+
+	it('a built-in ACP agent starts by id: approval mode and gateway, no command', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const agent = { id: 'omp', name: 'oh-my-pi', preset: true };
+		const id = store.addSession(p, undefined, 'acp', agent);
+		begin(id);
+		await flush();
+		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined, false, {
+			engine: 'acp',
+			options: { agent: 'omp', approval_mode: 'read-only' }
+		});
+		expect(p.lastAcpAgent).toEqual(agent);
+		// An agent with a gateway mode switches like Claude Code / Codex.
+		const s = p.sessions.find((x) => x.id === id)!;
+		s.chat.agentGateway = true;
+		await store.applyToolProfile(id, 'jucode');
+		expect(hostSession).toHaveBeenLastCalledWith(id, p.path, 'conv-1', false, {
+			engine: 'acp',
+			options: { agent: 'omp', approval_mode: 'read-only', jucode_gateway: true }
+		});
+	});
+
+	it('an ACP agent without a gateway mode keeps its process on a profile switch', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p, undefined, 'acp', { id: 'opencode', name: 'OpenCode', preset: true });
+		begin(id);
+		await flush();
+		vi.mocked(hostSession).mockClear();
+		await store.applyToolProfile(id, 'jucode');
+		expect(hostSession).not.toHaveBeenCalled();
+	});
+
+	it('a custom ACP agent still runs its registry command', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p, undefined, 'acp', { id: 'gemini', name: 'Gemini' });
+		begin(id);
+		await flush();
+		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined, false, {
+			engine: 'acp',
+			options: { command: 'gemini', args: ['--experimental-acp'], env: {} }
+		});
+	});
+
+	it('a restored ACP tab keeps its built-in agent', async () => {
+		const agent = { id: 'pi', name: 'Pi', preset: true };
+		const store = new SessionStore();
+		await store.restore([
+			{
+				id: 'p1',
+				name: 'p1',
+				path: '/tmp/p1',
+				lastBackend: 'acp',
+				lastAcpAgent: agent,
+				tabs: [{ id: 't1', sid: 'acp-1', title: 'A', backend: 'acp', acpAgent: agent }]
+			}
+		]);
+		const s = store.projects[0].sessions[0];
+		expect(s.acpAgent).toEqual(agent);
+		expect(store.projects[0].lastAcpAgent).toEqual(agent);
+		await flush();
+		expect(hostSession).toHaveBeenCalledWith('t1', '/tmp/p1', 'acp-1', false, {
+			engine: 'acp',
+			options: { agent: 'pi', approval_mode: 'read-only' }
+		});
+		expect(store.serialize()[0]).toMatchObject({ lastAcpAgent: agent, tabs: [{ acpAgent: agent }] });
 	});
 });

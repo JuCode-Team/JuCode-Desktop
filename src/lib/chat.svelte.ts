@@ -1,6 +1,6 @@
-import type { AgentEvent } from './protocol';
+import type { AgentEvent, SessionOption } from './protocol';
 import { loadProfile, profileKey, rememberProfile, type BackendProfile } from '$lib/backendProfile';
-import { isBackendId, type BackendId } from './backends/types';
+import { isBackendId, type BackendCaps, type BackendId } from './backends/types';
 import {
 	EDIT_TOOLS,
 	fromEngineMode,
@@ -362,6 +362,17 @@ export class ChatState {
 	 *  (shown instead of the generic ACP label). Set once at session creation. */
 	acpAgentId = '';
 	acpAgentName = '';
+	/** ACP: what the agent supports (`engine_caps`; `caps(chat)` reads it). */
+	engineCaps = $state<Partial<BackendCaps> | null>(null);
+	/** ACP: whether the agent asks before running tools; null when unknown
+	 *  (a custom agent). */
+	agentApprovals = $state<boolean | null>(null);
+	/** ACP: the agent can run on the JuCode gateway. */
+	agentGateway = $state(false);
+	/** ACP: the agent as it names itself (`id`: the preset, null for a custom one). */
+	agentInfo = $state<{ id: string | null; name: string; version: string } | null>(null);
+	/** ACP: the agent's session options besides model and effort. */
+	sessionOptions = $state<SessionOption[]>([]);
 
 	messages = $state<Msg[]>([]);
 	provider = $state('');
@@ -1002,6 +1013,9 @@ export class ChatState {
 				if (str(ev.session_id)) this.sessionId = str(ev.session_id);
 				this.contextWindow = num(ev.context_window);
 				this.#cacheWatch.reset();
+				// An ACP agent's engine_caps and session_options stay: the daemon
+				// sends engine_caps only when it changes, and it may come before
+				// this startup.
 				// A fresh engine incarnation (first start, crash auto-restart or
 				// provider switch) announces its approval mode next — re-arm the
 				// startup sync so the desktop's persisted mode is pushed again.
@@ -1425,6 +1439,20 @@ export class ChatState {
 				break;
 			case 'mcp_login':
 				this.mcpLoginUrl = str(ev.url);
+				break;
+			case 'engine_caps': {
+				const agent = ev.agent as Record<string, unknown> | null | undefined;
+				this.engineCaps = (ev.caps as Partial<BackendCaps> | undefined) ?? null;
+				this.agentApprovals = typeof ev.approvals === 'boolean' ? ev.approvals : null;
+				this.agentGateway = ev.gateway === true;
+				this.agentInfo = agent
+					? { id: typeof agent.id === 'string' ? agent.id : null, name: str(agent.name), version: str(agent.version) }
+					: null;
+				break;
+			}
+			case 'session_options':
+				// The agent's option types pass through; only these two render.
+				this.sessionOptions = arr<SessionOption>(ev.options).filter((o) => o.type === 'select' || o.type === 'boolean');
 				break;
 			case 'command_list':
 				this.commands = arr<CommandItem>(ev.commands);
