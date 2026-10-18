@@ -61,7 +61,7 @@ type PrefsShape = {
 /** The zoom levels ⌘+ / ⌘- step through. */
 export const ZOOM_STEPS = [0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
 
-export const TURN_STAT_KEYS = ['elapsed', 'ttft', 'tokens', 'tools', 'cost', 'model'] as const;
+export const TURN_STAT_KEYS = ['elapsed', 'ttft', 'tokens', 'tps', 'tools', 'cost', 'model'] as const;
 export type TurnStatKey = (typeof TURN_STAT_KEYS)[number];
 
 const DEFAULTS: PrefsShape = {

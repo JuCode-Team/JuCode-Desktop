@@ -134,6 +134,7 @@
 	const SAMPLE_TURN: TurnStats = {
 		elapsed: 48300,
 		ttft: 1200,
+		genMs: 41000,
 		segments: 2,
 		inTokens: 18400,
 		outTokens: 2100,

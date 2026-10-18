@@ -20,6 +20,8 @@ export function turnParts(s: TurnStats, keys: readonly TurnStatKey[]): { text: s
 			out.push({ text: t('chat.stat.ttftShort', { t: fmtDur(s.ttft) }), title: t('chat.stat.ttft') });
 		else if (k === 'tokens' && (s.inTokens || s.outTokens))
 			out.push({ text: `↑${fmtTokens(s.inTokens)} ↓${fmtTokens(s.outTokens)}`, title: t('chat.stat.tokens'), mono: true });
+		else if (k === 'tps' && s.genMs && s.outTokens)
+			out.push({ text: t('chat.stat.tpsShort', { n: (s.outTokens / (s.genMs / 1000)).toFixed(1) }), title: t('chat.stat.tps'), mono: true });
 		else if (k === 'tools' && s.tools) out.push({ text: t('chat.stat.toolsShort', { n: s.tools }), title: t('chat.stat.tools') });
 		else if (k === 'cost' && (s.cost > 0 || s.billing))
 			out.push({ text: costText(s.cost, s.billing), title: t(s.billing?.gateway_requests ? 'chat.costSettledHint' : 'chat.stat.cost'), mono: true });

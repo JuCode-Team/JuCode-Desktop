@@ -331,6 +331,7 @@ const settings = {
 				elapsed: '总耗时',
 				ttft: '首字延迟',
 				tokens: 'Token',
+				tps: '输出速度',
 				tools: '工具调用',
 				cost: '费用',
 				model: '模型'
@@ -885,6 +886,7 @@ const settings = {
 				elapsed: 'Total time',
 				ttft: 'First token',
 				tokens: 'Tokens',
+				tps: 'Output speed',
 				tools: 'Tool calls',
 				cost: 'Cost',
 				model: 'Model'

@@ -32,6 +32,8 @@ export interface TurnStats {
 	elapsed: number;
 	/** Time to the first streamed output, ms. */
 	ttft?: number;
+	/** Time output was streaming, summed over the turn's requests (no waits, no tools), ms. */
+	genMs?: number;
 	inTokens: number;
 	outTokens: number;
 	tools: number;
@@ -391,6 +393,9 @@ export class ChatState {
 	sessionId = $state('');
 	effort = $state('');
 	efforts = $state<string[]>([]);
+	/** An ACP agent's effort value that leaves the level to it ("default",
+	 *  "auto"; not in `efforts`): the unset state. '' when it has none. */
+	effortDefault = $state('');
 	/** Claude Code: ultracode (standing Workflow orchestration) is on, and
 	 *  this model offers it. */
 	ultracode = $state(false);
@@ -595,6 +600,9 @@ export class ChatState {
 	// send state is still shown.
 	#sending: Extract<Msg, { kind: 'user' }> | null = null;
 	#firstOutput: number | null = null;
+	// When the current request's output began streaming, and the turn's streaming time so far.
+	#genStart: number | null = null;
+	#genMs = 0;
 	#turnIn = 0;
 	#turnOut = 0;
 	#turnTools = 0;
@@ -702,6 +710,7 @@ export class ChatState {
 		const turn: TurnStats = {
 			elapsed,
 			...(this.#firstOutput !== null ? { ttft: this.#firstOutput - this.#turnStart } : {}),
+			...(this.#genMs > 0 ? { genMs: this.#genMs } : {}),
 			inTokens: this.#turnIn,
 			outTokens: this.#turnOut,
 			tools: this.#turnTools,
@@ -713,6 +722,7 @@ export class ChatState {
 		};
 		this.#turnStart = null;
 		this.#firstOutput = null;
+		this.#genMs = 0;
 		this.#turnIn = this.#turnOut = this.#turnTools = this.#turnSegments = 0;
 		this.#segStart = null;
 		for (let i = this.messages.length - 1; i >= 0; i--) {
@@ -749,6 +759,7 @@ export class ChatState {
 		const now = Date.now();
 		if (this.#firstOutput === null && this.#turnStart !== null) this.#firstOutput = now;
 		if (this.call?.phase !== 'output') this.call = { phase: 'output', since: now };
+		if (this.#genStart === null && this.#turnStart !== null) this.#genStart = now;
 		this.#setSend(null);
 	}
 
@@ -765,6 +776,10 @@ export class ChatState {
 	/** The open reply segment ends (its tool call, a new request, the turn's
 	 *  end): stamp its own time. Text after it starts a new segment. */
 	#closeSegment(now: number) {
+		if (this.#genStart !== null) {
+			this.#genMs += now - this.#genStart;
+			this.#genStart = null;
+		}
 		const m = this.#assistantIdx >= 0 ? this.messages[this.#assistantIdx] : null;
 		if (m?.kind === 'assistant' && m.segMs === undefined && this.#segStart !== null) {
 			m.segMs = now - this.#segStart;
@@ -813,6 +828,8 @@ export class ChatState {
 		for (const [id, a] of Object.entries(this.subagents)) if (a.endedAt) delete this.subagents[id];
 		this.#segStart = this.#turnStart;
 		this.#firstOutput = null;
+		this.#genStart = null;
+		this.#genMs = 0;
 		this.#turnIn = this.#turnOut = this.#turnTools = this.#turnSegments = 0;
 		this.#turnCostStart = this.cost;
 		this.#turnBillingIds = [];
@@ -973,6 +990,7 @@ export class ChatState {
 		this.modelLabel = p.modelLabel ?? '';
 		this.effort = p.effort ?? '';
 		this.efforts = p.efforts ?? [];
+		this.effortDefault = p.effortDefault ?? '';
 		this.contextWindow = p.contextWindow ?? 0;
 		this.modelCatalog = p.catalog ?? [];
 		this.modelCatalogEffort = p.catalogEffort ?? '';
@@ -1059,6 +1077,7 @@ export class ChatState {
 				this.modelLabel = str(ev.model_label);
 				this.effort = str(ev.reasoning_effort);
 				this.efforts = arr<string>(ev.reasoning_efforts);
+				this.effortDefault = str(ev.default_effort);
 				this.ultracode = ev.ultracode === true;
 				this.ultracodeAvailable = ev.ultracode_available === true;
 				this.fast = ev.fast === true;
@@ -1073,6 +1092,7 @@ export class ChatState {
 					modelLabel: this.modelLabel,
 					effort: this.effort,
 					efforts: this.efforts,
+					effortDefault: this.effortDefault,
 					contextWindow: this.contextWindow
 				});
 				break;

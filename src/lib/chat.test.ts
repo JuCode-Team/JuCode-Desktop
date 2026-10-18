@@ -543,7 +543,8 @@ describe('reply timing', () => {
 			const [a, b] = c.messages.filter((m) => m.kind === 'assistant') as { segMs?: number; turn?: { segments: number; elapsed: number } }[];
 			expect(a.segMs).toBe(2000);
 			expect(b.segMs).toBe(1400);
-			expect(b.turn).toMatchObject({ segments: 2, elapsed: 4000 });
+			// Output streamed 1000–2000 and 3000–4000: the waits and the tool run are not output time.
+			expect(b.turn).toMatchObject({ segments: 2, elapsed: 4000, genMs: 2000 });
 			expect(c.call).toBeNull();
 			expect(c.runMs).toBe(4000);
 		} finally {
