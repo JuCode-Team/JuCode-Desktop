@@ -34,15 +34,16 @@ export function formatArgs(args: string[]): string {
 	return args.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(' ');
 }
 
-/** A registry id from a display name: lowercase slug, deduplicated against
- *  `taken` with a numeric suffix. */
-export function slugifyAgentId(name: string, taken: Set<string> = new Set()): string {
+/** A registry id from a display name: lowercase slug (`fallback` when the
+ *  name has no latin letters or digits), deduplicated against `taken` with a
+ *  numeric suffix. */
+export function slugifyAgentId(name: string, taken: Set<string> = new Set(), fallback = 'agent'): string {
 	const base =
 		name
 			.toLowerCase()
 			.replace(/[^a-z0-9]+/g, '-')
 			.replace(/^-+|-+$/g, '')
-			.slice(0, 48) || 'agent';
+			.slice(0, 48) || fallback;
 	if (!taken.has(base)) return base;
 	for (let n = 2; ; n++) {
 		const candidate = `${base}-${n}`;

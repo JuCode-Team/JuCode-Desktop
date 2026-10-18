@@ -158,14 +158,29 @@ const settings = {
 				chat: 'Chat Completions'
 			}
 		},
-        toolProviders: {
-            title: '自定义 Provider',
-            hint: '仅供此工具使用。请求经过本地网关记录用量，密钥保存在本机。默认选择对新建或重新打开的本地模式会话生效。',
-            system: '工具原有配置',
-            default: '默认 Provider',
-            name: '名称',
-            keepKey: '留空保留现有密钥'
-        },
+		toolProviders: {
+			title: '自定义提供商',
+			hint: '只供 {tool} 使用。请求经本机网关转发并记录用量，密钥只保存在这台电脑上。默认提供商对之后新建或重新打开、在本机运行的会话生效。',
+			defaultLabel: '默认提供商',
+			defaultCurrent: '默认：{name}',
+			system: '{tool} 自己的登录或配置',
+			add: '添加提供商',
+			edit: '编辑',
+			editTitle: '编辑「{name}」',
+			remove: '删除',
+			name: '名称',
+			namePlaceholder: '在设置和会话里显示的名字',
+			model: '模型名',
+			modelPlaceholder: '提供商的模型 ID',
+			keepKey: '留空则保留已保存的密钥',
+			needName: '请填写名称。',
+			badUrl: 'Base URL 须以 http:// 或 https:// 开头，不能带查询参数、# 片段或账号密码。',
+			needModel: '请填写模型名。',
+			needKey: '请填写 API key。',
+			loadFailed: '无法读取自定义提供商：{msg}',
+			deleteTitle: '删除提供商「{name}」？',
+			deleteMessage: '保存的密钥会一并删除。正在运行的会话继续使用它，重新打开后不再使用。'
+		},
 		backend: {
 			groupLabel: '引擎后端',
 			hint: '每个会话可选择由哪个 Agent CLI 驱动。可为各后端指定可执行文件路径（留空则按 PATH 与常见安装目录自动查找）。',
@@ -698,14 +713,29 @@ const settings = {
 				chat: 'Chat Completions'
 			}
 		},
-        toolProviders: {
-            title: 'Custom providers',
-            hint: 'Only for this tool. Requests pass through the local gateway to record usage; keys stay on this computer. The default applies to new or reopened sessions in local mode.',
-            system: 'Tool’s own configuration',
-            default: 'Default provider',
-            name: 'Name',
-            keepKey: 'Leave blank to keep the current key'
-        },
+		toolProviders: {
+			title: 'Custom providers',
+			hint: 'Only for {tool}. Requests go through the local gateway, which records usage; keys stay on this computer. The default applies to sessions on this machine that are created or reopened afterwards.',
+			defaultLabel: 'Default provider',
+			defaultCurrent: 'Default: {name}',
+			system: '{tool}’s own login or config',
+			add: 'Add provider',
+			edit: 'Edit',
+			editTitle: 'Edit "{name}"',
+			remove: 'Delete',
+			name: 'Name',
+			namePlaceholder: 'Shown in Settings and in sessions',
+			model: 'Model',
+			modelPlaceholder: 'The provider’s model ID',
+			keepKey: 'Leave blank to keep the saved key',
+			needName: 'Enter a name.',
+			badUrl: 'The base URL must start with http:// or https:// and have no query, # fragment or credentials.',
+			needModel: 'Enter a model.',
+			needKey: 'Enter an API key.',
+			loadFailed: 'Couldn’t load custom providers: {msg}',
+			deleteTitle: 'Delete provider "{name}"?',
+			deleteMessage: 'Its saved key is deleted too. Running sessions keep using it until they are reopened.'
+		},
 		backend: {
 			groupLabel: 'Engine backends',
 			hint: 'Each session picks which agent CLI drives it. Optionally pin a binary path per backend (leave empty to auto-detect via PATH and common install dirs).',

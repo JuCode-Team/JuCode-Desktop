@@ -22,6 +22,7 @@ describe('slugifyAgentId', () => {
 		expect(slugifyAgentId('Gemini CLI')).toBe('gemini-cli');
 		expect(slugifyAgentId('  JuCode (ACP)!  ')).toBe('jucode-acp');
 		expect(slugifyAgentId('日本語')).toBe('agent');
+		expect(slugifyAgentId('公司接口', new Set(['provider']), 'provider')).toBe('provider-2');
 	});
 
 	it('deduplicates against taken ids with a numeric suffix', () => {

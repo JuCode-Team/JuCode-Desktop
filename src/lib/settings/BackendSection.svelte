@@ -250,8 +250,8 @@
 				</IconButton>
 			</div>
 			{#if dep}<div class="bindent"><DepDetails {dep} /></div>{/if}
+			{#if id === 'claude' || id === 'codex'}<div class="bindent"><ToolProviders tool={id} /></div>{/if}
 			<div class="bindent">
-				{#if id === 'claude' || id === 'codex'}<ToolProviders tool={id} />{/if}
 				<button class="advhead" onclick={() => (advOpen[id] = !advOpen[id])} aria-expanded={!!advOpen[id]}>
 					<span class="chev" class:open={advOpen[id]}><ChevronRightIcon size={12} /></span>
 					{t('settings.backend.advanced')}

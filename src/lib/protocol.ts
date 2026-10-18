@@ -784,17 +784,40 @@ export function sendTelemetry(install: string, days: { day: string; events: Reco
 	return invoke('send_telemetry', { install, days });
 }
 
-/** Each external coding tool owns its providers; keys are never returned. */
+/** A custom provider of Claude Code or Codex (`tool_providers`); the daemon
+ *  keeps the key and only says whether one is saved. */
 export interface ToolApiProvider {
-    id: string;
-    name: string;
-    base_url: string;
-    format: 'anthropic' | 'responses';
-    model: string;
-    has_key: boolean;
+	id: string;
+	name: string;
+	base_url: string;
+	format: 'anthropic' | 'responses';
+	model: string;
+	has_key: boolean;
 }
-export interface ToolProviderConfig { selected: string; providers: ToolApiProvider[] }
-export async function toolProviders(tool: 'claude' | 'codex', action = 'tool_providers', fields: Record<string, unknown> = {}): Promise<ToolProviderConfig> {
-    const reply = await daemon.request({ op: action, tool, ...fields });
-    return reply.config as unknown as ToolProviderConfig;
+/** One tool's providers and its default (`selected`, empty: the tool's own
+ *  configuration). */
+export interface ToolProviderConfig {
+	selected: string;
+	providers: ToolApiProvider[];
+}
+export type ToolProviderOp = 'tool_providers' | 'tool_provider_save' | 'tool_provider_select' | 'tool_provider_remove';
+/** Reads or changes a tool's custom providers. The daemon answers only the
+ *  local desktop; each op returns the updated config. */
+export async function toolProviders(
+	tool: 'claude' | 'codex',
+	op: ToolProviderOp = 'tool_providers',
+	fields: Record<string, unknown> = {}
+): Promise<ToolProviderConfig> {
+	await daemon.connect();
+	const reply = await daemon.request({ op, tool, ...fields });
+	return reply.config as unknown as ToolProviderConfig;
+}
+
+/** `tool_provider` session state (Claude Code / Codex): the custom provider
+ *  the session's engine process runs on; null on the tool's own
+ *  configuration or the JuCode gateway. */
+export interface SessionToolProvider {
+	id: string;
+	name: string;
+	model: string;
 }
