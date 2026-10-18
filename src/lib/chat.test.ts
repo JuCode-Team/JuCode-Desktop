@@ -25,6 +25,26 @@ describe('ChatState.handle', () => {
 		expect(userTexts(c)).toEqual(['first', 'second']);
 	});
 
+	it('shows a message of images alone once, sent here or queued', () => {
+		const c = new ChatState();
+		const images = (c: ChatState) => c.messages.flatMap((m) => (m.kind === 'user' ? [m.images ?? []] : []));
+		c.optimisticUser('', ['/u/a.png']);
+		c.handle({ type: 'user_message', content: '', images: ['/u/a.png'] });
+		expect(images(c)).toEqual([['/u/a.png']]);
+		// Queued while busy, it shows when the engine takes it in.
+		c.handle({ type: 'user_message', content: '', images: ['/u/b.png'] });
+		expect(images(c)).toEqual([['/u/a.png'], ['/u/b.png']]);
+	});
+
+	it('keeps a just-sent image when the snapshot ends with an earlier one', () => {
+		const c = new ChatState();
+		c.optimisticUser('', ['/u/new.png']);
+		c.handle({ type: 'transcript', items: [{ role: 'user', content: '', images: ['/u/old.png'] }, { role: 'assistant', content: 'red' }] });
+		expect(c.messages.flatMap((m) => (m.kind === 'user' ? [m.images] : []))).toEqual([['/u/old.png'], ['/u/new.png']]);
+		c.handle({ type: 'user_message', content: '', images: ['/u/new.png'] });
+		expect(c.messages.filter((m) => m.kind === 'user')).toHaveLength(2);
+	});
+
 	it('names the terminal a conversation moved to, and clears it on return', () => {
 		const c = new ChatState();
 		c.handle({ type: 'surface', session: 's', surface: 'tui', term: 't-1', client: 3 });

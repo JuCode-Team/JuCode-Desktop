@@ -1390,8 +1390,12 @@ export class ChatState {
 					})
 					.filter((m): m is Msg => m !== null);
 				if (pending !== null) {
+					// The same text is not enough when it is empty: an earlier
+					// message of images alone is not this one.
 					const last = this.messages.findLast((m) => m.kind === 'user');
-					if (last?.kind === 'user' && last.text === pending) this.#pendingUserEcho = null;
+					const same = (a?: string[], b?: string[]) => (a ?? []).join('\n') === (b ?? []).join('\n');
+					if (last?.kind === 'user' && last.text === pending && (pending !== '' || same(last.images, sent?.kind === 'user' ? sent.images : undefined)))
+						this.#pendingUserEcho = null;
 					else if (sent) this.messages.push(sent);
 				}
 				if (this.rejoining) {
