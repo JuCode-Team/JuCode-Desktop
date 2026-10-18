@@ -40,6 +40,7 @@
 	import { t } from '$lib/i18n';
 	import SettingsSection from './SettingsSection.svelte';
 	import SettingsRow from './SettingsRow.svelte';
+	import ToolProviders from './ToolProviders.svelte';
 
 	let settings = $state<BackendSettings>(loadBackendSettings());
 	let status = $state<Partial<Record<BackendId, BackendStatus | 'checking'>>>({});
@@ -250,6 +251,7 @@
 			</div>
 			{#if dep}<div class="bindent"><DepDetails {dep} /></div>{/if}
 			<div class="bindent">
+				{#if id === 'claude' || id === 'codex'}<ToolProviders tool={id} />{/if}
 				<button class="advhead" onclick={() => (advOpen[id] = !advOpen[id])} aria-expanded={!!advOpen[id]}>
 					<span class="chev" class:open={advOpen[id]}><ChevronRightIcon size={12} /></span>
 					{t('settings.backend.advanced')}

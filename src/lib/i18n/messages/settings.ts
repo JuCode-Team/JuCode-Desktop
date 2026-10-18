@@ -158,6 +158,14 @@ const settings = {
 				chat: 'Chat Completions'
 			}
 		},
+        toolProviders: {
+            title: '自定义 Provider',
+            hint: '仅供此工具使用。请求经过本地网关记录用量，密钥保存在本机。默认选择对新建或重新打开的本地模式会话生效。',
+            system: '工具原有配置',
+            default: '默认 Provider',
+            name: '名称',
+            keepKey: '留空保留现有密钥'
+        },
 		backend: {
 			groupLabel: '引擎后端',
 			hint: '每个会话可选择由哪个 Agent CLI 驱动。可为各后端指定可执行文件路径（留空则按 PATH 与常见安装目录自动查找）。',
@@ -684,6 +692,14 @@ const settings = {
 				chat: 'Chat Completions'
 			}
 		},
+        toolProviders: {
+            title: 'Custom providers',
+            hint: 'Only for this tool. Requests pass through the local gateway to record usage; keys stay on this computer. The default applies to new or reopened sessions in local mode.',
+            system: 'Tool’s own configuration',
+            default: 'Default provider',
+            name: 'Name',
+            keepKey: 'Leave blank to keep the current key'
+        },
 		backend: {
 			groupLabel: 'Engine backends',
 			hint: 'Each session picks which agent CLI drives it. Optionally pin a binary path per backend (leave empty to auto-detect via PATH and common install dirs).',

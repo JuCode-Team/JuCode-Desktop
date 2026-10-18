@@ -746,3 +746,18 @@ export function submitFeedback(ticket: Record<string, unknown>): Promise<Record<
 export function sendTelemetry(install: string, days: { day: string; events: Record<string, number> }[]): Promise<void> {
 	return invoke('send_telemetry', { install, days });
 }
+
+/** Each external coding tool owns its providers; keys are never returned. */
+export interface ToolApiProvider {
+    id: string;
+    name: string;
+    base_url: string;
+    format: 'anthropic' | 'responses';
+    model: string;
+    has_key: boolean;
+}
+export interface ToolProviderConfig { selected: string; providers: ToolApiProvider[] }
+export async function toolProviders(tool: 'claude' | 'codex', action = 'tool_providers', fields: Record<string, unknown> = {}): Promise<ToolProviderConfig> {
+    const reply = await daemon.request({ op: action, tool, ...fields });
+    return reply.config as unknown as ToolProviderConfig;
+}
