@@ -9,14 +9,23 @@
 	// Mounted from the first open until the closing transition ends.
 	let mounted = $state(untrack(() => open));
 	let shown = $state(untrack(() => open));
+	// Fully open: the content may reach past the edges (a highlight's ring,
+	// a focus outline); while it moves it is clipped to the height.
+	let settled = $state(untrack(() => open));
 	$effect(() => {
 		if (open) {
 			mounted = true;
+			if (untrack(() => shown)) return;
 			// One frame at 0fr first, so the opening transitions.
 			const raf = requestAnimationFrame(() => (shown = true));
-			return () => cancelAnimationFrame(raf);
+			const done = setTimeout(() => (settled = true), 400);
+			return () => {
+				cancelAnimationFrame(raf);
+				clearTimeout(done);
+			};
 		}
 		shown = false;
+		settled = false;
 		// No transitionend under reduced motion or a window resize: unmount anyway.
 		const done = setTimeout(() => (mounted = false), 400);
 		return () => clearTimeout(done);
@@ -28,7 +37,8 @@
 		class="collapse"
 		class:open={shown}
 		inert={!open}
-		ontransitionend={(e) => e.target === e.currentTarget && !open && (mounted = false)}
+		class:settled
+		ontransitionend={(e) => e.target === e.currentTarget && (open ? (settled = true) : (mounted = false))}
 	>
 		<div class="inner">{@render children()}</div>
 	</div>
@@ -50,6 +60,9 @@
 	.inner {
 		min-height: 0;
 		overflow: hidden;
+	}
+	.settled > .inner {
+		overflow: visible;
 	}
 	@media (prefers-reduced-motion: reduce) {
 		.collapse {

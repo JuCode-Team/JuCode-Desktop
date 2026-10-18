@@ -22,7 +22,9 @@ export interface TurnFold {
 }
 
 /** The folds of `messages`' finished turns. `shows`: whether a message has
- *  a row at all; `busy`: the last turn is still running (it never folds). */
+ *  a row at all; `busy`: the last turn is still running. Its work folds only
+ *  as far as a reply that ended it before (a background task that finished
+ *  runs a short turn of its own after it): what runs now stays open. */
 export function turnFolds(messages: Msg[], shows: (m: Msg) => boolean, busy: boolean): TurnFold[] {
 	const turns: { key: Msg; body: Msg[] }[] = [];
 	for (const m of messages) {
@@ -30,8 +32,13 @@ export function turnFolds(messages: Msg[], shows: (m: Msg) => boolean, busy: boo
 		else if (shows(m)) turns.at(-1)?.body.push(m);
 	}
 	const folds: TurnFold[] = [];
-	turns.forEach(({ key, body }, i) => {
-		if (busy && i === turns.length - 1) return;
+	turns.forEach(({ key, body: all }, i) => {
+		let body = all;
+		if (busy && i === turns.length - 1) {
+			const ended = all.findLastIndex((m) => m.kind === 'assistant' && !!m.turn);
+			if (ended < 0) return;
+			body = all.slice(0, ended + 1);
+		}
 		// The final reply: the text after the last other row (a reply split
 		// by nothing but empty rows is one reply).
 		let end = body.length;

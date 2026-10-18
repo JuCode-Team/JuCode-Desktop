@@ -3,7 +3,7 @@
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
 	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
-	import { flushSync, tick, untrack, type Snippet } from 'svelte';
+	import { flushSync, untrack, type Snippet } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import Markdown from '$lib/Markdown.svelte';
 	import Collapse from '$lib/ui/Collapse.svelte';
@@ -17,7 +17,9 @@
 	import { stableBlocks } from '$lib/streamBlocks';
 	import { splitMentions } from '$lib/fileMention';
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
-	import { turnFolds, type TurnFold } from '$lib/turnFold';
+	import type { TurnFold } from '$lib/turnFold';
+	import { timeline, type Block, type Item } from '$lib/timeline';
+	import { motionMs, T_MED } from '$lib/ui/motion';
 	import Indicator from '$lib/Indicator.svelte';
 	import CallTimer from '$lib/CallTimer.svelte';
 	import RetryNotice from '$lib/RetryNotice.svelte';
@@ -35,7 +37,7 @@
 	import ArtifactCards from '$lib/ArtifactCards.svelte';
 	import ScheduleProposal from '$lib/ScheduleProposal.svelte';
 	import ChildSessions from '$lib/ChildSessions.svelte';
-	import { turnSummary, USER_TOOLS, type Proposal, type TurnSummary } from '$lib/turnSummary';
+	import { USER_TOOLS, type Proposal, type TurnSummary } from '$lib/turnSummary';
 
 	let {
 		messages,
@@ -73,6 +75,7 @@
 		onSchedule,
 		scheduleCreated,
 		onOpenSession,
+		follow,
 		mark = $bindable(-1)
 	}: {
 		messages: Msg[];
@@ -89,8 +92,8 @@
 		onAutoRetryNow?: () => void;
 		onAutoRetryCancel?: () => void;
 		findActive?: number | null;
-		// The scroll viewport (owned by +page). When provided and the history is
-		// long, rows outside the viewport are windowed out.
+		// The scroll viewport (owned by the pane). When provided, a long
+		// history renders its older rows as the reader nears them.
 		scroller?: HTMLElement | null;
 		onEdit: (text: string) => void;
 		/** Quote text selected in a reply into the composer. */
@@ -139,70 +142,112 @@
 		scheduleCreated?: (id: string) => boolean;
 		/** Opens a session this one started (absent: rows don't open). */
 		onOpenSession?: (session: string) => void;
+		/** Whether the view follows the end (absent: it does). */
+		follow?: () => boolean;
 	} = $props();
 
-	// ── Rendered rows ────────────────────────────────────────────────────────
-	// The rows from `start` to the end are in the page. A rendered row stays
-	// while the reader is away from the end, so scrolling never swaps rows in
-	// or out under the view: the scroll is the browser's alone, with no
-	// guessed heights to correct. Older rows join above in batches before the
-	// reader reaches them; the browser's scroll anchoring keeps the view
-	// still (where it has none, the position moves by the height they add).
-	// Back at the end, rows far above are let go again, so a long
-	// conversation stays light while a reply streams.
-	const KEEP = 120; // messages rendered at the end
-	const BATCH = 20; // messages added above at a time
+	// ── Rendered blocks ──────────────────────────────────────────────────────
+	// The conversation is laid out as blocks (timeline.ts): a message's row,
+	// a run of tool calls as one card, a finished turn's work under its
+	// line. The blocks from the first rendered one to the end are in the
+	// page, and a block once rendered stays: scrolling never swaps rows in
+	// or out under the view, and a row is never built twice. Older blocks
+	// join above in batches — before the reader gets to them, and while
+	// nothing moves — until enough history is there; the browser's scroll
+	// anchoring keeps the view still (where it has none, the position moves
+	// by the height they add). Hundreds of rendered blocks cost a reply
+	// streaming at the end about 1.5 ms of layout a frame (WebKit, measured).
+	const INITIAL = 50; // blocks rendered when a conversation opens
+	const BATCH = 15; // blocks added above at a time
 	const AHEAD = 3; // viewports of rendered room kept above the view
-	const TRIM_MS = 1500; // at the end this long before rows above are let go
+	const PREFILL = 400; // blocks rendered ahead of the reader while idle
+	const IDLE_MS = 250; // no scrolling this long: idle
+	const ARRIVE_MS = 3000; // a row shown this soon after its message arrived comes in
 	const nativeAnchor = typeof CSS !== 'undefined' && CSS.supports('overflow-anchor', 'auto');
 
-	let start = $state(0);
+	const shows = (m: Msg) => hasContent(m);
+	const tl = $derived(timeline(messages, { shows, ownRow: isAgentCall, foldTurns, busy }));
+	const firstMsg = (b: Block) => b.item?.m ?? b.fold!.items[0]!.m;
+
+	// The first rendered block, by its first message: it keeps its place as
+	// blocks come, go or fold around it. Unknown (another list): near the end.
+	let startMsg = $state.raw<Msg | null>(null);
+	const startAt = $derived.by(() => {
+		const at = startMsg ? tl.blockOf.get(startMsg) : undefined;
+		return at ?? Math.max(0, tl.blocks.length - INITIAL);
+	});
+	$effect.pre(() => {
+		const b = tl.blocks[startAt];
+		untrack(() => {
+			const m = b && firstMsg(b);
+			if (m && m !== startMsg) startMsg = m;
+		});
+	});
+
 	let listEl: HTMLElement;
-	let rowEls: (HTMLElement | null)[] = [];
 	// Messages arriving one or two at a time after the list is shown come
-	// in with an entrance; a conversation loading, a replay or older rows
-	// joining above do not.
-	const arriving = new WeakSet<Msg>();
+	// in with an entrance, once; a conversation loading, a replay or older
+	// rows joining above do not.
+	const arrived = new Map<Msg, number>();
 	let shownList: Msg[] | null = null;
 	let shownCount = -1;
 	$effect.pre(() => {
 		const list = messages;
 		const n = list.length;
-		// Driven by the list and its length only.
 		untrack(() => {
-			if (list !== shownList) {
-				// Another list (a replay, a closed notice): keep the first rendered
-				// row if it is still there, else start near the end.
-				const kept = shownList?.[start];
-				const at = kept ? list.indexOf(kept) : -1;
-				start = at >= 0 ? at : Math.max(0, n - KEEP);
-				shownList = list;
-			} else if (shownCount >= 0 && n > shownCount && n - shownCount <= 2) {
-				for (let i = shownCount; i < n; i++) arriving.add(list[i]!);
+			if (list === shownList && shownCount >= 0 && n > shownCount && n - shownCount <= 2) {
+				const now = performance.now();
+				for (const [m, at] of arrived) if (now - at > ARRIVE_MS) arrived.delete(m);
+				for (let i = shownCount; i < n; i++) arrived.set(list[i]!, now);
 			}
-			if (start > n) start = Math.max(0, n - KEEP);
+			shownList = list;
 			shownCount = n;
 		});
 	});
+	/** A row's entrance, played when it is first built soon after its message came. */
+	function enter(node: HTMLElement, m: Msg) {
+		const at = arrived.get(m);
+		arrived.delete(m);
+		const ms = motionMs(T_MED);
+		if (at === undefined || performance.now() - at > ARRIVE_MS || !ms) return;
+		node.animate([{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: ms, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' });
+	}
 
-	/** Render older rows down to `to`, keeping the view where it is. */
+	// Each shown message's row element (find, the rail's marks).
+	const elOf = new Map<Msg, HTMLElement>();
+	function track(node: HTMLElement, it: Item) {
+		let msgs: Msg[] = [];
+		const set = (it: Item) => {
+			for (const m of msgs) if (elOf.get(m) === node) elOf.delete(m);
+			msgs = it.run ?? [it.m];
+			for (const m of msgs) elOf.set(m, node);
+		};
+		set(it);
+		return {
+			update: set,
+			destroy: () => {
+				for (const m of msgs) if (elOf.get(m) === node) elOf.delete(m);
+			}
+		};
+	}
+
+	/** Render older blocks down to `to`, keeping the view where it is. */
 	function extend(to: number) {
 		to = Math.max(0, to);
-		if (to >= start) return;
+		if (to >= startAt) return;
 		const el = scroller;
 		const height = el?.scrollHeight ?? 0;
 		const top = el?.scrollTop ?? 0;
-		start = to;
+		startMsg = firstMsg(tl.blocks[to]!);
 		flushSync();
 		if (el && !nativeAnchor) el.scrollTop = top + el.scrollHeight - height;
 	}
 
-	// One pass per frame while scrolling: add rows above before the reader
-	// gets there, follow the user message in view for the rail, and let
-	// rows far above go once the reader has stayed at the end.
+	// One pass per frame while scrolling: add blocks above before the reader
+	// gets there and follow the user message in view for the rail.
 	let atEnd = $state(true);
 	let frame = 0;
-	let trimTimer: ReturnType<typeof setTimeout> | undefined;
+	let lastScroll = 0;
 	function onScrollFrame() {
 		frame = 0;
 		const el = scroller;
@@ -210,19 +255,9 @@
 		const viewH = el.clientHeight;
 		// How far the rendered rows reach above the view.
 		const above = el.getBoundingClientRect().top - listEl.getBoundingClientRect().top;
-		if (start > 0 && above < AHEAD * viewH) extend(start - BATCH);
+		if (startAt > 0 && above < AHEAD * viewH) extend(startAt - BATCH);
 		atEnd = el.scrollHeight - el.scrollTop - viewH < 8;
 		updateMark();
-		// Following a reply scrolls every frame: count from reaching the end,
-		// not from the last scroll.
-		if (!atEnd) {
-			clearTimeout(trimTimer);
-			trimTimer = undefined;
-		} else if (!trimTimer && start < messages.length - KEEP - BATCH) trimTimer = setTimeout(trim, TRIM_MS);
-	}
-	function trim() {
-		trimTimer = undefined;
-		if (atEnd) start = Math.max(start, messages.length - KEEP);
 	}
 	$effect(() => {
 		const el = scroller;
@@ -231,34 +266,55 @@
 			if (cite) cite = null;
 			if (!frame) frame = requestAnimationFrame(onScrollFrame);
 		};
-		el.addEventListener('scroll', onScroll, { passive: true });
+		const onUserScroll = () => {
+			lastScroll = performance.now();
+			onScroll();
+		};
+		el.addEventListener('scroll', onUserScroll, { passive: true });
 		// The view's height or the content changing (a reply growing, a row
 		// folding) can leave too little rendered above, or move the rail's mark.
 		const ro = new ResizeObserver(onScroll);
 		ro.observe(el);
 		ro.observe(listEl);
 		onScroll();
+		// While idle, history joins above a batch at a time until there is
+		// enough of it: scrolling up later finds it built. Not while a reply
+		// streams, or while the reader scrolls (a batch is a frame's work).
+		let idle = setTimeout(function step() {
+			idle = setTimeout(step, IDLE_MS / 2);
+			if (active || performance.now() - lastScroll < IDLE_MS) return;
+			if (startAt > 0 && tl.blocks.length - startAt < PREFILL) extend(startAt - BATCH);
+		}, IDLE_MS);
 		return () => {
-			el.removeEventListener('scroll', onScroll);
+			el.removeEventListener('scroll', onUserScroll);
 			ro.disconnect();
 			cancelAnimationFrame(frame);
 			frame = 0;
-			clearTimeout(trimTimer);
+			clearTimeout(idle);
 		};
 	});
 
 	// Scroll the current find hit into view (rendering down to it first).
 	// A hit inside a folded turn opens it.
+	const hitMsg = $derived(findActive == null ? null : (messages[findActive] ?? null));
+	const isHit = (it: Item) => !!hitMsg && (it.m === hitMsg || !!it.run?.includes(hitMsg));
 	$effect(() => {
-		if (findActive == null) return;
-		const i = findActive;
-		const fold = folds.of.get(messages[i]!);
+		const m = hitMsg;
+		if (!m) return;
+		let opening = false;
 		untrack(() => {
-			if (fold) openFolds.add(fold.key);
+			const fold = tl.foldOf.get(m);
+			if (fold && !openFolds.has(fold.key)) {
+				openFolds.add(fold.key);
+				opening = true;
+			}
+			const at = tl.blockOf.get(m);
 			// A jump: no view to keep, and no flushSync inside an effect.
-			if (i < start) start = Math.max(0, i - 2);
+			if (at !== undefined && at < startAt) startMsg = firstMsg(tl.blocks[Math.max(0, at - 1)]!);
 		});
-		tick().then(() => rowEls[i]?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+		// An opening fold builds its rows first; then they move into place.
+		const timer = setTimeout(() => elOf.get(m)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), opening ? T_MED + 40 : 0);
+		return () => clearTimeout(timer);
 	});
 
 	// Index in `messages` of each message the user wrote, in order: the rail's marks.
@@ -269,7 +325,7 @@
 		if (!rows.length) return void (mark = -1);
 		if (atEnd || !scroller) return void (mark = rows.length - 1);
 		const line = scroller.getBoundingClientRect().top + scroller.clientHeight / 3;
-		const topOf = (k: number) => (rows[k]! < start ? -Infinity : (rowEls[rows[k]!]?.getBoundingClientRect().top ?? -Infinity));
+		const topOf = (k: number) => elOf.get(messages[rows[k]!]!)?.getBoundingClientRect().top ?? -Infinity;
 		// The last mark whose row starts above the line (rows are in order).
 		let lo = 0;
 		let hi = rows.length - 1;
@@ -287,10 +343,11 @@
 
 	/** Scroll mark `n`'s message to the top of the viewport. */
 	export function jumpToMark(n: number) {
-		const i = markRows[n];
-		if (i === undefined || !scroller) return;
-		extend(Math.min(start, i - 2));
-		const row = rowEls[i];
+		const m = messages[markRows[n] ?? -1];
+		if (!m || !scroller) return;
+		const at = tl.blockOf.get(m);
+		if (at !== undefined) extend(Math.min(startAt, at - 1));
+		const row = elOf.get(m);
 		if (!row) return;
 		const top = scroller.scrollTop + row.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 16;
 		scroller.scrollTo({ top, behavior: 'smooth' });
@@ -449,34 +506,6 @@
 		return /\S/.test(m.text);
 	}
 
-	// A run of consecutive tool calls (rows that show nothing don't break it),
-	// with the reasoning that led to each of them, renders as one card on its
-	// first row; the run's other rows render no row of their own. Reasoning
-	// that no call follows (yet) stays a block of its own.
-	const toolGroups = $derived.by(() => {
-		const members = new Map<Msg, Msg[]>(); // first row → the run
-		const headOf = new Map<Msg, Msg>();
-		let run: Msg[] = [];
-		let thoughts: Msg[] = [];
-		const flush = () => {
-			if (run.length) {
-				members.set(run[0]!, run);
-				for (const x of run) headOf.set(x, run[0]!);
-			}
-			run = [];
-			thoughts = [];
-		};
-		for (const m of messages) {
-			if (!hasContent(m)) continue;
-			if (m.kind === 'tool' && !isAgentCall(m)) {
-				run.push(...thoughts, m);
-				thoughts = [];
-			} else if (m.kind === 'reasoning') thoughts.push(m);
-			else flush();
-		}
-		flush();
-		return { members, headOf };
-	});
 	const openGroups = new SvelteSet<Msg>();
 	// The last message with something to show (a plan's actions show there only).
 	const lastShown = $derived(messages.findLast((m) => hasContent(m)));
@@ -487,41 +516,32 @@
 		if (m.name === 'Workflow') return !!agentOfCall(agents, m.callId);
 		return SPAWN_TOOLS.has(m.name) || WAIT_TOOLS.has(m.name);
 	}
-	// Finished turns' work, folded into a line on its first row; a turn's
-	// open state is kept by its user message.
-	const folds = $derived.by(() => {
-		const head = new Map<Msg, TurnFold>();
-		const of = new Map<Msg, TurnFold>();
-		if (foldTurns)
-			for (const f of turnFolds(messages, hasContent, busy)) {
-				head.set(f.members[0]!, f);
-				for (const m of f.members) of.set(m, f);
-			}
-		return { head, of };
-	});
+	// Finished turns' work, folded into a line; a turn's open state is kept
+	// by its user message.
 	const openFolds = new SvelteSet<Msg>();
-	function folded(m: Msg): boolean {
-		const f = folds.of.get(m);
-		return !!f && !openFolds.has(f.key);
-	}
-	function shown(m: Msg): boolean {
-		return hasContent(m) && (!toolGroups.headOf.has(m) || toolGroups.members.has(m)) && (!folded(m) || folds.head.has(m));
-	}
-	// Each finished turn's edited files, deliverables and proposals, under
-	// its last row in view (its final reply, as a rule).
-	const summaries = $derived.by(() => {
-		const out = new Map<Msg, TurnSummary>();
-		const turns: Msg[][] = [];
-		for (const m of messages) {
-			if (m.kind === 'user' && !parseDelivery(m.text)) turns.push([m]);
-			else turns.at(-1)?.push(m);
-		}
-		turns.forEach((turn, i) => {
-			if (busy && i === turns.length - 1) return;
-			const summary = turnSummary(turn);
-			if (summary) out.set(turn.findLast((m) => shown(m)) ?? turn[0]!, summary);
+	// A turn ending folds its work, closing from open in view, where the
+	// reader follows the end. Where they read elsewhere it stays open under
+	// its line, so what they read stays. (A turn ends when its fold appears:
+	// subagents it handed work to may still be running.)
+	let closing = $state.raw<Msg | null>(null);
+	let foldedBefore: { list: Msg[]; last: Msg | undefined; folded: boolean } | null = null;
+	$effect.pre(() => {
+		const { folded } = tl;
+		untrack(() => {
+			const last = messages.findLast((m) => m.kind === 'user' && !parseDelivery(m.text));
+			const now = !!last && folded.has(last);
+			const was = foldedBefore;
+			foldedBefore = { list: messages, last, folded: now };
+			if (!now || !was || was.list !== messages || was.last !== last || was.folded || openFolds.has(last!)) return;
+			if (follow && !follow()) openFolds.add(last!);
+			else closing = last!;
 		});
-		return out;
+	});
+	// Shown open for the frame it is built in, then it closes.
+	$effect(() => {
+		if (!closing) return;
+		let raf = requestAnimationFrame(() => (raf = requestAnimationFrame(() => (closing = null))));
+		return () => cancelAnimationFrame(raf);
 	});
 
 	function foldLine(f: TurnFold): string {
@@ -534,112 +554,123 @@
 
 <svelte:document onselectionchange={() => cite && window.getSelection()?.isCollapsed && (cite = null)} />
 
-<div class="list" bind:this={listEl} onmouseup={() => setTimeout(offerCite)} role="presentation">
-	{#each messages.slice(start) as m, k (m)}
-		{@const i = start + k}
-		{#if shown(m)}
-			{@const run = toolGroups.members.get(m)}
-			{@const fold = folds.head.get(m)}
-			{@const summary = summaries.get(m)}
-			<div class="mwrap" class:animate={arriving.has(m)} class:hit={i === findActive} bind:this={rowEls[i]}>
-				{#if fold}
-					{@const open = openFolds.has(fold.key)}
-					<button class="fold" class:open onclick={() => (open ? openFolds.delete(fold.key) : openFolds.add(fold.key))} aria-expanded={open}>
-						<span class="rchev"><ChevronRightIcon size={14} /></span>
-						<span>{foldLine(fold)}</span>
-						<span class="fold-rule"></span>
-					</button>
+{#snippet row(it: Item)}
+	{@const m = it.m}
+	{#if it.run}
+		<ToolGroup run={it.run} open={openGroups.has(m)} onToggle={() => (openGroups.has(m) ? openGroups.delete(m) : openGroups.add(m))} {onFile} {traceOf} />
+	{:else if m.kind === 'user'}
+		{@const delivery = parseDelivery(m.text)}
+		{@const drop = userOrdinal.size - (userOrdinal.get(m) ?? 0)}
+		{#if delivery}
+			<DeliveryNotice {delivery} />
+		{:else}
+		<div class="row user">
+			<button class="uedit rewind" onclick={() => onRewind(m.text, userOrdinal.get(m) ?? 0)} aria-label="rewind" title={t('chat.rewindTitleN', { n: drop })}>
+				<RotateCcwIcon size={12} />{#if drop > 1}<span class="rwn">{drop}</span>{/if}
+			</button>
+			<button class="uedit" onclick={() => onEdit(m.text)} aria-label="quote" title={t('chat.quoteTitle')}><PencilIcon size={12} /></button>
+			<div class="ucol">
+				<!-- One line: the bubble is pre-wrap, so template whitespace would show. -->
+				<div class="bubble" class:pending={m.state === 'sending'}>{#if m.images?.length}<div class="uimgs">{#each m.images as p (p)}<UserImage path={p} load={loadImage} group={m.images} />{/each}</div>{/if}{#each userBlocks(m.text) as block, b (b)}{#if block.quote}<span class="uquote">{block.text}</span>{:else}<span class="utext">{#each userSegments(block.text) as seg, j (j)}{#if seg.image}<span class="utoken">{t('chat.imageToken', { n: seg.image })}</span>{:else if seg.file}<button class="utoken ufile" title={seg.file} data-file={seg.file} onclick={() => onFile?.(seg.file!)}><FileTextIcon size={12} />{fileName(seg.file)}</button>{:else}{seg.text}{/if}{/each}</span>{/if}{/each}</div>
+				{#if m.state}
+					{#key m.state}
+						<div class="sendstate {m.state}" in:fade={{ duration: 160 }}>
+							{#if m.state === 'failed'}<CircleAlertIcon size={14} />{:else}<span class="sdot"></span>{/if}
+							<span>{t(`chat.send.${m.state}`)}</span>
+							{#if call && (m.state === 'connecting' || m.state === 'waiting')}<CallTimer since={call.since} />{/if}
+						</div>
+					{/key}
 				{/if}
-				{#if fold && folded(m)}
-					<!-- Folded: the line is the whole row. -->
-				{:else if run}
-					<ToolGroup {run} open={openGroups.has(m)} onToggle={() => (openGroups.has(m) ? openGroups.delete(m) : openGroups.add(m))} {onFile} {traceOf} />
-				{:else if m.kind === 'user'}
-			{@const delivery = parseDelivery(m.text)}
-			{@const drop = userOrdinal.size - (userOrdinal.get(m) ?? 0)}
-			{#if delivery}
-				<DeliveryNotice {delivery} />
+			</div>
+		</div>
+		{/if}
+	{:else if m.kind === 'assistant'}
+		<div class="answer">
+			{#if m === streamingMsg}
+				{@const rt = revealed(m)}
+				{@const si = splitIdx(rt)}
+				{#each stableBlocks(rt.slice(0, si)) as block (block.key)}<Markdown text={block.text} />{/each}
+				<div class="stream">{rt.slice(si)}</div>
 			{:else}
-			<div class="row user">
-				<button class="uedit rewind" onclick={() => onRewind(m.text, userOrdinal.get(m) ?? 0)} aria-label="rewind" title={t('chat.rewindTitleN', { n: drop })}>
-					<RotateCcwIcon size={12} />{#if drop > 1}<span class="rwn">{drop}</span>{/if}
-				</button>
-				<button class="uedit" onclick={() => onEdit(m.text)} aria-label="quote" title={t('chat.quoteTitle')}><PencilIcon size={12} /></button>
-				<div class="ucol">
-					<!-- One line: the bubble is pre-wrap, so template whitespace would show. -->
-					<div class="bubble" class:pending={m.state === 'sending'}>{#if m.images?.length}<div class="uimgs">{#each m.images as p (p)}<UserImage path={p} load={loadImage} group={m.images} />{/each}</div>{/if}{#each userBlocks(m.text) as block, b (b)}{#if block.quote}<span class="uquote">{block.text}</span>{:else}<span class="utext">{#each userSegments(block.text) as seg, j (j)}{#if seg.image}<span class="utoken">{t('chat.imageToken', { n: seg.image })}</span>{:else if seg.file}<button class="utoken ufile" title={seg.file} data-file={seg.file} onclick={() => onFile?.(seg.file!)}><FileTextIcon size={12} />{fileName(seg.file)}</button>{:else}{seg.text}{/if}{/each}</span>{/if}{/each}</div>
-					{#if m.state}
-						{#key m.state}
-							<div class="sendstate {m.state}" in:fade={{ duration: 160 }}>
-								{#if m.state === 'failed'}<CircleAlertIcon size={14} />{:else}<span class="sdot"></span>{/if}
-								<span>{t(`chat.send.${m.state}`)}</span>
-								{#if call && (m.state === 'connecting' || m.state === 'waiting')}<CallTimer since={call.since} />{/if}
-							</div>
-						{/key}
+				<Markdown text={m.text} {onFile} />
+				<!-- Only the turn's last reply carries the request's totals. -->
+				{#if m.turn}
+					<div class="foot">
+						{#each turnParts(m.turn, prefs.turnStats) as part, j (j)}
+							<span class="stat" class:mono={part.mono} title={part.title}>{part.text}</span>
+						{/each}
+					</div>
+				{:else if m.elapsed}
+					<div class="foot">
+						<span class="mono">{fmtDur(m.elapsed)}</span>
+						{#if m.tokens}<span class="mono">{t('chat.tokens', { n: m.tokens })}</span>{/if}
+					</div>
+				{/if}
+	{/if}
+		</div>
+	{:else if m.kind === 'reasoning'}
+		<div class="reason" class:open={!m.collapsed}>
+			<button class="reason-head" onclick={() => (m.collapsed = !m.collapsed)}>
+				<span>{t('chat.reasoning')}</span>
+				<span class="rchev"><ChevronRightIcon size={14} /></span>
+			</button>
+			<Collapse open={!m.collapsed}>
+				<div class="reason-body">
+					{#if m === streamingReasoning}
+						<!-- Reasoning summaries are markdown (OpenAI's open with a
+						     **bold** title): completed blocks parse once, the short
+						     tail block re-parses as it grows. -->
+						<!-- While it streams: plain text (no per-frame Markdown);
+						     it renders as Markdown once finished. -->
+						<div class="stream">{revealed(m)}</div>
+					{:else}
+						<Markdown text={m.text} {onFile} />
 					{/if}
 				</div>
-			</div>
-			{/if}
-		{:else if m.kind === 'assistant'}
-			<div class="answer">
-				{#if m === streamingMsg}
-					{@const rt = revealed(m)}
-					{@const si = splitIdx(rt)}
-					{#each stableBlocks(rt.slice(0, si)) as block (block.key)}<Markdown text={block.text} />{/each}
-					<div class="stream">{rt.slice(si)}</div>
-				{:else}
-					<Markdown text={m.text} {onFile} />
-					<!-- Only the turn's last reply carries the request's totals. -->
-					{#if m.turn}
-						<div class="foot">
-							{#each turnParts(m.turn, prefs.turnStats) as part, j (j)}
-								<span class="stat" class:mono={part.mono} title={part.title}>{part.text}</span>
-							{/each}
-						</div>
-					{:else if m.elapsed}
-						<div class="foot">
-							<span class="mono">{fmtDur(m.elapsed)}</span>
-							{#if m.tokens}<span class="mono">{t('chat.tokens', { n: m.tokens })}</span>{/if}
-						</div>
-					{/if}
-				{/if}
-			</div>
-		{:else if m.kind === 'reasoning'}
-			<div class="reason" class:open={!m.collapsed}>
-				<button class="reason-head" onclick={() => (m.collapsed = !m.collapsed)}>
-					<span>{t('chat.reasoning')}</span>
+			</Collapse>
+		</div>
+	{:else if m.kind === 'tool' && agents}
+		<SubagentCard name={m.name} callId={m.callId} output={m.output} args={m.args} running={m.running} isError={m.isError} rows={agents} onOpen={onOpenAgent} />
+	{:else if m.kind === 'plan'}
+		<PlanCard id={m.id} title={m.title} text={m.text} status={m.status} actionable={m === lastShown} defaultMode={planMode} onAction={onPlan} onOpen={onOpenPlan} />
+	{:else if m.kind === 'error'}
+		<ErrorNotice text={m.text} {backend} onAction={onErrorAction} onDismiss={onDismiss ? () => onDismiss(m) : undefined} />
+	{/if}
+{/snippet}
+
+{#snippet summaryOf(summary: TurnSummary)}
+	{#if summary.children.length}<ChildSessions sessions={summary.children} onOpen={onOpenSession} />{/if}
+	{#if summary.edited.length}<EditedFiles files={summary.edited} {root} {onFile} />{/if}
+	{#if summary.artifacts.length}<ArtifactCards files={summary.artifacts} onOpen={onFile} {onReveal} />{/if}
+	{#each summary.proposals as p (p.id)}
+		<ScheduleProposal proposal={p} created={scheduleCreated?.(p.id) ?? false} onCreate={onSchedule} />
+	{/each}
+{/snippet}
+
+<div class="list" bind:this={listEl} onmouseup={() => setTimeout(offerCite)} role="presentation">
+	{#each tl.blocks.slice(startAt) as b (b.key)}
+		{#if b.fold}
+			{@const fold = b.fold.turn}
+			{@const open = openFolds.has(fold.key) || closing === fold.key}
+			<div class="mwrap">
+				<button class="fold" class:open onclick={() => (open ? openFolds.delete(fold.key) : openFolds.add(fold.key))} aria-expanded={open}>
 					<span class="rchev"><ChevronRightIcon size={14} /></span>
+					<span>{foldLine(fold)}</span>
+					<span class="fold-rule"></span>
 				</button>
-				<Collapse open={!m.collapsed}>
-					<div class="reason-body">
-						{#if m === streamingReasoning}
-							<!-- Reasoning summaries are markdown (OpenAI's open with a
-							     **bold** title): completed blocks parse once, the short
-							     tail block re-parses as it grows. -->
-							<!-- While it streams: plain text (no per-frame Markdown);
-							     it renders as Markdown once finished. -->
-							<div class="stream">{revealed(m)}</div>
-						{:else}
-							<Markdown text={m.text} {onFile} />
-						{/if}
+				<Collapse {open}>
+					<div class="fold-rows">
+						{#each b.fold.items as it (it.key)}
+							<div class="mwrap" class:hit={isHit(it)} use:track={it}>{@render row(it)}</div>
+						{/each}
 					</div>
 				</Collapse>
+				{#if b.summary}{@render summaryOf(b.summary)}{/if}
 			</div>
-		{:else if m.kind === 'tool' && agents}
-			<SubagentCard name={m.name} callId={m.callId} output={m.output} args={m.args} running={m.running} isError={m.isError} rows={agents} onOpen={onOpenAgent} />
-		{:else if m.kind === 'plan'}
-			<PlanCard id={m.id} title={m.title} text={m.text} status={m.status} actionable={m === lastShown} defaultMode={planMode} onAction={onPlan} onOpen={onOpenPlan} />
-		{:else if m.kind === 'error'}
-			<ErrorNotice text={m.text} {backend} onAction={onErrorAction} onDismiss={onDismiss ? () => onDismiss(m) : undefined} />
-				{/if}
-				{#if summary}
-					{#if summary.children.length}<ChildSessions sessions={summary.children} onOpen={onOpenSession} />{/if}
-					{#if summary.edited.length}<EditedFiles files={summary.edited} {root} {onFile} />{/if}
-					{#if summary.artifacts.length}<ArtifactCards files={summary.artifacts} onOpen={onFile} {onReveal} />{/if}
-					{#each summary.proposals as p (p.id)}
-						<ScheduleProposal proposal={p} created={scheduleCreated?.(p.id) ?? false} onCreate={onSchedule} />
-					{/each}
-				{/if}
+		{:else if b.item}
+			<div class="mwrap" class:hit={isHit(b.item)} use:track={b.item} use:enter={b.item.m}>
+				{@render row(b.item)}
+				{#if b.summary}{@render summaryOf(b.summary)}{/if}
 			</div>
 		{/if}
 	{/each}
@@ -721,11 +752,6 @@
 	.mwrap {
 		border-radius: var(--r);
 		transition: background var(--t-slow) var(--ease-out), box-shadow var(--t-slow) var(--ease-out);
-	}
-	/* A message arriving while the conversation is shown comes in once;
-	   rows loading or joining above do not. */
-	.mwrap.animate {
-		animation: rise var(--t-med) var(--ease-out) both;
 	}
 	.mwrap.hit {
 		background: var(--accent-soft);
@@ -993,8 +1019,14 @@
 		background: var(--hairline);
 	}
 	/* Open, the line heads the work it folds. */
-	.fold.open {
-		margin-bottom: 12px;
+	.fold-rows {
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+		padding-top: 12px;
+	}
+	.fold-rows > :global(*) {
+		flex-shrink: 0;
 	}
 	.reason-body {
 		margin-top: 4px;

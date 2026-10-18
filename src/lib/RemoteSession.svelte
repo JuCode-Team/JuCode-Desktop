@@ -65,6 +65,7 @@
 	import { prefs } from '$lib/prefs.svelte';
 	import { fileMention } from '$lib/fileMention';
 	import { followAfterScroll, fromEnd, followTop, shortOfEnd } from '$lib/chatFollow';
+	import { clickAnchor, type ClickAnchor } from '$lib/chatAnchor';
 
 	let {
 		session,
@@ -202,8 +203,9 @@
 	let lastHeight = 0;
 	function onScroll() {
 		if (!scroller) return;
-		// The scroll event of our own pin says nothing about the reader.
-		if (scroller.scrollTop !== pinnedTop) atBottom = followAfterScroll(atBottom, scroller, lastTop, lastHeight);
+		// The scroll event of our own pin says nothing about the reader, nor
+		// does the view held still where a click left it.
+		if (scroller.scrollTop !== pinnedTop && (atBottom || !anchor?.holding())) atBottom = followAfterScroll(atBottom, scroller, lastTop, lastHeight);
 		lastTop = scroller.scrollTop;
 		lastHeight = scroller.scrollHeight;
 		farFromEnd = fromEnd(scroller) > 60;
@@ -220,11 +222,15 @@
 		if (y > touchY) atBottom = false;
 		touchY = y;
 	}
+	// What a click opens or closes stays under the pointer (chatAnchor).
+	let anchor: ClickAnchor | null = null;
 	$effect(() => {
 		if (!contentEl || !scroller) return;
+		const held = (anchor = clickAnchor(scroller, contentEl));
 		const ro = new ResizeObserver(() => {
 			if (!scroller || !contentEl) return;
 			if (atBottom) {
+				held.release();
 				const top = followTop(scroller, contentEl, chat.busy);
 				scroller.scrollTop = top;
 				pinnedTop = scroller.scrollTop;
@@ -233,9 +239,14 @@
 			farFromEnd = fromEnd(scroller) > 60;
 		});
 		ro.observe(contentEl);
-		return () => ro.disconnect();
+		return () => {
+			ro.disconnect();
+			held.destroy();
+			anchor = null;
+		};
 	});
 	function jumpToBottom() {
+		anchor?.release();
 		atBottom = true;
 		scroller?.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' });
 	}
@@ -760,6 +771,7 @@
 			<div class="thread" bind:this={contentEl} onclickcapture={() => (atBottom = false)} role="presentation">
 				<MessageList
 					messages={chat.messages}
+					follow={() => atBottom}
 					busy={turnOpen}
 					foldTurns={prefs.foldTurns}
 					{streamingMsg}

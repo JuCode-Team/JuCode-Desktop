@@ -61,6 +61,7 @@
 	import { prefs } from '$lib/prefs.svelte';
 	import { fileMention } from '$lib/fileMention';
 	import { followAfterScroll, fromEnd, followTop, shortOfEnd } from '$lib/chatFollow';
+	import { clickAnchor, type ClickAnchor } from '$lib/chatAnchor';
 	import { t } from '$lib/i18n';
 	import type { SessionStore } from '$lib/session.svelte';
 	import type { Session } from '$lib/types';
@@ -949,8 +950,9 @@
 	let lastHeight = 0;
 	function onScroll() {
 		if (!scroller) return;
-		// The scroll event of our own pin says nothing about the reader.
-		if (scroller.scrollTop !== pinnedTop) atBottom = followAfterScroll(atBottom, scroller, lastTop, lastHeight);
+		// The scroll event of our own pin says nothing about the reader, nor
+		// does the view held still where a click left it.
+		if (scroller.scrollTop !== pinnedTop && (atBottom || !anchor?.holding())) atBottom = followAfterScroll(atBottom, scroller, lastTop, lastHeight);
 		lastTop = scroller.scrollTop;
 		lastHeight = scroller.scrollHeight;
 		farFromEnd = fromEnd(scroller) > 60;
@@ -972,11 +974,15 @@
 	// While a reply streams: reveal it only until the latest message reaches
 	// the top, then hold still, so the text being read never moves.
 	let contentEl = $state<HTMLElement | null>(null);
+	// What a click opens or closes stays under the pointer (chatAnchor).
+	let anchor: ClickAnchor | null = null;
 	$effect(() => {
 		if (!contentEl || !scroller) return;
+		const held = (anchor = clickAnchor(scroller, contentEl));
 		const ro = new ResizeObserver(() => {
 			if (!scroller || !contentEl) return;
 			if (atBottom) {
+				held.release();
 				const top = followTop(scroller, contentEl, chat.busy);
 				scroller.scrollTop = top;
 				pinnedTop = scroller.scrollTop;
@@ -985,7 +991,11 @@
 			farFromEnd = fromEnd(scroller) > 60;
 		});
 		ro.observe(contentEl);
-		return () => ro.disconnect();
+		return () => {
+			ro.disconnect();
+			held.destroy();
+			anchor = null;
+		};
 	});
 	async function scrollToEnd(force = false) {
 		await tick();
@@ -996,6 +1006,7 @@
 		}
 	}
 	function jumpToBottom() {
+		anchor?.release();
 		atBottom = true;
 		scrollToEnd(true);
 	}
@@ -1309,7 +1320,7 @@
 		<main bind:this={scroller} onscroll={onScroll} onwheel={onWheel}>
 			<!-- Pressing inside the conversation (opening a card, selecting text) stops following the end: what was pressed stays under the pointer instead of being pushed up as the reply grows. -->
 			<div bind:this={contentEl} onpointerdowncapture={() => (atBottom = false)} oncontextmenu={onFileMenu} role="presentation">
-				<MessageList bind:this={messageList} bind:mark messages={chat.messages} busy={turnOpen} foldTurns={prefs.foldTurns} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onNote={noteRequirement} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} traceOf={traceOf} agents={allAgents} onOpenAgent={openAgent} tail={tasksEntryButton} onPlan={planAction} {planMode} onOpenPlan={(id) => planPages.open(session.id, id)} root={project?.path || chat.cwd || ''} onReveal={revealFile} onSchedule={scheduleFrom} scheduleCreated={(id) => daemonState.schedules.some((s) => s.origin === id)} onOpenSession={openChild} />
+				<MessageList bind:this={messageList} bind:mark messages={chat.messages} follow={() => atBottom} busy={turnOpen} foldTurns={prefs.foldTurns} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onNote={noteRequirement} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} traceOf={traceOf} agents={allAgents} onOpenAgent={openAgent} tail={tasksEntryButton} onPlan={planAction} {planMode} onOpenPlan={(id) => planPages.open(session.id, id)} root={project?.path || chat.cwd || ''} onReveal={revealFile} onSchedule={scheduleFrom} scheduleCreated={(id) => daemonState.schedules.some((s) => s.origin === id)} onOpenSession={openChild} />
 			</div>
 			{#if proposing}
 				<ScheduleDialog preset={proposing} projects={store.projects} onClose={() => (proposing = null)} />

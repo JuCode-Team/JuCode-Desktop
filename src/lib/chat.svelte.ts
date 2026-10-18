@@ -1716,7 +1716,18 @@ export class ChatState {
 						return null;
 					})
 					.filter((m): m is Msg => m !== null);
-				this.subagentTranscripts[str(ev.agent_id)] = { task, messages, error: str(ev.error) };
+				// Read again every few seconds while the subagent works: the
+				// messages already shown stay the same objects, so their rows
+				// stay (and a reasoning block the reader opened stays open).
+				const shown = this.subagentTranscripts[str(ev.agent_id)]?.messages ?? [];
+				const kept = messages.map((m, i) => {
+					const old = shown[i];
+					if (!old || old.kind !== m.kind || (m.kind === 'tool' && old.kind === 'tool' && (old.callId !== m.callId || old.name !== m.name))) return m;
+					if (m.kind === 'reasoning' && old.kind === 'reasoning') m.collapsed = old.collapsed;
+					Object.assign(old, m);
+					return old;
+				});
+				this.subagentTranscripts[str(ev.agent_id)] = { task, messages: kept, error: str(ev.error) };
 				break;
 			}
 			case 'permission_rules':

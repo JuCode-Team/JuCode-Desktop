@@ -26,6 +26,16 @@ describe('turnFolds', () => {
 		expect(turnFolds(msgs, all, false).map((f) => f.key)).toEqual([msgs[2]]);
 	});
 
+	it('folds what a running turn finished before, and leaves what runs now open', () => {
+		const q = user('go');
+		const work = [tool('bash'), think('so')];
+		const answer = reply('started it', 900);
+		const after = [tool('read'), reply('the task finished')];
+		const [fold] = turnFolds([q, ...work, answer, ...after], all, true);
+		expect(fold!.members).toEqual(work);
+		expect(fold!.elapsed).toBe(900);
+	});
+
 	it('keeps plans and errors in view, and folds a turn that ended without a reply', () => {
 		const err: Msg = { kind: 'error', text: 'boom' };
 		const plan: Msg = { kind: 'plan', id: 'p', title: 't', text: '', status: 'pending' };

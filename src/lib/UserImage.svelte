@@ -56,17 +56,18 @@
 		outline: 2px solid var(--brand);
 		outline-offset: 2px;
 	}
+	/* One height before and after the image loads: a row's height never
+	   changes when its images arrive (the list above the view would move). */
 	img,
 	.ph {
 		display: block;
+		height: 120px;
 		max-width: 220px;
-		max-height: 160px;
 		border-radius: var(--r);
 		object-fit: cover;
 	}
 	.ph {
-		width: 96px;
-		height: 72px;
+		width: 160px;
 		background: var(--surface2);
 	}
 	.ph.failed {
