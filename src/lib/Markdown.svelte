@@ -11,6 +11,7 @@
 	import { openExternal } from '$lib/openExternal';
 	import { renderMarkdown } from '$lib/markdown';
 	import { getLocale, t } from '$lib/i18n';
+	import { useFileCheck } from '$lib/fileCheck';
 
 	let { text, onFile }: { text: string; onFile?: (href: string) => void } = $props();
 
@@ -24,6 +25,22 @@
 			rendered.set(key, out);
 		}
 		return out;
+	});
+
+	// File links whose path names no file read as plain text (where the
+	// conversation provides the check, fileCheck.ts).
+	const fileCheck = useFileCheck();
+	let root = $state<HTMLDivElement>();
+	$effect(() => {
+		void html;
+		if (!fileCheck || !root) return;
+		for (const a of root.querySelectorAll<HTMLAnchorElement>('a.fileref')) {
+			const href = a.getAttribute('href');
+			if (!href) continue;
+			const known = fileCheck.known(href);
+			if (known !== undefined) a.classList.toggle('dead', !known);
+			else fileCheck.check(href).then((ok) => a.classList.toggle('dead', !ok));
+		}
 	});
 
 	// Only hand a link to the system opener if it carries an explicit, allowed
@@ -49,6 +66,7 @@
 		}
 		const a = el.closest('a');
 		const href = a?.getAttribute('href');
+		if (a?.classList.contains('dead')) return void e.preventDefault();
 		if (href) {
 			// Always stop the webview from navigating to a markdown link (it's
 			// LLM/file-supplied). Safe external schemes go to the system opener;
@@ -62,7 +80,7 @@
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-<div class="md" onclick={onClick}>{@html html}</div>
+<div class="md" bind:this={root} onclick={onClick}>{@html html}</div>
 
 <style>
 	.md {
@@ -128,6 +146,12 @@
 	.md :global(a.fileref code) {
 		font-size: 1em;
 		color: inherit;
+	}
+	/* Names no file: plain text (inline code stays code). */
+	.md :global(a.fileref.dead) {
+		color: inherit;
+		text-decoration: none;
+		cursor: text;
 	}
 	.md :global(.cb-head .fileref) {
 		margin: 0 auto 0 10px;

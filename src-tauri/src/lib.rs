@@ -2084,8 +2084,9 @@ fn walk_files(root: &Path, dir: &Path, out: &mut Vec<String>) {
 /// worked in: the session's directory, the project root, one of the project's
 /// added directories, or a nested repo in one of them. Try `root/rel` for
 /// every root in order, then `dir/rel` for every directory up to REF_DEPTH
-/// below the roots, and answer only when exactly one file matches.
-#[tauri::command]
+/// below the roots, and answer only when exactly one file matches. Async:
+/// every file link in a reply is checked, and the search walks directories.
+#[tauri::command(async)]
 fn resolve_file_ref(roots: Vec<String>, rel: String) -> Option<FileTarget> {
     let home = rel.strip_prefix("~/").or_else(|| rel.strip_prefix("~\\"));
     let rel = match home {

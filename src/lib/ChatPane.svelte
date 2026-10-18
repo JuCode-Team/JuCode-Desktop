@@ -84,6 +84,7 @@
 	import { imageViewer } from '$lib/ui/imageViewer.svelte';
 	import { isMac } from '$lib/shortcuts';
 	import { editors } from '$lib/editors.svelte';
+	import { provideFileCheck } from '$lib/fileCheck';
 	import { fadeOut, paneIn, paneOut, sideIn, sideOut } from '$lib/ui/motion';
 	import type { Msg } from '$lib/chat.svelte';
 	import type { SessionSwitch } from '$lib/composer/SessionSwitches.svelte';
@@ -1064,6 +1065,12 @@
 		return { ref, target: ref.path ? resolveFileRef(fileRoots, ref.path).catch(() => null) : Promise.resolve(null) };
 	};
 
+	// A path in a reply that names no file shows as plain text.
+	provideFileCheck(async (href) => {
+		const { ref, target } = fileTarget(href);
+		return !!ref.path && !!(await target);
+	});
+
 	// Open a file a chat link names. HTML opens in the built-in browser
 	// (rendered) or the editor (source) per preference, images in the viewer,
 	// other text in the editor; what the editor can't show (an .apk, a PDF) is
@@ -1096,7 +1103,7 @@
 	async function onFileMenu(e: MouseEvent) {
 		const el = (e.target as Element).closest('a[href], [data-file]');
 		const href = el?.getAttribute('data-file') ?? el?.getAttribute('href');
-		if (!href || /^(https?:|mailto:|#)/i.test(href)) return;
+		if (!href || /^(https?:|mailto:|#)/i.test(href) || el?.classList.contains('dead')) return;
 		e.preventDefault(); // before the await: the app-wide text menu stays out
 		const { ref, target } = fileTarget(href);
 		if (!ref.path) return;
