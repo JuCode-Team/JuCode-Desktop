@@ -101,6 +101,9 @@ export const ROWS: SearchRow[] = [
 	{ section: 'acp', id: 'acp-agents', titleKey: 'settings.acp.groupLabel', descKey: 'settings.acp.hint' },
 	{ section: 'daemon', id: 'title-model', titleKey: 'settings.behavior.titleModel', descKey: 'settings.behavior.titleModelHint' },
 	{ section: 'import', id: 'import-scan', titleKey: 'settings.import.title', descKey: 'settings.import.intro' },
+	{ section: 'daemon', id: 'app-tools-present', titleKey: 'settings.appTools.presentFiles', descKey: 'settings.appTools.presentFilesHint' },
+	{ section: 'daemon', id: 'app-tools-schedule', titleKey: 'settings.appTools.proposeSchedule', descKey: 'settings.appTools.proposeScheduleHint' },
+	{ section: 'daemon', id: 'app-tools-sessions', titleKey: 'settings.appTools.sessions', descKey: 'settings.appTools.sessionsHint' },
 	{ section: 'daemon', id: 'relay', titleKey: 'settings.backend.relayToggle', descKey: 'settings.backend.relayHint' },
 	{ section: 'daemon', id: 'devices', titleKey: 'settings.backend.devices', descKey: 'settings.backend.devicesHint' },
 	{ section: 'updates', id: 'app-version', titleKey: 'settings.update.currentVersion', descKey: 'settings.update.groupLabel' }

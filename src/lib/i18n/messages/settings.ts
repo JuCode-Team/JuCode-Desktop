@@ -329,6 +329,17 @@ const settings = {
 			includeProjectInstructions: '包含项目说明',
 			includeProjectInstructionsSub: '加载 AGENTS.md 等项目级指令'
 		},
+		appTools: {
+			title: 'JuCode 工具',
+			hint: 'JuCode 给每个智能体额外提供的工具。Claude Code 通过内置的 jucode MCP 服务器使用，Codex 和 JuCode CLI 作为内置工具使用。改动对之后新开或重启的会话生效。',
+			presentFiles: '展示产物',
+			presentFilesHint: '任务结束时，智能体把做好的文件（报告、图片、网页等）以卡片列出，可以直接打开。',
+			proposeSchedule: '提议定时任务',
+			proposeScheduleHint: '智能体可以提议一个定时任务，你点「创建」后才会生效。',
+			sessions: '启动其他会话',
+			sessionsHint: '智能体可以在本项目里另开会话分派任务，并等待它的回复。',
+			loadFailed: '读取失败：{msg}'
+		},
 		rules: {
 			title: 'Claude Code 权限规则',
 			hint: '当前会话生效的规则，来自设置文件和本会话的授权。在审批时选「始终允许」可保存到本项目或所有项目。',
@@ -843,6 +854,17 @@ const settings = {
 			project: 'Project',
 			includeProjectInstructions: 'Include project instructions',
 			includeProjectInstructionsSub: 'Load project-level instructions such as AGENTS.md'
+		},
+		appTools: {
+			title: 'JuCode tools',
+			hint: 'Tools JuCode gives every agent. Claude Code uses them through the built-in jucode MCP server; Codex and the JuCode CLI as built-in tools. Changes apply to sessions started or restarted afterwards.',
+			presentFiles: 'Present deliverables',
+			presentFilesHint: 'At the end of a task the agent lists the files it made (reports, images, web pages…) as cards you can open.',
+			proposeSchedule: 'Propose scheduled tasks',
+			proposeScheduleHint: 'The agent can propose a scheduled task; it exists only once you click Create.',
+			sessions: 'Start other sessions',
+			sessionsHint: 'The agent can start other sessions in this project, hand them work and wait for their replies.',
+			loadFailed: 'Could not load: {msg}'
 		},
 		rules: {
 			title: 'Claude Code permission rules',
