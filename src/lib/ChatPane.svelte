@@ -1121,7 +1121,7 @@
 	/** A session this one started (`start_session`). */
 	function openChild(id: string) {
 		const listed = daemonState.sessions.find((s) => s.session === id);
-		store.openDaemonSession(listed?.cwd ?? project?.path ?? chat.cwd ?? '', id, listed?.title, listed?.engine, listed?.gateway);
+		store.openDaemonSession(listed?.cwd ?? project?.path ?? chat.cwd ?? '', id, listed?.title, listed?.engine, listed?.gateway, listed?.agent);
 	}
 
 	// Right-click on a file link (or a file the user attached): open, attach,

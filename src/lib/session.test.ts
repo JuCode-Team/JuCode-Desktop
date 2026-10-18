@@ -1409,6 +1409,9 @@ describe('daemon sessions', () => {
 		const codex = store.allSessions.find((x) => x.id === codexId);
 		expect(codex?.chat.backendId).toBe('codex');
 		expect(codex?.gateway).toBe(true);
+		// A built-in ACP agent's run (a scheduled task's) keeps its preset.
+		const ompId = store.openDaemonSession('/srv/ops', 'daemon-4', null, 'acp', false, 'omp');
+		expect(store.allSessions.find((x) => x.id === ompId)?.acpAgent).toEqual({ id: 'omp', name: 'omp', preset: true });
 	});
 });
 

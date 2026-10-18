@@ -817,9 +817,9 @@ export class SessionStore {
 
 	/** Show daemon session `sid` (one the daemon hosts in `cwd`) in its
 	 *  open tab or a new one, in the project for `cwd`, which is added when
-	 *  missing. `title`, `engine`, `gateway`: the daemon's record of it.
+	 *  missing. `title`, `engine`, `gateway`, `agent`: the daemon's record of it.
 	 *  `activate`: false lists it without switching to it. */
-	openDaemonSession(cwd: string, sid: string, title?: string | null, engine?: string, gateway?: boolean, activate = true) {
+	openDaemonSession(cwd: string, sid: string, title?: string | null, engine?: string, gateway?: boolean, agent?: string | null, activate = true) {
 		const open = this.allSessions.find((s) => s.chat.sessionId === sid);
 		if (open) {
 			open.archived = false;
@@ -832,7 +832,8 @@ export class SessionStore {
 			this.projects.push(project);
 		}
 		// The daemon holds the conversation and reopens it on its own engine.
-		const s = this.#newSession(normalizeBackendId(engine));
+		const preset = engine === 'acp' && agent ? { id: agent, name: agent, preset: true } : undefined;
+		const s = this.#newSession(normalizeBackendId(engine), preset);
 		if (gateway) s.gateway = true;
 		if (title) s.chat.title = title;
 		s.restored = true;

@@ -295,7 +295,7 @@
 	/** Show a daemon session in a tab. */
 	function openDaemonSession(session: string) {
 		const listed = daemonState.sessions.find((s) => s.session === session);
-		store.openDaemonSession(listed?.cwd ?? '', session, listed?.title, listed?.engine, listed?.gateway);
+		store.openDaemonSession(listed?.cwd ?? '', session, listed?.title, listed?.engine, listed?.gateway, listed?.agent);
 		showDesk = false;
 	}
 	let showQuickOpen = $state(false);
@@ -1341,7 +1341,7 @@
 			ChatState.onSessionStarted = (cwd, started) => {
 				const id = String(started.session);
 				const listed = daemonState.sessions.find((s) => s.session === id);
-				store.openDaemonSession(listed?.cwd ?? cwd, id, listed?.title ?? String(started.title ?? ''), String(started.engine ?? ''), listed?.gateway, false);
+				store.openDaemonSession(listed?.cwd ?? cwd, id, listed?.title ?? String(started.title ?? ''), String(started.engine ?? ''), listed?.gateway, listed?.agent, false);
 			};
 			cleanups.push(() => (ChatState.onSessionStarted = null));
 			// A turn that failed on the connection is picked back up (autoRetry.ts).
