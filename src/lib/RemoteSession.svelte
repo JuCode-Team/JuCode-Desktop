@@ -33,7 +33,10 @@
 	import { joinPath, parseFileHref } from '$lib/fileRefs';
 	import TaskPanel from '$lib/agents/TaskPanel.svelte';
 	import NetworkIcon from '@lucide/svelte/icons/network';
+	import SquareTerminalIcon from '@lucide/svelte/icons/square-terminal';
+	import TerminalView from '$lib/remote/TerminalView.svelte';
 	import { engineKey, pickEngines } from '$lib/remote/engines';
+	import { canHandOffToTui } from '$lib/tuiHandoff';
 	import type { Msg } from '$lib/chat.svelte';
 	import type { SessionSwitch } from '$lib/composer/SessionSwitches.svelte';
 	import MessageList from '$lib/MessageList.svelte';
@@ -485,6 +488,38 @@
 	/** The built-in ACP agent it runs, if any. */
 	const agentId = $derived(agent ?? view?.agent ?? undefined);
 
+	// Its own TUI, run by the computer and shown here in place of the
+	// conversation while it lasts (`chat.terminal`, for every client).
+	const canTui = $derived(
+		connected && !chat.inTerminal && canHandOffToTui(engine ?? view?.engine ?? 'jucode', agentId) && chat.messages.some((m) => m.kind === 'user')
+	);
+	/** Asked for here: the view opens it, before `surface` names it. */
+	let tuiOpening = $state<{ force: boolean } | null>(null);
+	$effect(() => {
+		if (chat.terminal) tuiOpening = null;
+	});
+	async function openTui() {
+		if (chat.busy || chat.bgTasks.length) {
+			const ok = await confirm({
+				title: t('chat.openInTerminal'),
+				message: t('chat.interruptToTerminal'),
+				confirmLabel: t('chat.openInTerminal'),
+				danger: true
+			});
+			if (!ok) return;
+		}
+		tuiOpening = { force: true };
+	}
+	function tuiGone(message?: string) {
+		tuiOpening = null;
+		// It ended while this page was away: the conversation is back in the GUI.
+		chat.terminal = '';
+		chat.inTerminal = false;
+		if (message) error = message;
+	}
+	function backToChat() {
+		if (chat.terminal) daemon.post({ op: 'term_close', term: chat.terminal }).catch((e) => (error = String(e)));
+	}
 	/** Messages sent mid-turn to an engine that runs them as the next turn
 	 *  (it does not list them): shown until that turn starts. */
 	let queued = $state<string[]>([]);
@@ -693,7 +728,12 @@
 			{#if hostName}<span class="host"><MonitorIcon size={12} /><span>{hostName}</span></span>{/if}
 		</span>
 		{#if chat.busy}<span class="busy pulse"></span>{/if}
-		{#if connected}<button class="back" onclick={() => openTasks(null)} aria-label={t('dock.agents.title')}><NetworkIcon size={16} /></button>{/if}
+		{#if chat.terminal || tuiOpening}
+			<Button size="sm" variant="ghost" onclick={backToChat} disabled={!chat.terminal}>{t('chat.backToChat')}</Button>
+		{:else}
+			{#if canTui}<button class="back" onclick={openTui} aria-label={t('chat.openInTerminal')} title={t('chat.openInTerminal')}><SquareTerminalIcon size={16} /></button>{/if}
+			{#if connected}<button class="back" onclick={() => openTasks(null)} aria-label={t('dock.agents.title')}><NetworkIcon size={16} /></button>{/if}
+		{/if}
 		{#if onFiles}<button class="back" onclick={onFiles} aria-label={t('shell.remote.files')}><FilesIcon size={16} /></button>{/if}
 		{#if onChanges}<button class="back" onclick={onChanges} aria-label={t('shell.remote.changes')}><GitCompareIcon size={16} /></button>{/if}
 	</header>
@@ -705,267 +745,271 @@
 		</div>
 	{/if}
 
-	<main
-		class="scroll"
-		bind:this={scroller}
-		onscroll={onScroll}
-		onwheel={onWheel}
-		ontouchstart={(e) => (touchY = e.touches[0]?.clientY ?? 0)}
-		ontouchmove={onTouchMove}
-	>
-		<!-- Pressing inside the conversation (opening a card, selecting text) stops following the end: what was pressed stays under the finger instead of being pushed up as the reply grows. -->
-		<div class="thread" bind:this={contentEl} onclickcapture={() => (atBottom = false)} role="presentation">
-			<MessageList
-				messages={chat.messages}
-				busy={turnOpen}
-				foldTurns={prefs.foldTurns}
-				{streamingMsg}
-				{streamingReasoning}
-				phase={chat.phase}
-				call={chat.call}
-				compactionTokens={chat.compactionTokens}
-				{traceOf}
-				agents={allAgents}
-				onOpenAgent={openAgent}
-				tail={tasksEntryButton}
-				{loadImage}
-				onFile={onFile ? openReplyFile : undefined}
-				{scroller}
-				onEdit={(value) => {
-					text = value;
-					tick().then(() => (autosize(), input?.focus()));
-				}}
-				onRewind={() => {}}
-			/>
-		</div>
-		{#if opening && chat.messages.length === 0}
-			<div class="welcome">
-				<span class="spawn-spin"><LoaderCircleIcon size={28} class="spin" /></span>
-				<p class="welcome-tip">{t('shell.remote.openingSession')}</p>
+	{#if chat.terminal || tuiOpening}
+		<TerminalView term={chat.terminal} session={sid} force={tuiOpening?.force} onGone={tuiGone} />
+	{:else}
+		<main
+			class="scroll"
+			bind:this={scroller}
+			onscroll={onScroll}
+			onwheel={onWheel}
+			ontouchstart={(e) => (touchY = e.touches[0]?.clientY ?? 0)}
+			ontouchmove={onTouchMove}
+		>
+			<!-- Pressing inside the conversation (opening a card, selecting text) stops following the end: what was pressed stays under the finger instead of being pushed up as the reply grows. -->
+			<div class="thread" bind:this={contentEl} onclickcapture={() => (atBottom = false)} role="presentation">
+				<MessageList
+					messages={chat.messages}
+					busy={turnOpen}
+					foldTurns={prefs.foldTurns}
+					{streamingMsg}
+					{streamingReasoning}
+					phase={chat.phase}
+					call={chat.call}
+					compactionTokens={chat.compactionTokens}
+					{traceOf}
+					agents={allAgents}
+					onOpenAgent={openAgent}
+					tail={tasksEntryButton}
+					{loadImage}
+					onFile={onFile ? openReplyFile : undefined}
+					{scroller}
+					onEdit={(value) => {
+						text = value;
+						tick().then(() => (autosize(), input?.focus()));
+					}}
+					onRewind={() => {}}
+				/>
 			</div>
-		{:else if draft && chat.messages.length === 0}
-			<div class="welcome">
-				<p class="lead">
-					{#each t('shell.startPicker.lead').split(/(\{project\}|\{backend\})/) as part, i (i)}
-						{#if part === '{project}'}
-							<span class="anchor">
-								<button class="word" class:on={pickMenu === 'project'} onclick={() => (pickMenu = pickMenu === 'project' ? null : 'project')} aria-haspopup="menu" aria-label={t('shell.startPicker.project')}>
-									<FolderIcon size={16} /><span class="wname">{pickedProject ? projectLabel(pickedProject) : t('shell.startPicker.project')}</span><ChevronDownIcon size={12} />
-								</button>
-								{#if pickMenu === 'project'}
-									<PopMenu
-										placement="down-left"
-										items={pickProjects.map((p) => ({ key: p.id, label: projectLabel(p), icon: FolderIcon, checked: p.id === pickedProject?.id }))}
-										onSelect={pickProject}
-										onClose={() => (pickMenu = null)}
-									/>
-								{/if}
-							</span>
-						{:else if part === '{backend}'}
-							<span class="anchor">
-								<button class="word" class:on={pickMenu === 'engine'} disabled={isChat} onclick={openEnginePicker} aria-haspopup="menu" aria-label={t('shell.startPicker.backend')}>
-									<BackendIcon backend={(engine ?? 'jucode') as 'jucode'} {agent} size={14} /><span class="wname">{pickedEngine?.label ?? agent ?? BACKEND_LABELS[(engine ?? 'jucode') as 'jucode']}</span><ChevronDownIcon size={12} />
-								</button>
-								{#if pickMenu === 'engine'}
-									<PopMenu
-										placement="down-left"
-										items={engineRows.map((r) => ({ key: r.key, label: r.label, desc: r.note, disabled: r.disabled, checked: r.key === engineKey(engine, agent) }))}
-										onSelect={pickEngine}
-										onClose={() => (pickMenu = null)}
-									/>
-								{/if}
-							</span>
-						{:else}{part}{/if}
-					{/each}
-				</p>
-			</div>
-		{:else if (draft || connected) && chat.messages.length === 0 && !chat.busy}
-			<div class="welcome"><p class="welcome-tip">{t('shell.welcomeTip')}</p></div>
-		{/if}
-	</main>
-
-	<div class="bottom">
-		{#if farFromEnd}
-			<button class="jump" onclick={jumpToBottom} aria-label={t('shell.remote.back')}><ChevronDownIcon size={16} /></button>
-		{/if}
-		{#if chat.inTerminal}
-			<p class="interm">{t('chat.inTerminal')}</p>
-		{/if}
-		{#if chat.pendingApproval}
-			<div class="approval">
-				{#key chat.pendingApproval.callId}
-					<ApprovalCard approval={chat.pendingApproval} onRespond={respond} ruleScopes={caps(chat).ruleScopes} keys={active} />
-				{/key}
-			</div>
-		{/if}
-
-		{#if fromCache && !connected && !exited}
-			<div class="exit">
-				<div class="exit-msg"><Notice tone="info">{t('shell.remote.cached')}</Notice></div>
-			</div>
-		{/if}
-		{#if reconnecting}
-			<div class="exit">
-				<div class="exit-msg"><Notice tone="warn">{t('shell.remote.reconnecting')}</Notice></div>
-			</div>
-		{:else if exited}
-			<div class="exit">
-				<div class="exit-msg"><Notice tone={error ? 'error' : 'warn'}>{error || t('shell.remote.disconnected')}</Notice></div>
-				<Button size="sm" onclick={connect}><RotateCwIcon size={14} /> {t('shell.remote.reconnect')}</Button>
-			</div>
-		{/if}
-
-		<SideAnswers {chat} />
-		<div class="composer-wrap">
-			{#if chat.approvalPending && chat.busy}
-				<div class="queued">
-					<span class="queued-label">{t('chat.modePending', { mode: APPROVAL_MODES[chat.approvalPending]?.label ?? chat.approvalPending })}</span>
-					<button type="button" class="qsteer" onclick={stop}>{t('chat.modeApplyNow')}</button>
+			{#if opening && chat.messages.length === 0}
+				<div class="welcome">
+					<span class="spawn-spin"><LoaderCircleIcon size={28} class="spin" /></span>
+					<p class="welcome-tip">{t('shell.remote.openingSession')}</p>
 				</div>
-			{/if}
-			{#if waiting.length}
-				<div class="queued">
-					<span class="queued-label">{t('chat.queuedLabel', { n: waiting.length })}</span>
-					{#each waiting as q, i (i)}
-						<span class="qchip">{q}</span>
-					{/each}
-					{#if bcaps.steer && chat.pendingMessages.length}
-						<button type="button" class="qsteer" onclick={() => send({ op: 'steer' })} title={t('chat.steerTitle')}
-							><FastForwardIcon size={12} />{t('chat.steerAction')}</button
-						>
-					{/if}
-				</div>
-			{/if}
-			<form class="composer" onsubmit={(e) => (e.preventDefault(), submit())}>
-				<textarea
-					rows="1"
-					bind:this={input}
-					bind:value={text}
-					placeholder={t('shell.remote.messagePlaceholder')}
-					oninput={autosize}
-					onkeydown={onKey}
-					onpaste={onPaste}
-				></textarea>
-				{#if attachments.length}
-					<div class="attachments">
-						{#each attachments as a (a.key)}
-							<span class="att" class:failed={!!a.error} title={a.error ?? a.name}>
-								{#if a.url}<button type="button" class="att-thumb" onclick={() => viewAttached(a.key)} aria-label={t('common.image.open')}><img src={a.url} alt="" /></button>{:else}<FileIcon size={16} />{/if}
-								<span class="att-name">{a.name}</span>
-								{#if a.error}<span class="att-state">{t('shell.upload.failed')}</span>
-								{:else if !a.done}<span class="att-state">{Math.round((a.sent / Math.max(a.total, 1)) * 100)}%</span>{/if}
-								<button type="button" aria-label={t('shell.upload.remove')} onclick={() => detach(a.key)}><XIcon size={12} /></button>
-							</span>
+			{:else if draft && chat.messages.length === 0}
+				<div class="welcome">
+					<p class="lead">
+						{#each t('shell.startPicker.lead').split(/(\{project\}|\{backend\})/) as part, i (i)}
+							{#if part === '{project}'}
+								<span class="anchor">
+									<button class="word" class:on={pickMenu === 'project'} onclick={() => (pickMenu = pickMenu === 'project' ? null : 'project')} aria-haspopup="menu" aria-label={t('shell.startPicker.project')}>
+										<FolderIcon size={16} /><span class="wname">{pickedProject ? projectLabel(pickedProject) : t('shell.startPicker.project')}</span><ChevronDownIcon size={12} />
+									</button>
+									{#if pickMenu === 'project'}
+										<PopMenu
+											placement="down-left"
+											items={pickProjects.map((p) => ({ key: p.id, label: projectLabel(p), icon: FolderIcon, checked: p.id === pickedProject?.id }))}
+											onSelect={pickProject}
+											onClose={() => (pickMenu = null)}
+										/>
+									{/if}
+								</span>
+							{:else if part === '{backend}'}
+								<span class="anchor">
+									<button class="word" class:on={pickMenu === 'engine'} disabled={isChat} onclick={openEnginePicker} aria-haspopup="menu" aria-label={t('shell.startPicker.backend')}>
+										<BackendIcon backend={(engine ?? 'jucode') as 'jucode'} {agent} size={14} /><span class="wname">{pickedEngine?.label ?? agent ?? BACKEND_LABELS[(engine ?? 'jucode') as 'jucode']}</span><ChevronDownIcon size={12} />
+									</button>
+									{#if pickMenu === 'engine'}
+										<PopMenu
+											placement="down-left"
+											items={engineRows.map((r) => ({ key: r.key, label: r.label, desc: r.note, disabled: r.disabled, checked: r.key === engineKey(engine, agent) }))}
+											onSelect={pickEngine}
+											onClose={() => (pickMenu = null)}
+										/>
+									{/if}
+								</span>
+							{:else}{part}{/if}
 						{/each}
+					</p>
+				</div>
+			{:else if (draft || connected) && chat.messages.length === 0 && !chat.busy}
+				<div class="welcome"><p class="welcome-tip">{t('shell.welcomeTip')}</p></div>
+			{/if}
+		</main>
+
+		<div class="bottom">
+			{#if farFromEnd}
+				<button class="jump" onclick={jumpToBottom} aria-label={t('shell.remote.back')}><ChevronDownIcon size={16} /></button>
+			{/if}
+			{#if chat.inTerminal}
+				<p class="interm">{t('chat.inTerminal')}</p>
+			{/if}
+			{#if chat.pendingApproval}
+				<div class="approval">
+					{#key chat.pendingApproval.callId}
+						<ApprovalCard approval={chat.pendingApproval} onRespond={respond} ruleScopes={caps(chat).ruleScopes} keys={active} />
+					{/key}
+				</div>
+			{/if}
+
+			{#if fromCache && !connected && !exited}
+				<div class="exit">
+					<div class="exit-msg"><Notice tone="info">{t('shell.remote.cached')}</Notice></div>
+				</div>
+			{/if}
+			{#if reconnecting}
+				<div class="exit">
+					<div class="exit-msg"><Notice tone="warn">{t('shell.remote.reconnecting')}</Notice></div>
+				</div>
+			{:else if exited}
+				<div class="exit">
+					<div class="exit-msg"><Notice tone={error ? 'error' : 'warn'}>{error || t('shell.remote.disconnected')}</Notice></div>
+					<Button size="sm" onclick={connect}><RotateCwIcon size={14} /> {t('shell.remote.reconnect')}</Button>
+				</div>
+			{/if}
+
+			<SideAnswers {chat} />
+			<div class="composer-wrap">
+				{#if chat.approvalPending && chat.busy}
+					<div class="queued">
+						<span class="queued-label">{t('chat.modePending', { mode: APPROVAL_MODES[chat.approvalPending]?.label ?? chat.approvalPending })}</span>
+						<button type="button" class="qsteer" onclick={stop}>{t('chat.modeApplyNow')}</button>
 					</div>
 				{/if}
-				<div class="composer-bar">
-					<button type="button" class="flatbtn attach" onclick={() => picker?.click()} title={t('shell.upload.attach')} aria-label={t('shell.upload.attach')}>
-						<PaperclipIcon size={16} />
-					</button>
-					<input
-						bind:this={picker}
-						type="file"
-						multiple
-						hidden
-						onchange={(e) => {
-							const input = e.currentTarget;
-							attach([...(input.files ?? [])]);
-							input.value = '';
-						}}
-					/>
-					{#if chat.agentApprovals === false}
-						<span class="noapproval" title={t('chat.noApprovalHint')}>{t('chat.noApproval')}</span>
-					{:else if bcaps.approvalModes}
-						<div class="footsel">
-							<button
-								type="button"
-								class="flatbtn mode"
-								class:warn={approvalCurrent.tone === 'warn'}
-								class:on={approvalOpen}
-								disabled={!connected && !draft}
-								onclick={() => (approvalOpen = !approvalOpen)}
-								title={t('chat.approvalModeTitle')}
-								aria-haspopup="menu"
-								aria-expanded={approvalOpen}
+				{#if waiting.length}
+					<div class="queued">
+						<span class="queued-label">{t('chat.queuedLabel', { n: waiting.length })}</span>
+						{#each waiting as q, i (i)}
+							<span class="qchip">{q}</span>
+						{/each}
+						{#if bcaps.steer && chat.pendingMessages.length}
+							<button type="button" class="qsteer" onclick={() => send({ op: 'steer' })} title={t('chat.steerTitle')}
+								><FastForwardIcon size={12} />{t('chat.steerAction')}</button
 							>
-								{#if approvalCurrent.icon}<approvalCurrent.icon size={16} />{/if}<span>{approvalCurrent.label}</span>
-							</button>
-							{#if approvalOpen}
-								<PopMenu
-									title={t('chat.approvalQuestion')}
-									items={APPROVAL}
-									placement="up-left"
-									onSelect={pickMode}
-									onClose={() => (approvalOpen = false)}
-								/>
-							{/if}
+						{/if}
+					</div>
+				{/if}
+				<form class="composer" onsubmit={(e) => (e.preventDefault(), submit())}>
+					<textarea
+						rows="1"
+						bind:this={input}
+						bind:value={text}
+						placeholder={t('shell.remote.messagePlaceholder')}
+						oninput={autosize}
+						onkeydown={onKey}
+						onpaste={onPaste}
+					></textarea>
+					{#if attachments.length}
+						<div class="attachments">
+							{#each attachments as a (a.key)}
+								<span class="att" class:failed={!!a.error} title={a.error ?? a.name}>
+									{#if a.url}<button type="button" class="att-thumb" onclick={() => viewAttached(a.key)} aria-label={t('common.image.open')}><img src={a.url} alt="" /></button>{:else}<FileIcon size={16} />{/if}
+									<span class="att-name">{a.name}</span>
+									{#if a.error}<span class="att-state">{t('shell.upload.failed')}</span>
+									{:else if !a.done}<span class="att-state">{Math.round((a.sent / Math.max(a.total, 1)) * 100)}%</span>{/if}
+									<button type="button" aria-label={t('shell.upload.remove')} onclick={() => detach(a.key)}><XIcon size={12} /></button>
+								</span>
+							{/each}
 						</div>
 					{/if}
-					<div class="cspace"></div>
-					{#if chat.model}
-						<button
-							type="button"
-							class="flatbtn model"
-							class:pending={!!pendingModel}
-							class:on={modelOpen}
-							bind:this={modelButton}
-							disabled={!connected}
-							onclick={openModels}
-							title={t('chat.switchModel')}
-							aria-haspopup="dialog"
-							aria-expanded={modelOpen}
-						>
-							{#key shownModel.id}
-								<span class="mswap">
-									{#if !engine || engine === 'jucode'}<Vendor model={shownModel.id} size={15} mono />{:else}<BackendIcon backend={engine as 'claude'} agent={agentId} size={15} mono />{/if}
-									<span class="m">{shownModel.label}</span>
-								</span>
-							{/key}
-							{#if chat.efforts.length && chat.effort}{#key chat.effort}<span
-										class="e"
-										class:effort-max={isTopEffort(chat.effort, chat.efforts)}
-										style:--effort-accent={modelColor(chat.model) || 'var(--text)'}>{effortLabel(chat.effort)}</span
-									>{/key}{/if}
+					<div class="composer-bar">
+						<button type="button" class="flatbtn attach" onclick={() => picker?.click()} title={t('shell.upload.attach')} aria-label={t('shell.upload.attach')}>
+							<PaperclipIcon size={16} />
 						</button>
-					{/if}
-					{#if chat.busy}
-						<button type="button" class="cact stop" disabled={stopping} onclick={stop} aria-label={t('chat.stopTitle')} title={t('chat.stopTitle')}>
-							{#if stopping}<LoaderCircleIcon size={16} class="spin" />{:else}<SquareIcon size={16} fill="currentColor" />{/if}
-						</button>
-					{/if}
-					<!-- Mid-turn, sending queues the message (插话). -->
-					{#if !chat.busy || text.trim() || attached.length}
-						<button type="submit" class="cact send" disabled={(!text.trim() && !attached.length) || uploading || (!connected && !draft)} aria-label={t('chat.sendTitle')} title={t('chat.sendTitle')}>
-							{#if opening && text.trim()}<LoaderCircleIcon size={16} class="spin" />{:else}<ArrowUpIcon size={16} />{/if}
-						</button>
-					{/if}
-				</div>
-			</form>
-			{#if chat.statusLog.length || showCost || showCtx}
-				<div class="composer-foot">
-					<StatusStrip {chat} />
-					{#if showCost}<span class="foot-cost">{t('chat.sessionCost', { cost: costText(chat.cost, chat.billing) })}</span>{/if}
-					{#if showCtx}
-						<ContextIndicator
-							pct={ctxPct}
-							atThreshold={chat.contextLimit > 0}
-							contextTokens={chat.contextTokens}
-							contextLimit={ctxLimit}
-							totalIn={chat.totalIn}
-							totalOut={chat.totalOut}
-							cost={chat.cost}
-							billing={chat.billing}
-							billingError={chat.billingError}
-							runMs={chat.runMs}
-							breakdown={chat.contextBreakdown}
-							onBreakdown={bcaps.contextBreakdown && connected ? () => send({ op: 'context_usage' }) : undefined}
+						<input
+							bind:this={picker}
+							type="file"
+							multiple
+							hidden
+							onchange={(e) => {
+								const input = e.currentTarget;
+								attach([...(input.files ?? [])]);
+								input.value = '';
+							}}
 						/>
-					{/if}
-				</div>
-			{/if}
+						{#if chat.agentApprovals === false}
+							<span class="noapproval" title={t('chat.noApprovalHint')}>{t('chat.noApproval')}</span>
+						{:else if bcaps.approvalModes}
+							<div class="footsel">
+								<button
+									type="button"
+									class="flatbtn mode"
+									class:warn={approvalCurrent.tone === 'warn'}
+									class:on={approvalOpen}
+									disabled={!connected && !draft}
+									onclick={() => (approvalOpen = !approvalOpen)}
+									title={t('chat.approvalModeTitle')}
+									aria-haspopup="menu"
+									aria-expanded={approvalOpen}
+								>
+									{#if approvalCurrent.icon}<approvalCurrent.icon size={16} />{/if}<span>{approvalCurrent.label}</span>
+								</button>
+								{#if approvalOpen}
+									<PopMenu
+										title={t('chat.approvalQuestion')}
+										items={APPROVAL}
+										placement="up-left"
+										onSelect={pickMode}
+										onClose={() => (approvalOpen = false)}
+									/>
+								{/if}
+							</div>
+						{/if}
+						<div class="cspace"></div>
+						{#if chat.model}
+							<button
+								type="button"
+								class="flatbtn model"
+								class:pending={!!pendingModel}
+								class:on={modelOpen}
+								bind:this={modelButton}
+								disabled={!connected}
+								onclick={openModels}
+								title={t('chat.switchModel')}
+								aria-haspopup="dialog"
+								aria-expanded={modelOpen}
+							>
+								{#key shownModel.id}
+									<span class="mswap">
+										{#if !engine || engine === 'jucode'}<Vendor model={shownModel.id} size={15} mono />{:else}<BackendIcon backend={engine as 'claude'} agent={agentId} size={15} mono />{/if}
+										<span class="m">{shownModel.label}</span>
+									</span>
+								{/key}
+								{#if chat.efforts.length && chat.effort}{#key chat.effort}<span
+											class="e"
+											class:effort-max={isTopEffort(chat.effort, chat.efforts)}
+											style:--effort-accent={modelColor(chat.model) || 'var(--text)'}>{effortLabel(chat.effort)}</span
+										>{/key}{/if}
+							</button>
+						{/if}
+						{#if chat.busy}
+							<button type="button" class="cact stop" disabled={stopping} onclick={stop} aria-label={t('chat.stopTitle')} title={t('chat.stopTitle')}>
+								{#if stopping}<LoaderCircleIcon size={16} class="spin" />{:else}<SquareIcon size={16} fill="currentColor" />{/if}
+							</button>
+						{/if}
+						<!-- Mid-turn, sending queues the message (插话). -->
+						{#if !chat.busy || text.trim() || attached.length}
+							<button type="submit" class="cact send" disabled={(!text.trim() && !attached.length) || uploading || (!connected && !draft)} aria-label={t('chat.sendTitle')} title={t('chat.sendTitle')}>
+								{#if opening && text.trim()}<LoaderCircleIcon size={16} class="spin" />{:else}<ArrowUpIcon size={16} />{/if}
+							</button>
+						{/if}
+					</div>
+				</form>
+				{#if chat.statusLog.length || showCost || showCtx}
+					<div class="composer-foot">
+						<StatusStrip {chat} />
+						{#if showCost}<span class="foot-cost">{t('chat.sessionCost', { cost: costText(chat.cost, chat.billing) })}</span>{/if}
+						{#if showCtx}
+							<ContextIndicator
+								pct={ctxPct}
+								atThreshold={chat.contextLimit > 0}
+								contextTokens={chat.contextTokens}
+								contextLimit={ctxLimit}
+								totalIn={chat.totalIn}
+								totalOut={chat.totalOut}
+								cost={chat.cost}
+								billing={chat.billing}
+								billingError={chat.billingError}
+								runMs={chat.runMs}
+								breakdown={chat.contextBreakdown}
+								onBreakdown={bcaps.contextBreakdown && connected ? () => send({ op: 'context_usage' }) : undefined}
+							/>
+						{/if}
+					</div>
+				{/if}
+			</div>
 		</div>
-	</div>
+	{/if}
 
 	{#if modelOpen}
 		<ModelMenu

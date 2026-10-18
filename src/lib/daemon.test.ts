@@ -152,14 +152,30 @@ describe('DaemonClient', () => {
 		expect(env.client.owns('desk-1')).toBe(false);
 	});
 
-	it('a dropped connection ends its terminals, as the daemon kills them', async () => {
+	it('a dropped connection detaches its terminal views; the terminals live on', async () => {
+		const env = setup();
+		const socket = await openCreated(env, 'desk-1', 'sess-1');
+		const seen: Record<string, unknown>[] = [];
+		env.client.onTerm('t-1', (frame) => seen.push(frame));
+		socket.push({ type: 'term_output', term: 't-1', data: '' });
+		socket.close();
+		expect(seen.map((f) => f.type)).toEqual(['term_output', 'term_detached']);
+		expect(seen[1]).toMatchObject({ term: 't-1', reason: 'disconnected' });
+	});
+
+	it('routes a terminal\'s frames to its viewer, and an attach reply to its request', async () => {
 		const env = setup();
 		const socket = await openCreated(env, 'desk-1', 'sess-1');
 		const seen: unknown[] = [];
 		env.client.onTerm('t-1', (frame) => seen.push(frame.type));
-		socket.push({ type: 'term_output', term: 't-1', data: '' });
-		socket.close();
-		expect(seen).toEqual(['term_output', 'term_exit']);
+		const attached = env.client.request({ op: 'term_attach', term: 't-1', cols: 80, rows: 24 });
+		socket.reply({ type: 'term_attached', term: 't-1', cols: 80, rows: 24 });
+		expect(await attached).toMatchObject({ type: 'term_attached', term: 't-1' });
+		socket.push({ type: 'term_attached', term: 't-1', cols: 80, rows: 24 });
+		socket.push({ type: 'term_output', term: 't-1', data: '', replay: true });
+		socket.push({ type: 'term_detached', term: 't-1', reason: 'slow' });
+		socket.push({ type: 'term_exit', term: 't-2', code: 0 });
+		expect(seen).toEqual(['term_attached', 'term_output', 'term_detached']);
 	});
 });
 

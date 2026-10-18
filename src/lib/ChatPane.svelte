@@ -1360,7 +1360,13 @@
 			{/if}
 
 			{#if chat.inTerminal}
-				<p class="interm" in:paneIn out:paneOut>{t('chat.inTerminal')}</p>
+				<p class="interm" in:paneIn out:paneOut>
+					{t('chat.inTerminal')}
+					<!-- Opened on another client: this tile can view it too. -->
+					{#if chat.terminal}
+						<Button size="sm" variant="ghost" onclick={() => (session.surface = 'tui')}>{t('chat.viewTerminal')}</Button>
+					{/if}
+				</p>
 			{/if}
 			{#if chat.rateLimit}
 				<RateLimitBanner rateLimit={chat.rateLimit} onDismiss={() => (chat.rateLimit = null)} />

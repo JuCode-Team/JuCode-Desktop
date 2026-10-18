@@ -1,5 +1,5 @@
-// What the two xterm views (TerminalPanel, TuiPanel) share: their look and
-// their renderer.
+// What the xterm views (TerminalPanel, TuiPanel, the remote TerminalView)
+// share: their look and their renderer.
 import type { ITerminalOptions, Terminal } from '@xterm/xterm';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { prefs } from '$lib/prefs.svelte';

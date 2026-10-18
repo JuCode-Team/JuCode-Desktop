@@ -1268,6 +1268,16 @@ export class SessionStore {
 		s.surface = 'tui';
 	}
 
+	/** The daemon connection came back while this conversation was in its
+	 *  TUI: open and watch it again. A session still in its TUI is only
+	 *  watched (its snapshot names the terminal); one whose TUI ended with
+	 *  the daemon starts its engine. */
+	rewatch(id: string): Promise<void> {
+		const s = this.allSessions.find((x) => x.id === id);
+		if (!s || daemon.sessionOf(id)) return Promise.resolve();
+		return this.#spawn(s, this.projectPathOf(id)).catch((e) => this.#engineFailed(s.chat, e));
+	}
+
 	/** Back to the GUI once the TUI has exited: the daemon has started the
 	 *  engine again, and its transcript (what the TUI added included)
 	 *  replaces what this chat showed. */

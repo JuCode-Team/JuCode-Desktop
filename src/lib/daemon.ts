@@ -54,6 +54,9 @@ const DAEMON_EVENTS = new Set([
 	'dev_servers',
 	'session_reopened'
 ]);
+/** Frames for one terminal's viewers (`onTerm`), unless one answers a
+ *  request (`term_attached` does, when sent with an id). */
+const TERM_EVENTS = new Set(['term_attached', 'term_output', 'term_exit', 'term_detached']);
 const CLOSE_TIMEOUT_MS = 10_000;
 
 /** An error the daemon replied with: it was reached, so retrying the
@@ -237,8 +240,9 @@ export class DaemonClient {
 
 	#terms = new Map<string, (frame: Frame) => void>();
 
-	/** Routes a terminal's `term_output` / `term_exit` frames to `handler`
-	 *  (this connection's terminals only); returns the unsubscribe. */
+	/** Routes a terminal's `term_attached`, `term_output`, `term_exit` and
+	 *  `term_detached` frames to `handler` (terminals this connection views);
+	 *  returns the unsubscribe. */
 	onTerm(term: string, handler: (frame: Frame) => void): () => void {
 		this.#terms.set(term, handler);
 		return () => {
@@ -247,15 +251,15 @@ export class DaemonClient {
 	}
 
 	#receive(frame: Frame, raw: string) {
-		if ((frame.type === 'term_output' || frame.type === 'term_exit') && typeof frame.term === 'string') {
-			this.#terms.get(frame.term)?.(frame);
-			return;
-		}
 		if (typeof frame.id === 'number' && this.#pending.has(frame.id)) {
 			const pending = this.#pending.get(frame.id)!;
 			this.#pending.delete(frame.id);
 			if (frame.type === 'error') pending.reject(new DaemonError(String(frame.message)));
 			else pending.resolve(frame);
+			return;
+		}
+		if (TERM_EVENTS.has(String(frame.type)) && typeof frame.term === 'string') {
+			this.#terms.get(frame.term)?.(frame);
 			return;
 		}
 		if (DAEMON_EVENTS.has(String(frame.type))) {
@@ -325,15 +329,16 @@ export class DaemonClient {
 	}
 
 	/** The connection dropped: every hosted session looks exited to the
-	 *  desktop, whose restart logic reopens them on a new connection; the
-	 *  daemon killed this connection's terminals. */
+	 *  desktop, whose restart logic reopens them on a new connection. The
+	 *  terminals it viewed keep running in the daemon: their viewers are
+	 *  detached and may attach again. */
 	#lost() {
 		this.#socket = null;
 		for (const session of this.#usage.keys()) this.#forgetUsage(session);
 		this.onDisconnect();
 		const terms = [...this.#terms];
 		this.#terms.clear();
-		for (const [term, handler] of terms) handler({ type: 'term_exit', term, code: null });
+		for (const [term, handler] of terms) handler({ type: 'term_detached', term, reason: 'disconnected' });
 		for (const pending of this.#pending.values())
 			pending.reject(new Error('connection to jucode daemon lost'));
 		this.#pending.clear();

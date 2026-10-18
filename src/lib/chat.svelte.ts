@@ -446,6 +446,9 @@ export class ChatState {
 	/** The conversation is open in its engine's TUI (on this or another
 	 *  client): its GUI ops wait until the TUI exits. */
 	inTerminal = $state(false);
+	/** The daemon terminal running that TUI (`surface` names it), for any
+	 *  client to view; '' while the conversation is in the GUI. */
+	terminal = $state('');
 	/** An MCP server's sign-in page, to open once (codex mcp_login). */
 	mcpLoginUrl = $state('');
 	/** Subagents by id; `label` names them when the id doesn't (claude's task ids).
@@ -1435,6 +1438,7 @@ export class ChatState {
 			// what the TUI added included.
 			case 'surface':
 				this.inTerminal = ev.surface === 'tui';
+				this.terminal = ev.surface === 'tui' ? str(ev.term) : '';
 				if (ev.surface === 'gui') this.keepNextTranscript = false;
 				break;
 			case 'mcp_login':

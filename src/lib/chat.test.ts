@@ -25,6 +25,16 @@ describe('ChatState.handle', () => {
 		expect(userTexts(c)).toEqual(['first', 'second']);
 	});
 
+	it('names the terminal a conversation moved to, and clears it on return', () => {
+		const c = new ChatState();
+		c.handle({ type: 'surface', session: 's', surface: 'tui', term: 't-1', client: 3 });
+		expect(c.inTerminal).toBe(true);
+		expect(c.terminal).toBe('t-1');
+		c.handle({ type: 'surface', session: 's', surface: 'gui' });
+		expect(c.inTerminal).toBe(false);
+		expect(c.terminal).toBe('');
+	});
+
 	it('notes deferred and decided actions of a hosted session in the chat', () => {
 		setLocale('en');
 		const c = new ChatState();

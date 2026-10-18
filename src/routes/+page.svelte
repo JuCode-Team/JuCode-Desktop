@@ -1542,7 +1542,9 @@
 												backend={sess.backendId}
 												cwd={store.projectPathOf(sid) ?? ''}
 												session={daemon.sessionOf(sid)}
+												terminal={sess.chat.terminal}
 												onBackToGui={() => store.returnToGui(sid)}
+												onReattach={() => store.rewatch(sid)}
 												onOpenSettings={() => openSettings('agents')}
 											/>
 											{/if}

@@ -40,8 +40,10 @@ gateway switch; a custom one passes its registry command line.
   draws the engine's own TUI with xterm in the same tile. Quitting it returns
   the tab to the chat (`returnToGui`); the daemon restarts the engine and
   sends the transcript with the TUI's turns. ACP sessions of a built-in
-  agent hand off too; a registered agent's cannot. Other clients see a
-  notice while the conversation is in the terminal (`ChatState.inTerminal`).
+  agent hand off too; a registered agent's cannot. The terminal belongs to
+  the session: other clients see a notice (`ChatState.inTerminal`) and can
+  view and type in it (`ChatState.terminal`, `daemonTerminal.ts`); closing
+  a view only detaches it.
 - File paths in replies (`src/a.ts:12`, a code block titled with a path)
   become links (`fileRefs.ts`, `markdown.ts`); clicking one opens the file in
   the editor at that line, or in the files screen on a paired device.
