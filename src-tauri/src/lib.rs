@@ -16,6 +16,7 @@ mod backend;
 mod browser;
 mod capture;
 mod claude_history;
+mod editors;
 mod native_import;
 mod installer;
 mod plugins;
@@ -3384,6 +3385,8 @@ pub fn run() {
             list_dir,
             list_files,
             resolve_file_ref,
+            editors::list_editors,
+            editors::open_in_editor,
             read_text,
             stat_text,
             write_text,

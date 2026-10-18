@@ -83,6 +83,7 @@
 	import PopMenu, { type PopMenuItem } from '$lib/ui/PopMenu.svelte';
 	import { imageViewer } from '$lib/ui/imageViewer.svelte';
 	import { isMac } from '$lib/shortcuts';
+	import { editors } from '$lib/editors.svelte';
 	import type { Msg } from '$lib/chat.svelte';
 	import type { SessionSwitch } from '$lib/composer/SessionSwitches.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
@@ -1099,7 +1100,8 @@
 		const { ref, target } = fileTarget(href);
 		if (!ref.path) return;
 		const at = { x: e.clientX, y: e.clientY };
-		fileMenu = { ...at, ref, target: await target };
+		const [found] = await Promise.all([target, editors.list.length ? null : editors.load()]);
+		fileMenu = { ...at, ref, target: found };
 		fileMenuPos = at;
 	}
 	const revealLabel = isMac() ? 'chat.fileMenu.revealMac' : /Windows/.test(navigator.userAgent) ? 'chat.fileMenu.revealWin' : 'chat.fileMenu.revealLinux';
@@ -1112,6 +1114,7 @@
 			];
 		return [
 			{ key: 'open', label: t('chat.fileMenu.open') },
+			...(editors.preferred ? [{ key: 'editor', label: t('editor.external.openIn', { name: editors.preferred.name }) }] : []),
 			{ key: 'attach', label: t('chat.fileMenu.attach') },
 			{ key: 'copyAbs', label: t('chat.fileMenu.copyAbs') },
 			...(rootOf(fileMenu.target.path) ? [{ key: 'copyRel', label: t('chat.fileMenu.copyRel') }] : []),
@@ -1137,7 +1140,10 @@
 		const root = abs ? rootOf(abs) : undefined;
 		const copy = (text: string) => void writeText(text).catch((e) => toast.error(String(e)));
 		if (key === 'open' && m.target) openTarget(m.target, m.ref);
-		else if (key === 'attach' && abs) {
+		else if (key === 'editor' && abs && editors.preferred) {
+			const { id, name } = editors.preferred;
+			editors.open(id, abs, m.ref, root).catch((e) => toast.error(t('editor.external.failed', { name, error: String(e) })));
+		}		else if (key === 'attach' && abs) {
 			addAttachment(abs);
 			composerEl?.focus();
 		} else if (key === 'copyAbs') copy(abs);

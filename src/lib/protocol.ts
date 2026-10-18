@@ -600,6 +600,21 @@ export function resolveFileRef(roots: string[], rel: string): Promise<FileTarget
 	return invoke('resolve_file_ref', { roots, rel });
 }
 
+/** An external editor installed on this computer (editors.rs). */
+export interface EditorInfo {
+	id: string;
+	name: string;
+	/** The app's own icon as a data URL; null where none is read (Windows, Linux). */
+	icon: string | null;
+}
+export function listEditors(): Promise<EditorInfo[]> {
+	return invoke('list_editors');
+}
+/** Opens a folder, or a file at a line in the window of `root`, in the editor `id`. */
+export function openInEditor(id: string, path: string, at?: { line?: number; col?: number }, root?: string): Promise<void> {
+	return invoke('open_in_editor', { id, path, line: at?.line ?? null, col: at?.col ?? null, root: root ?? null });
+}
+
 export interface ProviderInfo {
 	id: string;
 	base_url: string;

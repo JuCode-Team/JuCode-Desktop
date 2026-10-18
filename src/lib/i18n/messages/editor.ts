@@ -25,7 +25,12 @@ const editor = {
 		aiNoSession: '没有可用的会话',
 		quickOpenPlaceholder: '输入文件名，模糊匹配…',
 		quickOpenEmpty: '没有匹配的文件',
-		utf8: 'UTF-8'
+		utf8: 'UTF-8',
+		external: {
+			openIn: '在 {name} 中打开',
+			choose: '选择编辑器',
+			failed: '无法在 {name} 中打开：{error}'
+		}
 	},
 	en: {
 		title: 'Audit',
@@ -53,7 +58,12 @@ const editor = {
 		aiNoSession: 'No active session',
 		quickOpenPlaceholder: 'Type a file name (fuzzy match)…',
 		quickOpenEmpty: 'No matching files',
-		utf8: 'UTF-8'
+		utf8: 'UTF-8',
+		external: {
+			openIn: 'Open in {name}',
+			choose: 'Choose editor',
+			failed: 'Cannot open in {name}: {error}'
+		}
 	}
 };
 export default editor;

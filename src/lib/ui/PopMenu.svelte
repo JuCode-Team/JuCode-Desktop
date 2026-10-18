@@ -7,6 +7,8 @@
 		/** Second line in gray under the label. */
 		desc?: string;
 		icon?: typeof IconType;
+		/** An image in place of `icon` (an app's own icon). */
+		img?: string;
 		checked?: boolean;
 		/** Keyboard shortcut shown at the right, e.g. ⌘C. */
 		hint?: string;
@@ -37,7 +39,7 @@
 		onClose: () => void;
 	} = $props();
 
-	const hasIcons = $derived(items.some((i) => i.icon));
+	const hasIcons = $derived(items.some((i) => i.icon || i.img));
 </script>
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && onClose()} />
@@ -47,7 +49,7 @@
 	{#if title}<div class="pop-head">{title}</div>{/if}
 	{#each items as it (it.key)}
 		<button class="pop-row" class:warn={it.tone === 'warn'} class:two={!!it.desc} role={it.checked === undefined ? 'menuitem' : 'menuitemradio'} aria-checked={it.checked} disabled={it.disabled} onmousedown={(e) => e.preventDefault()} onclick={() => onSelect(it.key)}>
-			{#if it.icon}<span class="pop-ico"><it.icon size={18} /></span>{:else if hasIcons}<span class="pop-ico"></span>{/if}
+			{#if it.icon}<span class="pop-ico"><it.icon size={18} /></span>{:else if it.img}<span class="pop-ico"><img src={it.img} alt="" width="18" height="18" /></span>{:else if hasIcons}<span class="pop-ico"></span>{/if}
 			<span class="pop-txt">
 				<span class="pop-label">{it.label}</span>
 				{#if it.desc}<span class="pop-desc">{it.desc}</span>{/if}
