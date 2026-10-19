@@ -12,6 +12,9 @@ export interface EditedFile {
 	path: string;
 	add: number;
 	del: number;
+	/** The diff of each edit to this file, in order (absent: not all known,
+	 *  e.g. a multi-file change without per-file diffs). */
+	diffs?: string[];
 }
 
 export interface Artifact {
@@ -53,27 +56,33 @@ const str = (v: unknown) => (typeof v === 'string' ? v : '');
  *  diff for a one-file edit. */
 export function fileStats(parsed: Record<string, unknown> | null): EditedFile[] {
 	if (!parsed || parsed.error) return [];
-	if (Array.isArray(parsed.files))
-		return parsed.files.flatMap((f) => (f && typeof f === 'object' && str(f.path) ? [{ path: str(f.path), add: num(f.add), del: num(f.del) }] : []));
 	const diff = str(parsed.diff);
+	if (Array.isArray(parsed.files)) {
+		const files = parsed.files.flatMap((f) => (f && typeof f === 'object' && str(f.path) ? [{ path: str(f.path), add: num(f.add), del: num(f.del) }] : []));
+		// One file: the diff is its own.
+		return files.length === 1 && diff ? [{ ...files[0]!, diffs: [diff] }] : files;
+	}
 	if (/^--- .*\n\+\+\+ /m.test(diff)) {
-		const out: EditedFile[] = [];
-		let cur: EditedFile | null = null;
+		const out: (EditedFile & { lines: string[] })[] = [];
+		let cur: (EditedFile & { lines: string[] }) | null = null;
 		let from = '';
 		for (const line of diff.split('\n')) {
 			if (line.startsWith('--- ')) from = line.slice(4).replace(/^a\//, '');
 			else if (line.startsWith('+++ ')) {
 				const to = line.slice(4).replace(/^b\//, '');
-				cur = { path: to === '/dev/null' ? from : to, add: 0, del: 0 };
+				cur = { path: to === '/dev/null' ? from : to, add: 0, del: 0, lines: [] };
 				out.push(cur);
-			} else if (cur && line.startsWith('+')) cur.add++;
-			else if (cur && line.startsWith('-')) cur.del++;
+			} else if (cur) {
+				cur.lines.push(line);
+				if (line.startsWith('+')) cur.add++;
+				else if (line.startsWith('-')) cur.del++;
+			}
 		}
-		if (out.length) return out;
+		if (out.length) return out.map(({ lines, ...f }) => ({ ...f, diffs: [lines.join('\n')] }));
 	}
 	const paths = editedPaths(parsed);
 	const stat = diffStat(parsed) ?? { add: 0, del: 0 };
-	return paths.length ? [{ path: paths[0]!, ...stat }] : [];
+	return paths.length ? [{ path: paths[0]!, ...stat, ...(diff ? { diffs: [diff] } : {}) }] : [];
 }
 
 /** The summary of one turn's messages (null: nothing to show). */
@@ -103,6 +112,7 @@ export function turnSummary(turn: Msg[]): TurnSummary | null {
 				if (seen) {
 					seen.add += f.add;
 					seen.del += f.del;
+					seen.diffs = seen.diffs && f.diffs ? [...seen.diffs, ...f.diffs] : undefined;
 				} else edited.set(f.path, { ...f });
 			}
 		}

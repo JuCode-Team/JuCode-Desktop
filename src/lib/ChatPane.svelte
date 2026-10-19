@@ -83,7 +83,8 @@
 	import ScheduleDialog from '$lib/ScheduleDialog.svelte';
 	import { daemonState } from '$lib/daemonState.svelte';
 	import type { ScheduleDraft } from '$lib/schedules';
-	import type { Proposal } from '$lib/turnSummary';
+	import type { EditedFile, Proposal } from '$lib/turnSummary';
+	import { turnBase } from '$lib/editor/turnBase';
 	import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 	import PopMenu, { type PopMenuItem } from '$lib/ui/PopMenu.svelte';
 	import { imageViewer } from '$lib/ui/imageViewer.svelte';
@@ -1134,6 +1135,28 @@
 		}
 	}
 
+	// A file a turn edited opens in the editor with that turn's changes: the
+	// file before it worked out from the turn's edits, or git HEAD when that
+	// can't be (edited since; a change without its own diff).
+	async function openEdited(file: EditedFile) {
+		const { ref, target: pending } = fileTarget(file.path);
+		const target = await pending;
+		if (!target) return void toast.error(t('chat.fileNotFound', { path: ref.path }));
+		if (!target.text) return openTarget(target, ref);
+		const abs = target.path;
+		try {
+			const opened = await editorStore.open(abs, rootOf(abs) ?? abs.replace(/[\\/][^\\/]*$/, ''));
+			// Open before the agent edited it: the file as it is now.
+			if (!opened.dirty) await editorStore.reload(opened.path);
+			const tab = editorStore.tab(opened.path) ?? opened;
+			const base = file.diffs ? turnBase(tab.doc, file.diffs) : null;
+			editorStore.showTurn(tab.path, base);
+			if (base == null) toast.info(t('editor.turnBaseUnknown'));
+		} catch (e) {
+			toast.error(t('chat.fileOpenFailed', { path: ref.path, error: String(e) }));
+		}
+	}
+
 	// A scheduled task the agent proposed opens the task dialog filled in:
 	// this session's folder and engine, the proposal's prompt and times.
 	let proposing = $state<Partial<ScheduleDraft> | null>(null);
@@ -1336,7 +1359,7 @@
 		<main bind:this={scroller} onscroll={onScroll} onwheel={onWheel}>
 			<!-- Pressing inside the conversation (opening a card, selecting text) stops following the end: what was pressed stays under the pointer instead of being pushed up as the reply grows. -->
 			<div bind:this={contentEl} onpointerdowncapture={() => (atBottom = false)} oncontextmenu={onFileMenu} role="presentation">
-				<MessageList bind:this={messageList} bind:mark messages={chat.messages} follow={() => atBottom} busy={turnOpen} foldTurns={prefs.foldTurns} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onNote={noteRequirement} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} traceOf={traceOf} agents={allAgents} onOpenAgent={openAgent} tail={tasksEntryButton} onPlan={planAction} {planMode} onOpenPlan={(id) => planPages.open(session.id, id)} root={project?.path || chat.cwd || ''} onReveal={revealFile} onSchedule={scheduleFrom} scheduleCreated={(id) => daemonState.schedules.some((s) => s.origin === id)} onOpenSession={openChild} />
+				<MessageList bind:this={messageList} bind:mark messages={chat.messages} follow={() => atBottom} busy={turnOpen} foldTurns={prefs.foldTurns} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onNote={noteRequirement} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} traceOf={traceOf} agents={allAgents} onOpenAgent={openAgent} tail={tasksEntryButton} onPlan={planAction} {planMode} onOpenPlan={(id) => planPages.open(session.id, id)} root={project?.path || chat.cwd || ''} onReveal={revealFile} onSchedule={scheduleFrom} scheduleCreated={(id) => daemonState.schedules.some((s) => s.origin === id)} onOpenSession={openChild} onOpenEdited={openEdited} />
 			</div>
 			{#if proposing}
 				<ScheduleDialog preset={proposing} projects={store.projects} onClose={() => (proposing = null)} />

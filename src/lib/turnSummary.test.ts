@@ -27,7 +27,8 @@ describe('turnSummary', () => {
 			{ kind: 'assistant', text: 'done' }
 		]);
 		expect(summary!.edited).toEqual([
-			{ path: '/p/a.ts', add: 3, del: 1 },
+			{ path: '/p/a.ts', add: 3, del: 1, diffs: ['-x\n+y\n+z', '+w'] },
+			// A change of several files without their own diffs: counts only.
 			{ path: '/p/b.ts', add: 3, del: 1 },
 			{ path: '/p/c.ts', add: 0, del: 2 }
 		]);
@@ -46,8 +47,8 @@ describe('turnSummary', () => {
 	it('splits a multi-file diff at its headers', () => {
 		const diff = ['diff --git a/x.ts b/x.ts', '--- a/x.ts', '+++ b/x.ts', '@@ -1 +1 @@', '-a', '+b', '--- a/gone.ts', '+++ /dev/null', '-c'].join('\n');
 		expect(fileStats({ diff })).toEqual([
-			{ path: 'x.ts', add: 1, del: 1 },
-			{ path: 'gone.ts', add: 0, del: 1 }
+			{ path: 'x.ts', add: 1, del: 1, diffs: ['@@ -1 +1 @@\n-a\n+b'] },
+			{ path: 'gone.ts', add: 0, del: 1, diffs: ['-c'] }
 		]);
 	});
 

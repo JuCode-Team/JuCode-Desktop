@@ -20,6 +20,11 @@ export interface EditorTab {
 	size: number;
 	/** Content at git HEAD (null → unavailable: new file, no repo, binary…). */
 	headText: string | null;
+	/** What the editor shows the file against: the changes since a turn
+	 *  began (`turnBase`), since git HEAD, or none. */
+	compare: 'off' | 'turn' | 'head';
+	/** The file before the turn opened from its edited files (null: none). */
+	turnBase: string | null;
 	/** File changed on disk since load and a save was rejected (覆盖 / 重新加载). */
 	conflict: boolean;
 	/** 1-based line range a ⌘K AI edit is pending on (drives the busy overlay). */
@@ -103,6 +108,8 @@ export class EditorStore {
 			mtime,
 			size,
 			headText: null,
+			compare: 'off',
+			turnBase: null,
 			conflict: false,
 			aiRange: null,
 			rev: 1,
@@ -123,6 +130,21 @@ export class EditorStore {
 		} catch {
 			tab.headText = null; // new file / not a repo / binary at HEAD
 		}
+	}
+
+	/** Show the tab's changes against `mode` (a mode it has no text for: off). */
+	setCompare(path: string, mode: EditorTab['compare']) {
+		const tab = this.tab(path);
+		if (tab) tab.compare = mode;
+	}
+
+	/** A turn's changes to `path`: against `base`, the file before the turn
+	 *  (null when unknown: against git HEAD instead, once it is read). */
+	showTurn(path: string, base: string | null) {
+		const tab = this.tab(path);
+		if (!tab) return;
+		tab.turnBase = base;
+		tab.compare = base != null ? 'turn' : 'head';
 	}
 
 	activate(path: string) {

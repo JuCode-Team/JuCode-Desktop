@@ -1,13 +1,19 @@
 <script lang="ts">
 	// The files a turn edited: one line, closed by default (most readers
-	// don't need it); open, a row per file with its line counts.
+	// don't need it); open, a row per file with its line counts. A row opens
+	// the file with the turn's changes (`onOpen`), else as a file.
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import Collapse from '$lib/ui/Collapse.svelte';
 	import DiffStat from '$lib/DiffStat.svelte';
 	import { relativeTo, type EditedFile } from '$lib/turnSummary';
 	import { t } from '$lib/i18n';
 
-	let { files, root = '', onFile }: { files: EditedFile[]; root?: string; onFile?: (path: string) => void } = $props();
+	let {
+		files,
+		root = '',
+		onFile,
+		onOpen
+	}: { files: EditedFile[]; root?: string; onFile?: (path: string) => void; onOpen?: (file: EditedFile) => void } = $props();
 
 	let open = $state(false);
 	const add = $derived(files.reduce((n, f) => n + f.add, 0));
@@ -23,7 +29,7 @@
 	<Collapse {open}>
 		<div class="rows">
 			{#each files as f (f.path)}
-				<button class="row" data-file={f.path} title={f.path} onclick={() => onFile?.(f.path)}>
+				<button class="row" data-file={f.path} title={f.path} onclick={() => (onOpen ? onOpen(f) : onFile?.(f.path))}>
 					<span class="path">{relativeTo(f.path, root)}</span>
 					<DiffStat add={f.add} del={f.del} />
 				</button>

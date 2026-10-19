@@ -37,7 +37,7 @@
 	import ArtifactCards from '$lib/ArtifactCards.svelte';
 	import ScheduleProposal from '$lib/ScheduleProposal.svelte';
 	import ChildSessions from '$lib/ChildSessions.svelte';
-	import { USER_TOOLS, type Proposal, type TurnSummary } from '$lib/turnSummary';
+	import { USER_TOOLS, type EditedFile, type Proposal, type TurnSummary } from '$lib/turnSummary';
 
 	let {
 		messages,
@@ -76,6 +76,7 @@
 		scheduleCreated,
 		onOpenSession,
 		follow,
+		onOpenEdited,
 		mark = $bindable(-1)
 	}: {
 		messages: Msg[];
@@ -144,6 +145,8 @@
 		onOpenSession?: (session: string) => void;
 		/** Whether the view follows the end (absent: it does). */
 		follow?: () => boolean;
+		/** Opens a file a turn edited with that turn's changes (absent: as a file). */
+		onOpenEdited?: (file: EditedFile) => void;
 	} = $props();
 
 	// ── Rendered blocks ──────────────────────────────────────────────────────
@@ -640,7 +643,7 @@
 
 {#snippet summaryOf(summary: TurnSummary)}
 	{#if summary.children.length}<ChildSessions sessions={summary.children} onOpen={onOpenSession} />{/if}
-	{#if summary.edited.length}<EditedFiles files={summary.edited} {root} {onFile} />{/if}
+	{#if summary.edited.length}<EditedFiles files={summary.edited} {root} {onFile} onOpen={onOpenEdited} />{/if}
 	{#if summary.artifacts.length}<ArtifactCards files={summary.artifacts} onOpen={onFile} {onReveal} />{/if}
 	{#each summary.proposals as p (p.id)}
 		<ScheduleProposal proposal={p} created={scheduleCreated?.(p.id) ?? false} onCreate={onSchedule} />
