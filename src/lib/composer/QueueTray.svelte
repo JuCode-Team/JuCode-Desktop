@@ -1,25 +1,32 @@
 <script lang="ts">
 	import CornerDownRightIcon from '@lucide/svelte/icons/corner-down-right';
 	import FastForwardIcon from '@lucide/svelte/icons/fast-forward';
+	import Undo2Icon from '@lucide/svelte/icons/undo-2';
 	import { popOut } from '$lib/ui/motion';
 	import { t } from '$lib/i18n';
 
 	// Messages sent while a reply runs, inside the composer card above the
 	// editor (as an agent's questions are): each waits for the turn to end,
-	// or goes now (`onSteer`). `joins`: the engine takes it into the running
-	// reply; otherwise sending now stops the reply first.
+	// goes now (`onSteer`) or comes back to the editor (`onUnqueue`).
+	// `joins`: the engine takes it into the running reply; otherwise sending
+	// now stops the reply first. The first `fixed` the engine has already.
 	let {
 		messages,
+		fixed = 0,
 		joins,
 		hint = '',
-		onSteer
+		onSteer,
+		onUnqueue
 	}: {
 		messages: string[];
+		fixed?: number;
 		joins: boolean;
 		/** The shortcut that sends a typed message now, shown in the heading. */
 		hint?: string;
 		/** Sends queued message `index` now (absent: they only wait). */
 		onSteer?: (index: number) => void;
+		/** Takes queued message `index` back to the editor. */
+		onUnqueue?: (index: number) => void;
 	} = $props();
 </script>
 
@@ -33,16 +40,25 @@
 			<div class="row" role="listitem">
 				<span class="ico"><CornerDownRightIcon size={14} /></span>
 				<span class="ttl" title={q}>{q}</span>
-				{#if onSteer}
-					<button
-						type="button"
-						class="go"
-						onmousedown={(e) => e.preventDefault()}
-						onclick={() => onSteer(i)}
-						title={t(joins ? 'chat.steerJoinTitle' : 'chat.steerStopTitle')}
-					>
-						<FastForwardIcon size={12} />{t('chat.steerAction')}
-					</button>
+				{#if i < fixed}
+					<span class="sent">{t('chat.queuedSending')}</span>
+				{:else}
+					{#if onUnqueue}
+						<button type="button" class="go" onmousedown={(e) => e.preventDefault()} onclick={() => onUnqueue(i)} title={t('chat.unqueueTitle')}>
+							<Undo2Icon size={12} />{t('chat.unqueueAction')}
+						</button>
+					{/if}
+					{#if onSteer}
+						<button
+							type="button"
+							class="go"
+							onmousedown={(e) => e.preventDefault()}
+							onclick={() => onSteer(i)}
+							title={t(joins ? 'chat.steerJoinTitle' : 'chat.steerStopTitle')}
+						>
+							<FastForwardIcon size={12} />{t('chat.steerAction')}
+						</button>
+					{/if}
 				{/if}
 			</div>
 		{/each}
@@ -109,6 +125,12 @@
 		white-space: nowrap;
 		color: var(--text);
 		font-size: var(--fs-sm);
+	}
+	.sent {
+		flex-shrink: 0;
+		padding: 3px 9px;
+		color: var(--dim2);
+		font-size: var(--fs-xs);
 	}
 	.go {
 		display: inline-flex;

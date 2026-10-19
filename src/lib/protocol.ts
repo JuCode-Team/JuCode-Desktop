@@ -41,6 +41,8 @@ export type Op =
 	| { op: 'command'; input: string }
 	/** A queued message into the running turn: `index`, negative from the last. */
 	| { op: 'steer'; index?: number }
+	/** A queued message taken back (answered by `unqueued`): `index`, negative from the last. */
+	| { op: 'unqueue'; index: number }
 	// JuCode: runs a failed turn again with no new message (SessionStore.retryTurn).
 	| { op: 'continue' }
 	| { op: 'interrupt' }

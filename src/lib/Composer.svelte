@@ -70,6 +70,7 @@
 		onSubmit,
 		onStop,
 		onSteer,
+		onUnqueue,
 		onPick,
 		onImage,
 		onModel,
@@ -118,6 +119,8 @@
 		onStop: () => void;
 		/** Sends queued message `index` now. */
 		onSteer: (index: number) => void;
+		/** Takes queued message `index` back to the editor. */
+		onUnqueue: (index: number) => void;
 		onPick: () => void;
 		/** A pasted image, saved to a temp file: the pane adds it. */
 		onImage: (path: string) => void;
@@ -811,7 +814,7 @@
 	{/if}
 	<div class="composer" onfocusout={onComposerFocusOut}>
 		{#if chat.pendingMessages.length}
-			<QueueTray messages={chat.pendingMessages} joins={bcaps.steer} hint={shortcutLabel('sendNow')} onSteer={chat.busy ? onSteer : undefined} />
+			<QueueTray messages={chat.pendingMessages} fixed={chat.pendingFixed} joins={bcaps.steer} hint={shortcutLabel('sendNow')} onSteer={chat.busy ? onSteer : undefined} {onUnqueue} />
 		{/if}
 		{#if trayMode}
 			<ComposerTray

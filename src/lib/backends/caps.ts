@@ -9,7 +9,7 @@ export const CLAUDE_CAPS: BackendCaps = {
 	extendedApprovalModes: true, // native plan + auto permission modes
 	planMode: true,
 	hunkApproval: true, // MultiEdit splits into per-edit hunks (single Edit stays whole-call)
-	steer: false, // stdin is the queue: steer stops the turn and the queued messages run next
+	steer: true, // the daemon holds mid-turn messages; steer writes one to the CLI, which takes it in at the next tool boundary
 	interrupt: true, // control_request subtype interrupt
 	branchTree: false,
 	goals: false,

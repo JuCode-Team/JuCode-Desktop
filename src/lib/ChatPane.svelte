@@ -638,6 +638,18 @@
 			chat.pendingFill = null;
 		}
 	});
+	// A queued message taken back: its text before what is typed now, its
+	// images attached again.
+	$effect(() => {
+		const back = chat.unqueued;
+		if (!back) return;
+		chat.unqueued = null;
+		untrack(() => {
+			input = input.trim() ? `${back.content}\n${input}` : back.content;
+			for (const path of back.images) addAttachment(path);
+		});
+		composerEl?.focus();
+	});
 	$effect(() => {
 		if (!chat.pendingAttach.length) return;
 		const paths = chat.pendingAttach;
@@ -1430,6 +1442,7 @@
 				onSubmit={submit}
 				onStop={stop}
 				onSteer={(index) => send({ op: 'steer', index })}
+				onUnqueue={(index) => send({ op: 'unqueue', index })}
 				onPick={pickFiles}
 				onModel={openModelPicker}
 				onModelSelect={selectRow}

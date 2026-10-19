@@ -427,6 +427,12 @@ export class ChatState {
 	#billingTurns: Record<string, BillingCost> = {};
 	#turnBillingIds: string[] = [];
 	pendingMessages = $state<string[]>([]);
+	/** How many of pendingMessages the engine has already (first): no
+	 *  sending ahead or taking back for those. */
+	pendingFixed = $state(0);
+	/** A queued message taken back (`unqueued`): the composer takes it in to
+	 *  edit again. */
+	unqueued = $state<{ content: string; images: string[] } | null>(null);
 	picker = $state<Picker>(null);
 	/** The daemon names the conversation (and keeps a rename); until then
 	 *  this placeholder. */
@@ -1324,6 +1330,10 @@ export class ChatState {
 				break;
 			case 'pending_messages':
 				this.pendingMessages = arr<string>(ev.messages);
+				this.pendingFixed = typeof ev.fixed === 'number' ? ev.fixed : 0;
+				break;
+			case 'unqueued':
+				this.unqueued = { content: str(ev.content), images: arr<string>(ev.images).filter((p) => typeof p === 'string') };
 				break;
 			case 'tree_view':
 				this.picker = { kind: 'tree', nodes: arr<TreeNode>(ev.nodes) };

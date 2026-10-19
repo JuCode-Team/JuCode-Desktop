@@ -29,13 +29,13 @@ describe('caps() gating helper', () => {
 		// replay) and rewind (reopened with --resume-session-at) are live;
 		// so are subagents and background tasks (system/task_*), the CLI's own
 		// slash commands, and its MCP servers (switch / reconnect, not edit);
-		// steer (stdin is already a queue), plan/goal tabs, tree and skills stay
-		// hidden.
+		// plan/goal tabs, tree and skills stay hidden; mid-turn messages wait in
+		// the daemon and steer in at the next tool boundary.
 		const cl = caps({ backendId: 'claude' });
 		expect(cl.approvalModes).toBe(true);
 		expect(cl.interrupt).toBe(true);
 		expect(cl.contextUsage).toBe(true);
-		expect(cl.steer).toBe(false);
+		expect(cl.steer).toBe(true);
 		expect(cl.goals).toBe(false);
 		expect(cl.branchTree).toBe(false);
 		expect(cl.checkpoints).toBe(true); // conversation rewind via --resume-session-at respawn

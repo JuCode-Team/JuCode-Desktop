@@ -538,6 +538,21 @@
 		if (!chat.busy) queued = [];
 	});
 	const waiting = $derived(chat.pendingMessages.length ? chat.pendingMessages : queued);
+	// A queued message taken back: its text before what is typed now, its
+	// images (already on the computer) attached again.
+	$effect(() => {
+		const back = chat.unqueued;
+		if (!back) return;
+		chat.unqueued = null;
+		untrack(() => {
+			text = text.trim() ? `${back.content}\n${text}` : back.content;
+			for (const path of back.images) {
+				const name = path.split(/[\\/]/).pop() || path;
+				attachments.push({ key: ++attachKey, name, sent: 0, total: 0, done: { path, name, size: 0, image: true } });
+			}
+		});
+		tick().then(() => (autosize(), input?.focus()));
+	});
 
 	// The approval mode, as on the desktop: claude adds plan and auto.
 	const APPROVAL_MODES: Record<string, PopMenuItem> = {
@@ -881,7 +896,13 @@
 				<form class="composer" onsubmit={(e) => (e.preventDefault(), submit())}>
 					{#if waiting.length}
 						<!-- Only messages the engine lists can be sent ahead (by their place in its queue). -->
-						<QueueTray messages={waiting} joins={bcaps.steer} onSteer={chat.busy && chat.pendingMessages.length ? (index) => send({ op: 'steer', index }) : undefined} />
+						<QueueTray
+							messages={waiting}
+							fixed={chat.pendingMessages.length ? chat.pendingFixed : 0}
+							joins={bcaps.steer}
+							onSteer={chat.busy && chat.pendingMessages.length ? (index) => send({ op: 'steer', index }) : undefined}
+							onUnqueue={chat.pendingMessages.length ? (index) => send({ op: 'unqueue', index }) : undefined}
+						/>
 					{/if}
 					<textarea
 						rows="1"

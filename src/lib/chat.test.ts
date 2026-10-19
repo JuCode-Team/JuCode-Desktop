@@ -162,6 +162,17 @@ describe('ChatState.handle', () => {
 		expect(tool('bg')).toMatchObject({ running: false });
 	});
 
+	it('keeps how many queued messages the engine has, and a message taken back', () => {
+		const c = new ChatState();
+		c.handle({ type: 'pending_messages', messages: ['a', 'b'], fixed: 1 });
+		expect(c.pendingMessages).toEqual(['a', 'b']);
+		expect(c.pendingFixed).toBe(1);
+		c.handle({ type: 'pending_messages', messages: ['a'] });
+		expect(c.pendingFixed).toBe(0);
+		c.handle({ type: 'unqueued', content: 'b', images: ['/tmp/x.png'] });
+		expect(c.unqueued).toEqual({ content: 'b', images: ['/tmp/x.png'] });
+	});
+
 	it('resolves a pencil rewind intent from checkpoint_view by position', () => {
 		const c = new ChatState();
 		c.rewindIntent = { userIndex: 1, text: 'edit me' };
