@@ -32,6 +32,7 @@
 	import { CHATS_ENABLED, type Project, type Session } from '$lib/types';
 	import RequirementTag from '$lib/requirements/RequirementTag.svelte';
 	import { useRequirements } from '$lib/requirements.svelte';
+	import { prefs } from '$lib/prefs.svelte';
 
 	let {
 		projects,
@@ -362,6 +363,10 @@
 					{#if picked.includes(s.id)}<CheckIcon size={12} />{/if}
 				</span>
 			{/if}
+			<!-- A draft belongs to no backend until its first message. -->
+			{#if prefs.sessionAgentIcon && s.backendId && !s.draft}
+				<span class="backend-chip" title={BACKEND_LABELS[s.backendId]}><BackendIcon backend={s.backendId} agent={s.chat.acpAgentId} size={14} mono /></span>
+			{/if}
 			{#if s.icon}
 				<TabGlyph icon={s.icon} color={s.color} size={14} />
 			{:else if s.color}
@@ -389,10 +394,6 @@
 				>
 			{/if}
 			{#if req}<RequirementTag id={req.id} title={req.title} />{/if}
-			<!-- A draft belongs to no backend until its first message. -->
-			{#if s.backendId && s.backendId !== 'jucode' && !s.draft}
-				<span class="backend-chip" title={BACKEND_LABELS[s.backendId]}><BackendIcon backend={s.backendId} agent={s.chat.acpAgentId} size={12} /></span>
-			{/if}
 			{#if s.pinned && !s.archived}<span class="pin-mark" title={t('shell.pin')}><PinIcon size={12} fill="currentColor" /></span>{/if}
 			<SessionMark status={status} />
 			{#if !selectable}
@@ -927,8 +928,12 @@
 	}
 	.backend-chip {
 		display: inline-flex;
-		color: var(--dim);
+		color: var(--text);
 		flex-shrink: 0;
+	}
+	/* Every engine's mark in the same plain colour, the ACP plug included. */
+	.backend-chip :global(.mark) {
+		color: inherit;
 	}
 
 	.folder {

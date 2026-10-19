@@ -629,6 +629,9 @@
 								<Switch checked={prefs.sidebarVibrancy} label={t('settings.behavior.vibrancy')} onChange={(on) => prefs.setSidebarVibrancy(on)} />
 							</SettingsRow>
 						{/if}
+						<SettingsRow id="session-agent-icon" title={t('settings.behavior.sessionAgentIcon')} description={t('settings.behavior.sessionAgentIconHint')}>
+							<Switch checked={prefs.sessionAgentIcon} label={t('settings.behavior.sessionAgentIcon')} onChange={(on) => prefs.setFlag('sessionAgentIcon', on)} />
+						</SettingsRow>
 						<SettingsRow id="default-surface" title={t('settings.behavior.defaultSurface')} description={t('settings.behavior.defaultSurfaceHint')}>
 							<Segmented
 								value={prefs.defaultSurface}

@@ -50,6 +50,7 @@ export const ROWS: SearchRow[] = [
 	{ section: 'general', id: 'language', titleKey: 'settings.language' },
 	{ section: 'general', id: 'theme', titleKey: 'settings.theme' },
 	{ section: 'general', id: 'vibrancy', titleKey: 'settings.behavior.vibrancy', descKey: 'settings.behavior.vibrancyHint' },
+	{ section: 'general', id: 'session-agent-icon', titleKey: 'settings.behavior.sessionAgentIcon', descKey: 'settings.behavior.sessionAgentIconHint' },
 	{ section: 'general', id: 'default-surface', titleKey: 'settings.behavior.defaultSurface', descKey: 'settings.behavior.defaultSurfaceHint' },
 	{ section: 'general', id: 'open-elsewhere', titleKey: 'settings.behavior.openElsewhere', descKey: 'settings.behavior.openElsewhereHint' },
 	{ section: 'general', id: 'ui-font', titleKey: 'settings.behavior.uiFont', descKey: 'settings.behavior.uiFontHint' },
