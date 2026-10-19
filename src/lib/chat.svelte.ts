@@ -967,7 +967,29 @@ export class ChatState {
 	 *  delivered (see the `status` handler). */
 	#finishStuckTools() {
 		for (const m of this.messages) {
-			if (m.kind === 'tool' && m.running) {
+			// A background subagent's calls go on after the turn: its own
+			// result, or its end, finishes them.
+			if (m.kind === 'tool' && m.running && !(m.subagent && this.#agentRunning(m.subagent))) {
+				m.running = false;
+				m.endedAt ??= Date.now();
+			}
+		}
+	}
+
+	/** Whether the subagent named `label` (its calls' `subagent`) still runs. */
+	#agentRunning(label: string): boolean {
+		const live = (state: string) => !FINAL_AGENT.includes(state);
+		return (
+			Object.values(this.subagents).some((a) => a.label === label && !a.endedAt) ||
+			this.agentRuns.agents.some((a) => a.label === label && live(a.state)) ||
+			this.agentRuns.workflows.some((w) => w.agents.some((a) => a.label === label && live(a.state)))
+		);
+	}
+
+	/** A subagent ended: its calls still spinning are done too. */
+	#finishAgentTools(label: string) {
+		for (const m of this.messages) {
+			if (m.kind === 'tool' && m.running && m.subagent === label) {
 				m.running = false;
 				m.endedAt ??= Date.now();
 			}
@@ -1585,6 +1607,8 @@ export class ChatState {
 					startedAt: prev?.startedAt ?? now,
 					...(ended ? { endedAt: prev?.endedAt ?? now } : {})
 				};
+				const label = this.subagents[path]!.label;
+				if (ended && label) this.#finishAgentTools(label);
 				break;
 			}
 			// The plan as the model writes it: one message grows, and the

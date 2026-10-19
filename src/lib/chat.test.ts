@@ -149,6 +149,19 @@ describe('ChatState.handle', () => {
 		expect(tool).toMatchObject({ kind: 'tool', name: 'read', running: false });
 	});
 
+	it("leaves a background subagent's running calls alone when the turn ends, until the subagent ends", () => {
+		const c = new ChatState();
+		c.handle({ type: 'subagent_lifecycle', path: 't1', label: 'Scan auth', status: 'running' });
+		c.handle({ type: 'tool_start', call_id: 'bg', name: 'grep', subagent: 'Scan auth' });
+		c.handle({ type: 'tool_start', call_id: 'main', name: 'read' });
+		c.handle({ type: 'status', message: 'ready' });
+		const tool = (id: string) => c.messages.find((m) => m.kind === 'tool' && m.callId === id);
+		expect(tool('main')).toMatchObject({ running: false });
+		expect(tool('bg')).toMatchObject({ running: true });
+		c.handle({ type: 'subagent_lifecycle', path: 't1', label: 'Scan auth', status: 'completed' });
+		expect(tool('bg')).toMatchObject({ running: false });
+	});
+
 	it('resolves a pencil rewind intent from checkpoint_view by position', () => {
 		const c = new ChatState();
 		c.rewindIntent = { userIndex: 1, text: 'edit me' };
