@@ -623,9 +623,17 @@
 	 *  front, also when it already was the active one behind another tab. */
 	function showSession(id: string) {
 		store.activeId = id;
-		if (!tilesReady || !chatSessionsIn(tiles).includes(id)) return;
-		applyTiles(activateTab(tiles, chatPanel(id)));
-		focusedLeaf = leafOfTab(tiles.root, chatPanel(id))?.id ?? focusedLeaf;
+		// Its tab may have been closed while it stayed the active session:
+		// the effect below sees no change then.
+		revealChat(id);
+	}
+	/** Focuses session `id`'s chat tab, opening one in the focused leaf. */
+	function revealChat(id: string) {
+		if (!tilesReady || !store.shownSessions.some((s) => s.id === id)) return;
+		if (chatSessionsIn(tiles).includes(id)) applyTiles(activateTab(tiles, chatPanel(id)));
+		else applyTiles(openChatTab(tiles, focusedLeaf, id));
+		const leaf = leafOfTab(tiles.root, chatPanel(id));
+		if (leaf) focusedLeaf = leaf.id;
 	}
 
 	// The workbench-active session always has a chat tile: activating a session
@@ -633,14 +641,7 @@
 	$effect(() => {
 		const id = store.activeId;
 		if (!tilesReady || !id) return;
-		untrack(() => {
-			// An agent's session shows on the workbench only.
-			if (!store.shownSessions.some((s) => s.id === id)) return;
-			if (chatSessionsIn(tiles).includes(id)) applyTiles(activateTab(tiles, chatPanel(id)));
-			else applyTiles(openChatTab(tiles, focusedLeaf, id));
-			const leaf = leafOfTab(tiles.root, chatPanel(id));
-			if (leaf) focusedLeaf = leaf.id;
-		});
+		untrack(() => revealChat(id));
 	});
 
 	// Chat tiles of closed (or hidden) sessions disappear with them, and a
