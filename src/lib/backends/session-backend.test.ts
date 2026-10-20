@@ -39,7 +39,7 @@ describe('SessionStore × backends', () => {
 		expect(hostSession).not.toHaveBeenCalled();
 		begin(id);
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined, false, undefined);
+		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined, false, undefined, expect.any(String));
 		expect(adapterFor(id)?.id).toBe('jucode');
 		expect(p.lastBackend).toBe('jucode');
 		const cl = store.addSession(p, undefined, 'claude');
@@ -57,7 +57,7 @@ describe('SessionStore × backends', () => {
 		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined, false, {
 			engine: 'claude',
 			options: { approval_mode: 'read-only' }
-		});
+		}, expect.any(String));
 		expect(p.lastBackend).toBe('claude');
 		// The daemon names the conversation.
 		expect(p.sessions[0].chat.sessionId).toBe('conv-1');
@@ -69,7 +69,7 @@ describe('SessionStore × backends', () => {
 		expect(hostSession).toHaveBeenLastCalledWith(id2, p.path, undefined, false, {
 			engine: 'claude',
 			options: { approval_mode: 'read-only' }
-		});
+		}, expect.any(String));
 	});
 
 	it('ops of any backend go out as jucode lines', async () => {
@@ -127,7 +127,7 @@ describe('SessionStore × backends', () => {
 		expect(hostSession).toHaveBeenCalledWith(sessions[1].id, '/tmp/p1', 's-b', false, {
 			engine: 'claude',
 			options: { approval_mode: 'read-only' }
-		});
+		}, undefined);
 		expect(sendLine).not.toHaveBeenCalledWith(sessions[1].id, expect.stringContaining('/resume'));
 	});
 
@@ -146,7 +146,7 @@ describe('SessionStore × backends', () => {
 		expect(hostSession).toHaveBeenCalledWith(id, p.path, 'thread-1', false, {
 			engine: 'codex',
 			options: { approval_mode: 'read-only' }
-		});
+		}, undefined);
 		expect(sendLine).not.toHaveBeenCalledWith(id, expect.stringContaining('/resume'));
 	});
 
@@ -171,7 +171,7 @@ describe('SessionStore × backends', () => {
 		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined, false, {
 			engine: 'acp',
 			options: { agent: 'omp', approval_mode: 'read-only' }
-		});
+		}, expect.any(String));
 		expect(p.lastAcpAgent).toEqual(agent);
 		// An agent with a gateway mode switches like Claude Code / Codex.
 		const s = p.sessions.find((x) => x.id === id)!;
@@ -180,7 +180,7 @@ describe('SessionStore × backends', () => {
 		expect(hostSession).toHaveBeenLastCalledWith(id, p.path, 'conv-1', false, {
 			engine: 'acp',
 			options: { agent: 'omp', approval_mode: 'read-only', jucode_gateway: true }
-		});
+		}, undefined);
 	});
 
 	it('an ACP agent without a gateway mode keeps its process on a profile switch', async () => {
@@ -205,7 +205,7 @@ describe('SessionStore × backends', () => {
 		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined, false, {
 			engine: 'acp',
 			options: { command: 'gemini', args: ['--experimental-acp'], env: {} }
-		});
+		}, expect.any(String));
 	});
 
 	it('a restored ACP tab keeps its built-in agent', async () => {
@@ -228,7 +228,7 @@ describe('SessionStore × backends', () => {
 		expect(hostSession).toHaveBeenCalledWith('t1', '/tmp/p1', 'acp-1', false, {
 			engine: 'acp',
 			options: { agent: 'pi', approval_mode: 'read-only' }
-		});
+		}, undefined);
 		expect(store.serialize()[0]).toMatchObject({ lastAcpAgent: agent, tabs: [{ acpAgent: agent }] });
 	});
 });

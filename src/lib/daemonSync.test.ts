@@ -167,11 +167,11 @@ describe('DaemonSync', () => {
 		const frame = (rev: number, projects: { id: string; name: string; path: string }[]) =>
 			sync.handle({ type: 'workspaces', rev, workspaces: [{ id: ws.id, name: ws.name, is_default: true, projects }] });
 		frame(3, [{ id: 'p1', name: 'app', path: '/w/app' }, { id: 'p9', name: 'new', path: '/w/new' }]);
-		sync.reconcile([{ session: 's-1', cwd: '/w/app', created_at: 0, open: false, engine: 'jucode' }]);
+		sync.reconcile([{ session: 's-1', cwd: '/w/app', created_at: 0, open: false, engine: 'jucode', project: 'p1' }]);
 		sync.reset();
 		frame(1, [{ id: 'p1', name: 'app', path: '/w/app' }]);
 		sync.reconcile([]);
-		expect(store.projects.map((p) => p.path)).toEqual(['/w/app', '/w/new']);
+		expect(store.workspaceProjects.map((p) => p.path)).toEqual(['/w/app', '/w/new']);
 		expect(store.projects[0].sessions.map((s) => s.chat.sessionId)).toEqual(['s-1']);
 	});
 
@@ -200,11 +200,13 @@ describe('DaemonSync', () => {
 	it('lists daemon sessions dormant, follows their titles and archive state, and drops removed ones', async () => {
 		const { sync, store } = await setup();
 		const session = (over: Record<string, unknown> = {}) => ({
-			session: 's-1', cwd: '/w/app/', created_at: 0, open: false, title: 'fix login', archived: false, engine: 'claude', ...over
+			session: 's-1', cwd: '/w/app/', created_at: 0, open: false, title: 'fix login', archived: false, engine: 'claude', project: 'p1', ...over
 		});
-		sync.reconcile([session(), session({ session: 's-other', cwd: '/elsewhere' })]);
+		sync.reconcile([session(), session({ session: 's-other', cwd: '/elsewhere', project: null })]);
 		const listed = store.projects[0].sessions;
 		expect(listed).toHaveLength(1);
+		// Of no project: in the loose group, in its own folder.
+		expect(store.loose!.sessions.map((s) => [s.chat.sessionId, s.cwd])).toEqual([['s-other', '/elsewhere']]);
 		expect(listed[0]).toMatchObject({ dormant: true, backendId: 'claude' });
 		expect(listed[0].chat.sessionId).toBe('s-1');
 		expect(listed[0].chat.title).toBe('fix login');
@@ -215,13 +217,49 @@ describe('DaemonSync', () => {
 
 		sync.reconcile([]);
 		expect(store.projects[0].sessions).toHaveLength(0);
+		expect(store.loose!.sessions).toHaveLength(0);
+	});
+
+	it('with a daemon that names no project, sessions stay where they are and new ones go by folder', async () => {
+		const { sync, store } = await setup();
+		const p = store.projects[0];
+		const id = store.addSession(p);
+		const s = p.sessions[0];
+		s.draft = false;
+		s.chat.sessionId = 's-1';
+		sync.reconcile([
+			{ session: 's-1', cwd: '/elsewhere', created_at: 0, open: true, engine: 'jucode' },
+			{ session: 's-2', cwd: '/w/app', created_at: 0, open: false, engine: 'jucode' }
+		]);
+		expect(store.ownerOf(id)).toBe(p);
+		expect(p.sessions.map((x) => x.chat.sessionId)).toEqual(['s-2', 's-1']);
+		expect(store.loose).toBeUndefined();
+	});
+
+	it('places a session by its project, follows a move, and lets one go to another workspace', async () => {
+		const { sync, store } = await setup();
+		store.projects.push({ id: 'p2', name: 'web', path: '/w/web', sessions: [] });
+		const session = (project: string | null, cwd = '/w/web') => ({ session: 's-1', cwd, created_at: 0, open: false, engine: 'jucode', project });
+		// In p1 although it works in p2's folder.
+		sync.reconcile([session('p1')]);
+		const s = store.projects[0].sessions[0];
+		expect(s.cwd).toBe('/w/web');
+		sync.reconcile([session('p2')]);
+		expect(store.projects[1].sessions).toEqual([s]);
+		expect(s.cwd).toBeUndefined();
+		sync.reconcile([session(null)]);
+		expect(store.loose!.sessions).toEqual([s]);
+		expect(s.cwd).toBe('/w/web');
+		// A project this window does not have: not listed here.
+		sync.reconcile([session('p-elsewhere')]);
+		expect(store.allSessions).toHaveLength(0);
 	});
 
 	it('lists a built-in ACP agent\'s session (a scheduled run, a phone\'s), never a registered agent\'s', async () => {
 		const { sync, store } = await setup();
 		sync.reconcile([
-			{ session: 's-omp', cwd: '/w/app', created_at: 0, open: false, engine: 'acp', agent: 'omp' },
-			{ session: 's-custom', cwd: '/w/app', created_at: 0, open: false, engine: 'acp', agent: null }
+			{ session: 's-omp', cwd: '/w/app', created_at: 0, open: false, engine: 'acp', agent: 'omp', project: 'p1' },
+			{ session: 's-custom', cwd: '/w/app', created_at: 0, open: false, engine: 'acp', agent: null, project: 'p1' }
 		]);
 		const listed = store.projects[0].sessions;
 		expect(listed.map((s) => s.chat.sessionId)).toEqual(['s-omp']);
@@ -238,7 +276,7 @@ describe('DaemonSync', () => {
 	it('skips a just-created session while a tab here waits for its id, not while only drafts are open', async () => {
 		const { sync, store } = await setup();
 		const p = store.projects[0];
-		const fresh = (session: string) => ({ session, cwd: '/w/app', created_at: Date.now(), open: true, engine: 'jucode' });
+		const fresh = (session: string) => ({ session, cwd: '/w/app', created_at: Date.now(), open: true, engine: 'jucode', project: 'p1' });
 		// A draft has no daemon session yet: nothing is on its way to it.
 		store.addSession(p);
 		sync.reconcile([fresh('s-new')]);
@@ -257,7 +295,7 @@ describe('DaemonSync', () => {
 	it('keeps the sidebar order and pins over a reconcile; new daemon sessions join at the start', async () => {
 		const { sync, store } = await setup();
 		const p = store.projects[0];
-		const session = (id: string) => ({ session: id, cwd: '/w/app', created_at: 0, open: false, engine: 'jucode', title: id });
+		const session = (id: string) => ({ session: id, cwd: '/w/app', created_at: 0, open: false, engine: 'jucode', title: id, project: 'p1' });
 		sync.reconcile([session('s-1'), session('s-2'), session('s-3')]);
 		const id = (sid: string) => p.sessions.find((s) => s.chat.sessionId === sid)!.id;
 		store.moveSession(id('s-3'), id('s-1'), false);
@@ -275,7 +313,7 @@ describe('DaemonSync', () => {
 
 	it('shares renames, archiving and closing of daemon sessions', async () => {
 		const { store, sync } = await setup();
-		sync.reconcile([{ session: 's-3', cwd: '/w/app', created_at: 0, open: false, engine: 'jucode', title: 'x' }]);
+		sync.reconcile([{ session: 's-3', cwd: '/w/app', created_at: 0, open: false, engine: 'jucode', title: 'x', project: 'p1' }]);
 		const id = store.projects[0].sessions[0].id;
 		store.renameSession(id, 'Nice name');
 		store.archiveSession(id);

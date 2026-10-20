@@ -112,7 +112,8 @@
 				title: view?.title || t('shell.untitled'),
 				engine: BACKEND_LABELS[normalizeBackendId(view?.engine ?? 'jucode')],
 				at: view?.updated_at ?? view?.created_at,
-				project: view ? base(view.cwd) : '',
+				// Its project, else (of none) its folder.
+				project: view ? (projects.find((p) => p.id === view.project)?.name ?? base(view.cwd)) : '',
 				state: r.session_states?.[id]
 			};
 		})

@@ -112,7 +112,7 @@
 	import Modal from '$lib/ui/Modal.svelte';
 	import BackendIcon from '$lib/BackendIcon.svelte';
 	import { daemonState } from '$lib/daemonState.svelte';
-	import { CHATS_ENABLED, type Project, type WorktreeMeta } from '$lib/types';
+	import { CHATS_ENABLED, LOOSE_ID, type Project, type WorktreeMeta } from '$lib/types';
 	import PlanPanel from '$lib/PlanPanel.svelte';
 	import ProposalPane from '$lib/ProposalPane.svelte';
 	import { planPages, proposalOf, proposalPanel } from '$lib/planPages.svelte';
@@ -135,6 +135,8 @@
 	const active = $derived(store.active);
 	const chat = $derived(store.chat);
 	const activeProject = $derived(store.activeProject);
+	/** Where the active session works (its own folder, else its project's). */
+	const activeCwd = $derived(store.activeId ? store.cwdOf(store.activeId) : undefined);
 	const activeId = $derived(store.activeId);
 	// A session by id, read from the store each time. A derived map of them
 	// went stale twice after the app had run a while (even a new tab's first
@@ -248,8 +250,7 @@
 	async function startRequirement(r: Requirement, how: StartHow) {
 		try {
 			telemetry.track('requirement_start');
-			const path = how.project ?? workspaceProjects.find((p) => p.id === r.project)?.path;
-			const project = path ? await openProjectPath(path, false) : null;
+			const project = store.workspaceProjects.find((p) => p.id === (how.project ?? r.project) && !p.stale);
 			if (!project) return toast.warn(t('shell.requirement.pickProject'));
 			if (!r.project) await requirements.update(r.id, { project: project.id });
 			if (how.mode === 'worktree') {
@@ -289,13 +290,18 @@
 		return requirements.list.filter((r) => needsYou(r) && (!r.project || ids.has(r.project))).length;
 	});
 	const workspaceProjects = $derived(
-		projects.filter((p) => !p.worktree && !p.chats).map((p) => ({ id: p.id, path: p.path, name: p.name }))
+		store.workspaceProjects.filter((p) => !p.worktree).map((p) => ({ id: p.id, path: p.path, name: p.name }))
 	);
 
-	/** Show a daemon session in a tab. */
-	function openDaemonSession(session: string) {
+	/** Show a daemon session in a tab; one of a project of another workspace
+	 *  opens there. */
+	async function openDaemonSession(session: string) {
 		const listed = daemonState.sessions.find((s) => s.session === session);
-		store.openDaemonSession(listed?.cwd ?? '', session, listed?.title, listed?.engine, listed?.gateway, listed?.agent);
+		const elsewhere = listed?.project && !store.workspaceProjects.some((p) => p.id === listed.project)
+			? workspaces.workspaces.find((w) => w.id !== workspaces.activeId && w.projects.some((p) => p.id === listed.project))
+			: undefined;
+		if (elsewhere) await switchWorkspace(elsewhere.id);
+		store.openDaemonSession(listed?.cwd ?? '', session, listed?.title, listed?.engine, listed?.gateway, listed?.agent, true, listed?.project);
 		showDesk = false;
 	}
 	let showQuickOpen = $state(false);
@@ -444,12 +450,16 @@
 	let tuiPick = $state<Project | null>(null);
 	function newSession(p: Project) {
 		if (prefs.defaultSurface === 'tui' && !p.chats) tuiPick = p;
-		else store.addSession(p);
+		else store.addSession(p, undefined, undefined, undefined, looseCwd(p));
+	}
+	/** A new session of no project works where the active one does. */
+	function looseCwd(p: Project) {
+		return p.loose ? (activeCwd ?? store.workspaceProjects[0]?.path) : undefined;
 	}
 	function pickTuiBackend(backend: BackendId) {
 		const p = tuiPick;
 		tuiPick = null;
-		if (p) store.addTuiSession(p, backend);
+		if (p) store.addTuiSession(p, backend, looseCwd(p));
 	}
 	// The TUI panel of each conversation in its TUI, for the title bar's way back.
 	const tuiPanels: Record<string, TuiPanel | undefined> = $state({});
@@ -712,7 +722,7 @@
 	// The editor confines opens / resolves relative engine paths against the
 	// active project's root.
 	$effect(() => {
-		if (activeProject) editorStore.root = activeProject.path;
+		if (activeCwd) editorStore.root = activeCwd;
 	});
 
 	// ⌘E audits the current change instead of opening a blank IDE: it reveals
@@ -731,7 +741,7 @@
 		if (!c.busy) {
 			// Snapshot the working tree before the turn (codex/claude rewinds
 			// restore files from it; jucode checkpoints engine-side).
-			const cwd = activeProject?.path;
+			const cwd = activeCwd;
 			if (cwd && (c.backendId === 'codex' || c.backendId === 'claude')) {
 				const idx = c.userTurns;
 				gitCheckpointCapture(cwd)
@@ -761,6 +771,8 @@
 	// One list of projects and sessions with the daemon (and so with paired
 	// devices): the desktop's edits go to it, other clients' come back.
 	const sync = new DaemonSync(store, workspaces, () => store.loaded && !wsBusy);
+	// A new session may name a project just added: the daemon hears of it first.
+	store.projectsSynced = () => sync.push();
 	$effect(() => {
 		if (!store.loaded || wsBusy) return;
 		// A list that came while the tree was being restored or swapped.
@@ -836,7 +848,8 @@
 		wsBusy = true;
 		try {
 			tilesReady = false; // gate the tile effects during the swap
-			for (const p of [...store.projects]) store.detachProject(p);
+			// Sessions of no project stay: they show in every workspace.
+			for (const p of store.projects.filter((x) => !x.loose)) store.detachProject(p);
 			store.loaded = false; // re-gate the persist effect during the swap
 			await store.restore(entry.projects);
 			if (gen !== wsGen) return;
@@ -943,6 +956,14 @@
 		ev.preventDefault();
 		projectChromeFor = { id: p.id, x: ev.clientX, y: ev.clientY, tab };
 	}
+	/** Where a session can move (移到项目): this workspace's other projects,
+	 *  and out of any. Chats stay chats. */
+	function projectTargets(id: string) {
+		const owner = store.ownerOf(id);
+		if (!owner || owner.chats) return [];
+		const list = store.workspaceProjects.filter((p) => p !== owner && !p.stale).map((p) => ({ id: p.id, name: p.name }));
+		return owner.loose ? list : [...list, { id: LOOSE_ID, name: t('shell.noProject') }];
+	}
 	/** The workspaces other than the open one, for 移到工作区. */
 	const otherWorkspaces = $derived(workspaces.workspaces.filter((w) => w.id !== workspaces.activeId).map((w) => ({ id: w.id, name: w.name })));
 	/** A project, its tabs with it, moves to another workspace. Its sessions
@@ -951,7 +972,11 @@
 		const saved = store.serialize().find((x) => x.id === p.id);
 		const target = workspaces.workspaces.find((w) => w.id === wsId);
 		if (!saved || !target) return;
-		workspaces.setProjects(wsId, [...target.projects.filter((x) => x.id !== p.id && normPath(x.path) !== normPath(p.path)), saved]);
+		// Replacing it would take that project's sessions out of it.
+		if (target.projects.some((x) => x.id !== p.id && normPath(x.path) === normPath(p.path))) {
+			return toast.warn(t('shell.workspace.moveConflict', { ws: target.name }));
+		}
+		workspaces.setProjects(wsId, [...target.projects.filter((x) => x.id !== p.id), saved]);
 		store.detachProject(p);
 		workspaces.updateProjects(store.serialize());
 		toast.info(t('shell.workspace.moved', { name: p.name, ws: target.name }));
@@ -1144,7 +1169,7 @@
 		if (matches(e, 'audit')) return act(toggleAudit);
 		if (matches(e, 'quickOpen')) return act(() => activeProject && (showQuickOpen = !showQuickOpen));
 		if (matches(e, 'terminal')) return act(() => openPanelTile('terminal'));
-		if (matches(e, 'history')) return act(() => activeProject && store.openHistory(activeProject));
+		if (matches(e, 'history')) return act(() => activeProject && !activeProject.loose && store.openHistory(activeProject));
 		if (matches(e, 'focusComposer') && pane) return act(pane.focusComposer);
 		if (matches(e, 'stop') && pane) return act(pane.stop);
 		if (matches(e, 'model') && pane) return act(pane.openModelMenu);
@@ -1346,7 +1371,7 @@
 			ChatState.onSessionStarted = (cwd, started) => {
 				const id = String(started.session);
 				const listed = daemonState.sessions.find((s) => s.session === id);
-				store.openDaemonSession(listed?.cwd ?? cwd, id, listed?.title ?? String(started.title ?? ''), String(started.engine ?? ''), listed?.gateway, listed?.agent, false);
+				store.openDaemonSession(listed?.cwd ?? cwd, id, listed?.title ?? String(started.title ?? ''), String(started.engine ?? ''), listed?.gateway, listed?.agent, false, listed?.project);
 			};
 			cleanups.push(() => (ChatState.onSessionStarted = null));
 			// A turn that failed on the connection is picked back up (autoRetry.ts).
@@ -1427,8 +1452,8 @@
 		onAdd={(key) => mosaicAdd(focusedLeaf, key)}
 	>
 		{#snippet actions()}
-			{@const editorProject = showSettings || showDesk ? undefined : (shownProject ?? activeProject)}
-			{#if editorProject && !editorProject.chats && !editorProject.stale}<OpenInEditor path={editorProject.path} />{/if}
+			{@const editorPath = showSettings || showDesk ? undefined : shownProject ? shownProject.path : activeProject && !activeProject.chats && !activeProject.stale ? activeCwd : undefined}
+			{#if editorPath}<OpenInEditor path={editorPath} />{/if}
 			{#if !showSettings && !showDesk && active && active.surface === 'tui'}
 				<button class="tile-action" title={t('dock.tui.backToGui')} aria-label={t('dock.tui.backToGui')} onclick={() => active && tuiPanels[active.id]?.backToGui()}>
 					<MessageSquareTextIcon size={16} />
@@ -1457,6 +1482,7 @@
 			onRename={(id, name) => workspaces.rename(id, name)}
 			onChrome={(id, chrome) => workspaces.setChrome(id, chrome)}
 			onDelete={deleteWorkspace}
+			onMove={(id, target, after) => workspaces.move(id, target, after)}
 			loggedIn={providers.includes('jucode')}
 			updateAvailable={updater.available}
 			settingsOpen={showSettings}
@@ -1491,6 +1517,10 @@
 				onPinSession={(id, pinned) => store.setPinned(id, pinned)}
 				onMoveSession={(id, target, after) => store.moveSession(id, target, after)}
 				onMoveProject={(id, target, after) => store.moveProject(id, target, after)}
+				onMoveProjectToWorkspace={(id, ws) => {
+					const p = store.workspaceProjects.find((x) => x.id === id);
+					if (p) moveProjectToWorkspace(p, ws);
+				}}
 				onRenameSession={(id, title) => store.renameSession(id, title)}
 				onSessionMenu={openSessionMenu}
 				onProjectMenu={openProjectMenu}
@@ -1545,7 +1575,7 @@
 											<TuiPanel
 												bind:this={tuiPanels[sid]}
 												backend={sess.backendId}
-												cwd={store.projectPathOf(sid) ?? ''}
+												cwd={store.cwdOf(sid) ?? ''}
 												session={daemon.sessionOf(sid)}
 												terminal={sess.chat.terminal}
 												onBackToGui={() => store.returnToGui(sid)}
@@ -1607,12 +1637,12 @@
 										}}
 									/>
 								{:else if tab.panel === 'goal'}<GoalPanel goal={chat?.goal ?? null} />
-								{:else if tab.panel === 'files'}<FilesPanel rootDir={activeProject?.path ?? ''} />
-								{:else if tab.panel === 'git'}<GitPanel cwd={activeProject?.path ?? ''} worktree={activeProject?.worktree ?? null} llm={llmTarget} onOpenTask={(path, meta) => openTaskProject(path, meta)} onTaskRemoved={closeTaskProject} />
-								{:else if tab.panel === 'term'}<TerminalPanel cwd={activeProject?.path ?? ''} />
+								{:else if tab.panel === 'files'}<FilesPanel rootDir={activeCwd ?? ''} />
+								{:else if tab.panel === 'git'}<GitPanel cwd={activeCwd ?? ''} worktree={activeProject?.worktree ?? null} llm={llmTarget} onOpenTask={(path, meta) => openTaskProject(path, meta)} onTaskRemoved={closeTaskProject} />
+								{:else if tab.panel === 'term'}<TerminalPanel cwd={activeCwd ?? ''} />
 								{:else if tab.panel === 'browser'}<BrowserPanel />
 								{:else if tab.panel === 'audit'}<EditorPane onAiSend={sendAiEdit} />
-								{:else if tui}<TuiPanel backend={tui} cwd={activeProject?.path ?? ''} onOpenSettings={() => openSettings('agents')} />
+								{:else if tui}<TuiPanel backend={tui} cwd={activeCwd ?? ''} onOpenSettings={() => openSettings('agents')} />
 								{/if}
 							{/snippet}
 						</Mosaic>
@@ -1640,7 +1670,7 @@
 					bind:page={deskPage}
 					bind:requirementId={deskRequirement}
 					projects={workspaceProjects}
-					currentProject={activeProject?.id}
+					currentProject={activeProject?.loose ? undefined : activeProject?.id}
 					{captureSignal}
 					{currentStep}
 					onStartRequirement={startRequirement}
@@ -1696,8 +1726,8 @@
 		/>
 	{/if}
 
-	{#if showQuickOpen && activeProject}
-		{@const qoRoot = activeProject.path}
+	{#if showQuickOpen && activeCwd}
+		{@const qoRoot = activeCwd}
 		<QuickOpen
 			root={qoRoot}
 			onClose={() => (showQuickOpen = false)}
@@ -1733,6 +1763,13 @@
 			onIcon={(i) => store.setSessionChrome(chromeSession.id, { icon: i })}
 			pinned={!!chromeSession.pinned}
 			onPin={(v) => store.setPinned(chromeSession.id, v)}
+			moveLabel={t('shell.chrome.moveToProject')}
+			moveTargets={projectTargets(chromeSession.id)}
+			onMove={(to) => {
+				const id = chromeSession.id;
+				sessionChromeFor = null;
+				store.moveToProject(id, to);
+			}}
 			{...tabCloseActions(sessionChromeFor.tab, () => (sessionChromeFor = null))}
 			onClose={() => (sessionChromeFor = null)}
 		/>
@@ -1790,7 +1827,7 @@
 		<CommandPalette
 			{chat}
 			hasProject={!!activeProject}
-			canNewTask={!!activeProject && !activeProject.stale}
+			canNewTask={!!activeProject && !activeProject.stale && !activeProject.loose}
 			panelOptions={panelKeys.map((k) => ({ key: k, label: t(`dock.tabs.${k}`) }))}
 			onClose={() => (showPalette = false)}
 			onRun={runCommand}
@@ -1806,7 +1843,7 @@
 				setupView = view;
 				showSetup = true;
 			}}
-			onHistory={() => activeProject && store.openHistory(activeProject)}
+			onHistory={() => activeProject && !activeProject.loose && store.openHistory(activeProject)}
 			onShortcuts={() => (showShortcuts = true)}
 			onFeedback={() => (showFeedback = true)}
 			canOpenTui={!!active && active.surface !== 'tui' && canHandOffToTui(active.backendId, presetOf(active.acpAgent)) && tuiReady(active.id)}

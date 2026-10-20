@@ -1,10 +1,11 @@
 <script lang="ts">
-	// A new conversation not started yet, as one sentence: "in <project>
-	// with <agent>", both words menus. The choices are only recorded until the
-	// first message starts the engine there (SessionStore.moveDraft /
-	// switchBackend).
+	// A new conversation not started yet, as one sentence: "in <folder>
+	// with <agent> · <project>", each word a menu. The choices are only
+	// recorded until the first message starts the engine there
+	// (SessionStore.moveDraft / setDraftCwd / switchBackend).
 	import { open } from '@tauri-apps/plugin-dialog';
 	import FolderIcon from '@lucide/svelte/icons/folder';
+	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
 	import FolderPlusIcon from '@lucide/svelte/icons/folder-plus';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import { t } from '$lib/i18n';
@@ -12,25 +13,34 @@
 	import BackendIcon from '$lib/BackendIcon.svelte';
 	import { BACKEND_LABELS, NATIVE_BACKEND_IDS, type BackendId } from '$lib/backends';
 	import type { SessionStore } from '$lib/session.svelte';
-	import type { Session } from '$lib/types';
+	import { LOOSE_ID, type Session } from '$lib/types';
 
 	let { store, session }: { store: SessionStore; session: Session } = $props();
 
 	const OPEN_FOLDER = '\u0000open';
-	let menu = $state<'project' | 'backend' | null>(null);
-	const projects = $derived(store.shownProjects.filter((p) => !p.chats && !p.stale));
-	const current = $derived(store.projects.find((p) => p.sessions.some((s) => s.id === session.id)));
+	let menu = $state<'project' | 'dir' | 'backend' | null>(null);
+	const projects = $derived(store.workspaceProjects.filter((p) => !p.stale));
+	const current = $derived(store.ownerOf(session.id));
+	const cwd = $derived(session.cwd || current?.path || '');
+	/** The folders offered: the project's, and the one picked. */
+	const dirs = $derived([...new Set([cwd, ...(current && !current.loose ? [current.path, ...(current.dirs ?? [])] : [])].filter(Boolean))]);
+	const base = (path: string) => path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || path;
 	// The home directory as ~, as a terminal shows it.
 	const short = (path: string) => path.replace(/^(\/Users|\/home)\/[^/]+/, '~').replace(/^[A-Za-z]:\\Users\\[^\\]+/, '~');
 	// The sentence around the two menus, in the UI language's word order.
-	const parts = $derived(t('shell.startPicker.lead').split(/(\{project\}|\{backend\})/));
+	const parts = $derived(t('shell.startPicker.lead').split(/(\{project\}|\{dir\}|\{backend\})/));
 
+	async function pickDir(key: string) {
+		menu = null;
+		const path = key === OPEN_FOLDER ? await open({ directory: true, title: t('shell.pickDirTitle') }) : key;
+		if (path && !Array.isArray(path)) store.setDraftCwd(session.id, path);
+	}
 	async function pickProject(key: string) {
 		menu = null;
 		if (key !== OPEN_FOLDER) return store.moveDraft(session.id, key);
 		const path = await open({ directory: true, title: t('shell.pickDirTitle') });
 		if (!path || Array.isArray(path)) return;
-		const name = path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || path;
+		const name = base(path);
 		store.addProjectShell({ id: store.uid(), name, path });
 		// Already a project (the same folder, with or without a trailing separator): that one.
 		const trim = (x: string) => x.replace(/[\\/]+$/, '');
@@ -49,7 +59,7 @@
 			<span class="anchor">
 				<button class="word" class:on={menu === 'project'} onclick={() => (menu = menu === 'project' ? null : 'project')} aria-haspopup="menu" aria-expanded={menu === 'project'} title={current?.path} aria-label={t('shell.startPicker.project')}>
 					<FolderIcon size={16} />
-					<span class="wname">{current?.name ?? ''}</span>
+					<span class="wname">{current?.loose ? t('shell.noProject') : (current?.name ?? '')}</span>
 					<ChevronDownIcon size={12} />
 				</button>
 				{#if menu === 'project'}
@@ -57,9 +67,29 @@
 						placement="down-left"
 						items={[
 							...projects.map((p) => ({ key: p.id, label: p.name, desc: short(p.path), icon: FolderIcon, checked: p.id === current?.id })),
+							{ key: LOOSE_ID, label: t('shell.noProject'), checked: !!current?.loose },
 							{ key: OPEN_FOLDER, label: t('shell.startPicker.openFolder'), icon: FolderPlusIcon }
 						]}
 						onSelect={pickProject}
+						onClose={() => (menu = null)}
+					/>
+				{/if}
+			</span>
+		{:else if part === '{dir}'}
+			<span class="anchor">
+				<button class="word" class:on={menu === 'dir'} onclick={() => (menu = menu === 'dir' ? null : 'dir')} aria-haspopup="menu" aria-expanded={menu === 'dir'} title={cwd} aria-label={t('shell.startPicker.dir')}>
+					<FolderOpenIcon size={16} />
+					<span class="wname">{base(cwd)}</span>
+					<ChevronDownIcon size={12} />
+				</button>
+				{#if menu === 'dir'}
+					<PopMenu
+						placement="down-left"
+						items={[
+							...dirs.map((d) => ({ key: d, label: base(d), desc: short(d), icon: FolderOpenIcon, checked: d === cwd })),
+							{ key: OPEN_FOLDER, label: t('shell.startPicker.pickFolder'), icon: FolderPlusIcon }
+						]}
+						onSelect={pickDir}
 						onClose={() => (menu = null)}
 					/>
 				{/if}

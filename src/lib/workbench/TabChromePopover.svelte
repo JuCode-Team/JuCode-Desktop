@@ -34,6 +34,7 @@
 		pinned = false,
 		onPin,
 		moveTargets = [],
+		moveLabel,
 		onMove,
 		onCloseOthers,
 		onCloseAll,
@@ -59,6 +60,8 @@
 		/** Projects and agents: the other workspaces it can move to. */
 		moveTargets?: { id: string; name: string }[];
 		onMove?: (workspace: string) => void;
+		/** Heads the move targets (default: 移到工作区). */
+		moveLabel?: string;
 		/** Mosaic tabs: close the other tabs / every tab of its group. */
 		onCloseOthers?: () => void;
 		onCloseAll?: () => void;
@@ -243,7 +246,7 @@
 		</Button>
 	{/if}
 	{#if onMove && moveTargets.length}
-		<span class="move-label">{t('shell.chrome.moveTo')}</span>
+		<span class="move-label">{moveLabel ?? t('shell.chrome.moveTo')}</span>
 		{#each moveTargets as w (w.id)}
 			<Button size="sm" full onclick={() => onMove(w.id)}><ArrowRightLeftIcon size={12} />{w.name}</Button>
 		{/each}

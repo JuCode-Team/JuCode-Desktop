@@ -14,7 +14,7 @@ import { saveComposerText } from './composerText';
 import { toast } from './ui/toast.svelte';
 import { telemetry } from './telemetry.svelte';
 import { normalizeColor, parseTabIcon, type TabIcon } from './workbench/tabChrome';
-import { CHATS_ENABLED, type AcpAgentRef, type Project, type Session, type WorktreeMeta } from './types';
+import { CHATS_ENABLED, LOOSE_ID, type AcpAgentRef, type Project, type Session, type WorktreeMeta } from './types';
 
 /** Optional per-tab chrome persisted alongside the session id + title. */
 export interface SavedTabChrome {
@@ -46,6 +46,8 @@ export interface SavedProject extends SavedTabChrome {
 		gateway?: boolean;
 		/** Claude Code: the model it last ran on (Session.model). */
 		model?: string;
+		/** Its own working directory (Session.cwd). */
+		cwd?: string;
 	} & SavedTabChrome)[];
 	/** 并行任务 worktree 项目的元数据（isWorktree/mainRepoPath/branch/baseBranch/slug）。 */
 	worktree?: WorktreeMeta;
@@ -100,6 +102,9 @@ export class SessionStore {
 	 *  daemon session id: they come back as they were, with the token totals,
 	 *  context and timings that the daemon's replay does not carry. */
 	#parked = new Map<string, Session>();
+	/** Drafts taken off this window, by desktop id: they come back with
+	 *  their picks (model, effort, folder, a requirement to start on). */
+	#parkedDrafts = new Map<string, Session>();
 	uid() {
 		return `s${Date.now().toString(36)}-${(this.#counter++).toString(36)}`;
 	}
@@ -107,13 +112,30 @@ export class SessionStore {
 	get allSessions() {
 		return this.projects.flatMap((p) => p.sessions);
 	}
+	/** The group of sessions that belong to no project, once there is one. */
+	get loose(): Project | undefined {
+		return this.projects.find((p) => p.loose);
+	}
+	/** The loose group, added on first use. */
+	looseGroup(): Project {
+		if (!this.loose) this.projects.push({ id: LOOSE_ID, name: '', path: '', loose: true, sessions: [] });
+		return this.loose!;
+	}
+	/** The projects of this workspace (not the chats or loose groups). */
+	get workspaceProjects() {
+		return this.projects.filter((p) => !p.chats && !p.loose);
+	}
+	/** Called before a new session is created in the daemon: resolves once
+	 *  the daemon knows this window's projects (one just added included). */
+	projectsSynced: () => Promise<void> = () => Promise.resolve();
 	/** Projects the UI shows: a hidden chats group stays in the tree (and in
 	 *  the saved and daemon lists) but is never listed or opened. */
 	get shownProjects() {
-		return this.projects.filter((p) => CHATS_ENABLED || !p.chats);
+		return this.projects.filter((p) => (CHATS_ENABLED || !p.chats) && !p.loose);
 	}
+	/** Sessions the UI shows: of shown projects and of no project. */
 	get shownSessions() {
-		return this.shownProjects.flatMap((p) => p.sessions);
+		return this.projects.filter((p) => CHATS_ENABLED || !p.chats).flatMap((p) => p.sessions);
 	}
 	get active() {
 		return this.allSessions.find((s) => s.id === this.activeId);
@@ -125,8 +147,15 @@ export class SessionStore {
 		return this.projects.find((p) => p.sessions.some((s) => s.id === this.activeId));
 	}
 
-	projectPathOf(id: string) {
-		return this.projects.find((p) => p.sessions.some((s) => s.id === id))?.path;
+	/** The project (or the loose group) holding session `id`. */
+	ownerOf(id: string): Project | undefined {
+		return this.projects.find((p) => p.sessions.some((s) => s.id === id));
+	}
+
+	/** The directory session `id` works in: its own, else its project's. */
+	cwdOf(id: string): string | undefined {
+		const p = this.ownerOf(id);
+		return p?.sessions.find((s) => s.id === id)?.cwd || p?.path || undefined;
 	}
 
 	/** An engine that failed to start retries like one that crashed (see
@@ -304,9 +333,14 @@ export class SessionStore {
 								};
 							})
 						: Promise.resolve(undefined);
+		const reopen = resume ?? (s.chat.sessionId || undefined);
+		const owner = this.ownerOf(s.id);
+		// A new session names its project (a chat's is the chats folder's).
+		const project = reopen || !owner || owner.chats ? undefined : owner.loose ? '' : owner.id;
 		return engine
+			.then((spec) => (project ? this.projectsSynced().then(() => spec) : spec))
 			.then((spec) =>
-				hostSession(s.id, cwd ?? '', resume ?? (s.chat.sessionId || undefined), chat, spec).then(() => {
+				hostSession(s.id, cwd ?? '', reopen, chat, spec, project).then(() => {
 					// A new session is named by the daemon (the engine's conversation id).
 					if (!s.chat.sessionId) {
 						s.chat.sessionId = daemon.sessionOf(s.id) ?? '';
@@ -356,12 +390,14 @@ export class SessionStore {
 	 *  overrides the project's last-used backend (which itself falls back to
 	 *  the settings default). `acpAgent` picks the registry agent for 'acp'
 	 *  sessions (defaults to the project's last one; without any, the session
-	 *  falls back to the native engine). */
+	 *  falls back to the native engine). `cwd`: where it works, when not in
+	 *  the project's folder (a session of no project needs one). */
 	addSession(
 		project: Project,
 		firstMessage?: string,
 		backend?: BackendId,
-		acpAgent?: AcpAgentRef
+		acpAgent?: AcpAgentRef,
+		cwd?: string
 	) {
 		// Only the jucode engine has a chat mode.
 		let backendId = project.chats ? 'jucode' : (backend ?? defaultBackendFor(project.lastBackend));
@@ -371,6 +407,9 @@ export class SessionStore {
 			agent = undefined;
 		}
 		const s = this.#newSession(backendId, agent);
+		if (cwd && !samePath(cwd, project.path)) s.cwd = cwd;
+		// Listed among the latest until the daemon says when it last changed.
+		s.updatedAt = Date.now();
 		this.#makeDraft(s);
 		// At the start: the sidebar lists a project's first sessions only.
 		project.sessions.unshift(s);
@@ -382,11 +421,16 @@ export class SessionStore {
 		return s.id;
 	}
 
+	/** A new session of no project, working in `cwd`. */
+	addLooseSession(cwd: string, backend?: BackendId) {
+		return this.addSession(this.looseGroup(), undefined, backend, undefined, cwd);
+	}
+
 	/** A new session that opens in its backend's TUI: its engine starts at
 	 *  once (the TUI takes over the daemon session), and the TUI starts the
 	 *  conversation. */
-	addTuiSession(project: Project, backend: BackendId) {
-		const id = this.addSession(project, undefined, backend);
+	addTuiSession(project: Project, backend: BackendId, cwd?: string) {
+		const id = this.addSession(project, undefined, backend, undefined, cwd);
 		const s = this.allSessions.find((x) => x.id === id);
 		if (s && canHandOffToTui(s.backendId)) {
 			s.surface = 'tui';
@@ -430,7 +474,7 @@ export class SessionStore {
 			dispatch(s.id, { op: 'command', input: effort ? `/model ${model} ${effort}` : `/model ${model}` });
 		};
 		const startOpts = acp && pick ? { ...(pick.model ? { model: pick.model } : {}), ...(pick.effort ? { effort: pick.effort } : {}) } : undefined;
-		this.#spawn(s, project.path, applyPick, startOpts)
+		this.#spawn(s, s.cwd || project.path, applyPick, startOpts)
 			.then(() => {
 				// Renamed while a draft, before it had a daemon session.
 				if (s.chat.title !== UNTITLED) this.#share(s, { title: s.chat.title });
@@ -578,21 +622,96 @@ export class SessionStore {
 	}
 
 	/** A new conversation not started yet (a draft) moves to another
-	 *  project: it starts there, in that project's directory. */
+	 *  project: it starts there, in that project's directory. Moved out of
+	 *  any project (LOOSE_ID), it keeps the directory it had. */
 	moveDraft(id: string, projectId: string) {
-		const from = this.projects.find((p) => p.sessions.some((x) => x.id === id));
-		const to = this.projects.find((p) => p.id === projectId && !p.chats && !p.stale);
+		const from = this.ownerOf(id);
+		const to = projectId === LOOSE_ID ? this.looseGroup() : this.projects.find((p) => p.id === projectId && !p.chats && !p.stale && !p.loose);
 		const s = from?.sessions.find((x) => x.id === id);
 		if (!from || !to || !s?.draft || from === to) return;
+		s.cwd = to.loose ? s.cwd || from.path : undefined;
 		from.sessions = from.sessions.filter((x) => x !== s);
 		to.sessions.unshift(s);
-		to.lastBackend = s.backendId;
+		if (!to.loose) to.lastBackend = s.backendId;
+	}
+
+	/** A draft starts in `dir` instead of its project's folder. */
+	setDraftCwd(id: string, dir: string) {
+		const p = this.ownerOf(id);
+		const s = p?.sessions.find((x) => x.id === id);
+		if (!p || !s?.draft || !isAbsolute(dir)) return;
+		s.cwd = samePath(dir, p.path) ? undefined : dir;
+	}
+
+	/** A session moves to another project of this window, or out of any
+	 *  (LOOSE_ID); it keeps working where it did. A draft goes with
+	 *  `moveDraft`. */
+	moveToProject(id: string, projectId: string) {
+		const from = this.ownerOf(id);
+		const s = from?.sessions.find((x) => x.id === id);
+		if (s?.draft) return this.moveDraft(id, projectId);
+		const to = projectId === LOOSE_ID ? this.looseGroup() : this.workspaceProjects.find((p) => p.id === projectId && !p.stale);
+		if (!from || !s || !to || from === to) return;
+		this.#place(s, from, to, s.cwd || from.path);
+		this.#share(s, { project: to.loose ? '' : to.id });
+	}
+
+	/** Moves `s` from `from` to the start of `to`, working in `cwd`. */
+	#place(s: Session, from: Project, to: Project, cwd: string | undefined) {
+		s.cwd = cwd && !samePath(cwd, to.path) ? cwd : undefined;
+		from.sessions = from.sessions.filter((x) => x !== s);
+		to.sessions.unshift(s);
+	}
+
+	/** A daemon session another client moved: to `projectId` of this window
+	 *  (null: of no project), working in `cwd`. */
+	followProject(id: string, projectId: string | null, cwd: string) {
+		const from = this.ownerOf(id);
+		const s = from?.sessions.find((x) => x.id === id);
+		const to = projectId === null ? this.looseGroup() : this.workspaceProjects.find((p) => p.id === projectId);
+		if (!from || !s || !to || from === to) return;
+		this.#place(s, from, to, cwd);
+	}
+
+	/** Takes a session off this window without ending it (it moved to a
+	 *  project of another workspace): it comes back as it was there. */
+	park(id: string) {
+		const p = this.ownerOf(id);
+		const s = p?.sessions.find((x) => x.id === id);
+		if (!p || !s) return;
+		if (!s.dormant && !s.draft) daemon.detach(s.id);
+		unregisterAdapter(s.id);
+		this.#keep(s);
+		p.sessions = p.sessions.filter((x) => x !== s);
+		if (this.activeId === id) this.activeId = this.shownSessions.find((x) => !x.archived)?.id ?? '';
 	}
 
 	/** A session's title, archive state or removal goes to the daemon, which
 	 *  every other client follows. */
-	#share(s: Session, changes: { title?: string; archived?: boolean; hidden?: boolean; group?: string }) {
+	#share(s: Session, changes: { title?: string; archived?: boolean; hidden?: boolean; group?: string; project?: string }) {
 		if (s.chat.sessionId) sessionMeta(s.chat.sessionId, changes).catch(() => {});
+	}
+
+	/** A session taken off this window, kept to come back as it was: the
+	 *  ops held for its engine stay, and go once it is back and started. A
+	 *  draft starts anew when it is back (`#draftSaved`). */
+	#keep(s: Session) {
+		if (s.draft) {
+			clearDraft(s.id);
+			this.#parkedDrafts.set(s.id, s);
+		} else if (s.chat.sessionId) this.#parked.set(s.chat.sessionId, s);
+		// Nothing to come back by.
+		else clearDraft(s.id);
+	}
+
+	/** A kept session of daemon session `sid`, back in this window. */
+	#unpark(sid: string): Session | undefined {
+		const s = this.#parked.get(sid);
+		if (!s) return;
+		this.#parked.delete(sid);
+		registerAdapter(s.id, s.adapter);
+		s.chat.rejoining = true;
+		return s;
 	}
 
 	/** Lists a daemon session in `project` without opening it here; it opens
@@ -608,18 +727,19 @@ export class SessionStore {
 			agent?: string | null;
 			group?: string | null;
 			gateway?: boolean;
+			/** Where it works (left out: the project's folder). */
+			cwd?: string;
 		},
 		reuseId?: string,
 		atStart = false
 	): string {
-		const parked = this.#parked.get(rec.session);
+		const cwd = rec.cwd && !samePath(rec.cwd, project.path) ? rec.cwd : undefined;
+		const parked = this.#unpark(rec.session);
 		if (parked) {
-			this.#parked.delete(rec.session);
-			registerAdapter(parked.id, parked.adapter);
+			parked.cwd = cwd;
 			parked.dormant = true;
 			parked.archived = !!rec.archived;
 			if (rec.title) parked.chat.title = rec.title;
-			parked.chat.rejoining = true;
 			if (atStart) project.sessions.unshift(parked);
 			else project.sessions.push(parked);
 			return parked.id;
@@ -627,6 +747,7 @@ export class SessionStore {
 		const agent = rec.engine === 'acp' && rec.agent ? { id: rec.agent, name: rec.agent, preset: true } : undefined;
 		const s = this.#newSession(normalizeBackendId(rec.engine), agent, reuseId);
 		if (rec.gateway) s.gateway = true;
+		if (cwd) s.cwd = cwd;
 		s.dormant = true;
 		s.restored = true;
 		s.archived = !!rec.archived;
@@ -663,7 +784,7 @@ export class SessionStore {
 	 *  it is up. */
 	wake(id: string): Promise<void> | undefined {
 		const s = this.allSessions.find((x) => x.id === id);
-		const path = this.projectPathOf(id);
+		const path = this.cwdOf(id);
 		if (!s?.dormant || !path) return;
 		return this.#spawn(s, path, undefined, this.#keepModel(s), s.chat.sessionId).catch((e) => this.#engineFailed(s.chat, e));
 	}
@@ -758,11 +879,13 @@ export class SessionStore {
 		acpAgent?: AcpAgentRef,
 		surface?: 'tui',
 		gateway?: boolean,
-		model?: string
+		model?: string,
+		cwd?: string
 	) {
-		const s = this.#newSession(backend, backend === 'acp' ? acpAgent : undefined, reuseId);
+		const s = this.#unpark(sid) ?? this.#newSession(backend, backend === 'acp' ? acpAgent : undefined, reuseId);
 		if (gateway) s.gateway = true;
 		if (model) s.model = model;
+		if (cwd && !samePath(cwd, project.path)) s.cwd = cwd;
 		if (title) s.chat.title = title;
 		s.archived = archived;
 		if (chrome?.color) s.color = chrome.color;
@@ -779,7 +902,7 @@ export class SessionStore {
 		// render the TuiPanel (which resumes by id) and never start the GUI
 		// engine beside it — one process per conversation. `returnToGui`
 		// starts the engine again later.
-		this.#spawn(s, project.path, undefined, this.#keepModel(s), sid).catch((e) => this.#engineFailed(s.chat, e));
+		this.#spawn(s, s.cwd || project.path, undefined, this.#keepModel(s), sid).catch((e) => this.#engineFailed(s.chat, e));
 		return s.id;
 	}
 
@@ -795,6 +918,14 @@ export class SessionStore {
 		chrome?: SavedTabChrome,
 		acpAgent?: AcpAgentRef
 	) {
+		const kept = this.#parkedDrafts.get(reuseId);
+		if (kept) {
+			this.#parkedDrafts.delete(reuseId);
+			registerAdapter(kept.id, kept.adapter);
+			markDraft(kept.id, () => this.#startDraft(kept.id));
+			project.sessions.push(kept);
+			return kept.id;
+		}
 		const s = this.#newSession(backend, backend === 'acp' ? acpAgent : undefined, reuseId);
 		if (title) s.chat.title = title;
 		s.archived = archived;
@@ -827,21 +958,22 @@ export class SessionStore {
 	}
 
 	/** Show daemon session `sid` (one the daemon hosts in `cwd`) in its
-	 *  open tab or a new one, in the project for `cwd`, which is added when
-	 *  missing. `title`, `engine`, `gateway`, `agent`: the daemon's record of it.
+	 *  open tab or a new one, in its `project` (null: none; left out or not
+	 *  in this window: the project whose folder is `cwd`, else none).
+	 *  `title`, `engine`, `gateway`, `agent`: the daemon's record of it.
 	 *  `activate`: false lists it without switching to it. */
-	openDaemonSession(cwd: string, sid: string, title?: string | null, engine?: string, gateway?: boolean, agent?: string | null, activate = true) {
+	openDaemonSession(cwd: string, sid: string, title?: string | null, engine?: string, gateway?: boolean, agent?: string | null, activate = true, project?: string | null) {
 		const open = this.allSessions.find((s) => s.chat.sessionId === sid);
 		if (open) {
 			open.archived = false;
 			if (activate) this.activeId = open.id;
 			return open.id;
 		}
-		let project = this.projects.find((p) => p.path === cwd && !p.worktree);
-		if (!project) {
-			project = { id: this.uid(), name: base(cwd), path: cwd, sessions: [] };
-			this.projects.push(project);
-		}
+		const home =
+			(project === null ? this.looseGroup() : undefined) ??
+			(project ? this.workspaceProjects.find((p) => p.id === project) : undefined) ??
+			this.workspaceProjects.find((p) => samePath(p.path, cwd) && !p.worktree) ??
+			this.looseGroup();
 		// The daemon holds the conversation and reopens it on its own engine.
 		const preset = engine === 'acp' && agent ? { id: agent, name: agent, preset: true } : undefined;
 		const s = this.#newSession(normalizeBackendId(engine), preset);
@@ -849,9 +981,10 @@ export class SessionStore {
 		if (title) s.chat.title = title;
 		s.restored = true;
 		s.chat.sessionId = sid;
-		project.sessions.push(s);
+		if (cwd && !samePath(cwd, home.path)) s.cwd = cwd;
+		home.sessions.push(s);
 		if (activate) this.activeId = s.id;
-		this.#spawn(s, project.path, undefined, undefined, sid).catch((e) => this.#engineFailed(s.chat, e));
+		this.#spawn(s, s.cwd || home.path, undefined, undefined, sid).catch((e) => this.#engineFailed(s.chat, e));
 		return s.id;
 	}
 
@@ -888,7 +1021,7 @@ export class SessionStore {
 		// session gets a new id that CAN be resumed on a later crash).
 		if (s.chat.resumeBroken) s.chat.sessionId = '';
 		s.chat.resumeBroken = false;
-		this.#spawn(s, this.projectPathOf(id), undefined, this.#keepModel(s)).catch((e) => this.#engineFailed(s.chat, e));
+		this.#spawn(s, this.cwdOf(id), undefined, this.#keepModel(s)).catch((e) => this.#engineFailed(s.chat, e));
 	}
 
 	/** Claude Code reopened by id comes back on its default model, not the one
@@ -1000,7 +1133,7 @@ export class SessionStore {
 		try {
 			await closeSession(id);
 			if (this.#gone(s)) return;
-			await this.#spawn(s, this.projectPathOf(id));
+			await this.#spawn(s, this.cwdOf(id));
 			s.chat.switching = false;
 		} catch (e) {
 			s.chat.switching = false;
@@ -1043,7 +1176,7 @@ export class SessionStore {
 			s.chat.resumeBroken = false;
 			await this.#spawn(
 				s,
-				this.projectPathOf(id),
+				this.cwdOf(id),
 				model ? () => dispatch(id, { op: 'command', input: `/model ${model}` }) : undefined
 			);
 			s.chat.switching = false;
@@ -1069,7 +1202,7 @@ export class SessionStore {
 		try {
 			await closeSession(id);
 			if (this.#gone(s)) return;
-			await this.#spawn(s, this.projectPathOf(id), undefined, { permission_mode: 'full-auto', ...this.#keepModel(s) });
+			await this.#spawn(s, this.cwdOf(id), undefined, { permission_mode: 'full-auto', ...this.#keepModel(s) });
 			s.chat.switching = false;
 		} catch (e) {
 			s.chat.switching = false;
@@ -1098,7 +1231,7 @@ export class SessionStore {
 			if (this.#gone(s)) return;
 			await this.#spawn(
 				s,
-				this.projectPathOf(id),
+				this.cwdOf(id),
 				undefined,
 				{ ...this.#keepModel(s), ...(resumeAtUuid ? { resume_session_at: resumeAtUuid } : {}) }
 			);
@@ -1187,7 +1320,8 @@ export class SessionStore {
 		this.projects = rest;
 	}
 
-	/** Tear down a project and all its sessions (the page handles confirmation). */
+	/** Tear down a project and all its sessions (the page handles
+	 *  confirmation; the daemon archives them, of no project now). */
 	removeProject(p: Project) {
 		this.#dropProject(p, true);
 	}
@@ -1205,10 +1339,11 @@ export class SessionStore {
 				if (close) closeSession(s.id).catch(() => {});
 				else daemon.detach(s.id);
 			}
-			if (!close && !s.draft && s.chat.sessionId) this.#parked.set(s.chat.sessionId, s);
 			unregisterAdapter(s.id);
-			clearDraft(s.id);
-			dropHeldOps(s.id);
+			if (close) {
+				clearDraft(s.id);
+				dropHeldOps(s.id);
+			} else this.#keep(s);
 		}
 		this.projects = this.projects.filter((x) => x.id !== p.id);
 		this.#staleTabs.delete(p.id);
@@ -1232,9 +1367,10 @@ export class SessionStore {
 		}
 	}
 
-	/** The JuCode conversations saved for the project, as history picker rows. */
-	async historyItems(p: Project, chat: ChatState) {
-		const sessions = (await sessionHistory(p.path)).filter((x) => x.engine === 'jucode');
+	/** The JuCode conversations saved in `dir` (the project's folder), as
+	 *  history picker rows. */
+	async historyItems(p: Project, chat: ChatState, dir = p.path) {
+		const sessions = (await sessionHistory(dir)).filter((x) => x.engine === 'jucode');
 		return sessions.map((x) => ({
 			id: x.session,
 			label: x.title || x.session,
@@ -1243,8 +1379,9 @@ export class SessionStore {
 		}));
 	}
 
-	/** Open a saved conversation from a history picker in a new tab. */
-	openSaved(project: Project, sid: string, title: string, backend: BackendId) {
+	/** Open a saved conversation from a history picker in a new tab; `cwd`:
+	 *  the folder it was saved in, when not the project's. */
+	openSaved(project: Project, sid: string, title: string, backend: BackendId, cwd?: string) {
 		// Already open: switch to it (a second engine on the same conversation
 		// would fight over it).
 		const open = this.allSessions.find((s) => s.backendId === backend && s.chat.sessionId === sid);
@@ -1253,7 +1390,7 @@ export class SessionStore {
 			this.activeId = open.id;
 			return;
 		}
-		this.activeId = this.restoreSession(project, sid, title, backend);
+		this.activeId = this.restoreSession(project, sid, title, backend, false, undefined, undefined, undefined, undefined, undefined, undefined, cwd);
 	}
 
 	/** The tab was closed (or its workspace swapped out) while an async
@@ -1287,7 +1424,7 @@ export class SessionStore {
 	rewatch(id: string): Promise<void> {
 		const s = this.allSessions.find((x) => x.id === id);
 		if (!s || daemon.sessionOf(id)) return Promise.resolve();
-		return this.#spawn(s, this.projectPathOf(id)).catch((e) => this.#engineFailed(s.chat, e));
+		return this.#spawn(s, this.cwdOf(id)).catch((e) => this.#engineFailed(s.chat, e));
 	}
 
 	/** Back to the GUI once the TUI has exited: the daemon has started the
@@ -1310,7 +1447,7 @@ export class SessionStore {
 	 *  is only written when it isn't the default, so pre-existing layouts stay
 	 *  byte-identical; 'acp' tabs also carry their agent so restore can respawn. */
 	serialize(): SavedProject[] {
-		return this.projects.map((p) => ({
+		return this.projects.filter((p) => !p.loose).map((p) => ({
 			id: p.id,
 			name: p.name,
 			path: p.path,
@@ -1335,6 +1472,7 @@ export class SessionStore {
 					...(s.backendId === 'acp' && s.acpAgent ? { acpAgent: s.acpAgent } : {}),
 					...(s.archived ? { archived: true } : {}),
 					...(s.pinned ? { pinned: true } : {}),
+					...(s.cwd ? { cwd: s.cwd } : {}),
 					...(s.color ? { color: s.color } : {}),
 					...(s.icon ? { icon: s.icon } : {}),
 				}))
@@ -1393,7 +1531,9 @@ export class SessionStore {
 						t.model
 					)
 				: this.#draftSaved(proj, t.id!, t.title, backend, !!t.archived, chrome, acpAgent);
-			if (t.pinned === true) proj.sessions.find((s) => s.id === id)!.pinned = true;
+			const s = proj.sessions.find((x) => x.id === id)!;
+			if (t.pinned === true) s.pinned = true;
+			if (typeof t.cwd === 'string' && isAbsolute(t.cwd) && !samePath(t.cwd, proj.path)) s.cwd = t.cwd;
 		}
 	}
 
@@ -1442,7 +1582,8 @@ export class SessionStore {
 		} else {
 			const root = await projectRoot();
 			this.projects.push({ id: this.uid(), name: base(root), path: root, sessions: [] });
-			this.addSession(this.projects[0]);
+			// The loose group may be first: it stays across workspaces.
+			this.addSession(this.projects.at(-1)!);
 		}
 		this.loaded = true;
 	}

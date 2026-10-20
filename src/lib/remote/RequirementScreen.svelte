@@ -113,7 +113,7 @@
 	const startOptions = $derived(
 		[...projects]
 			.sort((a, b) => Number(b.id === r?.project) - Number(a.id === r?.project))
-			.map((p) => ({ value: p.path, label: p.name }))
+			.map((p) => ({ value: p.id, label: p.name }))
 	);
 	let startProject = $state('');
 	$effect(() => {
@@ -131,11 +131,13 @@
 			.map((row) => ({ value: row.key, label: row.note ? `${row.label} · ${row.note}` : row.label }))
 	);
 	function start() {
-		if (!startProject) return;
+		const project = projects.find((p) => p.id === startProject);
+		if (!project) return;
 		const row = pickEngines(presets).find((r) => r.key === engine);
 		void run(async () => {
 			const session = await conn.requirements.reply(id, {
-				cwd: startProject,
+				cwd: project.path,
+				project: project.id,
 				engine: row?.engine ?? 'jucode',
 				agent: row?.agent,
 				newSession: true,

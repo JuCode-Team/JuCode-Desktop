@@ -55,7 +55,6 @@
 
 	const { daemonState, projects: remoteProjects } = useHost();
 	const SHOW_LIMIT = 6;
-	const trim = (path: string) => path.replace(/[\\/]+$/, '');
 
 	const projects = $derived(remoteProjects.active?.projects ?? []);
 	const chats = $derived(CHATS_ENABLED ? projects.find((p) => p.chats) : undefined);
@@ -68,13 +67,14 @@
 			.filter((s) => listable(s) && (CHATS_ENABLED || !s.chat))
 			.sort((a, b) => (b.updated_at ?? b.created_at) - (a.updated_at ?? a.created_at))
 	);
-	const sessionsOf = (p: ProjectView) => listed.filter((s) => trim(s.cwd) === trim(p.path));
-	/** Sessions in no project of any workspace (those of another workspace
-	 *  show there). */
-	const loose = $derived.by(() => {
-		const all = remoteProjects.workspaces.flatMap((w) => w.projects);
-		return listed.filter((s) => !all.some((p) => trim(s.cwd) === trim(p.path)));
-	});
+	// A daemon from before sessions named their project: by folder.
+	const trim = (path: string) => path.replace(/[\\/]+$/, '');
+	const all = $derived(remoteProjects.workspaces.flatMap((w) => w.projects));
+	const projectOf = (s: (typeof listed)[number]) =>
+		s.project !== undefined ? s.project : (all.find((p) => trim(p.path) === trim(s.cwd))?.id ?? null);
+	const sessionsOf = (p: ProjectView) => listed.filter((s) => projectOf(s) === p.id);
+	/** Sessions of no project (those of another workspace's show there). */
+	const loose = $derived(listed.filter((s) => !projectOf(s)));
 
 	let collapsed = $state<Record<string, boolean>>({});
 	let showAll = $state<Record<string, boolean>>({});

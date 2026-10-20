@@ -110,6 +110,7 @@ const shell = {
 		// workspaces
 		workspace: {
 			moved: '已把「{name}」移到「{ws}」',
+			moveConflict: '「{ws}」已有这个文件夹的项目，没有移动。',
 			label: '工作区',
 			default: '默认工作区',
 			nth: '工作区 {n}',
@@ -126,6 +127,7 @@ const shell = {
 		chrome: {
 			title: '外观',
 			moveTo: '移到工作区',
+			moveToProject: '移到项目',
 			name: '名称',
 			color: '颜色',
 			noColor: '无颜色',
@@ -154,10 +156,12 @@ const shell = {
 
 		// welcome / empty states
 		startPicker: {
-			lead: '在 {project} 用 {backend} 开始新对话',
+			lead: '在 {dir} 用 {backend} 开始新对话 · {project}',
 			project: '项目',
+			dir: '工作目录',
 			backend: '后端',
-			openFolder: '打开文件夹…'
+			openFolder: '打开文件夹…',
+			pickFolder: '选择文件夹…'
 		},
 		welcomeTip: '给 JuCode 指派一个任务，开始新对话',
 		hintCommand: '命令',
@@ -168,6 +172,8 @@ const shell = {
 		startFromProject: '选择项目，开始对话',
 		startChat: '开始对话',
 		chats: '对话',
+		recents: '最近',
+		noProject: '不归属项目',
 		projects: '项目',
 		closeSearch: '关闭搜索',
 		addPanel: '打开面板',
@@ -241,7 +247,7 @@ const shell = {
 
 		// dialogs (page)
 		pickDirTitle: '选择项目目录',
-		closeProjectConfirm: '关闭「{name}」会结束其下 {count} 个对话，确定吗？磁盘上的文件不受影响。',
+		closeProjectConfirm: '关闭「{name}」？其下 {count} 个对话会结束，并归档到「最近」。磁盘上的文件不受影响。',
 		closeProjectEmptyConfirm: '从侧栏移除「{name}」？磁盘上的文件不受影响。',
 		removeSessionTitle: '移除会话',
 		removeSessionConfirm: '从所有设备的会话列表中移除「{title}」？对话记录仍可在历史中找回。',
@@ -510,7 +516,7 @@ const shell = {
 		},
 		projectPage: {
 			dirs: '目录',
-			dirsHint: '主目录以外的目录，在这个项目里开的会话也能读写。',
+			dirsHint: '新会话默认在主目录工作，新建时也可以选这里的其他目录。项目里的会话都能读写这些目录。',
 			main: '主目录',
 			addDir: '添加目录',
 			removeDir: '移除目录',
@@ -868,6 +874,7 @@ const shell = {
 		// workspaces
 		workspace: {
 			moved: 'Moved “{name}” to “{ws}”',
+			moveConflict: '“{ws}” already has a project for this folder; nothing was moved.',
 			label: 'Workspace',
 			default: 'Default workspace',
 			nth: 'Workspace {n}',
@@ -884,6 +891,7 @@ const shell = {
 		chrome: {
 			title: 'Appearance',
 			moveTo: 'Move to workspace',
+			moveToProject: 'Move to project',
 			name: 'Name',
 			color: 'Color',
 			noColor: 'No color',
@@ -912,10 +920,12 @@ const shell = {
 
 		// welcome / empty states
 		startPicker: {
-			lead: 'Start a conversation in {project} with {backend}',
+			lead: 'Start a conversation in {dir} with {backend} · {project}',
 			project: 'Project',
+			dir: 'Working folder',
 			backend: 'Agent',
-			openFolder: 'Open a folder…'
+			openFolder: 'Open a folder…',
+			pickFolder: 'Choose a folder…'
 		},
 		welcomeTip: 'Assign JuCode a task to start a new conversation',
 		hintCommand: 'Commands',
@@ -926,6 +936,8 @@ const shell = {
 		startFromProject: 'Pick a project to start',
 		startChat: 'Start a chat',
 		chats: 'Chats',
+		recents: 'Recent',
+		noProject: 'No project',
 		projects: 'Projects',
 		closeSearch: 'Close search',
 		addPanel: 'Open a panel',
@@ -999,7 +1011,7 @@ const shell = {
 
 		// dialogs (page)
 		pickDirTitle: 'Select project directory',
-		closeProjectConfirm: 'Closing "{name}" will end its {count} conversation(s). Continue? Files on disk are not touched.',
+		closeProjectConfirm: 'Close "{name}"? Its {count} conversation(s) will end and be archived under Recent. Files on disk are not touched.',
 		closeProjectEmptyConfirm: 'Remove "{name}" from the sidebar? Files on disk are not touched.',
 		removeSessionTitle: 'Remove session',
 		removeSessionConfirm: 'Remove "{title}" from the session list on every device? The conversation stays in history.',
@@ -1268,7 +1280,7 @@ const shell = {
 		},
 		projectPage: {
 			dirs: 'Directories',
-			dirsHint: 'Directories besides the main one. Sessions in this project can read and write them too.',
+			dirsHint: 'New sessions work in the main directory unless you pick another of these when starting one. Every session of the project can read and write all of them.',
 			main: 'Main',
 			addDir: 'Add directory',
 			removeDir: 'Remove directory',

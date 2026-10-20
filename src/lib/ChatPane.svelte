@@ -146,6 +146,8 @@
 
 	const chat = $derived(session.chat);
 	const project = $derived(store.projects.find((p) => p.sessions.some((s) => s.id === session.id)));
+	/** Where this session works: its own folder, else its project's. */
+	const workDir = $derived(store.cwdOf(session.id) || chat.cwd);
 	// The requirement this session works on (or, a draft, will once it starts).
 	const reqs = useRequirements();
 	const linked = $derived(chat.sessionId ? reqs.bySession.get(chat.sessionId) : undefined);
@@ -313,8 +315,8 @@
 		try {
 			const items =
 				from === 'jucode'
-					? await store.historyItems(proj, chat)
-					: (await nativeSessions(from, proj.path)).map((s) => ({
+					? await store.historyItems(proj, chat, workDir)
+					: (await nativeSessions(from, workDir)).map((s) => ({
 							id: s.id,
 							label: s.title || s.id.slice(0, 8),
 							detail: [s.origin, new Date(s.mtime_ms).toLocaleString(), s.imported ? t('shell.historySource.imported') : '']
@@ -337,7 +339,7 @@
 		const proj = project;
 		if (!proj) return;
 		try {
-			const sessions = (await sessionHistory(proj.path)).filter((s) => s.engine === 'claude');
+			const sessions = (await sessionHistory(workDir)).filter((s) => s.engine === 'claude');
 			c.handle({
 				type: 'resume_view',
 				items: sessions.map((s) => ({
@@ -360,20 +362,20 @@
 	// "detached"; a failed probe (not a git repo) hides the chip.
 	let gitBranch = $state('');
 	function refreshGitBranch() {
-		const cwd = project?.path || chat.cwd;
+		const cwd = workDir;
 		if (!cwd) {
 			gitBranch = '';
 			return;
 		}
 		git(['branch', '--show-current'], cwd)
 			.then((out) => {
-				if (cwd === (project?.path || chat.cwd)) gitBranch = out.trim() || 'detached';
+				if (cwd === workDir) gitBranch = out.trim() || 'detached';
 			})
 			.catch(() => {});
 	}
 	// Refetched when the working directory changes (chip resets immediately)…
 	$effect(() => {
-		const cwd = project?.path || chat.cwd;
+		const cwd = workDir;
 		gitBranch = '';
 		if (!cwd) return;
 		refreshGitBranch();
@@ -889,14 +891,15 @@
 				const proj = project;
 				const title = item?.label ?? '';
 				const notice = toast.info(t('shell.historySource.importing', { title }), { duration: 0 });
-				importNativeSession(source, proj.path, sid)
-					.then((copy) => store.openSaved(proj, copy.id, copy.title || title, source))
+				const dir = workDir;
+				importNativeSession(source, dir, sid)
+					.then((copy) => store.openSaved(proj, copy.id, copy.title || title, source, dir))
 					.catch((e) => toast.error(t('shell.historySource.importFail', { msg: String(e) })))
 					.finally(() => toast.dismiss(notice));
 				return;
 			}
 			if (backend === 'codex' || backend === 'claude' || backend === 'jucode') {
-				store.openSaved(project, sid, item?.label ?? '', backend);
+				store.openSaved(project, sid, item?.label ?? '', backend, workDir);
 				return;
 			}
 		}
@@ -1072,7 +1075,7 @@
 	// conversation). Fire-and-forget; the sha lands under its turn index.
 	function captureCheckpoint() {
 		const c = chat;
-		const cwd = project?.path;
+		const cwd = workDir;
 		if (!cwd || (c.backendId !== 'codex' && c.backendId !== 'claude')) return;
 		const idx = c.userTurns;
 		gitCheckpointCapture(cwd)
@@ -1083,14 +1086,14 @@
 	}
 	// Restore the working tree to the checkpoint captured before the target turn.
 	function restoreCheckpoint(userIndex: number) {
-		const cwd = project?.path;
+		const cwd = workDir;
 		const sha = chat.fileCheckpoints[userIndex];
 		if (cwd && sha) gitCheckpointRestore(cwd, sha).catch((e) => console.error('checkpoint restore failed', e));
 	}
 
 	// Where a reply's relative paths are read from: the directory the engine
 	// runs in, then the project root and its added directories.
-	const fileRoots = $derived([...new Set([chat.cwd, project?.path, ...(project?.dirs ?? [])].filter((r): r is string => !!r))]);
+	const fileRoots = $derived([...new Set([chat.cwd, workDir, project?.path, ...(project?.dirs ?? [])].filter((r): r is string => !!r))]);
 	/** The project directory a file is in (root first), for its relative path
 	 *  and the editor's root. */
 	function rootOf(abs: string): string | undefined {
@@ -1098,7 +1101,7 @@
 			const base = r.replace(/[\\/]+$/, '');
 			return abs.startsWith(base) && /[\\/]/.test(abs.charAt(base.length));
 		};
-		return [project?.path, ...(project?.dirs ?? []), chat.cwd].find((r): r is string => !!r && under(r));
+		return [project?.path, ...(project?.dirs ?? []), workDir, chat.cwd].find((r): r is string => !!r && under(r));
 	}
 	const fileTarget = (href: string) => {
 		const ref = parseFileHref(href);
@@ -1169,7 +1172,7 @@
 			time: p.time,
 			...(p.days ? { days: p.days } : {}),
 			...(p.date ? { date: p.date } : {}),
-			cwd: project?.path || chat.cwd || '',
+			cwd: workDir || '',
 			engine,
 			options: engine === 'jucode' ? {} : { jucode_gateway: !!session.gateway },
 			origin: p.id
@@ -1179,7 +1182,7 @@
 	/** A session this one started (`start_session`). */
 	function openChild(id: string) {
 		const listed = daemonState.sessions.find((s) => s.session === id);
-		store.openDaemonSession(listed?.cwd ?? project?.path ?? chat.cwd ?? '', id, listed?.title, listed?.engine, listed?.gateway, listed?.agent);
+		store.openDaemonSession(listed?.cwd ?? workDir ?? '', id, listed?.title, listed?.engine, listed?.gateway, listed?.agent, true, listed?.project);
 	}
 
 	// Right-click on a file link (or a file the user attached): open, attach,
@@ -1359,10 +1362,10 @@
 		<main bind:this={scroller} onscroll={onScroll} onwheel={onWheel}>
 			<!-- Pressing inside the conversation (opening a card, selecting text) stops following the end: what was pressed stays under the pointer instead of being pushed up as the reply grows. -->
 			<div bind:this={contentEl} onpointerdowncapture={() => (atBottom = false)} oncontextmenu={onFileMenu} role="presentation">
-				<MessageList bind:this={messageList} bind:mark messages={chat.messages} follow={() => atBottom} busy={turnOpen} foldTurns={prefs.foldTurns} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onNote={noteRequirement} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} traceOf={traceOf} agents={allAgents} onOpenAgent={openAgent} tail={tasksEntryButton} onPlan={planAction} {planMode} onOpenPlan={(id) => planPages.open(session.id, id)} root={project?.path || chat.cwd || ''} onReveal={revealFile} onSchedule={scheduleFrom} scheduleCreated={(id) => daemonState.schedules.some((s) => s.origin === id)} onOpenSession={openChild} onOpenEdited={openEdited} />
+				<MessageList bind:this={messageList} bind:mark messages={chat.messages} follow={() => atBottom} busy={turnOpen} foldTurns={prefs.foldTurns} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onNote={noteRequirement} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} traceOf={traceOf} agents={allAgents} onOpenAgent={openAgent} tail={tasksEntryButton} onPlan={planAction} {planMode} onOpenPlan={(id) => planPages.open(session.id, id)} root={workDir || ''} onReveal={revealFile} onSchedule={scheduleFrom} scheduleCreated={(id) => daemonState.schedules.some((s) => s.origin === id)} onOpenSession={openChild} onOpenEdited={openEdited} />
 			</div>
 			{#if proposing}
-				<ScheduleDialog preset={proposing} projects={store.projects} onClose={() => (proposing = null)} />
+				<ScheduleDialog preset={proposing} projects={store.workspaceProjects} onClose={() => (proposing = null)} />
 			{/if}
 			{#if fileMenu}
 				<div class="file-menu" bind:this={fileMenuEl} style:left="{fileMenuPos.x}px" style:top="{fileMenuPos.y}px">
@@ -1487,7 +1490,7 @@
 						}
 					: undefined}
 				{gitBranch}
-				gitCwd={project?.path || chat.cwd}
+				gitCwd={workDir}
 				repoName={project?.name ?? ''}
 				onBranchChanged={refreshGitBranch}
 				onBackend={(b, acpAgent) => store.switchBackend(session.id, b, acpAgent)}

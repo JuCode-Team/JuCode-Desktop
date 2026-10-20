@@ -281,7 +281,9 @@
 			// A new session gets its id from the snapshot; later reconnects
 			// reopen that same session.
 			const resume = session ?? (chat.sessionId || undefined);
-			await daemon.open(id, cwd ?? '', resume, !resume && isChat, engineSpec(!resume));
+			// A new session belongs to the project picked (a chat's is found by the daemon).
+			const project = !resume && pickedProject && !pickedProject.chats ? pickedProject.id : undefined;
+			await daemon.open(id, cwd ?? '', resume, !resume && isChat, engineSpec(!resume), project);
 			connected = true;
 			dropped = false;
 			retries = 0;
@@ -816,8 +818,11 @@
 			{:else if draft && chat.messages.length === 0}
 				<div class="welcome">
 					<p class="lead">
-						{#each t('shell.startPicker.lead').split(/(\{project\}|\{backend\})/) as part, i (i)}
-							{#if part === '{project}'}
+						{#each t('shell.startPicker.lead').split(/(\{project\}|\{dir\}|\{backend\})/) as part, i (i)}
+							{#if part === '{dir}'}
+								<!-- The project's folder: a session here starts in it. -->
+								<span class="wname" title={cwd}>{(cwd ?? '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || t('shell.startPicker.dir')}</span>
+							{:else if part === '{project}'}
 								<span class="anchor">
 									<button class="word" class:on={pickMenu === 'project'} onclick={() => (pickMenu = pickMenu === 'project' ? null : 'project')} aria-haspopup="menu" aria-label={t('shell.startPicker.project')}>
 										<FolderIcon size={16} /><span class="wname">{pickedProject ? projectLabel(pickedProject) : t('shell.startPicker.project')}</span><ChevronDownIcon size={12} />

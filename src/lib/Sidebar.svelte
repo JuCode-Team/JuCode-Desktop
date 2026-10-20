@@ -29,7 +29,8 @@
 	import SessionMark from '$lib/SessionMark.svelte';
 	import { sessionStatus } from '$lib/sessionStatus';
 	import { listedSessions } from '$lib/session.svelte';
-	import { CHATS_ENABLED, type Project, type Session } from '$lib/types';
+	import { CHATS_ENABLED, LOOSE_ID, type Project, type Session } from '$lib/types';
+	import { railDrop } from '$lib/workbench/railDrop.svelte';
 	import RequirementTag from '$lib/requirements/RequirementTag.svelte';
 	import { useRequirements } from '$lib/requirements.svelte';
 	import { prefs } from '$lib/prefs.svelte';
@@ -53,6 +54,7 @@
 		onPinSession,
 		onMoveSession,
 		onMoveProject,
+		onMoveProjectToWorkspace,
 		onRenameSession,
 		onSessionMenu,
 		onProjectMenu,
@@ -83,6 +85,8 @@
 		onMoveSession: (id: string, target: string, after: boolean) => void;
 		/** A project and its sessions dropped before or after another project. */
 		onMoveProject: (id: string, target: string, after: boolean) => void;
+		/** A project dropped on another workspace in the rail. */
+		onMoveProjectToWorkspace: (id: string, workspace: string) => void;
 		/** Inline rename committed on a session row (dblclick the title). */
 		onRenameSession: (id: string, title: string) => void;
 		/** Right-click on a session row: the page opens the chrome popover. */
@@ -141,7 +145,16 @@
 		return current && !top.includes(current) ? [...top, current] : top;
 	}
 	const chats = $derived(CHATS_ENABLED ? projects.find((p) => p.chats) : undefined);
-	const codeProjects = $derived(projects.filter((p) => !p.chats));
+	const codeProjects = $derived(projects.filter((p) => !p.chats && !p.loose));
+	const loose = $derived(projects.find((p) => p.loose));
+	/** Recents: this workspace's sessions and those of no project, the
+	 *  latest first. */
+	const recents = $derived(
+		[...codeProjects, ...(loose ? [loose] : [])]
+			.flatMap((p) => listedSessions(p).filter((s) => sessionMatches(p, s)))
+			.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
+	);
+	const looseArch = $derived(loose ? loose.sessions.filter((s) => s.archived && sessionMatches(loose, s)) : []);
 
 	// Session filter: case-insensitive substring over session title + project
 	// name; empty project groups are hidden while a query is set.
@@ -259,6 +272,8 @@
 				frame = requestAnimationFrame(scroll);
 			}
 			update();
+			// A project over another workspace in the rail moves there.
+			if (!s) railDrop.id = railTarget(ev);
 		};
 		const end = (ev: PointerEvent) => {
 			window.removeEventListener('pointermove', move);
@@ -267,12 +282,15 @@
 			window.removeEventListener('selectstart', noSelect);
 			cancelAnimationFrame(frame);
 			const d = drag;
+			const ws = railDrop.id;
 			drag = null;
+			railDrop.id = null;
 			if (!d?.live) return;
 			// The release ends the drag; it does not open the row.
 			const swallow = (c: Event) => c.stopPropagation();
 			window.addEventListener('click', swallow, { capture: true, once: true });
 			setTimeout(() => window.removeEventListener('click', swallow, { capture: true }));
+			if (ev.type === 'pointerup' && ws) return onMoveProjectToWorkspace(id, ws);
 			if (ev.type !== 'pointerup' || d.at === d.from || !d.others.length) return;
 			const to = d.at < d.others.length ? { id: d.others[d.at]!, after: false } : { id: d.others[d.others.length - 1]!, after: true };
 			(s ? onMoveSession : onMoveProject)(id, to.id, to.after);
@@ -281,6 +299,11 @@
 		window.addEventListener('pointerup', end);
 		window.addEventListener('pointercancel', end);
 		window.addEventListener('selectstart', noSelect);
+	}
+	/** The workspace in the rail under the pointer, other than this one. */
+	function railTarget(ev: PointerEvent): string | null {
+		const el = document.elementFromPoint(ev.clientX, ev.clientY)?.closest<HTMLElement>('[data-ws-id]');
+		return el && el.getAttribute('aria-selected') !== 'true' ? (el.dataset.wsId ?? null) : null;
 	}
 	/** How far row `id` of `group` moves while a row of it is dragged. */
 	function shiftOf(group: string, id: string): number {
@@ -555,6 +578,18 @@
 				{/if}
 			{/each}
 		</section>
+
+		<!-- Recents: the latest sessions, of this workspace's projects or of none. -->
+		{#if recents.length || looseArch.length}
+			<section>
+				<div class="head"><span>{t('shell.recents')}</span></div>
+				{#each showAll[LOOSE_ID] || query ? recents : firstSessions(recents) as s (s.id)}{@render sessRow(s)}{/each}
+				{#if recents.length > SHOW_LIMIT && !query}
+					<button class="more" onclick={() => (showAll[LOOSE_ID] = !showAll[LOOSE_ID])}>{showAll[LOOSE_ID] ? t('shell.showLess') : t('shell.showMore')}</button>
+				{/if}
+				{#if loose}{@render archived(loose, looseArch, false)}{/if}
+			</section>
+		{/if}
 	</div>
 
 </div>

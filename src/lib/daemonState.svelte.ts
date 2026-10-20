@@ -27,6 +27,8 @@ export interface DaemonSessionView {
 	/** ACP: the built-in preset it runs (`opencode`, `omp`, `pi`); null for a
 	 *  registered agent, which only the desktop can reopen. */
 	agent?: string | null;
+	/** The id of the project it belongs to (null: none). */
+	project?: string | null;
 }
 
 /** A tool call an unwatched session deferred for the user to decide. */

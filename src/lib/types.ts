@@ -46,6 +46,11 @@ export interface Session {
 	draft?: boolean;
 	/** Listed above the project's other sessions (persisted, desktop only). */
 	pinned?: boolean;
+	/** Its working directory, when not its project's `path` (persisted). A
+	 *  session of no project always has one. */
+	cwd?: string;
+	/** When it last changed, as the daemon lists it (ms; not persisted). */
+	updatedAt?: number;
 	/** Model and effort picked while a draft, applied when it starts. */
 	draftPick?: { model?: string; effort?: string };
 	/** Claude Code / Codex / an ACP preset with a gateway mode: runs through
@@ -97,6 +102,9 @@ export interface Project {
 	lastAcpAgent?: AcpAgentRef;
 	/** 对话分组：path 为 ~/.jucode/chats，会话以对话模式（非编程）运行，只用 jucode 引擎。 */
 	chats?: boolean;
+	/** 未归属任何项目的会话所在的内部分组（id 为 LOOSE_ID，path 为空）：
+	 *  只在侧栏「最近」列出，不保存进工作区，不同步给后台服务。 */
+	loose?: boolean;
 	/** 侧栏文件夹的颜色与自定义图标（同标签外观；随 workspaces.json 保存并同步给后台服务）。 */
 	color?: string;
 	icon?: TabIcon;
@@ -105,3 +113,6 @@ export interface Project {
 /** 对话功能本版本隐藏（之后由新的助手取代）：桌面端和远程网页都不显示、不新建对话。
  *  已有的对话分组仍留在 workspaces.json 和后台服务里，只是不列出。改回 true 即恢复。 */
 export const CHATS_ENABLED = false;
+
+/** The id of the group of sessions that belong to no project (Project.loose). */
+export const LOOSE_ID = 'loose';

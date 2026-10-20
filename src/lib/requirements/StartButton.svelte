@@ -1,6 +1,6 @@
 <script lang="ts" module>
 	/** How to start a session on a requirement (the page carries it out):
-	 *  `project` is a project's path. */
+	 *  `project` is a project's id. */
 	export type StartHow = { project?: string; backend?: string; mode?: 'worktree' };
 </script>
 
@@ -37,7 +37,7 @@
 	const own = $derived(projects.find((p) => p.id === requirement.project));
 	const offered = $derived([...(own ? [own] : []), ...projects.filter((p) => p !== own)]);
 	const items = $derived<PopMenuItem[]>([
-		...offered.slice(0, 6).map((p) => ({ key: `p:${p.path}`, label: t('shell.requirement.startIn', { project: p.name }), icon: FolderIcon })),
+		...offered.slice(0, 6).map((p) => ({ key: `p:${p.id}`, label: t('shell.requirement.startIn', { project: p.name }), icon: FolderIcon })),
 		...(own
 			? [
 					...(['jucode', 'claude', 'codex'] as const).map((b) => ({

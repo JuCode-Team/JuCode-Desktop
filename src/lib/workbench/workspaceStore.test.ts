@@ -74,3 +74,23 @@ describe('WorkspaceStore chrome', () => {
 		expect(store.workspaces[0].icon).toBeUndefined();
 	});
 });
+
+describe('WorkspaceStore order', () => {
+	it('move puts a workspace before or after another', () => {
+		const { store, def, extra } = seeded();
+		const third = createWorkspace('third');
+		store.file!.workspaces.push(third);
+		store.move(third.id, def.id, false);
+		expect(store.workspaces.map((w) => w.id)).toEqual([third.id, def.id, extra.id]);
+		store.move(third.id, extra.id, true);
+		expect(store.workspaces.map((w) => w.id)).toEqual([def.id, extra.id, third.id]);
+	});
+
+	it('order follows the given ids and keeps unknown ones last', () => {
+		const { store, def, extra } = seeded();
+		const local = createWorkspace('local only');
+		store.file!.workspaces.push(local);
+		store.order([extra.id, def.id]);
+		expect(store.workspaces.map((w) => w.id)).toEqual([extra.id, def.id, local.id]);
+	});
+});

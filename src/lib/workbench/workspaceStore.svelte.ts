@@ -138,6 +138,34 @@ export class WorkspaceStore {
 		this.#schedule();
 	}
 
+	/** Move workspace `id` next to `targetId` (a drag in the rail). */
+	move(id: string, targetId: string, after: boolean) {
+		const file = this.file;
+		const ws = file?.workspaces.find((w) => w.id === id);
+		if (!file || !ws || id === targetId) return;
+		const rest = file.workspaces.filter((w) => w !== ws);
+		const i = rest.findIndex((w) => w.id === targetId);
+		if (i < 0) return;
+		rest.splice(after ? i + 1 : i, 0, ws);
+		file.workspaces = rest;
+		this.#schedule();
+	}
+
+	/** Put the workspaces in the order of `ids` (another client reordered
+	 *  them); ones not in `ids` keep their order after the rest. */
+	order(ids: string[]) {
+		const file = this.file;
+		if (!file) return;
+		const rank = (id: string) => {
+			const i = ids.indexOf(id);
+			return i < 0 ? ids.length : i;
+		};
+		const sorted = [...file.workspaces].sort((a, b) => rank(a.id) - rank(b.id));
+		if (sorted.every((w, i) => w === file.workspaces[i])) return;
+		file.workspaces = sorted;
+		this.#schedule();
+	}
+
 	/** Set or clear a workspace's tag color / icon (null clears). */
 	setChrome(id: string, chrome: { color?: string | null; icon?: TabIcon | null }) {
 		const ws = this.workspaces.find((w) => w.id === id);

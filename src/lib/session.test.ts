@@ -24,11 +24,11 @@ vi.mock('./protocol', () => ({
 
 import { SessionStore, listedSessions } from './session.svelte';
 import { UNTITLED } from './chat.svelte';
-import { dispatch, startDraft } from './backends/router';
+import { dispatch, dropHeldOps, holdOps, startDraft } from './backends/router';
 import { daemon, hostSession, closeSession, sendLine, git, writeConfig, sessionHistory, sessionMeta } from './protocol';
 import type { EngineSpec } from './daemon';
 import { setLocale } from './i18n';
-import type { Project, WorktreeMeta } from './types';
+import { LOOSE_ID, type Project, type WorktreeMeta } from './types';
 
 const proj = (id = 'p1'): Project => ({ id, name: id, path: `/tmp/${id}`, sessions: [] });
 /** A new session is a draft; its first message starts the engine. */
@@ -122,7 +122,7 @@ describe('SessionStore lifecycle', () => {
 		expect(p.sessions[0].draft).toBe(false);
 		expect(listedSessions(p).map((s) => s.id)).toEqual([id]);
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined, false, undefined);
+		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined, false, undefined, expect.any(String));
 		// The daemon named the new session.
 		expect(p.sessions[0].chat.sessionId).toBe(`conv-${id}`);
 	});
@@ -362,7 +362,7 @@ describe('SessionStore lifecycle', () => {
 		store.projects.push(p);
 		store.openSaved(p, 's6old', 'old chat', 'jucode');
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(store.activeId, p.path, 's6old', false, undefined);
+		expect(hostSession).toHaveBeenCalledWith(store.activeId, p.path, 's6old', false, undefined, undefined);
 		const first = store.activeId;
 		store.openSaved(p, 's6old', 'old chat', 'jucode');
 		expect(store.activeId).toBe(first);
@@ -544,7 +544,7 @@ describe('SessionStore lifecycle', () => {
 		vi.mocked(hostSession).mockClear();
 		await store.switchProvider(id, { id: 'x', base_url: 'u', format: 'openai', models: [{ name: 'm' }] }, 'm');
 		expect(closeSession).toHaveBeenCalledWith(id);
-		expect(hostSession).toHaveBeenCalledWith(id, p.path, `conv-${id}`, false, undefined);
+		expect(hostSession).toHaveBeenCalledWith(id, p.path, `conv-${id}`, false, undefined, undefined);
 		expect(sendLine).not.toHaveBeenCalledWith(id, expect.stringContaining('/resume'));
 	});
 
@@ -650,7 +650,7 @@ describe('SessionStore lifecycle', () => {
 		const s = store.projects[0].sessions[0];
 		expect(s.dormant).toBeUndefined();
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith('t1', '/tmp/p1', 'acp-1', false, expect.objectContaining({ engine: 'acp' }));
+		expect(hostSession).toHaveBeenCalledWith('t1', '/tmp/p1', 'acp-1', false, expect.objectContaining({ engine: 'acp' }), undefined);
 	});
 
 	it('acp tabs without a saved agent fall back to the project lastAcpAgent', async () => {
@@ -792,14 +792,14 @@ describe('SessionStore claude and codex in the daemon', () => {
 		expect(hostSession).toHaveBeenCalledWith(claude, p.path, undefined, false, {
 			engine: 'claude',
 			options: { approval_mode: 'read-only' }
-		});
+		}, expect.any(String));
 		const codex = store.addSession(p, undefined, 'codex');
 		begin(codex);
 		await flush();
 		expect(hostSession).toHaveBeenCalledWith(codex, p.path, undefined, false, {
 			engine: 'codex',
 			options: { approval_mode: 'read-only' }
-		});
+		}, expect.any(String));
 	});
 
 	it('a restored gateway tab reopens on the gateway', async () => {
@@ -811,7 +811,7 @@ describe('SessionStore claude and codex in the daemon', () => {
 		expect(hostSession).toHaveBeenCalledWith(id, p.path, 'codex-1', false, {
 			engine: 'codex',
 			options: { approval_mode: 'read-only', jucode_gateway: true }
-		});
+		}, undefined);
 	});
 
 	it('a saved Claude Code tab keeps its gateway and model when it reopens', async () => {
@@ -856,7 +856,7 @@ describe('SessionStore claude and codex in the daemon', () => {
 		expect(hostSession).toHaveBeenCalledWith(id, p.path, 'claude-1', false, {
 			engine: 'claude',
 			options: { approval_mode: 'full-auto' }
-		});
+		}, undefined);
 		expect(p.sessions[0].spawnedMode).toBe('bypassPermissions');
 		expect(p.sessions[0].chat.switching).toBe(false);
 	});
@@ -874,7 +874,7 @@ describe('SessionStore claude and codex in the daemon', () => {
 		expect(hostSession).toHaveBeenLastCalledWith(id, p.path, 'claude-1', false, {
 			engine: 'claude',
 			options: { approval_mode: 'read-only', resume_at: 'uuid-a' }
-		});
+		}, undefined);
 		expect(s.chat.userTurns).toBe(1);
 
 		await store.rewindClaudeSession(id, null, 0);
@@ -1001,6 +1001,34 @@ describe('switching workspaces', () => {
 	});
 });
 
+describe('switching workspaces and back', () => {
+	it('a draft comes back with its picks, and what waited for an engine is still sent', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const draft = store.addSession(p, undefined, undefined, undefined, '/tmp/elsewhere');
+		const d = store.allSessions.find((x) => x.id === draft)!;
+		d.draftPick = { model: 'm-2', effort: 'high' };
+		d.requirement = 'R-1';
+		const running = store.addSession(p);
+		begin(running);
+		await flush();
+		const r = store.allSessions.find((x) => x.id === running)!;
+		r.chat.sessionId = 'conv-1';
+		// The engine is restarting: a message waits for it.
+		holdOps(running);
+		dispatch(running, { op: 'user_message', content: 'queued' });
+		const saved = store.serialize();
+		store.detachProject(p);
+		store.loaded = false;
+		await store.restore(saved);
+		const back = store.allSessions.find((x) => x.id === draft)!;
+		expect(back).toBe(d);
+		expect(back).toMatchObject({ draft: true, cwd: '/tmp/elsewhere', requirement: 'R-1', draftPick: { model: 'm-2', effort: 'high' } });
+		expect(dropHeldOps(running)).toEqual([{ op: 'user_message', content: 'queued' }]);
+	});
+});
+
 describe('session order and pins', () => {
 	const titles = (p: Project) => listedSessions(p).map((s) => s.chat.title);
 	/** A new session past its first message (drafts are not listed). */
@@ -1099,7 +1127,8 @@ describe('SessionStore chats', () => {
 		expect(chats.sessions.map((s) => s.id)).toEqual([id]);
 		begin(id);
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(id, chats.path, undefined, true, undefined);
+		// A chat's project is the chats folder's, as the daemon finds it.
+		expect(hostSession).toHaveBeenCalledWith(id, chats.path, undefined, true, undefined, undefined);
 		// A second chat joins the same group.
 		await store.newChat();
 		expect(store.projects.filter((p) => p.chats)).toHaveLength(1);
@@ -1117,7 +1146,7 @@ describe('SessionStore chats', () => {
 		expect(again.projects[0].chats).toBe(true);
 		begin(again.projects[0].sessions[0].id);
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(expect.any(String), '/home/u/.jucode/chats', undefined, true, undefined);
+		expect(hostSession).toHaveBeenCalledWith(expect.any(String), '/home/u/.jucode/chats', undefined, true, undefined, undefined);
 	});
 });
 
@@ -1286,14 +1315,14 @@ describe('sessions in the jucode daemon', () => {
 		expect(hostSession).not.toHaveBeenCalled(); // a draft is in no daemon yet
 		begin(id);
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined, false, undefined);
+		expect(hostSession).toHaveBeenCalledWith(id, p.path, undefined, false, undefined, expect.any(String));
 		const acp = store.addSession(p, undefined, 'acp', { id: 'gemini', name: 'Gemini' });
 		begin(acp);
 		await flush();
 		expect(hostSession).toHaveBeenCalledWith(acp, p.path, undefined, false, {
 			engine: 'acp',
 			options: { command: 'gemini', args: ['--experimental-acp'], env: {} }
-		});
+		}, expect.any(String));
 	});
 
 	it('a gateway draft takes a group, and hands it over once the daemon names it', async () => {
@@ -1326,7 +1355,7 @@ describe('sessions in the jucode daemon', () => {
 		vi.mocked(hostSession).mockClear();
 		const picked = store.restoreSession(p, 'conv-2', '', 'claude');
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(picked, p.path, 'conv-2', false, expect.objectContaining({ engine: 'claude' }));
+		expect(hostSession).toHaveBeenCalledWith(picked, p.path, 'conv-2', false, expect.objectContaining({ engine: 'claude' }), undefined);
 		expect(p.sessions.find((x) => x.id === picked)!.chat.sessionId).toBe('conv-2');
 	});
 
@@ -1342,7 +1371,7 @@ describe('sessions in the jucode daemon', () => {
 		vi.mocked(hostSession).mockClear();
 		store.handleExit(id);
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(id, p.path, `conv-${id}`, false, undefined);
+		expect(hostSession).toHaveBeenCalledWith(id, p.path, `conv-${id}`, false, undefined, undefined);
 		expect(sendLine).not.toHaveBeenCalledWith(id, expect.stringContaining('/resume'));
 	});
 
@@ -1369,7 +1398,7 @@ describe('sessions in the jucode daemon', () => {
 		restored.wake(s.id);
 		expect(s.dormant).toBe(false);
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(s.id, p.path, sid, false, undefined);
+		expect(hostSession).toHaveBeenCalledWith(s.id, p.path, sid, false, undefined, undefined);
 		expect(sendLine).not.toHaveBeenCalledWith(s.id, expect.stringContaining('/resume'));
 	});
 
@@ -1403,13 +1432,13 @@ describe('sessions in the jucode daemon', () => {
 		expect(hostSession).toHaveBeenCalledWith('t-claude', '/tmp/p1', 'claude-1', false, {
 			engine: 'claude',
 			options: { approval_mode: 'read-only' }
-		});
+		}, undefined);
 		expect(hostSession).toHaveBeenCalledWith('t-codex', '/tmp/p1', 'codex-1', false, {
 			engine: 'codex',
 			options: { approval_mode: 'read-only' }
-		});
-		expect(hostSession).toHaveBeenCalledWith('t-jucode', '/tmp/p1', 'jucode-1', false, undefined);
-		expect(hostSession).toHaveBeenCalledWith('t-old', '/tmp/p1', 'jucode-2', false, undefined);
+		}, undefined);
+		expect(hostSession).toHaveBeenCalledWith('t-jucode', '/tmp/p1', 'jucode-1', false, undefined, undefined);
+		expect(hostSession).toHaveBeenCalledWith('t-old', '/tmp/p1', 'jucode-2', false, undefined, undefined);
 		// Woken once: a second wake opens nothing.
 		vi.mocked(hostSession).mockClear();
 		store.wake('t-claude');
@@ -1428,14 +1457,17 @@ describe('daemon sessions', () => {
 		expect(p.sessions.some((s) => s.id === first)).toBe(true);
 		expect(store.allSessions.find((x) => x.id === first)?.chat.title).toBe('处理今日工单');
 		await flush();
-		expect(hostSession).toHaveBeenCalledWith(first, '/srv/ops', 'daemon-1', false, undefined);
+		expect(hostSession).toHaveBeenCalledWith(first, '/srv/ops', 'daemon-1', false, undefined, undefined);
 		vi.mocked(hostSession).mockClear();
 		expect(store.openDaemonSession('/srv/ops', 'daemon-1')).toBe(first);
 		await flush();
 		expect(hostSession).not.toHaveBeenCalled();
-		// A directory with no project gets one.
-		store.openDaemonSession('/srv/other', 'daemon-2');
-		expect(store.projects.map((x) => x.path)).toEqual(['/srv/ops', '/srv/other']);
+		// A directory with no project: of no project, working there.
+		const other = store.openDaemonSession('/srv/other', 'daemon-2');
+		expect(store.loose!.sessions.map((s) => [s.id, s.cwd])).toEqual([[other, '/srv/other']]);
+		// Its project wins over its directory.
+		const named = store.openDaemonSession('/srv/other', 'daemon-5', null, undefined, false, null, false, p.id);
+		expect(p.sessions.find((s) => s.id === named)?.cwd).toBe('/srv/other');
 		// A Codex run (a scheduled task's) opens as Codex, through the gateway.
 		const codexId = store.openDaemonSession('/srv/ops', 'daemon-3', null, 'codex', true);
 		const codex = store.allSessions.find((x) => x.id === codexId);
@@ -1491,5 +1523,66 @@ describe('moveDraft', () => {
 		// Started: it stays where it is.
 		store.moveDraft(id, 'a');
 		expect(store.projects[1]!.sessions.map((s) => s.id)).toEqual([id]);
+	});
+});
+
+describe('sessions and projects', () => {
+	it('a new session names its project, or none, and works where it was told', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const synced = vi.fn(() => Promise.resolve());
+		store.projectsSynced = synced;
+		const inside = store.addSession(p, undefined, undefined, undefined, '/tmp/elsewhere');
+		begin(inside);
+		await flush();
+		expect(synced).toHaveBeenCalled();
+		expect(hostSession).toHaveBeenLastCalledWith(inside, '/tmp/elsewhere', undefined, false, undefined, 'p1');
+		const loose = store.addLooseSession('/tmp/scratch');
+		begin(loose);
+		await flush();
+		expect(hostSession).toHaveBeenLastCalledWith(loose, '/tmp/scratch', undefined, false, undefined, '');
+		expect(store.cwdOf(loose)).toBe('/tmp/scratch');
+		// The loose group is neither saved with the workspace nor a project of it.
+		expect(store.serialize().map((x) => x.id)).toEqual(['p1']);
+		expect(store.serialize()[0].tabs?.[0]).toMatchObject({ cwd: '/tmp/elsewhere' });
+		expect(store.workspaceProjects).toEqual([p]);
+	});
+
+	it('a session moves between projects, keeping its folder, and the daemon hears of it', async () => {
+		const store = new SessionStore();
+		store.projects.push(proj('p1'), proj('p2'));
+		const id = store.addSession(store.projects[0]);
+		begin(id);
+		await flush();
+		const sid = store.allSessions[0].chat.sessionId;
+		store.moveToProject(id, 'p2');
+		expect(store.ownerOf(id)?.id).toBe('p2');
+		expect(store.cwdOf(id)).toBe('/tmp/p1');
+		expect(sessionMeta).toHaveBeenLastCalledWith(sid, { project: 'p2' });
+		store.moveToProject(id, LOOSE_ID);
+		expect(store.ownerOf(id)?.loose).toBe(true);
+		expect(sessionMeta).toHaveBeenLastCalledWith(sid, { project: '' });
+		// Back in its folder's project: no folder of its own any more.
+		store.moveToProject(id, 'p1');
+		expect(store.allSessions[0].cwd).toBeUndefined();
+	});
+
+	it('a new workspace starts in its own folder even with sessions of no project open', async () => {
+		const store = new SessionStore();
+		store.addLooseSession('/tmp/scratch');
+		await store.restore([]);
+		const active = store.ownerOf(store.activeId);
+		expect(active?.loose).toBeFalsy();
+		expect(active?.path).toBe('/tmp/demo');
+	});
+
+	it('a conversation picked from history opens in the folder it was saved in', async () => {
+		const store = new SessionStore();
+		store.addLooseSession('/tmp/scratch');
+		vi.mocked(hostSession).mockClear();
+		store.openSaved(store.loose!, 'old-1', 'old', 'jucode', '/tmp/scratch');
+		await flush();
+		expect(hostSession).toHaveBeenLastCalledWith(store.activeId, '/tmp/scratch', 'old-1', false, undefined, undefined);
 	});
 });

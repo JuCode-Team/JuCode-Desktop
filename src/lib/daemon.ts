@@ -114,14 +114,16 @@ export class DaemonClient {
 	/** Creates a daemon session in `cwd` (as a chat in the chats directory,
 	 *  when `chat`), or reopens `resume` (a session
 	 *  id; `cwd` lets the daemon find one saved there that it never hosted),
-	 *  then watches it. The watch snapshot (startup state and transcript)
+	 *  then watches it. `project`: the project a new one belongs to ("": none;
+	 *  left out: the one whose folder is `cwd`). The watch snapshot (startup state and transcript)
 	 *  arrives through `onFrame`. */
 	async open(
 		desktopId: string,
 		cwd: string,
 		resume?: string,
 		chat = false,
-		engine?: EngineSpec
+		engine?: EngineSpec,
+		project?: string
 	): Promise<void> {
 		await this.connect();
 		const reply = resume
@@ -129,7 +131,7 @@ export class DaemonClient {
 			: await this.request(
 					chat && !engine
 						? { op: 'session_create', chat: true }
-						: { op: 'session_create', cwd, ...(engine ?? {}) }
+						: { op: 'session_create', cwd, ...(engine ?? {}), ...(project !== undefined ? { project } : {}) }
 				);
 		const session = String(reply.session);
 		this.#toDaemon.set(desktopId, session);

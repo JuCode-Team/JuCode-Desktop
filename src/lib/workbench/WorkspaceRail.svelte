@@ -13,6 +13,7 @@
 	import TabChromePopover from './TabChromePopover.svelte';
 	import AccountCard from './AccountCard.svelte';
 	import { rowIn, rowOut } from '$lib/ui/motion';
+	import { railDrop } from './railDrop.svelte';
 
 	// The outermost column: one entry per workspace (the top-level context —
 	// switching it swaps the sidebar's projects and the canvas layout) and + to
@@ -27,6 +28,7 @@
 		onRename,
 		onChrome,
 		onDelete,
+		onMove,
 		loggedIn,
 		updateAvailable = false,
 		settingsOpen = false,
@@ -43,6 +45,8 @@
 		onRename: (id: string, name: string) => void;
 		onChrome: (id: string, chrome: { color?: string | null; icon?: TabIcon | null }) => void;
 		onDelete: (id: string) => void;
+		/** A dragged entry dropped before or after `target`. */
+		onMove: (id: string, target: string, after: boolean) => void;
 		/** Signed in to the JuCode account (not tied to any one chat). */
 		loggedIn: boolean;
 		updateAvailable?: boolean;
@@ -89,6 +93,71 @@
 		if (card && !accountBtn?.contains(el) && !el.closest?.('.acct-card')) closeCard();
 	}
 
+	// Drag to reorder, with pointer events as the sidebar rows do (HTML drag
+	// and drop is not reliable in the macOS webview): a press stays a click
+	// until the pointer travels, then the entry follows it and the others
+	// slide aside to show where it lands.
+	let itemsEl = $state<HTMLElement | null>(null);
+	/** `dy`: how far the entry has moved; `others`: the other entries in
+	 *  order; `at`: where it would land among them; `size`: the room it takes. */
+	let drag = $state<{ id: string; live: boolean; dy: number; from: number; at: number; size: number; others: string[] } | null>(null);
+	function wsDown(e: PointerEvent, id: string) {
+		if (e.button !== 0 || busy || !itemsEl) return;
+		const list = itemsEl;
+		const startX = e.clientX;
+		const startY = e.clientY;
+		let centres: number[] = [];
+		drag = { id, live: false, dy: 0, from: 0, at: 0, size: 0, others: [] };
+		const begin = () => {
+			const rows = [...list.querySelectorAll<HTMLElement>('[data-ws-id]')];
+			const rects = rows.map((el) => el.getBoundingClientRect());
+			const from = rows.findIndex((el) => el.dataset.wsId === id);
+			if (!drag || from < 0 || rows.length < 2) return false;
+			const next = rects[from + 1] ?? null;
+			const prev = rects[from - 1] ?? null;
+			const size = next ? next.top - rects[from]!.top : prev ? rects[from]!.bottom - prev.bottom : rects[from]!.height;
+			centres = rects.filter((_, i) => i !== from).map((r) => r.top + r.height / 2);
+			const others = rows.filter((_, i) => i !== from).map((el) => el.dataset.wsId!);
+			Object.assign(drag, { live: true, from, at: from, size, others });
+			return true;
+		};
+		const noSelect = (ev: Event) => ev.preventDefault();
+		const move = (ev: PointerEvent) => {
+			if (!drag?.live && (!drag || Math.hypot(ev.clientX - startX, ev.clientY - startY) < 5 || !begin())) return;
+			drag!.dy = ev.clientY - startY;
+			drag!.at = centres.filter((c) => c < ev.clientY).length;
+		};
+		const end = (ev: PointerEvent) => {
+			window.removeEventListener('pointermove', move);
+			window.removeEventListener('pointerup', end);
+			window.removeEventListener('pointercancel', end);
+			window.removeEventListener('selectstart', noSelect);
+			const d = drag;
+			drag = null;
+			if (!d?.live) return;
+			// The release ends the drag; it does not switch workspace.
+			const swallow = (c: Event) => c.stopPropagation();
+			window.addEventListener('click', swallow, { capture: true, once: true });
+			setTimeout(() => window.removeEventListener('click', swallow, { capture: true }));
+			if (ev.type !== 'pointerup' || d.at === d.from) return;
+			const to = d.at < d.others.length ? { id: d.others[d.at]!, after: false } : { id: d.others[d.others.length - 1]!, after: true };
+			onMove(id, to.id, to.after);
+		};
+		window.addEventListener('pointermove', move);
+		window.addEventListener('pointerup', end);
+		window.addEventListener('pointercancel', end);
+		window.addEventListener('selectstart', noSelect);
+	}
+	/** How far entry `id` moves while one is dragged. */
+	function shiftOf(id: string): number {
+		if (!drag?.live) return 0;
+		if (id === drag.id) return drag.dy;
+		const k = drag.others.indexOf(id);
+		if (k >= drag.from && k < drag.at) return -drag.size;
+		if (k >= drag.at && k < drag.from) return drag.size;
+		return 0;
+	}
+
 	function openMenu(w: WorkspaceEntry, ev: MouseEvent) {
 		ev.preventDefault();
 		menuFor = { id: w.id, x: ev.clientX, y: ev.clientY };
@@ -96,16 +165,21 @@
 </script>
 
 <nav class="rail" data-tauri-drag-region aria-label={t('shell.workspace.label')}>
-	<div class="items" role="tablist">
+	<div class="items" class:dragging={drag?.live} role="tablist" bind:this={itemsEl}>
 		{#each workspaces as w (w.id)}
 			<button
 				class="ws"
 				in:rowIn
 				out:rowOut
 				class:on={w.id === activeId}
+				class:held={drag?.live && drag.id === w.id}
+				class:drop={railDrop.id === w.id}
+				style:transform={shiftOf(w.id) ? `translateY(${shiftOf(w.id)}px)` : undefined}
+				data-ws-id={w.id}
 				role="tab"
 				aria-selected={w.id === activeId}
 				title={w.name}
+				onpointerdown={(e) => wsDown(e, w.id)}
 				onclick={() => !busy && onSwitch(w.id)}
 				oncontextmenu={(e) => openMenu(w, e)}
 			>
@@ -245,6 +319,31 @@
 	.ws.on .tile {
 		background: var(--surface2);
 		color: var(--text);
+	}
+	/* A project dragged from the sidebar would move here. */
+	.ws.drop .tile {
+		background: var(--surface2);
+		color: var(--text);
+		box-shadow: inset 0 0 0 1px var(--accent);
+	}
+	/* Dragging an entry: it follows the pointer above the others, which
+	   slide aside to show where it lands. */
+	.items.dragging {
+		cursor: grabbing;
+		user-select: none;
+	}
+	.items.dragging .ws {
+		pointer-events: none;
+		transition: transform 150ms var(--ease-out);
+	}
+	.items.dragging .ws.held {
+		position: relative;
+		z-index: 2;
+		transition: none;
+	}
+	.items.dragging .ws.held .tile {
+		background: var(--surface2);
+		box-shadow: var(--shadow-sm);
 	}
 	.ws:disabled {
 		opacity: 0.5;

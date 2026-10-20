@@ -9,9 +9,10 @@
 //   The first list of a connection only adds: an empty daemon takes the
 //   desktop's list, and one that knows fewer projects (a new daemon, a lost
 //   file) never closes the desktop's.
-// - Sessions: every daemon session in one of the active workspace's projects
-//   shows in the sidebar. Ones not open here are listed dormant and open when
-//   first shown; titles and archive state follow the daemon; a session
+// - Sessions: every daemon session of one of the active workspace's projects,
+//   or of no project, shows in the sidebar, where the daemon says it belongs
+//   (`project`). Ones not open here are listed dormant and open when first
+//   shown; titles, archive state and project follow the daemon; a session
 //   another client removed leaves the list.
 //
 // Tabs, their order and chrome, and the tile layout stay desktop-only.
@@ -116,6 +117,8 @@ export class DaemonSync {
 	#held: Record<string, unknown> | null = null;
 	/** Session ids the last daemon list on this connection had. */
 	#seen = new Set<string>();
+	/** The list being sent, until the daemon answers. */
+	#sending: Promise<void> | null = null;
 
 	/** `ready`: the desktop's project tree is restored and not being swapped
 	 *  (a list applied before would be merged with an empty tree). */
@@ -148,7 +151,7 @@ export class DaemonSync {
 		return this.workspaces.workspaces.map((ws) =>
 			workspace(
 				ws,
-				(ws.id === this.workspaces.activeId ? this.store.projects : ws.projects).map(project)
+				(ws.id === this.workspaces.activeId ? this.store.projects.filter((p) => !p.loose) : ws.projects).map(project)
 			)
 		);
 	}
@@ -176,21 +179,31 @@ export class DaemonSync {
 		this.push();
 	}
 
-	/** Sends the desktop's list when it differs from the daemon's. */
-	push() {
-		if (this.#rev < 0) return;
+	/** Sends the desktop's list when it differs from the daemon's; resolves
+	 *  once the daemon has answered (the list it has, or another client's
+	 *  newer one). */
+	push(): Promise<void> {
+		if (this.#rev < 0) return Promise.resolve();
 		const local = this.local();
 		const key = canonical(local);
-		if (key === this.#remoteKey) return;
+		if (key === this.#remoteKey) return this.#sending ?? Promise.resolve();
 		this.#remoteKey = key;
-		daemon.request({ op: 'workspaces_set', rev: this.#rev, workspaces: local }).then(
-			(reply) => this.handle(reply),
-			() => {
-				// Another client saved first; its broadcast brings the new list.
-				this.#remoteKey = '';
-			}
-		);
+		const sending: Promise<void> = daemon
+			.request({ op: 'workspaces_set', rev: this.#rev, workspaces: local })
+			.then(
+				(reply) => this.handle(reply),
+				() => {
+					// Another client saved first; its broadcast brings the new list.
+					this.#remoteKey = '';
+				}
+			)
+			.finally(() => {
+				if (this.#sending === sending) this.#sending = null;
+			});
+		this.#sending = sending;
+		return sending;
 	}
+
 
 	#apply(remote: DaemonWorkspace[]) {
 		for (const r of remote) {
@@ -209,12 +222,15 @@ export class DaemonSync {
 			if (local.id === this.workspaces.activeId) this.#applyLive(r.projects);
 			else this.workspaces.setProjects(local.id, merge(local.projects, r.projects));
 		}
+		// Reordered elsewhere: follow it, or two desktops would keep sending
+		// their own order back and forth.
+		this.workspaces.order(remote.map((r) => r.id));
 	}
 
 	/** Brings the live project list in line with the daemon's. */
 	#applyLive(projects: DaemonProject[]) {
 		const byPath = new Map(projects.map((p) => [trim(p.path), p]));
-		for (const p of [...this.store.projects]) {
+		for (const p of this.store.projects.filter((p) => !p.loose)) {
 			const r = byPath.get(trim(p.path));
 			if (!r) {
 				this.store.removeProject(p);
@@ -247,14 +263,29 @@ export class DaemonSync {
 				// Not open here yet: it runs the way the daemon last ran it (a tab
 				// saved without the flag would otherwise read as the official one).
 				if (s.dormant && typeof r.gateway === 'boolean') s.gateway = r.gateway;
+				s.updatedAt = r.updated_at ?? r.created_at;
+				// Moved by another client: within this window it follows; to a
+				// project of another workspace it leaves (and is there). An
+				// older daemon names no project: it stays where it is.
+				if (r.project === undefined) continue;
+				const home = this.#homeOf(r);
+				const owner = this.store.ownerOf(s.id);
+				if (!home) {
+					if (!s.draft && !owner?.chats) this.store.park(s.id);
+				} else if (owner && owner !== home && !owner.chats) {
+					this.store.followProject(s.id, home.loose ? null : home.id, r.cwd);
+				}
 				continue;
 			}
 			if (daemon.desktopOf(r.session)) continue;
 			if (opening && Date.now() - r.created_at < NEW_SESSION_GRACE_MS) continue;
 			if (!LISTED_ENGINES.has(r.engine ?? 'jucode') && !(r.engine === 'acp' && r.agent)) continue;
-			const home = this.#projectFor(r.cwd);
+			const home = this.#homeOf(r);
+			if (!home) continue;
 			// At the start, with the project's newest: it came from elsewhere just now.
-			if (home) this.store.listDormant(home, r, undefined, true);
+			const id = this.store.listDormant(home, r, undefined, true);
+			const listed = home.sessions.find((x) => x.id === id);
+			if (listed) listed.updatedAt = r.updated_at ?? r.created_at;
 		}
 		for (const s of this.store.allSessions) {
 			const sid = s.chat.sessionId;
@@ -263,8 +294,15 @@ export class DaemonSync {
 		this.#seen = current;
 	}
 
-	#projectFor(cwd: string): Project | undefined {
-		return this.store.projects.find((p) => !p.stale && trim(p.path) === trim(cwd));
+	/** Where daemon session `r` shows in this window: its project, the
+	 *  loose group when it has none, or nowhere (a project of another
+	 *  workspace). A chat shows in the chats group only. */
+	#homeOf(r: DaemonSessionView): Project | undefined {
+		if (r.chat) return this.store.projects.find((p) => p.chats && trim(p.path) === trim(r.cwd));
+		// A daemon from before sessions named their project: by folder.
+		if (r.project === undefined) return this.store.workspaceProjects.find((p) => !p.stale && trim(p.path) === trim(r.cwd));
+		if (!r.project) return this.store.looseGroup();
+		return this.store.workspaceProjects.find((p) => p.id === r.project && !p.stale);
 	}
 }
 

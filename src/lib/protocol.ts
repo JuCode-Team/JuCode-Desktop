@@ -15,24 +15,27 @@ const daemonEndpoint = () => {
  *  The remote page makes one connection per computer (remote/connection). */
 export const daemon = new DaemonClient(daemonEndpoint, (url) => new WebSocket(url) as unknown as SocketLike);
 
-/** Starts (or, with `resume`, reopens) a session hosted by the daemon;
- *  `chat` starts it as a chat. */
-/** Renames, (un)archives or hides a daemon session for every client. */
+/** Renames, (un)archives, hides or moves (`project`; "": out of any) a
+ *  daemon session for every client. */
 export function sessionMeta(
 	session: string,
-	changes: { title?: string; archived?: boolean; hidden?: boolean; group?: string }
+	changes: { title?: string; archived?: boolean; hidden?: boolean; group?: string; project?: string }
 ): Promise<void> {
 	return daemon.post({ op: 'session_meta', session, ...changes });
 }
 
+/** Starts (or, with `resume`, reopens) a session hosted by the daemon;
+ *  `chat` starts it as a chat; `project`: the project a new one belongs to
+ *  ("": none). */
 export function hostSession(
 	session: string,
 	cwd: string,
 	resume?: string,
 	chat = false,
-	engine?: EngineSpec
+	engine?: EngineSpec,
+	project?: string
 ): Promise<void> {
-	return daemon.open(session, cwd, resume, chat, engine);
+	return daemon.open(session, cwd, resume, chat, engine, project);
 }
 
 // Commands the GUI sends to a session's engine.
