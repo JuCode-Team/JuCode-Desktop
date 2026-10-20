@@ -20,3 +20,18 @@ export function saveComposerText(key: string, text: string) {
 		/* no localStorage, or it is full: the text lives only in memory */
 	}
 }
+
+// What else the composer holds before it is sent (attachments, quotes,
+// picked page elements), per conversation, kept in memory so it survives
+// the pane closing (a workspace switch), not a restart.
+const extras = new Map<string, unknown>();
+
+export function loadComposerExtras<T>(key: string): T | undefined {
+	return extras.get(key) as T | undefined;
+}
+
+/** `value` undefined forgets it. */
+export function saveComposerExtras(key: string, value: unknown) {
+	if (value === undefined) extras.delete(key);
+	else extras.set(key, value);
+}

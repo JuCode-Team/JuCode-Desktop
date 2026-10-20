@@ -104,7 +104,7 @@
 	import FindBar from '$lib/shell/FindBar.svelte';
 	import { autoRetry } from '$lib/autoRetry.svelte';
 	import { parseDelivery } from '$lib/delivery';
-	import { loadComposerText, saveComposerText } from '$lib/composerText';
+	import { loadComposerExtras, loadComposerText, saveComposerExtras, saveComposerText } from '$lib/composerText';
 	import RequirementTag from '$lib/requirements/RequirementTag.svelte';
 	import { statusLabel } from '$lib/requirements/labels';
 	import { gateNext, gateOf, useRequirements } from '$lib/requirements.svelte';
@@ -190,20 +190,39 @@
 	// svelte-ignore state_referenced_locally
 	let input = $state(loadComposerText(session.id));
 	$effect(() => saveComposerText(session.id, input));
-	let attachments = $state<{ path: string; image: boolean }[]>([]);
+	// What else is not sent yet comes back with the pane (see the effect below).
+	type Extras = {
+		attachments: { path: string; image: boolean }[];
+		videos: { path: string; frames: string[]; duration: number }[];
+		webRefs: PickedRef[];
+		refSeq: number;
+		quotes: { id: number; text: string }[];
+		quoteSeq: number;
+	};
+	// svelte-ignore state_referenced_locally
+	const kept = loadComposerExtras<Extras>(session.id);
+	let attachments = $state<{ path: string; image: boolean }[]>(kept?.attachments ?? []);
 	// Videos attach as extracted keyframes (images) + a text description — the
 	// engine protocol only understands image paths.
-	let videos = $state<{ path: string; frames: string[]; duration: number }[]>([]);
+	let videos = $state<{ path: string; frames: string[]; duration: number }[]>(kept?.videos ?? []);
 	// Page elements picked in the embedded browser. Each pick inserts an inline
 	// token ([网页元素#N:…]) into the composer text at the cursor, so the user can
 	// position/reorder/delete it inline; on submit the token expands in place into
 	// the full reference. Refs whose token was deleted are dropped.
 	type PickedRef = WebRef & { id: number };
-	let webRefs = $state<PickedRef[]>([]);
-	let refSeq = 0;
+	let webRefs = $state<PickedRef[]>(kept?.webRefs ?? []);
+	let refSeq = kept?.refSeq ?? 0;
 	// Passages quoted from replies: a chip in the composer, the quote on send.
-	let quotes: { id: number; text: string }[] = [];
-	let quoteSeq = 0;
+	let quotes: { id: number; text: string }[] = kept?.quotes ?? [];
+	let quoteSeq = kept?.quoteSeq ?? 0;
+	// Kept when the pane closes (a workspace switch); nothing to keep, forgotten.
+	$effect(() => {
+		const id = session.id;
+		return () => {
+			const extras = { attachments: $state.snapshot(attachments), videos: $state.snapshot(videos), webRefs: $state.snapshot(webRefs), refSeq, quotes, quoteSeq };
+			saveComposerExtras(id, attachments.length || videos.length || webRefs.length || quotes.length ? extras : undefined);
+		};
+	});
 	let scroller = $state<HTMLElement | null>(null);
 	let composerEl = $state<HTMLElement | null>(null);
 	let composerRef = $state<{ insertToken: (t: string) => void; openModelMenu: () => void } | undefined>();
