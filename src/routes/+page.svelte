@@ -236,6 +236,9 @@
 		const id = leaf?.active ? projectOf(leaf.active) : null;
 		return id ? store.projects.find((p) => p.id === id) : undefined;
 	});
+	/** The session the sidebar shows as selected: the focused tab's, while
+	 *  it has a tab (a project page focused selects the project instead). */
+	const selectedSession = $derived.by(() => (shownProject || !tilesReady || !chatSessionsIn(tiles).includes(activeId) ? '' : activeId));
 	/** The workbench's requirements page: one requirement, or the list. */
 	function openRequirements(id: string | null = null) {
 		openDesk('requirements');
@@ -1502,6 +1505,7 @@
 				bind:this={sidebar}
 				{projects}
 				{activeId}
+				selectedId={selectedSession}
 				width={showSidebar ? sidebarWidth : 0}
 				resizing={sbResizing}
 				onSelect={showSession}

@@ -38,6 +38,7 @@
 	let {
 		projects,
 		activeId,
+		selectedId,
 		width,
 		resizing = false,
 		onSelect,
@@ -64,6 +65,9 @@
 	}: {
 		projects: Project[];
 		activeId: string;
+		/** The one row shown as selected: the session of the focused tab
+		 *  ('' when that tab is no conversation's). */
+		selectedId: string;
 		width: number;
 		/** True while the user drags the resizer — disables the width transition. */
 		resizing?: boolean;
@@ -359,6 +363,7 @@
 	</nav>
 
 
+	<!-- Selected once: a session of a project in its project, one of none in Recents. -->
 	{#snippet sessRow(s: Session, nested = false, selectable = false, p?: Project)}
 		{@const status = sessionStatus(s.chat)}
 		{@const req = s.chat.sessionId ? reqs.bySession.get(s.chat.sessionId) : undefined}
@@ -368,7 +373,7 @@
 			out:rowOut
 			class="sess"
 			class:nested
-			class:on={!selectable && s.id === activeId}
+			class:on={!selectable && s.id === selectedId && (!!p || !!loose?.sessions.includes(s))}
 			class:arch={s.archived}
 			class:selectable
 			class:held={drag?.live && drag.group !== 'projects' && drag.id === s.id}
@@ -529,7 +534,7 @@
 				{@const active = listedSessions(p).filter((s) => sessionMatches(p, s))}
 				{@const arch = p.sessions.filter((s) => s.archived && sessionMatches(p, s))}
 				{@const open = !collapsed[p.id] || !!query}
-				{@const holdsActive = p.sessions.some((s) => s.id === activeId)}
+				{@const holdsActive = p.sessions.some((s) => s.id === selectedId)}
 				{#if !query || active.length || arch.length}
 					<div
 						class="project"
