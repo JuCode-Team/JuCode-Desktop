@@ -81,7 +81,7 @@
 	} from '$lib/workbench/canvas';
 	import { tuiBackendOf, tuiTabTitle } from '$lib/workbench/tuiTab';
 	import { canHandOffToTui, isValidResumeSessionId, presetOf } from '$lib/tuiHandoff';
-	import { workspaceAlerts, type WorkspaceEntry } from '$lib/workbench/workspaces';
+	import { inWorkspace, workspaceAlerts, type WorkspaceEntry } from '$lib/workbench/workspaces';
 	import type { TabIcon } from '$lib/workbench/tabChrome';
 	import Mosaic from '$lib/workbench/Mosaic.svelte';
 	import WorkspaceRail from '$lib/workbench/WorkspaceRail.svelte';
@@ -296,13 +296,16 @@
 		store.workspaceProjects.filter((p) => !p.worktree).map((p) => ({ id: p.id, path: p.path, name: p.name }))
 	);
 
-	/** Show a daemon session in a tab; one of a project of another workspace
-	 *  opens there. */
+	/** Show a daemon session in a tab; one of another workspace (of a
+	 *  project there, or saved there) opens there. */
 	async function openDaemonSession(session: string) {
 		const listed = daemonState.sessions.find((s) => s.session === session);
-		const elsewhere = listed?.project && !store.workspaceProjects.some((p) => p.id === listed.project)
-			? workspaces.workspaces.find((w) => w.id !== workspaces.activeId && w.projects.some((p) => p.id === listed.project))
-			: undefined;
+		const here = store.allSessions.some((s) => s.chat.sessionId === session) || (!!listed?.project && store.workspaceProjects.some((p) => p.id === listed.project));
+		const elsewhere = here
+			? undefined
+			: workspaces.workspaces.find(
+					(w) => w.id !== workspaces.activeId && ((!!listed?.project && w.projects.some((p) => p.id === listed.project)) || inWorkspace(w, session))
+				);
 		if (elsewhere) await switchWorkspace(elsewhere.id);
 		store.openDaemonSession(listed?.cwd ?? '', session, listed?.title, listed?.engine, listed?.gateway, listed?.agent, true, listed?.project);
 		showDesk = false;
@@ -769,7 +772,8 @@
 	$effect(() => {
 		if (!store.loaded) return;
 		const saved = store.serialize();
-		untrack(() => workspaces.updateProjects(saved));
+		const loose = store.serializeLoose();
+		untrack(() => workspaces.updateProjects(saved, loose));
 	});
 
 	// One list of projects and sessions with the daemon (and so with paired
@@ -852,10 +856,9 @@
 		wsBusy = true;
 		try {
 			tilesReady = false; // gate the tile effects during the swap
-			// Sessions of no project stay: they show in every workspace.
-			for (const p of store.projects.filter((x) => !x.loose)) store.detachProject(p);
+			for (const p of [...store.projects]) store.detachProject(p);
 			store.loaded = false; // re-gate the persist effect during the swap
-			await store.restore(entry.projects);
+			await store.restore(entry.projects, entry.loose);
 			if (gen !== wsGen) return;
 			initTiles();
 		} finally {
@@ -865,7 +868,6 @@
 	// Daemon sessions of the workspaces in the back that finished a reply
 	// since theirs was left: counted on the rail, unread once it is back.
 	let finishedInBack = $state<string[]>([]);
-	const inWorkspace = (w: WorkspaceEntry, sid: string) => w.projects.some((p) => p.tabs?.some((tab) => tab.sid === sid));
 	daemonState.onFinished = (sid) => {
 		const back = workspaces.workspaces.some((w) => w.id !== workspaces.activeId && inWorkspace(w, sid));
 		if (back && !finishedInBack.includes(sid)) finishedInBack = [...finishedInBack, sid];
@@ -881,7 +883,7 @@
 
 	async function switchWorkspace(id: string) {
 		if (id === workspaces.activeId || wsBusy) return;
-		workspaces.updateProjects(store.serialize());
+		workspaces.updateProjects(store.serialize(), store.serializeLoose());
 		const entry = workspaces.setActive(id);
 		if (!entry) return;
 		await swapToWorkspace(entry);
@@ -1009,8 +1011,18 @@
 		}
 		workspaces.setProjects(wsId, [...target.projects.filter((x) => x.id !== p.id), saved]);
 		store.detachProject(p);
-		workspaces.updateProjects(store.serialize());
+		workspaces.updateProjects(store.serialize(), store.serializeLoose());
 		toast.info(t('shell.workspace.moved', { name: p.name, ws: target.name }));
+	}
+	/** A session of no project moves to another workspace's; it keeps
+	 *  running in the daemon and opens there. */
+	function moveLooseToWorkspace(id: string, wsId: string) {
+		const tab = store.serializeLoose().find((x) => x.id === id);
+		const target = workspaces.workspaces.find((w) => w.id === wsId);
+		if (!tab || !target) return;
+		workspaces.setLoose(wsId, [tab, ...(target.loose ?? []).filter((x) => x.id !== id)]);
+		store.park(id);
+		toast.info(t('shell.workspace.moved', { name: tab.title || t('shell.untitled'), ws: target.name }));
 	}
 	/** Settings → 导入: the folders of imported conversations become projects
 	 *  (without a chat; their conversations are in the project's 历史). */
@@ -1416,7 +1428,7 @@
 			// Restore the active workspace's projects + their open conversations
 			// (resume by id), or seed a default project on first run — then build
 			// the canvas from the persisted layout.
-			await store.restore(wsEntry.projects);
+			await store.restore(wsEntry.projects, wsEntry.loose);
 			initTiles();
 			// 深链在项目恢复完成后再注册，冷启动携带的链接（onOpenUrl 会补发当前
 			// 深链）才能作用于已恢复的项目列表。
@@ -1803,6 +1815,12 @@
 				const id = chromeSession.id;
 				sessionChromeFor = null;
 				store.moveToProject(id, to);
+			}}
+			workspaceTargets={store.ownerOf(chromeSession.id)?.loose ? otherWorkspaces : []}
+			onMoveWorkspace={(ws) => {
+				const id = chromeSession.id;
+				sessionChromeFor = null;
+				moveLooseToWorkspace(id, ws);
 			}}
 			{...tabCloseActions(sessionChromeFor.tab, () => (sessionChromeFor = null))}
 			onClose={() => (sessionChromeFor = null)}

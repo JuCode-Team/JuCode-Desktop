@@ -26,29 +26,32 @@ export interface SavedTabChrome {
 // session id (stable across restore so layout chat tiles keep matching);
 // `sid` is the engine conversation to resume, present only when the engine
 // actually persisted one.
+/** A saved session of a project or of a workspace's no-project group. */
+export type SavedTab = {
+	id?: string;
+	sid?: string;
+	title: string;
+	backend?: string;
+	/** backend 为 'acp' 时：驱动该会话的 ACP agent（内置预设或注册表条目，重启动/恢复时必需）。 */
+	acpAgent?: AcpAgentRef;
+	archived?: boolean;
+	pinned?: boolean;
+	/** The conversation was handed to the native TUI (resume by `sid`).
+	 *  Omitted for the default GUI surface so old layouts stay clean. */
+	surface?: 'tui';
+	/** Claude Code / Codex / an ACP preset through the JuCode gateway (Session.gateway). */
+	gateway?: boolean;
+	/** Claude Code: the model it last ran on (Session.model). */
+	model?: string;
+	/** Its own working directory (Session.cwd). */
+	cwd?: string;
+} & SavedTabChrome;
+
 export interface SavedProject extends SavedTabChrome {
 	id: string;
 	name: string;
 	path: string;
-	tabs?: ({
-		id?: string;
-		sid?: string;
-		title: string;
-		backend?: string;
-		/** backend 为 'acp' 时：驱动该会话的 ACP agent（内置预设或注册表条目，重启动/恢复时必需）。 */
-		acpAgent?: AcpAgentRef;
-		archived?: boolean;
-		pinned?: boolean;
-		/** The conversation was handed to the native TUI (resume by `sid`).
-		 *  Omitted for the default GUI surface so old layouts stay clean. */
-		surface?: 'tui';
-		/** Claude Code / Codex / an ACP preset through the JuCode gateway (Session.gateway). */
-		gateway?: boolean;
-		/** Claude Code: the model it last ran on (Session.model). */
-		model?: string;
-		/** Its own working directory (Session.cwd). */
-		cwd?: string;
-	} & SavedTabChrome)[];
+	tabs?: SavedTab[];
 	/** 并行任务 worktree 项目的元数据（isWorktree/mainRepoPath/branch/baseBranch/slug）。 */
 	worktree?: WorktreeMeta;
 	/** 本项目最近一次新建会话所用的引擎后端（缺省 = jucode）。 */
@@ -67,6 +70,25 @@ const DAEMON_RETRY_DELAYS = [1000, 2000, 4000, 8000, 15000, 30000, 30000, 30000,
 const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
 /** A Unix, drive-letter or UNC absolute path (the daemon takes no other). */
 const isAbsolute = (p: string) => /^(\/|[A-Za-z]:[\\/]|\\\\)/.test(p);
+
+function savedTab(s: Session): SavedTab {
+	return {
+		id: s.id,
+		// A session exists in the daemon from its first moment, so its id
+		// is always worth keeping.
+		...(s.chat.sessionId ? { sid: s.chat.sessionId } : {}),
+		...(s.gateway ? { gateway: true } : {}),
+		...(s.backendId === 'claude' && (s.chat.model || s.model) ? { model: s.chat.model || s.model } : {}),
+		title: s.chat.title,
+		...(s.backendId !== 'jucode' ? { backend: s.backendId } : {}),
+		...(s.backendId === 'acp' && s.acpAgent ? { acpAgent: s.acpAgent } : {}),
+		...(s.archived ? { archived: true } : {}),
+		...(s.pinned ? { pinned: true } : {}),
+		...(s.cwd ? { cwd: s.cwd } : {}),
+		...(s.color ? { color: s.color } : {}),
+		...(s.icon ? { icon: s.icon } : {})
+	};
+}
 const samePath = (a: string, b: string) => a.replace(/[\\/]+$/, '') === b.replace(/[\\/]+$/, '');
 
 /** A saved ACP agent (user-editable file), re-validated. */
@@ -1458,29 +1480,17 @@ export class SessionStore {
 			...(p.lastBackend === 'acp' && p.lastAcpAgent ? { lastAcpAgent: p.lastAcpAgent } : {}),
 			...(p.color ? { color: p.color } : {}),
 			...(p.icon ? { icon: p.icon } : {}),
-			tabs: p.stale
-				? (this.#staleTabs.get(p.id) ?? [])
-				: p.sessions.map((s) => ({
-					id: s.id,
-					// A session exists in the daemon from its first moment, so its id
-					// is always worth keeping.
-					...(s.chat.sessionId ? { sid: s.chat.sessionId } : {}),
-					...(s.gateway ? { gateway: true } : {}),
-					...(s.backendId === 'claude' && (s.chat.model || s.model) ? { model: s.chat.model || s.model } : {}),
-					title: s.chat.title,
-					...(s.backendId !== 'jucode' ? { backend: s.backendId } : {}),
-					...(s.backendId === 'acp' && s.acpAgent ? { acpAgent: s.acpAgent } : {}),
-					...(s.archived ? { archived: true } : {}),
-					...(s.pinned ? { pinned: true } : {}),
-					...(s.cwd ? { cwd: s.cwd } : {}),
-					...(s.color ? { color: s.color } : {}),
-					...(s.icon ? { icon: s.icon } : {}),
-				}))
+			tabs: p.stale ? (this.#staleTabs.get(p.id) ?? []) : p.sessions.map(savedTab)
 		}));
 	}
 
+	/** The sessions of no project, saved with the workspace they show in. */
+	serializeLoose(): SavedTab[] {
+		return this.loose?.sessions.map(savedTab) ?? [];
+	}
+
 	/** Restores saved tabs into `proj` (dormant, resumed or as drafts). */
-	#restoreTabs(proj: Project, tabs: NonNullable<SavedProject['tabs']>) {
+	#restoreTabs(proj: Project, tabs: SavedTab[]) {
 		for (const t of tabs) {
 			// Workspace data is user-editable. Invalid ids must never
 			// reach either a GUI resume or the TUI pty argv.
@@ -1528,7 +1538,9 @@ export class SessionStore {
 						acpAgent,
 						surface,
 						t.gateway === true,
-						t.model
+						t.model,
+						// A session of no project has no folder but its own to start in.
+						typeof t.cwd === 'string' && isAbsolute(t.cwd) ? t.cwd : undefined
 					)
 				: this.#draftSaved(proj, t.id!, t.title, backend, !!t.archived, chrome, acpAgent);
 			const s = proj.sessions.find((x) => x.id === id)!;
@@ -1537,13 +1549,15 @@ export class SessionStore {
 		}
 	}
 
-	/** Restore saved projects + their open conversations, or seed a default
+	/** Restore saved projects + their open conversations and the
+	 *  workspace's sessions of no project (`loose`), or seed a default
 	 *  project on first run. Sets `loaded` when done. A worktree project whose
 	 *  directory has vanished (task finished elsewhere / dir deleted) is kept in
 	 *  the list as `stale` — no sessions are spawned into a dead cwd — so the
 	 *  sidebar can offer a remove-from-list affordance instead of crashing. */
-	async restore(saved: SavedProject[]) {
-		if (saved.length) {
+	async restore(saved: SavedProject[], loose: SavedTab[] = []) {
+		if (loose.length) this.#restoreTabs(this.looseGroup(), loose);
+		if (saved.length || loose.length) {
 			for (const p of saved) {
 				// The same project twice (a file an older version wrote while a
 				// daemon list raced the restore): one entry, both entries' tabs.
@@ -1582,7 +1596,6 @@ export class SessionStore {
 		} else {
 			const root = await projectRoot();
 			this.projects.push({ id: this.uid(), name: base(root), path: root, sessions: [] });
-			// The loose group may be first: it stays across workspaces.
 			this.addSession(this.projects.at(-1)!);
 		}
 		this.loaded = true;

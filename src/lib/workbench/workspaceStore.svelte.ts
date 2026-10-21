@@ -4,7 +4,7 @@
 // pre-workspace installs. Writes are debounced and atomic Rust-side.
 
 import { appDataRead, appDataWrite } from '$lib/protocol';
-import type { SavedProject } from '$lib/session.svelte';
+import type { SavedProject, SavedTab } from '$lib/session.svelte';
 import type { SerializedLayout } from './tiles';
 import { normalizeColor, parseTabIcon, type TabIcon } from './tabChrome';
 import {
@@ -81,11 +81,22 @@ export class WorkspaceStore {
 		return this.active!;
 	}
 
-	/** Replace the active workspace's saved projects (SessionStore.serialize). */
-	updateProjects(projects: SavedProject[]) {
+	/** Replace the active workspace's saved projects and sessions of no
+	 *  project (SessionStore.serialize / serializeLoose). */
+	updateProjects(projects: SavedProject[], loose: SavedTab[]) {
 		const ws = this.active;
 		if (!ws) return;
 		ws.projects = projects;
+		ws.loose = loose.length ? loose : undefined;
+		this.#schedule();
+	}
+
+	/** Replace an inactive workspace's sessions of no project (one moved or
+	 *  first seen there). */
+	setLoose(id: string, loose: SavedTab[]) {
+		const ws = this.workspaces.find((w) => w.id === id);
+		if (!ws) return;
+		ws.loose = loose.length ? loose : undefined;
 		this.#schedule();
 	}
 

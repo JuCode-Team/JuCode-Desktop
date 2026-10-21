@@ -4,7 +4,7 @@
 // transforms — the reactive store and the Tauri IO live in
 // workspaceStore.svelte.ts.
 
-import type { SavedProject } from '$lib/session.svelte';
+import type { SavedProject, SavedTab } from '$lib/session.svelte';
 import { serializeLayout, singleLeafLayout, type SerializedLayout, type TileTab } from './tiles';
 import { normalizeColor, parseTabIcon, type TabIcon } from './tabChrome';
 
@@ -24,6 +24,9 @@ export interface WorkspaceEntry {
 	id: string;
 	name: string;
 	projects: SavedProject[];
+	/** Its sessions of no project (left out: none). Sessions of no project
+	 *  made elsewhere (a phone, the CLI) belong to the default workspace. */
+	loose?: SavedTab[];
 	/** Serialized dock tile layout; null until the user arranges one. */
 	layout: SerializedLayout | null;
 	/** The one always-present workspace: cannot be deleted. Exactly one per file. */
@@ -72,8 +75,6 @@ export function serializeWorkspaces(file: WorkspacesFile): string {
 
 const isStr = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
 
-type SavedTab = NonNullable<SavedProject['tabs']>[number];
-
 /** Re-validate a saved tab's or project's chrome (the file is user-editable;
  *  an inactive workspace must not carry a dirty SVG back into it). Invalid
  *  color/icon are dropped; every other field rides along untouched. */
@@ -98,10 +99,21 @@ export function sanitizeProjects(raw: unknown): SavedProject[] {
 		.map((p) =>
 			sanitizeChrome(
 				Array.isArray(p.tabs)
-					? { ...p, tabs: p.tabs.filter((t) => !!t && typeof t === 'object').map(sanitizeChrome) }
+					? { ...p, tabs: sanitizeTabs(p.tabs) }
 					: p
 			)
 		);
+}
+
+/** Saved sessions of no project, their chrome re-validated. */
+function sanitizeTabs(raw: unknown): SavedTab[] {
+	return Array.isArray(raw) ? raw.filter((t) => !!t && typeof t === 'object').map(sanitizeChrome) : [];
+}
+
+/** Whether daemon session `sid` is saved in workspace `w`, in a project or
+ *  among its sessions of no project. */
+export function inWorkspace(w: WorkspaceEntry, sid: string): boolean {
+	return w.projects.some((p) => p.tabs?.some((tab) => tab.sid === sid)) || !!w.loose?.some((tab) => tab.sid === sid);
 }
 
 /**
@@ -130,6 +142,8 @@ export function parseWorkspacesFile(text: string): WorkspacesFile | null {
 			// Layout blobs are validated lazily by tiles.deserializeLayout at use.
 			layout: o.layout && typeof o.layout === 'object' ? (o.layout as SerializedLayout) : null
 		};
+		const loose = sanitizeTabs(o.loose);
+		if (loose.length) entry.loose = loose;
 		if (o.isDefault === true) entry.isDefault = true;
 		const color = normalizeColor(o.color);
 		if (color) entry.color = color;
@@ -215,12 +229,11 @@ export function workspaceAlerts(
 	for (const w of workspaces) {
 		if (w.id === activeId) continue;
 		const alerts: WorkspaceAlert[] = [];
-		for (const p of w.projects)
-			for (const tab of p.tabs ?? []) {
-				if (!tab.sid || tab.archived) continue;
-				const kind = waiting.has(tab.sid) ? 'input' : finished.has(tab.sid) ? 'done' : null;
-				if (kind) alerts.push({ sid: tab.sid, title: tab.title, kind });
-			}
+		for (const tab of [...w.projects.flatMap((p) => p.tabs ?? []), ...(w.loose ?? [])]) {
+			if (!tab.sid || tab.archived) continue;
+			const kind = waiting.has(tab.sid) ? 'input' : finished.has(tab.sid) ? 'done' : null;
+			if (kind) alerts.push({ sid: tab.sid, title: tab.title, kind });
+		}
 		if (alerts.length) out[w.id] = alerts.sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'input' ? -1 : 1));
 	}
 	return out;

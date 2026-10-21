@@ -10,18 +10,21 @@
 //   desktop's list, and one that knows fewer projects (a new daemon, a lost
 //   file) never closes the desktop's.
 // - Sessions: every daemon session of one of the active workspace's projects,
-//   or of no project, shows in the sidebar, where the daemon says it belongs
-//   (`project`). Ones not open here are listed dormant and open when first
-//   shown; titles, archive state and project follow the daemon; a session
-//   another client removed leaves the list.
+//   or of no project and saved in it, shows in the sidebar, where the daemon
+//   says it belongs (`project`). One of no project saved in no workspace
+//   (made on a phone, the CLI) belongs to the default workspace. Ones not
+//   open here are listed dormant and open when first shown; titles, archive
+//   state and project follow the daemon; a session another client removed
+//   leaves the list.
 //
 // Tabs, their order and chrome, and the tile layout stay desktop-only.
 
 import { daemon } from '$lib/protocol';
 import type { DaemonSessionView } from '$lib/daemonState.svelte';
-import type { SavedProject, SessionStore } from '$lib/session.svelte';
+import type { SavedProject, SavedTab, SessionStore } from '$lib/session.svelte';
 import type { Project, WorktreeMeta } from '$lib/types';
 import type { WorkspaceStore } from '$lib/workbench/workspaceStore.svelte';
+import { inWorkspace } from '$lib/workbench/workspaces';
 import { normalizeColor, parseTabIcon, type TabIcon } from '$lib/workbench/tabChrome';
 
 interface DaemonProject {
@@ -281,7 +284,7 @@ export class DaemonSync {
 			if (opening && Date.now() - r.created_at < NEW_SESSION_GRACE_MS) continue;
 			if (!LISTED_ENGINES.has(r.engine ?? 'jucode') && !(r.engine === 'acp' && r.agent)) continue;
 			const home = this.#homeOf(r);
-			if (!home) continue;
+			if (!home || (home.loose && !this.#looseHere(r))) continue;
 			// At the start, with the project's newest: it came from elsewhere just now.
 			const id = this.store.listDormant(home, r, undefined, true);
 			const listed = home.sessions.find((x) => x.id === id);
@@ -292,6 +295,30 @@ export class DaemonSync {
 			if (sid && this.#seen.has(sid) && !current.has(sid)) this.store.forget(s.id);
 		}
 		this.#seen = current;
+	}
+
+	/** Whether session `r` of no project, not open here, shows in the open
+	 *  workspace: one saved in another shows there; one saved in none is the
+	 *  default workspace's, and is saved there when another is open. */
+	#looseHere(r: DaemonSessionView): boolean {
+		const active = this.workspaces.active;
+		if (!active || inWorkspace(active, r.session)) return true;
+		const others = this.workspaces.workspaces.filter((w) => w !== active);
+		if (others.some((w) => inWorkspace(w, r.session))) return false;
+		if (active.isDefault) return true;
+		const home = others.find((w) => w.isDefault);
+		if (!home) return true;
+		const tab: SavedTab = {
+			sid: r.session,
+			title: r.title ?? '',
+			...(r.engine && r.engine !== 'jucode' ? { backend: r.engine } : {}),
+			...(r.engine === 'acp' && r.agent ? { acpAgent: { id: r.agent, name: r.agent, preset: true } } : {}),
+			...(r.gateway ? { gateway: true } : {}),
+			...(r.archived ? { archived: true } : {}),
+			...(r.cwd ? { cwd: r.cwd } : {})
+		};
+		this.workspaces.setLoose(home.id, [tab, ...(home.loose ?? [])]);
+		return false;
 	}
 
 	/** Where daemon session `r` shows in this window: its project, the

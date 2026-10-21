@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
 	createWorkspace,
 	defaultWorkspacesFile,
+	inWorkspace,
 	migrateLegacy,
 	parseLegacyDockTabs,
 	parseWorkspacesFile,
@@ -23,6 +24,14 @@ describe('workspaces file', () => {
 		const file = defaultWorkspacesFile(ws);
 		const parsed = parseWorkspacesFile(serializeWorkspaces(file));
 		expect(parsed).toEqual(file);
+	});
+
+	it('keeps a workspace\'s sessions of no project, their chrome checked', () => {
+		const ws = { ...createWorkspace('a'), loose: [{ id: 's1', sid: 'x', title: 't', cwd: '/w', color: 'red' }, null] };
+		const parsed = parseWorkspacesFile(JSON.stringify(defaultWorkspacesFile(ws as never)));
+		expect(parsed?.workspaces[0].loose).toEqual([{ id: 's1', sid: 'x', title: 't', cwd: '/w' }]);
+		expect(inWorkspace(parsed!.workspaces[0], 'x')).toBe(true);
+		expect(inWorkspace(parsed!.workspaces[0], 'y')).toBe(false);
 	});
 
 	it('rejects unknown versions so a newer file is never clobbered', () => {
@@ -180,6 +189,11 @@ describe('workspaceAlerts', () => {
 				{ sid: 's2', title: 'two', kind: 'done' }
 			]
 		});
+	});
+
+	it('counts the sessions of no project saved in a workspace', () => {
+		const c = { ...createWorkspace('c'), loose: [{ sid: 's9', title: 'loose' }] };
+		expect(workspaceAlerts([a, c], a.id, new Set(['s9']), new Set())).toEqual({ [c.id]: [{ sid: 's9', title: 'loose', kind: 'input' }] });
 	});
 
 	it('has nothing for a workspace without alerts', () => {

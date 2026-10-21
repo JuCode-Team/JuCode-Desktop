@@ -185,6 +185,16 @@ describe('DaemonSync', () => {
 		expect(store.projects[0].sessions.map((s) => s.chat.sessionId)).toEqual(['s-1', 's-2']);
 	});
 
+	it('restores a workspace\'s sessions of no project under their saved ids, and saves them back', async () => {
+		const store = new SessionStore();
+		const loose = [{ id: 't9', sid: 's-9', title: 'nine', backend: 'claude', cwd: '/w/else' }];
+		await store.restore([], loose);
+		expect(store.loose!.sessions.map((s) => s.id)).toEqual(['t9']);
+		expect(store.activeId).toBe('t9');
+		expect(store.serialize()).toEqual([]);
+		expect(store.serializeLoose()).toEqual(loose);
+	});
+
 	it('saves a stale worktree project with the tabs it was restored with', async () => {
 		vi.mocked(git).mockRejectedValueOnce(new Error('not a git repository'));
 		const store = new SessionStore();
@@ -253,6 +263,29 @@ describe('DaemonSync', () => {
 		// A project this window does not have: not listed here.
 		sync.reconcile([session('p-elsewhere')]);
 		expect(store.allSessions).toHaveLength(0);
+	});
+
+	it('shows a session of no project in the workspace it is saved in; one saved nowhere goes to the default', async () => {
+		const { sync, store, workspaces } = await setup();
+		const def = workspaces.active!;
+		const other = workspaces.create('其他')!;
+		const loose = (session: string) => ({ session, cwd: '/w/x', created_at: 0, open: false, engine: 'claude', project: null, title: 't-' + session });
+		workspaces.setLoose(other.id, [{ sid: 's-there', title: 't' }]);
+		// The default is open: one saved nowhere shows here, one saved in the other does not.
+		sync.reconcile([loose('s-new'), loose('s-there')]);
+		expect(store.loose!.sessions.map((s) => s.chat.sessionId)).toEqual(['s-new']);
+
+		// Another workspace is open: one saved nowhere is saved in the default, not shown.
+		workspaces.updateProjects(store.serialize(), store.serializeLoose());
+		store.projects = store.projects.filter((p) => !p.loose);
+		workspaces.setActive(other.id);
+		sync.reconcile([loose('s-new'), loose('s-there'), loose('s-phone')]);
+		expect(store.loose!.sessions.map((s) => s.chat.sessionId)).toEqual(['s-there']);
+		expect(def.loose!.map((t) => t.sid)).toEqual(['s-phone', 's-new']);
+		expect(def.loose![0]).toEqual({ sid: 's-phone', title: 't-s-phone', backend: 'claude', cwd: '/w/x' });
+		// Saved there now: the next list does not save it twice.
+		sync.reconcile([loose('s-new'), loose('s-there'), loose('s-phone')]);
+		expect(def.loose).toHaveLength(2);
 	});
 
 	it('lists a built-in ACP agent\'s session (a scheduled run, a phone\'s), never a registered agent\'s', async () => {
