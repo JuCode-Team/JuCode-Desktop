@@ -7,6 +7,7 @@ import {
 	parseWorkspacesFile,
 	sanitizeProjects,
 	serializeWorkspaces,
+	workspaceAlerts,
 	LEGACY_DOCK_ACTIVE_KEY,
 	LEGACY_DOCK_TABS_KEY,
 	LEGACY_PROJECTS_KEY,
@@ -163,5 +164,25 @@ describe('legacy migration', () => {
 
 	it('returns null on a fresh install with no legacy keys', () => {
 		expect(migrateLegacy(store({}), 'ws')).toBeNull();
+	});
+});
+
+describe('workspaceAlerts', () => {
+	const tabs = (...t: { sid?: string; title: string; archived?: boolean }[]) => [{ ...proj('p'), tabs: t }];
+	const a = createWorkspace('a', tabs({ sid: 's1', title: 'one' }));
+	const b = createWorkspace('b', tabs({ sid: 's2', title: 'two' }, { sid: 's3', title: 'three' }, { sid: 's4', title: 'old', archived: true }, { title: 'draft' }));
+
+	it('lists the waiting and finished sessions of the workspaces in the back, waiting first', () => {
+		const alerts = workspaceAlerts([a, b], a.id, new Set(['s3', 's1']), new Set(['s2', 's4', 's1']));
+		expect(alerts).toEqual({
+			[b.id]: [
+				{ sid: 's3', title: 'three', kind: 'input' },
+				{ sid: 's2', title: 'two', kind: 'done' }
+			]
+		});
+	});
+
+	it('has nothing for a workspace without alerts', () => {
+		expect(workspaceAlerts([a, b], b.id, new Set(), new Set(['s2']))).toEqual({});
 	});
 });

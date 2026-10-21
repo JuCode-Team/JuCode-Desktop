@@ -5,10 +5,11 @@
 	import CircleUserIcon from '@lucide/svelte/icons/circle-user';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
 	import CircleArrowDownIcon from '@lucide/svelte/icons/circle-arrow-down';
+	import HandIcon from '@lucide/svelte/icons/hand';
 	import { t } from '$lib/i18n';
 	import { withShortcut } from '$lib/shortcuts';
 	import type { TabIcon } from './tabChrome';
-	import type { WorkspaceEntry } from './workspaces';
+	import type { WorkspaceAlert, WorkspaceEntry } from './workspaces';
 	import TabGlyph from './TabGlyph.svelte';
 	import TabChromePopover from './TabChromePopover.svelte';
 	import AccountCard from './AccountCard.svelte';
@@ -23,7 +24,9 @@
 		workspaces,
 		activeId,
 		busy = false,
+		alerts = {},
 		onSwitch,
+		onOpenAlert,
 		onNew,
 		onRename,
 		onChrome,
@@ -40,7 +43,11 @@
 		activeId: string;
 		/** A workspace swap is in flight: ignore switch / new / delete clicks. */
 		busy?: boolean;
+		/** The sessions each workspace in the back wants the user for (workspaceAlerts). */
+		alerts?: Record<string, WorkspaceAlert[]>;
 		onSwitch: (id: string) => void;
+		/** A session in a workspace's alert card: switch there and show it. */
+		onOpenAlert: (workspace: string, sid: string) => void;
 		onNew: () => void;
 		onRename: (id: string, name: string) => void;
 		onChrome: (id: string, chrome: { color?: string | null; icon?: TabIcon | null }) => void;
@@ -158,6 +165,22 @@
 		return 0;
 	}
 
+	// Alert card: a workspace's waiting sessions on hover, with the account
+	// card's grace so the pointer can cross the gap to it.
+	let alertCard = $state<{ id: string; left: number; top: number } | null>(null);
+	let alertTimer: ReturnType<typeof setTimeout> | undefined;
+	const cardAlerts = $derived(alertCard ? (alerts[alertCard.id] ?? []) : []);
+	function showAlerts(id: string, el: HTMLElement) {
+		clearTimeout(alertTimer);
+		if (drag?.live || !alerts[id]?.length) return (alertCard = null);
+		const r = el.getBoundingClientRect();
+		alertCard = { id, left: r.right + 8, top: r.top };
+	}
+	function hideAlertsSoon() {
+		clearTimeout(alertTimer);
+		alertTimer = setTimeout(() => (alertCard = null), 160);
+	}
+
 	function openMenu(w: WorkspaceEntry, ev: MouseEvent) {
 		ev.preventDefault();
 		menuFor = { id: w.id, x: ev.clientX, y: ev.clientY };
@@ -178,7 +201,9 @@
 				data-ws-id={w.id}
 				role="tab"
 				aria-selected={w.id === activeId}
-				title={w.name}
+				title={alerts[w.id]?.length ? undefined : w.name}
+				onmouseenter={(e) => showAlerts(w.id, e.currentTarget)}
+				onmouseleave={hideAlertsSoon}
 				onpointerdown={(e) => wsDown(e, w.id)}
 				onclick={() => !busy && onSwitch(w.id)}
 				oncontextmenu={(e) => openMenu(w, e)}
@@ -188,6 +213,14 @@
 						<TabGlyph icon={w.icon ?? { kind: 'builtin', id: 'home' }} color={w.color} active={w.id === activeId} size={20} />
 					{:else}
 						<ActiveIcon icon={LayersIcon} size={20} active={w.id === activeId} />
+					{/if}
+					{#if alerts[w.id]?.length}
+						{@const list = alerts[w.id]}
+						<span
+							class="badge"
+							class:input={list.some((a) => a.kind === 'input')}
+							aria-label={t('shell.workspace.alerts', { n: list.length })}>{list.length > 99 ? '99+' : list.length}</span
+						>
 					{/if}
 				</span>
 			</button>
@@ -236,6 +269,36 @@
 			onManageAccount();
 		}}
 	/>
+{/if}
+
+{#if alertCard && cardAlerts.length}
+	{@const ws = workspaces.find((w) => w.id === alertCard!.id)}
+	<div
+		class="pop alert-card"
+		role="dialog"
+		aria-label={t('shell.workspace.alerts', { n: cardAlerts.length })}
+		tabindex="-1"
+		style:left="{alertCard.left}px"
+		style:top="{alertCard.top}px"
+		onmouseenter={() => clearTimeout(alertTimer)}
+		onmouseleave={hideAlertsSoon}
+	>
+		<div class="pop-head">{ws?.name}</div>
+		{#each cardAlerts as a (a.sid)}
+			<button
+				class="pop-row"
+				onclick={() => {
+					const id = alertCard!.id;
+					alertCard = null;
+					if (!busy) onOpenAlert(id, a.sid);
+				}}
+			>
+				<span class="pop-ico">{#if a.kind === 'input'}<HandIcon size={14} />{:else}<span class="dot"></span>{/if}</span>
+				<span class="alert-title">{a.title || t('shell.untitled')}</span>
+				<span class="alert-kind">{a.kind === 'input' ? t('shell.status.approve') : t('shell.unread')}</span>
+			</button>
+		{/each}
+	</div>
 {/if}
 
 {#if menuFor && menuWs}
@@ -301,6 +364,7 @@
 		cursor: pointer;
 	}
 	.tile {
+		position: relative;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -344,6 +408,63 @@
 	.items.dragging .ws.held .tile {
 		background: var(--surface2);
 		box-shadow: var(--shadow-sm);
+	}
+	/* How many sessions there want the user: plain for finished replies,
+	   the accent once one waits on an approval or an answer. */
+	.badge {
+		position: absolute;
+		top: -3px;
+		right: -5px;
+		min-width: 16px;
+		height: 16px;
+		padding: 0 4px;
+		border-radius: 8px;
+		background: var(--text);
+		color: var(--bg);
+		font-size: var(--fs-2xs);
+		font-weight: 600;
+		line-height: 16px;
+		text-align: center;
+		font-variant-numeric: tabular-nums;
+		pointer-events: none;
+	}
+	.badge.input {
+		background: var(--accent);
+		color: var(--on-accent);
+	}
+	.alert-card {
+		position: fixed;
+		z-index: 90;
+		width: 260px;
+		max-height: 60vh;
+		overflow-y: auto;
+		transform-origin: top left;
+		animation: pop-in var(--t-med) var(--ease-out);
+	}
+	.alert-card .pop-row {
+		gap: 10px;
+	}
+	.alert-card .pop-ico {
+		justify-content: center;
+		width: 14px;
+	}
+	.dot {
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: var(--text);
+	}
+	.alert-title {
+		flex: 1;
+		min-width: 0;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.alert-kind {
+		flex-shrink: 0;
+		color: var(--dim2);
+		font-size: var(--fs-xs);
 	}
 	.ws:disabled {
 		opacity: 0.5;

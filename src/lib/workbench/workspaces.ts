@@ -193,3 +193,35 @@ export function migrateLegacy(read: (key: string) => string | null, name: string
 	const layout = tabs.length ? serializeLayout(singleLeafLayout(tabs, active ?? undefined)) : null;
 	return defaultWorkspacesFile(createWorkspace(name, projects, layout));
 }
+
+/** A session of a workspace in the back that wants the user: it waits on
+ *  them (`input`), or finished a reply since the workspace was left (`done`). */
+export interface WorkspaceAlert {
+	sid: string;
+	title: string;
+	kind: 'input' | 'done';
+}
+
+/** The alerts of every workspace but the active one, keyed by workspace id
+ *  and waiting ones first. `waiting`: daemon sessions with a pending action;
+ *  `finished`: those that finished a reply while their workspace was left. */
+export function workspaceAlerts(
+	workspaces: WorkspaceEntry[],
+	activeId: string,
+	waiting: ReadonlySet<string>,
+	finished: ReadonlySet<string>
+): Record<string, WorkspaceAlert[]> {
+	const out: Record<string, WorkspaceAlert[]> = {};
+	for (const w of workspaces) {
+		if (w.id === activeId) continue;
+		const alerts: WorkspaceAlert[] = [];
+		for (const p of w.projects)
+			for (const tab of p.tabs ?? []) {
+				if (!tab.sid || tab.archived) continue;
+				const kind = waiting.has(tab.sid) ? 'input' : finished.has(tab.sid) ? 'done' : null;
+				if (kind) alerts.push({ sid: tab.sid, title: tab.title, kind });
+			}
+		if (alerts.length) out[w.id] = alerts.sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'input' ? -1 : 1));
+	}
+	return out;
+}

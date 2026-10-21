@@ -81,7 +81,7 @@
 	} from '$lib/workbench/canvas';
 	import { tuiBackendOf, tuiTabTitle } from '$lib/workbench/tuiTab';
 	import { canHandOffToTui, isValidResumeSessionId, presetOf } from '$lib/tuiHandoff';
-	import type { WorkspaceEntry } from '$lib/workbench/workspaces';
+	import { workspaceAlerts, type WorkspaceEntry } from '$lib/workbench/workspaces';
 	import type { TabIcon } from '$lib/workbench/tabChrome';
 	import Mosaic from '$lib/workbench/Mosaic.svelte';
 	import WorkspaceRail from '$lib/workbench/WorkspaceRail.svelte';
@@ -862,12 +862,39 @@
 			if (gen === wsGen) wsBusy = false;
 		}
 	}
+	// Daemon sessions of the workspaces in the back that finished a reply
+	// since theirs was left: counted on the rail, unread once it is back.
+	let finishedInBack = $state<string[]>([]);
+	const inWorkspace = (w: WorkspaceEntry, sid: string) => w.projects.some((p) => p.tabs?.some((tab) => tab.sid === sid));
+	daemonState.onFinished = (sid) => {
+		const back = workspaces.workspaces.some((w) => w.id !== workspaces.activeId && inWorkspace(w, sid));
+		if (back && !finishedInBack.includes(sid)) finishedInBack = [...finishedInBack, sid];
+	};
+	const wsAlerts = $derived(
+		workspaceAlerts(
+			workspaces.workspaces,
+			workspaces.activeId,
+			new Set(daemonState.actions.map((a) => a.session_id)),
+			new Set(finishedInBack)
+		)
+	);
+
 	async function switchWorkspace(id: string) {
 		if (id === workspaces.activeId || wsBusy) return;
 		workspaces.updateProjects(store.serialize());
 		const entry = workspaces.setActive(id);
 		if (!entry) return;
 		await swapToWorkspace(entry);
+		const done = finishedInBack.filter((sid) => inWorkspace(entry, sid));
+		for (const s of store.allSessions)
+			if (s.chat.sessionId && done.includes(s.chat.sessionId) && s.id !== store.activeId) s.chat.unseen = true;
+		finishedInBack = finishedInBack.filter((sid) => !done.includes(sid));
+	}
+	/** A session in a workspace's alert card: that workspace, then the session. */
+	async function openWorkspaceAlert(id: string, sid: string) {
+		await switchWorkspace(id);
+		const s = store.allSessions.find((x) => x.chat.sessionId === sid);
+		if (s) showSession(s.id);
 	}
 	async function newWorkspace() {
 		if (wsBusy) return;
@@ -1481,7 +1508,9 @@
 			workspaces={workspaces.workspaces}
 			activeId={workspaces.activeId}
 			busy={wsBusy}
+			alerts={wsAlerts}
 			onSwitch={switchWorkspace}
+			onOpenAlert={openWorkspaceAlert}
 			onNew={newWorkspace}
 			onRename={(id, name) => workspaces.rename(id, name)}
 			onChrome={(id, chrome) => workspaces.setChrome(id, chrome)}

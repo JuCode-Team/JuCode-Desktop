@@ -29,6 +29,8 @@ export interface DaemonSessionView {
 	agent?: string | null;
 	/** The id of the project it belongs to (null: none). */
 	project?: string | null;
+	/** Running a turn (newer daemons; missing: unknown). */
+	busy?: boolean;
 }
 
 /** A tool call an unwatched session deferred for the user to decide. */
@@ -84,6 +86,8 @@ export class DaemonState {
 	onAction: ((action: ActionView) => void) | null = null;
 	/** A scheduled run needs the user. */
 	onScheduleEvent: ((event: ScheduleEvent) => void) | null = null;
+	/** A session stopped running, watched by this client or not. */
+	onFinished: ((session: string) => void) | null = null;
 	#daemon: DaemonClient;
 
 	/** `daemon`: the connection it follows; the app's shared one by default
@@ -118,7 +122,10 @@ export class DaemonState {
 	/** A daemon-wide frame (wired to `this.#daemon.onEvent`). */
 	handle(frame: Record<string, unknown>) {
 		if (frame.type === 'sessions' && Array.isArray(frame.sessions)) {
-			this.sessions = frame.sessions as DaemonSessionView[];
+			const list = frame.sessions as DaemonSessionView[];
+			const running = new Set(this.sessions.filter((s) => s.busy).map((s) => s.session));
+			for (const s of list) if (s.busy === false && running.has(s.session)) this.onFinished?.(s.session);
+			this.sessions = list;
 		} else if (frame.type === 'actions' && Array.isArray(frame.actions)) {
 			const list = frame.actions as ActionView[];
 			if (this.#seenActions)

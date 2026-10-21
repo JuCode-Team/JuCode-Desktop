@@ -34,6 +34,17 @@ describe('DaemonState', () => {
 		expect(state.actions.map((a) => a.id)).toEqual(['a1', 'a2']);
 	});
 
+	it('tells of a session that stopped running, not of one whose state the daemon does not send', () => {
+		const state = new DaemonState();
+		const told: string[] = [];
+		state.onFinished = (s) => told.push(s);
+		const view = (session: string, busy?: boolean) => ({ session, cwd: '/w', created_at: 1, open: true, ...(busy === undefined ? {} : { busy }) });
+		state.handle({ type: 'sessions', sessions: [view('s1', true), view('s2', false), view('s3')] });
+		state.handle({ type: 'sessions', sessions: [view('s1', false), view('s2', false), view('s3')] });
+		state.handle({ type: 'sessions', sessions: [view('s1', false), view('s2', false), view('s3')] });
+		expect(told).toEqual(['s1']);
+	});
+
 	it('passes on a scheduled run that needs the user', () => {
 		const state = new DaemonState();
 		const onEvent = vi.fn();

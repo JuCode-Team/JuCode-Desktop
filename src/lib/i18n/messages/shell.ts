@@ -121,7 +121,8 @@ const shell = {
 			delete: '删除工作区',
 			deleteConfirm: '删除工作区「{name}」？其中的项目布局与会话标签将被移除（对话记录仍保留在引擎侧）。',
 			cannotDeleteDefault: '默认工作区不能删除。',
-			defaultBadge: '默认工作区（不可删除）'
+			defaultBadge: '默认工作区（不可删除）',
+			alerts: '{n} 个会话待处理'
 		},
 		// shared chrome editor (workspace tabs, session tabs, project folders, agents)
 		chrome: {
@@ -885,7 +886,8 @@ const shell = {
 			delete: 'Delete workspace',
 			deleteConfirm: 'Delete workspace "{name}"? Its project layout and session tabs are removed (conversations remain on the engine side).',
 			cannotDeleteDefault: 'The default workspace cannot be deleted.',
-			defaultBadge: 'Default workspace (cannot be deleted)'
+			defaultBadge: 'Default workspace (cannot be deleted)',
+			alerts: '{n} sessions need you'
 		},
 		// shared chrome editor (workspace tabs, session tabs, project folders, agents)
 		chrome: {
