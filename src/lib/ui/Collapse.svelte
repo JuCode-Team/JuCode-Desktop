@@ -47,6 +47,9 @@
 <style>
 	.collapse {
 		display: grid;
+		/* Width from the container, not the content: an unshrinkable row
+		 * (a running title) would otherwise widen the column past the edge. */
+		grid-template-columns: minmax(0, 1fr);
 		grid-template-rows: 0fr;
 		opacity: 0;
 		transition:
