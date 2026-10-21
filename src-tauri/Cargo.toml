@@ -3,7 +3,7 @@
 
 [package]
 name = "desktop"
-version = "0.4.31"
+version = "0.4.32"
 description = "JuCode desktop GUI"
 authors = ["Jucode Innovations INC."]
 license = "Apache-2.0"
