@@ -44,8 +44,7 @@ const dock = {
 		},
 		mosaic: {
 			stackHere: '叠放到这里',
-			splitHere: '拆分到这里',
-			maximizedHint: '已最大化 · Esc 还原'
+			splitHere: '拆分到这里'
 		},
 		tui: {
 			missing: '没有找到 {bin} 命令',
@@ -220,8 +219,7 @@ const dock = {
 		},
 		mosaic: {
 			stackHere: 'Stack here',
-			splitHere: 'Split here',
-			maximizedHint: 'Maximized · Esc to restore'
+			splitHere: 'Split here'
 		},
 		tui: {
 			missing: 'Could not find the {bin} command',

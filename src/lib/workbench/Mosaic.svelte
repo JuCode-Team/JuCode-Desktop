@@ -11,7 +11,6 @@
 		leavesOf,
 		moveTab,
 		resizeSplit,
-		toggleMaximize,
 		type DropZone,
 		type LeafNode,
 		type SplitNode,
@@ -24,7 +23,7 @@
 
 	// Renders a TileLayout: recursive splits with draggable gutters, per-leaf
 	// tab stacks, pointer-drag of tabs between leaves (edge drop = split, with
-	// a translucent landing preview), dblclick on a tab bar to maximize. All
+	// a translucent landing preview). All
 	// state transforms come from tiles.ts; this component only reports the next
 	// layout through `onchange` (and pointer focus through `onFocus`).
 	let {
@@ -71,7 +70,7 @@
 		actions?: Snippet<[TileTab]>;
 		/** Right-click on a tab (the caller decides whether to open a menu). */
 		onTabContext?: (tab: TileTab, ev: MouseEvent) => void;
-		/** Double-click on a tab (rename affordance — never maximizes). */
+		/** Double-click on a tab (rename affordance). */
 		onTabRename?: (tab: TileTab, ev: MouseEvent) => void;
 	} = $props();
 
@@ -102,9 +101,8 @@
 
 	const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), Math.max(min, max));
 
-	// Esc: cancel an in-flight drag, close the add menu, or restore a
-	// maximized leaf — in that priority order. A pane that already claimed
-	// Escape (e.g. a chat pane closing its picker) wins.
+	// Esc: cancel an in-flight drag, else close the add menu. A pane that
+	// already claimed Escape (e.g. a chat pane closing its picker) wins.
 	function windowKeydown(e: KeyboardEvent) {
 		if (e.key !== 'Escape' || e.defaultPrevented) return;
 		if (drag?.live) {
@@ -112,8 +110,6 @@
 			hover = null;
 		} else if (addMenuFor) {
 			addMenuFor = null;
-		} else if (layout.maximized) {
-			onchange(toggleMaximize(layout, layout.maximized));
 		}
 	}
 
@@ -249,13 +245,6 @@
 		window.addEventListener('pointerup', up);
 	}
 
-	// Dblclick on the EMPTY bar (not buttons, not tabs) toggles maximize for
-	// the leaf — dblclick on a tab is the rename affordance instead.
-	function barDblClick(e: MouseEvent, leaf: LeafNode) {
-		const el = e.target as HTMLElement;
-		if (el.closest('button') || el.closest('.ltab')) return;
-		onchange(toggleMaximize(layout, leaf.id));
-	}
 	import PopMenu from '$lib/ui/PopMenu.svelte';
 	import { rowIn, tabOut } from '$lib/ui/motion';
 </script>
@@ -323,13 +312,12 @@
 	<!-- svelte-ignore a11y_no_static_element_interactions (pointer focus tracking only) -->
 	<section
 		class="leaf"
-		class:maxed={layout.maximized === leaf.id}
 		class:focus={focused === leaf.id}
 		class:droptarget={drag?.live && zoneOf(hover)?.leafId === leaf.id}
 		data-leaf={leaf.id}
 		onpointerdowncapture={() => onFocus?.(leaf.id)}
 	>
-		<div class="lbar" data-tauri-drag-region data-bar={leaf.id} ondblclick={(e) => barDblClick(e, leaf)} role="tablist" tabindex="-1">
+		<div class="lbar" data-tauri-drag-region data-bar={leaf.id} role="tablist" tabindex="-1">
 			<div class="ltabs">
 				{#each leaf.tabs as tab, j (tab.id)}
 					{@const chrome = decorate?.(tab) ?? null}
@@ -372,9 +360,6 @@
 			</div>
 			<div class="lactions">
 				{#if actions && activeTab}{@render actions(activeTab)}{/if}
-				{#if layout.maximized === leaf.id}
-					<span class="lmax-hint">{t('dock.mosaic.maximizedHint')}</span>
-				{/if}
 				{#if barAdd && addOptions.length}
 					<button
 						class="lbtn"
@@ -435,8 +420,6 @@
 	.split.col {
 		flex-direction: column;
 	}
-	/* Cells must not clip: a maximized leaf positions itself against .mosaic
-	   and any overflow:hidden ancestor would cut it off. */
 	.cell {
 		display: flex;
 		min-width: 0;
@@ -483,14 +466,6 @@
 		overflow: hidden;
 		background: var(--bg);
 	}
-	/* Maximize = reposition over the whole mosaic; nothing re-mounts. The
-	   accent ring says "this pane is covering the others". */
-	.leaf.maxed {
-		position: absolute;
-		inset: 0;
-		z-index: 6;
-		box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 45%, var(--border));
-	}
 	/* The pane a dragged tab would land in: a border on the pane itself. */
 	.leaf.droptarget {
 		box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--accent) 65%, transparent);
@@ -505,7 +480,6 @@
 		padding: 6px 8px;
 		border-bottom: 1px solid var(--hairline);
 		flex-shrink: 0;
-		/* dblclick maximizes — don't let it select panel text instead */
 		user-select: none;
 	}
 	.ltabs {
@@ -594,16 +568,6 @@
 		align-items: center;
 		gap: 2px;
 		flex-shrink: 0;
-	}
-	.lmax-hint {
-		padding: 2px 8px;
-		margin-right: 4px;
-		font-size: var(--fs-2xs);
-		font-weight: 600;
-		white-space: nowrap;
-		color: var(--accent-bright);
-		background: var(--accent-soft);
-		border-radius: var(--r);
 	}
 	.lbtn {
 		display: inline-flex;

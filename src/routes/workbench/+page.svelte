@@ -1,6 +1,6 @@
 <script lang="ts">
 	// Dev demo for the mosaic tile workbench. Runs without a Tauri backend so
-	// the layout mechanics (drag to split, resize, stack, dblclick-maximize)
+	// the layout mechanics (drag to split, resize, stack)
 	// can be exercised and reviewed in a plain browser. Not linked from the
 	// app UI — visit /workbench directly.
 	import Mosaic from '$lib/workbench/Mosaic.svelte';
@@ -25,7 +25,7 @@
 		},
 		terminal: {
 			label: 'Terminal',
-			body: 'Double-click a tab bar to maximize this panel; double-click again to put it back. Drag the divider between panels to resize.'
+			body: 'Drag the divider between panels to resize.'
 		},
 		log: {
 			label: 'Log',
@@ -57,7 +57,7 @@
 			<h1>Mosaic workbench</h1>
 			<p>
 				A hand-rolled binary tile tree. Drag tabs between panels (edges split, center stacks),
-				drag the dividers to resize, double-click a tab bar to maximize.
+				and drag the dividers to resize.
 			</p>
 		</div>
 		<div class="actions">

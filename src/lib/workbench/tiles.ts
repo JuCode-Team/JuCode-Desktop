@@ -8,8 +8,7 @@
 //
 // Shape: an inner node splits its area between exactly two children (row =
 // side by side, col = stacked) at `ratio`; a leaf is a tab stack (several
-// tabs, one active). Maximize is layout state *next to* the tree — restoring
-// never has to rebuild anything, it just clears `maximized`.
+// tabs, one active).
 
 export type SplitDir = 'row' | 'col';
 
@@ -45,8 +44,6 @@ export type TileNode = LeafNode | SplitNode;
 
 export interface TileLayout {
 	root: TileNode | null;
-	/** Leaf shown full-bleed (dblclick semantic); null = normal tiling. */
-	maximized: string | null;
 }
 
 export const RATIO_MIN = 0.15;
@@ -57,7 +54,6 @@ export const LAYOUT_VERSION = 1;
 export interface SerializedLayout {
 	version: number;
 	root: TileNode | null;
-	maximized: string | null;
 }
 
 let counter = 0;
@@ -76,12 +72,12 @@ export function makeLeaf(tabs: TileTab[], active?: string): LeafNode {
 }
 
 export function emptyLayout(): TileLayout {
-	return { root: null, maximized: null };
+	return { root: null };
 }
 
 /** A layout with a single leaf holding `tabs` (the pre-mosaic dock shape). */
 export function singleLeafLayout(tabs: TileTab[], active?: string): TileLayout {
-	return { root: tabs.length ? makeLeaf(tabs, active) : null, maximized: null };
+	return { root: tabs.length ? makeLeaf(tabs, active) : null };
 }
 
 /** All leaves in DFS order (a before b) — the visual reading order. */
@@ -121,14 +117,6 @@ function mapLeaf(node: TileNode, leafId: string, fn: (leaf: LeafNode) => LeafNod
 	return a === node.a && b === node.b ? node : { ...node, a, b };
 }
 
-/** Drop `maximized` when the leaf it pointed at no longer exists. */
-function fixMaximized(layout: TileLayout): TileLayout {
-	if (layout.maximized && !findLeaf(layout.root, layout.maximized)) {
-		return { ...layout, maximized: null };
-	}
-	return layout;
-}
-
 // ---------- operations ----------
 
 /** Add `tab` to leaf `leafId` (or the first leaf; or a fresh root leaf when the
@@ -160,7 +148,7 @@ export function closeTab(layout: TileLayout, tabId: string): TileLayout {
 	const leaf = leafOfTab(layout.root, tabId);
 	if (!leaf || !layout.root) return layout;
 	if (leaf.tabs.length === 1) {
-		return fixMaximized({ ...layout, root: replaceLeaf(layout.root, leaf.id, null) });
+		return { ...layout, root: replaceLeaf(layout.root, leaf.id, null) };
 	}
 	const idx = leaf.tabs.findIndex((t) => t.id === tabId);
 	const tabs = leaf.tabs.filter((t) => t.id !== tabId);
@@ -191,9 +179,8 @@ export function splitLeaf(
 		a: first ? fresh : target,
 		b: first ? target : fresh
 	};
-	// A maximized leaf that gets split should reveal the result, not hide it.
 	return {
-		layout: { root: replaceLeaf(layout.root, leafId, split), maximized: null },
+		layout: { root: replaceLeaf(layout.root, leafId, split) },
 		leafId: fresh.id
 	};
 }
@@ -208,7 +195,7 @@ export function wrapRoot(
 	tab: TileTab,
 	ratio = 0.5
 ): TileLayout {
-	if (!layout.root) return { root: makeLeaf([tab]), maximized: null };
+	if (!layout.root) return { root: makeLeaf([tab]) };
 	const fresh = makeLeaf([tab]);
 	const dir: SplitDir = zone === 'left' || zone === 'right' ? 'row' : 'col';
 	const first = zone === 'left' || zone === 'top';
@@ -220,7 +207,7 @@ export function wrapRoot(
 		a: first ? fresh : layout.root,
 		b: first ? layout.root : fresh
 	};
-	return { root: split, maximized: layout.maximized };
+	return { root: split };
 }
 
 /**
@@ -285,17 +272,10 @@ export function resizeSplit(layout: TileLayout, splitId: string, ratio: number):
 	return root === layout.root ? layout : { ...layout, root };
 }
 
-/** Dblclick semantic: maximize `leafId`, or restore when it already is. */
-export function toggleMaximize(layout: TileLayout, leafId: string): TileLayout {
-	if (layout.maximized === leafId) return { ...layout, maximized: null };
-	if (!findLeaf(layout.root, leafId)) return layout;
-	return { ...layout, maximized: leafId };
-}
-
 // ---------- serialize / deserialize ----------
 
 export function serializeLayout(layout: TileLayout): SerializedLayout {
-	return { version: LAYOUT_VERSION, root: layout.root, maximized: layout.maximized };
+	return { version: LAYOUT_VERSION, root: layout.root };
 }
 
 const isStr = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
@@ -339,5 +319,5 @@ export function deserializeLayout(raw: unknown): TileLayout | null {
 	const data = raw as Record<string, unknown>;
 	if (data.version !== LAYOUT_VERSION) return null;
 	const root = sanitizeNode(data.root);
-	return fixMaximized({ root, maximized: isStr(data.maximized) ? data.maximized : null });
+	return { root };
 }

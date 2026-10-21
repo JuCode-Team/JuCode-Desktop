@@ -14,7 +14,6 @@ import {
 	serializeLayout,
 	singleLeafLayout,
 	splitLeaf,
-	toggleMaximize,
 	wrapRoot,
 	LAYOUT_VERSION,
 	RATIO_MAX,
@@ -54,14 +53,6 @@ describe('split', () => {
 		expect((root.a as LeafNode).id).toBe(secondId);
 	});
 
-	it('splitting a maximized leaf clears maximize so the result is visible', () => {
-		const layout = singleLeafLayout([tab('a')]);
-		const leaf = leavesOf(layout.root)[0];
-		const maxed = toggleMaximize(layout, leaf.id);
-		const { layout: next } = splitLeaf(maxed, leaf.id, 'bottom', tab('c'));
-		expect(next.maximized).toBeNull();
-	});
-
 	it('is a no-op on an unknown leaf', () => {
 		const layout = singleLeafLayout([tab('a')]);
 		expect(splitLeaf(layout, 'nope', 'left', tab('c')).layout).toBe(layout);
@@ -93,13 +84,6 @@ describe('close', () => {
 	it('closing the last tab of the only leaf empties the tree', () => {
 		const layout = singleLeafLayout([tab('a')]);
 		expect(closeTab(layout, 'a').root).toBeNull();
-	});
-
-	it('clears maximize when the maximized leaf collapses away', () => {
-		const { layout, secondId } = twoLeaves('right');
-		const maxed = toggleMaximize(layout, secondId);
-		const next = closeTab(maxed, 'c');
-		expect(next.maximized).toBeNull();
 	});
 
 	it('is a no-op for an unknown tab', () => {
@@ -232,32 +216,12 @@ describe('resize', () => {
 	});
 });
 
-describe('maximize', () => {
-	it('dblclick semantic toggles: maximize then restore', () => {
-		const { layout, firstId } = twoLeaves('right');
-		const maxed = toggleMaximize(layout, firstId);
-		expect(maxed.maximized).toBe(firstId);
-		expect(toggleMaximize(maxed, firstId).maximized).toBeNull();
-	});
-
-	it('maximizing another leaf replaces the current one', () => {
-		const { layout, firstId, secondId } = twoLeaves('right');
-		const next = toggleMaximize(toggleMaximize(layout, firstId), secondId);
-		expect(next.maximized).toBe(secondId);
-	});
-
-	it('ignores unknown leaves', () => {
-		const layout = singleLeafLayout([tab('a')]);
-		expect(toggleMaximize(layout, 'nope')).toBe(layout);
-	});
-});
-
 describe('serialize / deserialize', () => {
-	it('round-trips a layout with splits, stacks and maximize', () => {
-		const { layout, secondId } = twoLeaves('bottom');
-		const withMax = toggleMaximize(activateTab(layout, 'b'), secondId);
-		const parsed = deserializeLayout(JSON.parse(JSON.stringify(serializeLayout(withMax))));
-		expect(parsed).toEqual(withMax);
+	it('round-trips a layout with splits and stacks', () => {
+		const { layout } = twoLeaves('bottom');
+		const next = activateTab(layout, 'b');
+		const parsed = deserializeLayout(JSON.parse(JSON.stringify(serializeLayout(next))));
+		expect(parsed).toEqual(next);
 	});
 
 	it('stamps the current version', () => {
@@ -265,7 +229,7 @@ describe('serialize / deserialize', () => {
 	});
 
 	it('rejects unknown versions and garbage', () => {
-		expect(deserializeLayout({ version: 99, root: null, maximized: null })).toBeNull();
+		expect(deserializeLayout({ version: 99, root: null })).toBeNull();
 		expect(deserializeLayout('nonsense')).toBeNull();
 		expect(deserializeLayout(null)).toBeNull();
 	});
@@ -273,7 +237,6 @@ describe('serialize / deserialize', () => {
 	it('drops invalid tabs and collapses emptied nodes while parsing', () => {
 		const ser = {
 			version: LAYOUT_VERSION,
-			maximized: null,
 			root: {
 				kind: 'split',
 				id: 's1',
@@ -290,10 +253,10 @@ describe('serialize / deserialize', () => {
 		expect(leaf.active).toBe('a');
 	});
 
-	it('clears a maximized id that no longer resolves to a leaf', () => {
+	it('ignores a maximized leaf saved by an older version', () => {
 		const ser = serializeLayout(singleLeafLayout([tab('a')]));
-		const parsed = deserializeLayout({ ...ser, maximized: 'gone' });
-		expect(parsed?.maximized).toBeNull();
+		const parsed = deserializeLayout({ ...ser, maximized: leavesOf(ser.root)[0].id });
+		expect(parsed).toEqual({ root: ser.root });
 	});
 });
 

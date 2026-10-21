@@ -17,7 +17,6 @@ import {
 	serializeLayout,
 	singleLeafLayout,
 	splitLeaf,
-	toggleMaximize,
 	type LeafNode,
 	type SplitNode,
 	type TileTab
@@ -128,11 +127,10 @@ describe('reconcileLayout', () => {
 		expect(reconcileLayout(null, [], null).root).toBeNull();
 	});
 
-	it('keeps a valid layout (chat tile alive) byte-identical, maximize included', () => {
+	it('keeps a valid layout (chat tile alive) byte-identical', () => {
 		const base = openChatTab(dockOnlyLayout(), null, 's1');
-		const maxed = toggleMaximize(base, leavesOf(base.root)[0].id);
-		const next = reconcileLayout(JSON.parse(JSON.stringify(serializeLayout(maxed))), ['s1'], 's1');
-		expect(next).toEqual(maxed);
+		const next = reconcileLayout(JSON.parse(JSON.stringify(serializeLayout(base))), ['s1'], 's1');
+		expect(next).toEqual(base);
 	});
 });
 
