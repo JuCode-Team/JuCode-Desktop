@@ -203,6 +203,18 @@ const shell = {
 		approveCommand: '允许执行命令',
 		approveFile: '允许修改文件',
 		askQuestion: '请选择',
+		projectMenu: {
+			title: '项目',
+			commit: '提交…',
+			files: '{n} 个文件',
+			push: '推送 {n} 个提交',
+			publish: '发布分支',
+			pull: '拉取 {n} 个提交',
+			pushed: '已推送',
+			pulled: '已拉取',
+			changes: '改动',
+			clean: '无改动'
+		},
 		limit: {
 			window: {
 				five_hour: '5 小时额度',
@@ -994,6 +1006,18 @@ const shell = {
 		approveCommand: 'Allow running command',
 		approveFile: 'Allow file changes',
 		askQuestion: 'Choose an option',
+		projectMenu: {
+			title: 'Project',
+			commit: 'Commit…',
+			files: '{n} files',
+			push: 'Push {n} commits',
+			publish: 'Publish branch',
+			pull: 'Pull {n} commits',
+			pushed: 'Pushed',
+			pulled: 'Pulled',
+			changes: 'Changes',
+			clean: 'No changes'
+		},
 		limit: {
 			window: {
 				five_hour: '5-hour limit',

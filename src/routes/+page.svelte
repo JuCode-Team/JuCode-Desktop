@@ -87,7 +87,7 @@
 	import Mosaic from '$lib/workbench/Mosaic.svelte';
 	import WorkspaceRail from '$lib/workbench/WorkspaceRail.svelte';
 	import TitleBar from '$lib/shell/TitleBar.svelte';
-	import OpenInEditor from '$lib/shell/OpenInEditor.svelte';
+	import ProjectMenu from '$lib/shell/ProjectMenu.svelte';
 	import { fade } from 'svelte/transition';
 	import TabChromePopover from '$lib/workbench/TabChromePopover.svelte';
 	import ChatPane, { type ChatPaneApi, type ProviderOption } from '$lib/ChatPane.svelte';
@@ -1503,7 +1503,7 @@
 	>
 		{#snippet actions()}
 			{@const editorPath = showSettings || showDesk ? undefined : shownProject ? shownProject.path : activeProject && !activeProject.chats && !activeProject.stale ? activeCwd : undefined}
-			{#if editorPath}<OpenInEditor path={editorPath} />{/if}
+			{#if editorPath}<ProjectMenu path={editorPath} name={(shownProject ?? activeProject)?.name ?? ''} onOpenGit={() => openPanelTile('git')} />{/if}
 			{#if !showSettings && !showDesk && active && active.surface === 'tui'}
 				<button class="tile-action" title={t('dock.tui.backToGui')} aria-label={t('dock.tui.backToGui')} onclick={() => active && tuiPanels[active.id]?.backToGui()}>
 					<MessageSquareTextIcon size={16} />

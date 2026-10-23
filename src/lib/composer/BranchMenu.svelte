@@ -18,6 +18,7 @@
 		cwd,
 		repo,
 		current,
+		down = false,
 		onChanged,
 		onClose
 	}: {
@@ -25,6 +26,8 @@
 		/** Shown in the search placeholder. */
 		repo: string;
 		current: string;
+		/** Opens below its anchor, right-aligned (the title bar); else above. */
+		down?: boolean;
 		onChanged: () => void;
 		onClose: () => void;
 	} = $props();
@@ -97,7 +100,7 @@
 <svelte:window onkeydown={(e) => e.key === 'Escape' && !creating && onClose()} />
 
 <button class="bm-backdrop" aria-label="close menu" tabindex="-1" onclick={onClose}></button>
-<div use:overBrowser class="pop bm" out:popOut={{ y: 3 }} role="dialog" aria-label={t('chat.branchMenu.title')}>
+<div use:overBrowser class="pop bm" class:down out:popOut={{ y: 3 }} role="dialog" aria-label={t('chat.branchMenu.title')}>
 	{#if creating}
 		<label class="field">
 			<GitBranchIcon size={16} />
@@ -152,6 +155,13 @@
 		width: min(340px, calc(100vw - 32px));
 		transform-origin: bottom left;
 		animation: pop-in var(--t-med) var(--ease-out);
+	}
+	.bm.down {
+		top: calc(100% + 6px);
+		right: 0;
+		bottom: auto;
+		left: auto;
+		transform-origin: top right;
 	}
 	.field {
 		display: flex;
