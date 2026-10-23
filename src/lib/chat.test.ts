@@ -1055,3 +1055,16 @@ describe('subagent ends', () => {
 		expect(c.subagents.gone).toBeUndefined();
 	});
 });
+
+describe('usage limit', () => {
+	it('keeps which limit, how much of it is used, and when it resets', () => {
+		const c = new ChatState();
+		c.handle({ type: 'rate_limit', level: 'warning', message: '', resets_at: 1_790_800_000_000, window: 'five_hour', used: 83, overage: false } as never);
+		expect(c.rateLimit).toEqual({ level: 'warning', message: '', resetsAt: 1_790_800_000_000, window: 'five_hour', used: 83, overage: false });
+		// An older daemon: no window or share.
+		c.handle({ type: 'rate_limit', level: 'limited', message: 'out', resets_at: null } as never);
+		expect(c.rateLimit).toMatchObject({ level: 'limited', window: '', used: null, resetsAt: null });
+		c.handle({ type: 'rate_limit', level: 'ok' } as never);
+		expect(c.rateLimit).toBeNull();
+	});
+});

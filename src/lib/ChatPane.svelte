@@ -71,7 +71,8 @@
 	import TurnRail from '$lib/TurnRail.svelte';
 	import StatusStrip from '$lib/composer/StatusStrip.svelte';
 	import ApprovalCard from '$lib/ApprovalCard.svelte';
-	import RateLimitBanner from '$lib/RateLimitBanner.svelte';
+	import UsageLimit from '$lib/UsageLimit.svelte';
+	import { limitResume } from '$lib/limitResume.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import SideAnswers from '$lib/composer/SideAnswers.svelte';
 	import TaskPanel from '$lib/agents/TaskPanel.svelte';
@@ -804,6 +805,8 @@
 			// Echo the message instantly when it starts a turn now (a busy session
 			// queues it instead, shown in the composer's queue strip).
 			// A restarting engine holds the message and starts the turn once up.
+			// The user carries on now: no waiting for the usage limit's reset.
+			limitResume.cancel(chat);
 			if (!chat.busy || chat.restarting) {
 				captureCheckpoint(); // snapshot files before this turn (for rewind)
 				chat.optimisticUser(content, sent);
@@ -821,6 +824,7 @@
 	}
 	function stop() {
 		autoRetry.cancel(chat);
+		limitResume.cancel(chat);
 		send({ op: 'interrupt' });
 	}
 	function respondApproval(op: ApproveOp) {
@@ -1454,7 +1458,17 @@
 				</p>
 			{/if}
 			{#if chat.rateLimit}
-				<RateLimitBanner rateLimit={chat.rateLimit} onDismiss={() => (chat.rateLimit = null)} />
+				<UsageLimit
+					limit={chat.rateLimit}
+					backend={chat.backendId}
+					resumeArmed={chat.resumeAtReset}
+					onResume={() => limitResume.arm(chat)}
+					onCancelResume={() => limitResume.cancel(chat)}
+					onDismiss={() => {
+						limitResume.cancel(chat);
+						chat.rateLimit = null;
+					}}
+				/>
 			{/if}
 
 			<SideAnswers {chat} />

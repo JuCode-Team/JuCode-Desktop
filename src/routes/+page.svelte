@@ -55,6 +55,7 @@
 	import { SessionStore, listedSessions } from '$lib/session.svelte';
 	import { workspaces } from '$lib/workbench/workspaceStore.svelte';
 	import { autoRetry } from '$lib/autoRetry.svelte';
+	import { limitResume } from '$lib/limitResume.svelte';
 	import { refreshJucodeModels } from '$lib/jucodeModels';
 	import {
 		activateTab,
@@ -1424,6 +1425,7 @@
 			cleanups.push(() => (ChatState.onSessionStarted = null));
 			// A turn that failed on the connection is picked back up (autoRetry.ts).
 			autoRetry.store = store;
+			limitResume.store = store;
 			ChatState.onTurnFailed = (c, message, started) => autoRetry.failed(c, message, started);
 			cleanups.push(() => (ChatState.onTurnFailed = null));
 			if (disposed) {

@@ -257,6 +257,7 @@ const chat = {
 			note: '连接中断，已自动重试（第 {n} / {max} 次）',
 			resumed: '连接中断后自动继续'
 		},
+		limit: { resumed: '用量额度已重置，自动继续' },
 		delivery: {
 			agent: '来自 {name} 的消息',
 			from: '来自 {name} 的消息',
@@ -615,6 +616,7 @@ const chat = {
 			note: 'Connection lost; retried automatically (attempt {n} of {max})',
 			resumed: 'Continued automatically after a lost connection'
 		},
+		limit: { resumed: 'Usage limit reset; continuing automatically' },
 		delivery: {
 			agent: 'Message from {name}',
 			from: 'Message from {name}',

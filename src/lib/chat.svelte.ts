@@ -45,6 +45,18 @@ export interface TurnStats {
 	segments: number;
 }
 
+/** A plan usage limit the engine reported. `window`: which one (`five_hour`,
+ *  `seven_day`, `seven_day_opus`, `overage`…; empty if not said); `used`: its
+ *  percent used; `overage`: paid usage past the plan is in use. */
+export interface UsageLimit {
+	level: 'warning' | 'limited';
+	message: string;
+	resetsAt: number | null;
+	window: string;
+	used: number | null;
+	overage: boolean;
+}
+
 /** The model request in flight, for the live timer: which stage it is in and
  *  when that stage began. `connect`: request sent, no response yet; `ttft`:
  *  connected, waiting for the first token; `output`: tokens streaming. */
@@ -520,7 +532,10 @@ export class ChatState {
 	} | null>(null);
 	// Latest engine rate-limit / quota notice, shown as a persistent banner until
 	// the engine reports the limit cleared (status back to normal). null = no limit.
-	rateLimit = $state<{ level: 'warning' | 'limited'; message: string; resetsAt: number | null } | null>(null);
+	/** The engine's plan usage limit, near or hit (see UsageLimit.svelte). */
+	rateLimit = $state<UsageLimit | null>(null);
+	/** Once the limit resets, the stopped turn carries on (limitResume.svelte.ts). */
+	resumeAtReset = $state(false);
 	/** The official plan's usage (Claude subscription, ChatGPT plan) as the
 	 *  engine last reported it; null for API-key and gateway sessions. */
 	planUsage = $state<{
@@ -1839,7 +1854,14 @@ export class ChatState {
 					break;
 				}
 				const resetsAt = typeof ev.resets_at === 'number' && ev.resets_at > 0 ? ev.resets_at : null;
-				this.rateLimit = { level, message: str(ev.message), resetsAt };
+				this.rateLimit = {
+					level,
+					message: str(ev.message),
+					resetsAt,
+					window: str(ev.window),
+					used: typeof ev.used === 'number' ? ev.used : null,
+					overage: ev.overage === true
+				};
 				break;
 			}
 			case 'connecting':
