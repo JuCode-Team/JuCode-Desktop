@@ -157,12 +157,10 @@ const shell = {
 
 		// welcome / empty states
 		startPicker: {
-			lead: '在 {dir} 用 {backend} 开始新对话 · {project}',
+			lead: '在 {place} 用 {backend} 开始新对话',
 			project: '项目',
-			dir: '工作目录',
 			backend: '后端',
-			openFolder: '打开文件夹…',
-			pickFolder: '选择文件夹…'
+			openFolder: '打开文件夹…'
 		},
 		welcomeTip: '给 JuCode 指派一个任务，开始新对话',
 		hintCommand: '命令',
@@ -922,12 +920,10 @@ const shell = {
 
 		// welcome / empty states
 		startPicker: {
-			lead: 'Start a conversation in {dir} with {backend} · {project}',
+			lead: 'Start a conversation in {place} with {backend}',
 			project: 'Project',
-			dir: 'Working folder',
 			backend: 'Agent',
-			openFolder: 'Open a folder…',
-			pickFolder: 'Choose a folder…'
+			openFolder: 'Open a folder…'
 		},
 		welcomeTip: 'Assign JuCode a task to start a new conversation',
 		hintCommand: 'Commands',

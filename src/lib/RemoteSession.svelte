@@ -818,11 +818,8 @@
 			{:else if draft && chat.messages.length === 0}
 				<div class="welcome">
 					<p class="lead">
-						{#each t('shell.startPicker.lead').split(/(\{project\}|\{dir\}|\{backend\})/) as part, i (i)}
-							{#if part === '{dir}'}
-								<!-- The project's folder: a session here starts in it. -->
-								<span class="wname" title={cwd}>{(cwd ?? '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || t('shell.startPicker.dir')}</span>
-							{:else if part === '{project}'}
+						{#each t('shell.startPicker.lead').split(/(\{place\}|\{backend\})/) as part, i (i)}
+							{#if part === '{place}'}
 								<span class="anchor">
 									<button class="word" class:on={pickMenu === 'project'} onclick={() => (pickMenu = pickMenu === 'project' ? null : 'project')} aria-haspopup="menu" aria-label={t('shell.startPicker.project')}>
 										<FolderIcon size={16} /><span class="wname">{pickedProject ? projectLabel(pickedProject) : t('shell.startPicker.project')}</span><ChevronDownIcon size={12} />
