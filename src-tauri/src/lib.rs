@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -2962,8 +2961,6 @@ struct Pty {
     writer: Mutex<Box<dyn Write + Send>>,
     master: Mutex<Box<dyn portable_pty::MasterPty + Send>>,
     child: Mutex<Box<dyn portable_pty::Child + Send + Sync>>,
-    /// Set by `pty_close` to tell the reader thread to stop before the child is killed.
-    stop: Arc<AtomicBool>,
 }
 
 #[derive(Default)]
@@ -3095,16 +3092,13 @@ fn pty_open(
     let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
     let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
 
-    let stop = Arc::new(AtomicBool::new(false));
     let handle = app.clone();
     let stream_id = id.clone();
-    let reader_stop = stop.clone();
     std::thread::spawn(move || {
         let mut buf = [0u8; 4096];
+        // Reads until every process on the terminal has closed it, including
+        // after pty_close: see there.
         loop {
-            if reader_stop.load(Ordering::Relaxed) {
-                break;
-            }
             match reader.read(&mut buf) {
                 Ok(0) | Err(_) => break,
                 Ok(n) => {
@@ -3131,7 +3125,6 @@ fn pty_open(
                 writer: Mutex::new(writer),
                 master: Mutex::new(pair.master),
                 child: Mutex::new(child),
-                stop,
             }),
         );
     Ok(())
@@ -3185,13 +3178,18 @@ fn pty_close(id: String, ptys: tauri::State<Ptys>) -> Result<(), String> {
         .map_err(|e| format!("lock poisoned: {e}"))?
         .remove(&id);
     if let Some(pty) = removed {
-        // Stop the reader thread before killing so it doesn't spin on a dead fd.
-        pty.stop.store(true, Ordering::Relaxed);
-        if let Ok(mut child) = pty.child.lock() {
-            let _ = child.kill();
-            // Reap the process so it doesn't linger as a zombie.
-            let _ = child.wait();
-        }
+        // Off the main thread, with the reader still draining the terminal: a
+        // shell exits only once its output is read, so with a TUI writing
+        // (Claude Code redrawing on SIGHUP) and nobody reading, `wait` never
+        // returned and the window froze (closing a terminal on a workspace
+        // switch).
+        std::thread::spawn(move || {
+            if let Ok(mut child) = pty.child.lock() {
+                let _ = child.kill();
+                // Reap the process so it doesn't linger as a zombie.
+                let _ = child.wait();
+            }
+        });
     }
     Ok(())
 }
