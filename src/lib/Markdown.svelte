@@ -12,6 +12,8 @@
 	import { renderMarkdown } from '$lib/markdown';
 	import { getLocale, t } from '$lib/i18n';
 	import { useFileCheck } from '$lib/fileCheck';
+	import { renderMermaid } from '$lib/mermaid';
+	import { themeState } from '$lib/theme.svelte';
 
 	let { text, onFile }: { text: string; onFile?: (href: string) => void } = $props();
 
@@ -40,6 +42,30 @@
 			const known = fileCheck.known(href);
 			if (known !== undefined) a.classList.toggle('dead', !known);
 			else fileCheck.check(href).then((ok) => a.classList.toggle('dead', !ok));
+		}
+	});
+
+	// A ```mermaid block shows its diagram; its source stays in the <pre>
+	// (hidden) for the copy button, and shows when it doesn't parse.
+	$effect(() => {
+		void html;
+		// Redrawn in the colours of a theme change (revision: every apply).
+		void themeState.revision;
+		const dark = themeState.value === 'dark';
+		if (!root) return;
+		for (const code of root.querySelectorAll<HTMLElement>('.codeblock code.language-mermaid')) {
+			const block = code.closest<HTMLElement>('.codeblock')!;
+			renderMermaid(code.textContent ?? '', dark).then((svg) => {
+				if (!svg || !block.isConnected) return;
+				let view = block.querySelector<HTMLElement>('.mermaid-view');
+				if (!view) {
+					view = document.createElement('div');
+					view.className = 'mermaid-view';
+					block.append(view);
+				}
+				view.innerHTML = svg;
+				block.classList.add('diagram');
+			});
 		}
 	});
 
@@ -203,6 +229,19 @@
 		border: none;
 		border-radius: 0;
 		background: none;
+	}
+	.md :global(.codeblock.diagram pre) {
+		display: none;
+	}
+	.md :global(.mermaid-view) {
+		display: flex;
+		justify-content: center;
+		padding: 14px;
+		overflow-x: auto;
+	}
+	.md :global(.mermaid-view svg) {
+		max-width: 100%;
+		height: auto;
 	}
 	.md :global(.cb-head) {
 		display: flex;
