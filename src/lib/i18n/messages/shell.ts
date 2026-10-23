@@ -68,7 +68,15 @@ const shell = {
 			captureRequirement: '记下想法',
 			zoomIn: '放大界面',
 			zoomOut: '缩小界面',
-			zoomReset: '恢复默认大小'
+			zoomReset: '恢复默认大小',
+			editHint: '点击按键可以修改，只在这台电脑上生效',
+			recording: '按下新的快捷键，Esc 取消',
+			pressKeys: '按下按键…',
+			needsModifier: '快捷键需要包含 ⌘ 或 Ctrl',
+			taken: '{keys} 已用于「{name}」',
+			change: '修改「{name}」的快捷键',
+			reset: '恢复默认',
+			resetAll: '全部恢复默认'
 		},
 		updatePrompt: {
 			label: '应用更新',
@@ -831,7 +839,15 @@ const shell = {
 			captureRequirement: 'Note an idea',
 			zoomIn: 'Zoom in',
 			zoomOut: 'Zoom out',
-			zoomReset: 'Actual size'
+			zoomReset: 'Actual size',
+			editHint: 'Click a shortcut to change it; changes apply on this computer only',
+			recording: 'Press the new shortcut, or Esc to cancel',
+			pressKeys: 'Press keys…',
+			needsModifier: 'A shortcut needs ⌘ or Ctrl',
+			taken: '{keys} is already used by {name}',
+			change: 'Change the shortcut for {name}',
+			reset: 'Reset',
+			resetAll: 'Reset all to defaults'
 		},
 		updatePrompt: {
 			label: 'App update',

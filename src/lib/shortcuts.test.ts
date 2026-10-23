@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { matches, shortcutLabel } from './shortcuts';
+import { bindingOf, conflictOf, matches, resetBindings, setBinding, shortcutLabel } from './shortcuts';
 
 // Tests run in node: a plain event of the fields the matcher reads.
 const key = (init: Partial<KeyboardEvent>) =>
@@ -32,5 +32,28 @@ describe('shortcuts', () => {
 		expect(shortcutLabel('sessionN', false)).toBe('Ctrl+1…9');
 		expect(shortcutLabel('sendNow', true)).toBe('⌘↵');
 		expect(shortcutLabel('sendNow', false)).toBe('Ctrl+Enter');
+	});
+
+	it('rebind a shortcut, refuse one taken, and go back to the default', () => {
+		const next = bindingOf(key({ key: 'j', metaKey: true, shiftKey: true }), true)!;
+		expect(next).toEqual({ key: 'j', mod: true, shift: true, ctrl: false });
+		setBinding('model', next);
+		expect(matches(key({ key: 'J', metaKey: true, shiftKey: true }), 'model', true)).toBe(true);
+		expect(matches(key({ key: 'M', metaKey: true, shiftKey: true }), 'model', true)).toBe(false);
+		expect(shortcutLabel('model', true)).toBe('⇧⌘J');
+		// ⌘K is search's: taken.
+		expect(conflictOf('model', bindingOf(key({ key: 'k', metaKey: true }), true)!, true)).toBe('searchSessions');
+		// Off macOS, Ctrl+` is the terminal's Control key binding.
+		expect(conflictOf('model', bindingOf(key({ key: '`', code: 'Backquote', ctrlKey: true }), false)!, false)).toBe('terminal');
+		resetBindings();
+		expect(shortcutLabel('model', true)).toBe('⇧⌘M');
+	});
+
+	it('record only keys with a modifier', () => {
+		expect(bindingOf(key({ key: 'a' }), true)).toBeNull();
+		expect(bindingOf(key({ key: 'Meta', metaKey: true }), true)).toBeNull();
+		expect(bindingOf(key({ key: 'k', metaKey: true, altKey: true }), true)).toBeNull();
+		expect(bindingOf(key({ key: 'Tab', shiftKey: true }), true)).toEqual({ key: 'Tab', mod: false, shift: true, ctrl: false });
+		expect(bindingOf(key({ key: 'k', ctrlKey: true }), false)).toEqual({ key: 'k', mod: true, shift: false, ctrl: false });
 	});
 });
