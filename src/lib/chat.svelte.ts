@@ -190,6 +190,13 @@ const FINAL_AGENT = ['completed', 'done', 'failed', 'errored', 'stopped', 'inter
 
 /** Calls that start a subagent: their arguments name it. */
 const SUBAGENT_CALLS = new Set(['spawn_agent', 'Task', 'Agent']);
+/** Engines whose daemon reports that the model answered (`thinking_start`):
+ *  their requests show "connecting" until then. Claude joins once a daemon
+ *  that reports it is seen (an older one still running never does). */
+const ANSWER_REPORTED = new Set<BackendId>(['jucode']);
+/** Engines that announce only a turn's first request; the next one starts
+ *  when its tools are back. */
+const FIRST_REQUEST_ONLY = new Set<BackendId>(['codex', 'acp']);
 
 /** A proposed plan's status as the engine words it. */
 const PLAN_STATUS = ['pending', 'approved', 'revising'];
@@ -775,14 +782,14 @@ export class ChatState {
 		this.#setSend(null);
 	}
 
-	/** A model request was sent. jucode then reports the connection
-	 *  (`thinking_start`); the other engines only the first token, so their
-	 *  wait counts as the time to it. */
+	/** A model request was sent. jucode and claude then report the model's
+	 *  answer (`thinking_start`); the other engines only the first token, so
+	 *  their wait counts as the time to it. */
 	#requestStarted() {
 		const now = Date.now();
 		this.#closeSegment(now);
 		this.#segStart = now;
-		this.call = { phase: this.backendId === 'jucode' ? 'connect' : 'ttft', since: now };
+		this.call = { phase: ANSWER_REPORTED.has(this.backendId) ? 'connect' : 'ttft', since: now };
 	}
 
 	/** The open reply segment ends (its tool call, a new request, the turn's
@@ -941,7 +948,18 @@ export class ChatState {
 		if (this.engineState === 'compacting') return 'compacting';
 		if (!this.busy) return null;
 		const last = this.messages[this.messages.length - 1];
-		if (last?.kind === 'tool') return last.running ? 'tool' : 'waiting';
+		if (last?.kind === 'tool') {
+			// Claude announces a call as the model starts writing it: the
+			// request still streams its arguments.
+			if (this.call?.phase === 'output') return 'generating';
+			// Calls run side by side; any of the trailing ones still running.
+			for (let i = this.messages.length - 1; i >= 0; i--) {
+				const m = this.messages[i];
+				if (m.kind !== 'tool') break;
+				if (m.running) return 'tool';
+			}
+			return 'waiting';
+		}
 		// Content is the source of truth: if the tail message has streamed text we're
 		// generating, regardless of a stale 'connecting' engine state.
 		if ((last?.kind === 'assistant' || last?.kind === 'reasoning') && last.text.length > 0)
@@ -1182,7 +1200,8 @@ export class ChatState {
 				break;
 			}
 			case 'thinking_start':
-				// jucode: the gateway answered; the first token is on its way.
+				// The model answered; the first token is on its way.
+				ANSWER_REPORTED.add(this.backendId);
 				if (this.#sending?.state === 'connecting' || this.#sending?.state === 'sending') this.#setSend('waiting');
 				if (this.call) this.call = { phase: 'ttft', since: Date.now() };
 				break;
@@ -1199,9 +1218,11 @@ export class ChatState {
 			case 'tool_start':
 				this.#outputStarted();
 				this.#turnTools++;
-				// The request is done; its tools run untimed. Text after them is a
-				// new segment, below the tool cards.
-				this.call = null;
+				// The request is done and its tools run untimed, except on claude,
+				// which announces a call as the model starts writing it: that
+				// request ends with its `usage`. Text after them is a new segment,
+				// below the tool cards.
+				if (this.backendId !== 'claude') this.call = null;
 				this.#closeSegment(Date.now());
 				// One reasoning block per round: collapse this round's reasoning once
 				// its tool call appears, so the next round starts a fresh block.
@@ -1241,6 +1262,10 @@ export class ChatState {
 				// Engines that do not announce each request (codex) start the next
 				// one once the tools are back.
 				this.#segStart = Date.now();
+				if (FIRST_REQUEST_ONLY.has(this.backendId) && this.busy && !this.call) {
+					const id = str(ev.call_id);
+					if (!this.messages.some((m) => m.kind === 'tool' && m.running && m.callId !== id)) this.call = { phase: 'ttft', since: this.#segStart };
+				}
 				const t = this.#tool(str(ev.call_id));
 				if (t) {
 					t.output = boundedOutput(str(ev.output));
@@ -1553,6 +1578,8 @@ export class ChatState {
 				this.#remember({ commands: this.commands });
 				break;
 			case 'usage': {
+				// A request's own usage closes it (an aggregate is a turn's sum).
+				if (ev.aggregate !== true && this.call?.phase === 'output') this.call = null;
 				if (typeof ev.billing_turn === 'string') {
 					const id = ev.billing_turn;
 					if (ev.billing_gateway === true) {
@@ -1806,7 +1833,8 @@ export class ChatState {
 				this.suggestion = '';
 				this.#startTurn();
 				this.#requestStarted();
-				if (this.#sending?.state === 'sending') this.#setSend('connecting');
+				// Without the model's answer reported, the wait is for the first token.
+				if (this.#sending?.state === 'sending') this.#setSend(ANSWER_REPORTED.has(this.backendId) ? 'connecting' : 'waiting');
 				break;
 			case 'compaction_start':
 				this.engineState = 'compacting';

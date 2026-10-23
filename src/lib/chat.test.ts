@@ -685,9 +685,60 @@ describe('reply timing', () => {
 		try {
 			vi.setSystemTime(100);
 			const c = new ChatState();
-			c.backendId = 'claude';
+			c.backendId = 'codex';
+			c.handle({ type: 'user_message', content: 'q' } as never);
 			c.handle({ type: 'connecting' } as never);
 			expect(c.call).toEqual({ phase: 'ttft', since: 100 });
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('starts the next request when the tools are back on engines that announce only the first', () => {
+		vi.useFakeTimers();
+		try {
+			const c = new ChatState();
+			c.backendId = 'codex';
+			const at = (ms: number, ev: Record<string, unknown>) => {
+				vi.setSystemTime(ms);
+				c.handle(ev as never);
+			};
+			at(0, { type: 'connecting' });
+			at(500, { type: 'tool_start', call_id: 'a', name: 'bash' });
+			at(500, { type: 'tool_start', call_id: 'b', name: 'bash' });
+			at(900, { type: 'tool_output', call_id: 'a', name: 'bash', output: '' });
+			// b still runs: no request yet, and the indicator says so.
+			expect(c.call).toBeNull();
+			expect(c.phase).toBe('tool');
+			at(1200, { type: 'tool_output', call_id: 'b', name: 'bash', output: '' });
+			expect(c.call).toEqual({ phase: 'ttft', since: 1200 });
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('keeps a claude request generating while it writes a tool call, until its usage', () => {
+		vi.useFakeTimers();
+		try {
+			const c = new ChatState();
+			c.backendId = 'claude';
+			const at = (ms: number, ev: Record<string, unknown>) => {
+				vi.setSystemTime(ms);
+				c.handle(ev as never);
+			};
+			at(0, { type: 'connecting' });
+			at(200, { type: 'thinking_start' });
+			at(800, { type: 'assistant_delta', delta: 'writing' });
+			at(1000, { type: 'tool_start', call_id: 'w', name: 'write' });
+			expect(c.call).toEqual({ phase: 'output', since: 800 });
+			expect(c.phase).toBe('generating');
+			at(5000, { type: 'usage', input_tokens: 10, output_tokens: 900 });
+			expect(c.call).toBeNull();
+			expect(c.phase).toBe('tool');
+			at(5200, { type: 'tool_output', call_id: 'w', name: 'write', output: '' });
+			// This daemon reports the answer: the next request connects first.
+			at(5300, { type: 'connecting' });
+			expect(c.call).toEqual({ phase: 'connect', since: 5300 });
 		} finally {
 			vi.useRealTimers();
 		}
