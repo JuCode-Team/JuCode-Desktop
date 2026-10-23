@@ -15,6 +15,7 @@ export type ShortcutId =
 	| 'focusComposer'
 	| 'stop'
 	| 'sendNow'
+	| 'interruptSend'
 	| 'model'
 	| 'history'
 	| 'prevSession'
@@ -62,7 +63,8 @@ export const SHORTCUTS: Record<ShortcutId, Shortcut> = {
 	model: { key: 'm', mod: true, shift: true, group: 'composer' },
 	approvalMode: { key: 'Tab', shift: true, group: 'composer' },
 	stop: { key: '.', mod: true, group: 'composer' },
-	sendNow: { key: 'Enter', mod: true, group: 'composer' }
+	sendNow: { key: 'Enter', mod: true, group: 'composer' },
+	interruptSend: { key: 'Enter', mod: true, shift: true, group: 'composer' }
 };
 
 /** A shortcut's keys, without its group. */

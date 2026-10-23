@@ -93,7 +93,7 @@
 	import { editors } from '$lib/editors.svelte';
 	import { provideFileCheck } from '$lib/fileCheck';
 	import { fadeOut, paneIn, paneOut, sideIn, sideOut } from '$lib/ui/motion';
-	import type { Msg } from '$lib/chat.svelte';
+	import type { Msg, SendNow } from '$lib/chat.svelte';
 	import type { SessionSwitch } from '$lib/composer/SessionSwitches.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
@@ -747,9 +747,9 @@
 		insertRefToken(picked.id, picked.text || picked.tag || 'element');
 	}
 
-	/** `now`: sent while a reply runs, the message goes in at once instead of
-	 *  waiting for the turn to end (the engine's `steer`). */
-	function submit(now = false) {
+	/** `now`: sent while a reply runs, the message does not wait for the turn
+	 *  to end: it joins the reply (`steer`) or stops it and goes (`interrupt`). */
+	function submit(now?: SendNow) {
 		const text = input.trim();
 		if (!text && attachments.length === 0 && videos.length === 0) return;
 		// A draft made for a requirement starts from it; the words go with it.
@@ -813,7 +813,7 @@
 			}
 			send({ op: 'user_message', content, images: imagePaths.length ? imagePaths : undefined });
 			// The engine queues it last: that one goes now.
-			if (now && chat.busy && !chat.restarting) send({ op: 'steer', index: -1 });
+			if (now && chat.busy && !chat.restarting) send(now === 'steer' ? { op: 'steer', index: -1 } : interruptFor(-1));
 		}
 		input = '';
 		attachments = [];
@@ -821,6 +821,14 @@
 		webRefs = [];
 		quotes = [];
 		if (prefs.scrollOnSend) jumpToBottom();
+	}
+	/** Stops the reply and sends queued message `index` now. An engine that
+	 *  cannot join a reply already stops it to steer (ACP): `steer` there,
+	 *  which a daemon from before `interrupt`'s `index` also does. */
+	function interruptFor(index: number) {
+		autoRetry.cancel(chat);
+		limitResume.cancel(chat);
+		return caps(chat).steer ? { op: 'interrupt' as const, index } : { op: 'steer' as const, index };
 	}
 	function stop() {
 		autoRetry.cancel(chat);
@@ -1506,6 +1514,7 @@
 				onSubmit={submit}
 				onStop={stop}
 				onSteer={(index) => send({ op: 'steer', index })}
+				onInterrupt={(index) => send(interruptFor(index))}
 				onUnqueue={(index) => send({ op: 'unqueue', index })}
 				onPick={pickFiles}
 				onModel={openModelPicker}

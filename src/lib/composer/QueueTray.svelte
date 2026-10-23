@@ -2,20 +2,23 @@
 	import CornerDownRightIcon from '@lucide/svelte/icons/corner-down-right';
 	import FastForwardIcon from '@lucide/svelte/icons/fast-forward';
 	import Undo2Icon from '@lucide/svelte/icons/undo-2';
+	import SquareArrowUpIcon from '@lucide/svelte/icons/square-arrow-up';
 	import { popOut } from '$lib/ui/motion';
 	import { t } from '$lib/i18n';
 
 	// Messages sent while a reply runs, inside the composer card above the
 	// editor (as an agent's questions are): each waits for the turn to end,
-	// goes now (`onSteer`) or comes back to the editor (`onUnqueue`).
-	// `joins`: the engine takes it into the running reply; otherwise sending
-	// now stops the reply first. The first `fixed` the engine has already.
+	// joins the running reply (`onSteer`, where the engine can: `joins`),
+	// stops the reply and goes now (`onInterrupt`), or comes back to the
+	// editor (`onUnqueue`). The first `fixed` the engine has already.
 	let {
 		messages,
 		fixed = 0,
 		joins,
 		hint = '',
+		interruptHint = '',
 		onSteer,
+		onInterrupt,
 		onUnqueue
 	}: {
 		messages: string[];
@@ -23,8 +26,12 @@
 		joins: boolean;
 		/** The shortcut that sends a typed message now, shown in the heading. */
 		hint?: string;
-		/** Sends queued message `index` now (absent: they only wait). */
+		/** The shortcut that stops the reply and sends a typed message. */
+		interruptHint?: string;
+		/** Sends queued message `index` into the running reply. */
 		onSteer?: (index: number) => void;
+		/** Stops the running reply and sends queued message `index` now. */
+		onInterrupt?: (index: number) => void;
 		/** Takes queued message `index` back to the editor. */
 		onUnqueue?: (index: number) => void;
 	} = $props();
@@ -33,7 +40,9 @@
 <div class="tray" out:popOut={{ y: 3 }}>
 	<div class="tray-head">
 		<span class="heading">{t('chat.queuedHeading')}</span>
-		<span class="meta">{t('chat.queuedMeta', { n: messages.length })}{#if hint && onSteer}{' · '}{t('chat.sendNowHint', { key: hint })}{/if}</span>
+		<span class="meta"
+			>{t('chat.queuedMeta', { n: messages.length })}{#if hint && onSteer && joins}{' · '}{t('chat.sendNowHint', { key: hint })}{/if}{#if interruptHint && onInterrupt}{' · '}{t('chat.interruptHint', { key: interruptHint })}{/if}</span
+		>
 	</div>
 	<div class="list" role="list" aria-label={t('chat.queuedHeading')}>
 		{#each messages as q, i (i)}
@@ -48,15 +57,14 @@
 							<Undo2Icon size={12} />{t('chat.unqueueAction')}
 						</button>
 					{/if}
-					{#if onSteer}
-						<button
-							type="button"
-							class="go"
-							onmousedown={(e) => e.preventDefault()}
-							onclick={() => onSteer(i)}
-							title={t(joins ? 'chat.steerJoinTitle' : 'chat.steerStopTitle')}
-						>
+					{#if onSteer && joins}
+						<button type="button" class="go" onmousedown={(e) => e.preventDefault()} onclick={() => onSteer(i)} title={t('chat.steerJoinTitle')}>
 							<FastForwardIcon size={12} />{t('chat.steerAction')}
+						</button>
+					{/if}
+					{#if onInterrupt}
+						<button type="button" class="go" onmousedown={(e) => e.preventDefault()} onclick={() => onInterrupt(i)} title={t('chat.interruptTitle')}>
+							<SquareArrowUpIcon size={12} />{t('chat.interruptAction')}
 						</button>
 					{/if}
 				{/if}

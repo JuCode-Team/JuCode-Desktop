@@ -42,7 +42,7 @@
 	import { answerStep, startFlow, togglePick, type QuestionFlow } from '$lib/composer/tray';
 	import { effortLabel } from '$lib/composer/effort';
 	import type { ModelRow } from '$lib/composer/modelRows';
-	import type { ChatState } from '$lib/chat.svelte';
+	import type { ChatState, SendNow } from '$lib/chat.svelte';
 	import type { AcpAgentRef } from '$lib/types';
 	import { buildApproveOp, type ApprovalMode, type ApproveOp } from '$lib/approval';
 	import { caps, BACKEND_LABELS, type BackendId } from '$lib/backends';
@@ -70,6 +70,7 @@
 		onSubmit,
 		onStop,
 		onSteer,
+		onInterrupt,
 		onUnqueue,
 		onPick,
 		onImage,
@@ -114,11 +115,14 @@
 		onSessionOption?: (id: string, value: string | boolean) => void;
 		/** ACP agents with a gateway mode (see ModelMenu). */
 		acpGateway?: { on: boolean; onChange: (on: boolean) => void };
-		/** `now`: a message sent while a reply runs goes in at once (steer). */
-		onSubmit: (now?: boolean) => void;
+		/** A message sent while a reply runs: `steer` joins the reply at once,
+		 *  `interrupt` stops it and goes now; else it waits for the turn. */
+		onSubmit: (now?: SendNow) => void;
 		onStop: () => void;
-		/** Sends queued message `index` now. */
+		/** Sends queued message `index` into the running reply. */
 		onSteer: (index: number) => void;
+		/** Stops the running reply and sends queued message `index` now. */
+		onInterrupt: (index: number) => void;
 		/** Takes queued message `index` back to the editor. */
 		onUnqueue: (index: number) => void;
 		onPick: () => void;
@@ -545,7 +549,7 @@
 	}
 	const saves = new PendingSaves();
 	// A pending question turns a typed message into its free-form answer.
-	function submit(now = false) {
+	function submit(now?: SendNow) {
 		if (!currentQ) return saves.send(() => onSubmit(now));
 		const text = input.trim();
 		if (!text) return;
@@ -682,11 +686,13 @@
 		}
 		if (e.key === 'Enter') {
 			// contenteditable would otherwise insert a <div>/<br>; we control both:
-			// plain Enter submits, Shift+Enter inserts a newline (rendered via pre-wrap),
-			// ⌘Enter while a reply runs sends the message in at once.
+			// plain Enter submits, Shift+Enter inserts a newline (rendered via pre-wrap);
+			// while a reply runs ⌘Enter sends the message in at once and ⌘⇧Enter
+			// stops the reply and sends it.
 			e.preventDefault();
-			if (e.shiftKey) insertTextAtCaret('\n');
-			else submit(chat.busy && !!matches(e, 'sendNow'));
+			if (chat.busy && matches(e, 'interruptSend')) submit('interrupt');
+			else if (e.shiftKey) insertTextAtCaret('\n');
+			else submit(chat.busy && matches(e, 'sendNow') ? 'steer' : undefined);
 		}
 	}
 
@@ -814,7 +820,16 @@
 	{/if}
 	<div class="composer" onfocusout={onComposerFocusOut}>
 		{#if chat.pendingMessages.length}
-			<QueueTray messages={chat.pendingMessages} fixed={chat.pendingFixed} joins={bcaps.steer} hint={shortcutLabel('sendNow')} onSteer={chat.busy ? onSteer : undefined} {onUnqueue} />
+			<QueueTray
+				messages={chat.pendingMessages}
+				fixed={chat.pendingFixed}
+				joins={bcaps.steer}
+				hint={shortcutLabel('sendNow')}
+				interruptHint={shortcutLabel('interruptSend')}
+				onSteer={chat.busy ? onSteer : undefined}
+				onInterrupt={chat.busy ? onInterrupt : undefined}
+				{onUnqueue}
+			/>
 		{/if}
 		{#if trayMode}
 			<ComposerTray

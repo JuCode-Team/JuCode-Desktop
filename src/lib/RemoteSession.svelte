@@ -903,6 +903,7 @@
 							fixed={chat.pendingMessages.length ? chat.pendingFixed : 0}
 							joins={bcaps.steer}
 							onSteer={chat.busy && chat.pendingMessages.length ? (index) => send({ op: 'steer', index }) : undefined}
+							onInterrupt={chat.busy && chat.pendingMessages.length ? (index) => send(bcaps.steer ? { op: 'interrupt', index } : { op: 'steer', index }) : undefined}
 							onUnqueue={chat.pendingMessages.length ? (index) => send({ op: 'unqueue', index }) : undefined}
 						/>
 					{/if}

@@ -45,6 +45,10 @@ export interface TurnStats {
 	segments: number;
 }
 
+/** A message sent while a reply runs that does not wait for the turn: it
+ *  joins the reply (`steer`), or stops it and goes now (`interrupt`). */
+export type SendNow = 'steer' | 'interrupt';
+
 /** A plan usage limit the engine reported. `window`: which one (`five_hour`,
  *  `seven_day`, `seven_day_opus`, `overage`…; empty if not said); `used`: its
  *  percent used; `overage`: paid usage past the plan is in use. */

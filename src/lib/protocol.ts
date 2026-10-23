@@ -48,7 +48,8 @@ export type Op =
 	| { op: 'unqueue'; index: number }
 	// JuCode: runs a failed turn again with no new message (SessionStore.retryTurn).
 	| { op: 'continue' }
-	| { op: 'interrupt' }
+	/** Stops the turn; with `index` (negative from the last), that queued message goes next, at once. */
+	| { op: 'interrupt'; index?: number }
 	| { op: 'shutdown' }
 	// Structured approval answer: `hunks` (edit tools, partial approval) is only
 	// valid with decision "allow"; `always` is whole-call only (never with hunks).
