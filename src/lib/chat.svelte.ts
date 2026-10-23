@@ -1639,6 +1639,9 @@ export class ChatState {
 				const status = str(ev.status) === 'message' ? (prev?.status ?? 'running') : str(ev.status);
 				const now = Date.now();
 				const ended = FINAL_AGENT.includes(status);
+				// The end of one started before the engine process (claude):
+				// nothing shown to end.
+				if (ended && !prev && !str(ev.label)) break;
 				this.subagents[path] = {
 					status,
 					message: str(ev.message) || (str(ev.status) === 'message' ? (prev?.message ?? '') : ''),
@@ -1747,14 +1750,25 @@ export class ChatState {
 							phases: arr<Record<string, unknown>>(w.phases).map((p) => ({ index: n(p.index), title: str(p.title) })),
 							agents: arr<Record<string, unknown>>(w.agents).map(agentRun)
 						};
-						// A Workflow stopped or failed leaves its agents at their last
+						// A Workflow that ended leaves its agents at their last reported
 						// state (the engine updates the run only): they are not running.
-						if (runState(run.status) !== 'running')
-							for (const a of run.agents) if (['running', 'queued'].includes(runState(a.state))) a.state = 'stopped';
+						// Completed, it ran them to the end; stopped or failed, not.
+						const end = runState(run.status);
+						if (end !== 'running')
+							for (const a of run.agents) if (['running', 'queued'].includes(runState(a.state))) a.state = end === 'done' ? 'completed' : 'stopped';
 						return run;
 					}),
 					agents: arr<Record<string, unknown>>(ev.agents).map(agentRun)
 				};
+				// The run list is the engine's own: a subagent it says ended has
+				// ended, though its lifecycle event never came (a reconnect, a
+				// restarted engine).
+				for (const a of this.agentRuns.agents) {
+					const life = this.subagents[a.id];
+					if (!life || life.endedAt || !a.state || ['running', 'queued'].includes(runState(a.state))) continue;
+					this.subagents[a.id] = { ...life, status: a.state, endedAt: Date.now() };
+					if (life.label) this.#finishAgentTools(life.label);
+				}
 				break;
 			}
 			case 'subagent_transcript': {

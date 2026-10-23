@@ -831,6 +831,9 @@ describe('claude session extras', () => {
 		// Stopped, its agents left mid-run are not running.
 		c.handle({ type: 'agent_runs', workflows: [{ id: 'w1', status: 'killed', agents: [{ id: 'a1', state: 'progress', started_at: 120 }, { id: 'a2', state: 'done' }] }], agents: [] });
 		expect(c.agentRuns.workflows[0].agents.map((a) => a.state)).toEqual(['stopped', 'done']);
+		// Completed, the last progress came before its last agents finished.
+		c.handle({ type: 'agent_runs', workflows: [{ id: 'w1', status: 'completed', agents: [{ id: 'a1', state: 'progress', started_at: 120 }] }], agents: [] });
+		expect(c.agentRuns.workflows[0].agents[0].state).toBe('completed');
 		c.handle({
 			type: 'subagent_transcript',
 			agent_id: 'a1',
@@ -1036,5 +1039,19 @@ describe('boundedOutput', () => {
 		expect(out.stdout.length).toBeLessThan(40_000);
 		const image = JSON.stringify({ kind: 'image', base64: 'A'.repeat(300_000) });
 		expect(JSON.parse(boundedOutput(image)).base64.length).toBe(300_000);
+	});
+});
+
+describe('subagent ends', () => {
+	it('ends a subagent the run list says ended, and starts no row for an unknown end', () => {
+		const c = new ChatState();
+		c.handle({ type: 'subagent_lifecycle', path: 'a1', label: 'Scan', status: 'running' } as never);
+		c.handle({ type: 'agent_runs', workflows: [], agents: [{ id: 'a1', status: 'running' }] } as never);
+		expect(c.subagents.a1.endedAt).toBeUndefined();
+		c.handle({ type: 'agent_runs', workflows: [], agents: [{ id: 'a1', status: 'killed' }] } as never);
+		expect(c.subagents.a1).toMatchObject({ status: 'killed' });
+		expect(c.subagents.a1.endedAt).toBeGreaterThan(0);
+		c.handle({ type: 'subagent_lifecycle', path: 'gone', label: '', status: 'stopped' } as never);
+		expect(c.subagents.gone).toBeUndefined();
 	});
 });
