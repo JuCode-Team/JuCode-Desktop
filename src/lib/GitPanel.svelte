@@ -1,4 +1,5 @@
 <script lang="ts">
+	import AnimatedCount from '$lib/ui/AnimatedCount.svelte';
 	import { onMount, untrack } from 'svelte';
 	import GitBranchIcon from '@lucide/svelte/icons/git-branch';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
@@ -484,7 +485,7 @@
 				{#each compareFiles as f (f.path)}
 					<div class="chg">
 						<span class="rvstat">
-							{#if f.added < 0}<span class="rvbin">bin</span>{:else}<span class="rvadd">+{f.added}</span><span class="rvdel">−{f.removed}</span>{/if}
+							{#if f.added < 0}<span class="rvbin">bin</span>{:else}<span class="rvadd">+<AnimatedCount value={f.added} /></span><span class="rvdel">−<AnimatedCount value={f.removed} /></span>{/if}
 						</span>
 						<button class="cpath" onclick={() => showRangeDiff(f.path)} title={f.path}>{f.path}</button>
 					</div>
@@ -936,6 +937,10 @@
 		font-family: var(--font-mono);
 		font-size: var(--fs-2xs);
 		justify-content: flex-end;
+	}
+	.rvadd,
+	.rvdel {
+		font-variant-numeric: tabular-nums;
 	}
 	.rvadd {
 		color: var(--ok);
