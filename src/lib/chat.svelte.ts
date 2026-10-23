@@ -1484,9 +1484,13 @@ export class ChatState {
 				this.compactionTokens = 0;
 				this.#cacheWatch.reset();
 				this.messages.push({ kind: 'system', text: 'context compacted' });
+				// An automatic compaction ends mid-turn and the turn carries on;
+				// only the turn's closing status would otherwise clear "compacting".
+				if (this.engineState === 'compacting') this.engineState = 'streaming';
 				break;
 			case 'compaction_failed':
 				this.messages.push({ kind: 'error', text: `compaction failed: ${str(ev.error)}` });
+				if (this.engineState === 'compacting') this.engineState = 'streaming';
 				break;
 			case 'goal':
 				this.goal = ev.goal ? (ev.goal as unknown as Goal) : null;

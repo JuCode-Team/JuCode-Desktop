@@ -310,6 +310,18 @@ describe('ChatState.handle', () => {
 		expect(c.messages.map((m) => m.kind)).toEqual(['user', 'system', 'system', 'error']);
 	});
 
+	it('leaves the compacting phase when a mid-turn compaction ends', () => {
+		const c = new ChatState();
+		c.handle({ type: 'connecting' });
+		c.handle({ type: 'compaction_start' });
+		expect(c.phase).toBe('compacting');
+		c.handle({ type: 'compaction_end' });
+		expect(c.busy).toBe(true);
+		expect(c.phase).not.toBe('compacting');
+		c.handle({ type: 'status', message: 'ready' });
+		expect(c.busy).toBe(false);
+	});
+
 	it('shows a retry as live state, not a log line, until output flows again', () => {
 		const c = new ChatState();
 		c.handle({ type: 'user_message', content: 'hi' });
