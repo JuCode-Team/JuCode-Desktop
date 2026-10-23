@@ -2204,6 +2204,44 @@ fn save_temp_image(data: Vec<u8>, ext: String) -> Result<String, String> {
     Ok(path.display().to_string())
 }
 
+/// Where custom themes keep their background images (theme.svelte.ts).
+fn theme_images_dir() -> PathBuf {
+    jucode_dir().join("themes")
+}
+
+/// Saves a custom theme's background image (JPEG bytes) and returns its path.
+/// The theme refers to this copy, so moving or deleting the picked file
+/// changes nothing.
+#[tauri::command]
+fn save_theme_image(data: Vec<u8>) -> Result<String, String> {
+    let dir = theme_images_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let path = dir.join(format!("bg-{stamp}.jpg"));
+    std::fs::write(&path, &data).map_err(|e| e.to_string())?;
+    Ok(path.display().to_string())
+}
+
+/// Removes an image `save_theme_image` saved; refuses any other path.
+#[tauri::command]
+fn delete_theme_image(path: String) -> Result<(), String> {
+    let path = PathBuf::from(path);
+    let named = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|n| n.starts_with("bg-"));
+    if !named || path.parent() != Some(theme_images_dir().as_path()) {
+        return Err("not a theme image".to_string());
+    }
+    match std::fs::remove_file(&path) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.to_string()),
+        _ => Ok(()),
+    }
+}
+
 /// Reads a UTF-8 text file (size-capped). Returns an error for binary/oversized files.
 #[tauri::command]
 fn read_text(path: String, root: Option<String>) -> Result<String, String> {
@@ -3405,6 +3443,8 @@ pub fn run() {
             write_text,
             git_head_text,
             save_temp_image,
+            save_theme_image,
+            delete_theme_image,
             check_environment,
             install_dependency,
             check_dependencies,

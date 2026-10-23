@@ -21,6 +21,21 @@
         try {
           var pref = localStorage.getItem('jucode-theme');
           var light = pref === 'light' || (pref !== 'dark' && matchMedia('(prefers-color-scheme: light)').matches);
+          // The mode's custom theme: its background, and its lightness picks
+          // the built-in theme under it (themeColors.ts isDark: WCAG
+          // luminance under 0.179 reads better with white text).
+          var themes = JSON.parse(localStorage.getItem('jucode-themes') || '{}');
+          var id = themes[light ? 'light' : 'dark'];
+          var custom = (themes.custom || []).filter(function (t) { return t.id === id; })[0];
+          var rgb = custom && /^#([0-9a-f]{6})$/i.exec(custom.bg);
+          if (rgb) {
+            var lum = [0, 2, 4].map(function (i) {
+              var c = parseInt(rgb[1].slice(i, i + 2), 16) / 255;
+              return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+            });
+            light = 0.2126 * lum[0] + 0.7152 * lum[1] + 0.0722 * lum[2] >= 0.179;
+            root.style.setProperty('--bg', custom.bg);
+          }
           root.setAttribute('data-theme', light ? 'light' : 'dark');
         } catch (e) {}
         if (location.pathname.indexOf('/remote') === 0) root.classList.add('remote-boot');

@@ -11,7 +11,7 @@
 
 import { fetchAccountInfo, fetchCloudSettings, putCloudSettings, readConfig, writeConfig, type CloudSettings } from './protocol';
 import { getLocale, LOCALES, setLocale, type Locale } from './i18n/core.svelte';
-import { setTheme, themeState, type ThemePref } from './theme.svelte';
+import { applySyncedThemes, setTheme, setThemeSlot, syncedThemes, themeState, type ThemePref } from './theme.svelte';
 import { prefs, TURN_STAT_KEYS, type TurnStatKey } from './prefs.svelte';
 import { loadBackendSettings, saveBackendSettings } from './backends/settings';
 import { isBackendId } from './backends';
@@ -62,6 +62,26 @@ const SPECS: Spec[] = [
 		key: 'ui.theme',
 		read: () => themeState.pref,
 		apply: (v) => (['system', 'light', 'dark'].includes(v as string) ? (setTheme(v as ThemePref), true) : false)
+	},
+	{
+		// Colors and names; each theme's background image stays on its computer.
+		key: 'ui.customThemes',
+		read: () => syncedThemes(),
+		apply: (v) => applySyncedThemes(v)
+	},
+	{
+		// After ui.customThemes, so the themes it names are there.
+		key: 'ui.themeSlots',
+		read: () => ({ light: themeState.light, dark: themeState.dark }),
+		apply: (v) => {
+			const slots = v as { light?: unknown; dark?: unknown } | null;
+			if (!slots || !isString(slots.light) || !isString(slots.dark)) return false;
+			// A theme this computer does not have (its list kept local changes).
+			if ([slots.light, slots.dark].some((id) => id && !themeState.custom.some((c) => c.id === id))) return false;
+			setThemeSlot('light', slots.light);
+			setThemeSlot('dark', slots.dark);
+			return true;
+		}
 	},
 	{
 		key: 'ui.vibrancy',

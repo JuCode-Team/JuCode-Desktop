@@ -13,7 +13,7 @@ const DEFAULT_FONT =
  *  before the defaults). Read in an `$effect`, it reruns when either
  *  changes. */
 export function terminalLook(): Pick<ITerminalOptions, 'theme' | 'fontFamily' | 'fontSize'> {
-	void themeState.value; // the palette is read from CSS, which follows it
+	void themeState.revision; // the palette is read from CSS, which follows the theme
 	const font = prefs.terminalFont.trim();
 	return {
 		theme: terminalPalette(),

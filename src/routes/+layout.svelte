@@ -56,6 +56,8 @@
 </script>
 
 {@render children()}
+<!-- A custom theme's background image (app.css .theme-backdrop). -->
+<div class="theme-backdrop" aria-hidden="true"></div>
 <!-- App-drawn replacements for the WebView's context menu and title tooltips. -->
 <ContextMenuHost />
 <TooltipHost />

@@ -236,6 +236,45 @@ body {
 	--vibrancy-chrome: color-mix(in oklab, var(--rail) 50%, transparent);
 }
 
+/* A custom theme's background image (theme.svelte.ts): a translucent layer
+   over the whole window, so every fill under it shows the image the same way
+   without each one turning translucent. It sits above the content (z ≤ 61)
+   and under the window-level menus, dialogs and notices (z ≥ 80), which stay
+   clear; a dropdown inside a page (Select) shares its page's layer and is
+   tinted with it. */
+.theme-backdrop {
+	display: none;
+}
+:root[data-backdrop] .theme-backdrop {
+	display: block;
+	position: fixed;
+	inset: 0;
+	z-index: 75;
+	pointer-events: none;
+	overflow: hidden;
+	opacity: var(--backdrop-opacity);
+}
+:root[data-os='macos'] .theme-backdrop {
+	border-radius: var(--r);
+}
+/* Bleeds past the window by twice the blur, so the blurred edges fade
+   outside it. */
+.theme-backdrop::before {
+	content: '';
+	position: absolute;
+	inset: calc(var(--backdrop-blur) * -2);
+	background: var(--backdrop-image) center / cover no-repeat;
+	filter: blur(var(--backdrop-blur));
+}
+:root[data-backdrop='contain'] .theme-backdrop::before {
+	background-size: contain;
+}
+:root[data-backdrop='tile'] .theme-backdrop::before {
+	background-size: auto;
+	background-repeat: repeat;
+	background-position: 0 0;
+}
+
 ::-webkit-scrollbar {
 	width: 10px;
 	height: 10px;

@@ -46,7 +46,8 @@
 	import { prefs, TURN_STAT_KEYS, vibrancySupported } from '$lib/prefs.svelte';
 	import { playChime } from '$lib/chime';
 	import { turnParts } from '$lib/turnStats';
-	import { themeState, setTheme, type ThemePref } from '$lib/theme.svelte';
+	import { themeState, setTheme, setThemeSlot, type ThemePref } from '$lib/theme.svelte';
+	import ThemeEditor from './ThemeEditor.svelte';
 	import type { ChatState, TurnStats } from '$lib/chat.svelte';
 	import { modelSetup } from '$lib/modelSetupState.svelte';
 	import { loginErrorSince } from '$lib/loginWatch';
@@ -623,6 +624,24 @@
 								]}
 								onChange={(v) => setTheme(v as ThemePref)}
 							/>
+						</SettingsRow>
+						{#if themeState.custom.length}
+							<!-- Following the system, both modes' colors; else only the fixed mode's. -->
+							{#each themeState.pref === 'system' ? (['light', 'dark'] as const) : [themeState.pref] as mode (mode)}
+								<SettingsRow id="theme-{mode}" title={t(`settings.themes.${mode}Slot`)} description={t(`settings.themes.${mode}SlotHint`)}>
+									<Select
+										value={themeState[mode]}
+										options={[
+											{ value: '', label: t(mode === 'light' ? 'settings.themes.builtinLight' : 'settings.themes.builtinDark') },
+											...themeState.custom.map((c) => ({ value: c.id, label: c.name || t('settings.themes.untitled') }))
+										]}
+										onChange={(v) => setThemeSlot(mode, v)}
+									/>
+								</SettingsRow>
+							{/each}
+						{/if}
+						<SettingsRow id="custom-themes" title={t('settings.themes.custom')} description={t('settings.themes.customHint')} stacked>
+							<ThemeEditor />
 						</SettingsRow>
 						{#if vibrancySupported()}
 							<SettingsRow id="vibrancy" title={t('settings.behavior.vibrancy')} description={t('settings.behavior.vibrancyHint')}>

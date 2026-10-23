@@ -49,6 +49,7 @@ export interface SearchRow {
 export const ROWS: SearchRow[] = [
 	{ section: 'general', id: 'language', titleKey: 'settings.language' },
 	{ section: 'general', id: 'theme', titleKey: 'settings.theme' },
+	{ section: 'general', id: 'custom-themes', titleKey: 'settings.themes.custom', descKey: 'settings.themes.customHint' },
 	{ section: 'general', id: 'vibrancy', titleKey: 'settings.behavior.vibrancy', descKey: 'settings.behavior.vibrancyHint' },
 	{ section: 'general', id: 'session-agent-icon', titleKey: 'settings.behavior.sessionAgentIcon', descKey: 'settings.behavior.sessionAgentIconHint' },
 	{ section: 'general', id: 'default-surface', titleKey: 'settings.behavior.defaultSurface', descKey: 'settings.behavior.defaultSurfaceHint' },
