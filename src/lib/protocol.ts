@@ -744,16 +744,19 @@ export function transcribeAudio(audioBase64: string, mime?: string, language?: s
 	return invoke('transcribe_audio', { audioBase64, mime, language });
 }
 
-/** Snapshot the working tree as a dangling checkpoint commit (returns its sha).
+/** Snapshot the working tree as a checkpoint commit (returns its sha), kept
+ *  under the session's turn when given (refs/jucode/checkpoints/<session>/<turn>).
  *  Non-destructive: it never touches the index or working tree. */
-export function gitCheckpointCapture(cwd: string): Promise<string> {
-	return invoke('git_checkpoint_capture', { cwd });
+export function gitCheckpointCapture(cwd: string, session?: string, turn?: number): Promise<string> {
+	return invoke('git_checkpoint_capture', { cwd, session, turn });
 }
 
-/** Restore the working tree to a checkpoint sha. Snapshots the current state
- *  first (returns that recovery sha) so nothing is unrecoverable. */
-export function gitCheckpointRestore(cwd: string, checkpoint: string): Promise<string> {
-	return invoke('git_checkpoint_restore', { cwd, checkpoint });
+/** Restore the working tree to a checkpoint: the sha given, else the one kept
+ *  for the session's turn. Snapshots the current state first (returns that
+ *  recovery sha, kept under refs/jucode/rewind-backup/<session>) so nothing is
+ *  unrecoverable. null: no checkpoint for that turn. */
+export function gitCheckpointRestore(cwd: string, checkpoint: string, session?: string, turn?: number): Promise<string | null> {
+	return invoke('git_checkpoint_restore', { cwd, checkpoint, session, turn });
 }
 
 /** One-shot LLM completion (no agent / no chat pollution) — powers AI commit

@@ -756,7 +756,7 @@
 			const cwd = activeCwd;
 			if (cwd && (c.backendId === 'codex' || c.backendId === 'claude')) {
 				const idx = c.userTurns;
-				gitCheckpointCapture(cwd)
+				gitCheckpointCapture(cwd, activeId, idx)
 					.then((sha) => {
 						if (sha) c.fileCheckpoints[idx] = sha;
 					})

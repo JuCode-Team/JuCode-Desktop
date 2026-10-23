@@ -7,6 +7,8 @@ const chat = {
 		actionDenied: '待确认动作 {id} 已拒绝',
 		rewindTitle: '回退到此轮并重写（会还原文件改动）',
 		rewindTitleN: '回退到此轮并重写（还原文件改动，丢弃后面 {n} 轮）',
+		rewindNoCheckpoint: '这一轮开始前没有文件快照，只回退了对话，文件未还原',
+		rewindRestoreFailed: '文件还原失败：{error}',
 		quoteTitle: '引用到输入框',
 		tokens: '{n} tokens',
 		// Composer
@@ -363,6 +365,8 @@ const chat = {
 		actionDenied: 'Pending action {id} denied',
 		reasoning: 'Reasoning',
 		rewindTitle: 'Rewind to this turn and rewrite (reverts file changes)',
+		rewindNoCheckpoint: 'No file snapshot was taken before this turn: only the conversation was rewound, files are unchanged',
+		rewindRestoreFailed: 'Could not restore the files: {error}',
 		quoteTitle: 'Quote into the composer',
 		tokens: '{n} tokens',
 		// Composer

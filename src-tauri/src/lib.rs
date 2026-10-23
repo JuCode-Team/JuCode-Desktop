@@ -2902,13 +2902,81 @@ fn git_plumb(dir: &Path, index: Option<&Path>, args: &[&str]) -> Result<String, 
     }
 }
 
-/// Snapshot the full working tree (tracked + untracked) as a dangling commit
-/// object, WITHOUT touching the user's index or working tree (uses an isolated
-/// temp index). Returns the commit sha — a rewind file-checkpoint. `Ok(String::new())`
-/// only if the tree is unwritable; errors bubble the git message.
+/// Where a session's checkpoints are kept: a ref per turn, so git's garbage
+/// collection keeps them and a restarted app finds them.
+const CHECKPOINT_REFS: &str = "refs/jucode/checkpoints";
+/// Checkpoints older than this are dropped when a new one is taken.
+const CHECKPOINT_DAYS: u64 = 30;
+
+/// A session id that goes into a ref name: letters, digits, `-` and `_` only.
+fn ref_safe(session: &str) -> Result<&str, String> {
+    if session.is_empty()
+        || session.len() > 128
+        || !session
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err(format!("invalid session id: {session}"));
+    }
+    Ok(session)
+}
+
+/// The ref of `session`'s checkpoint before turn `turn`.
+fn checkpoint_ref(session: &str, turn: u32) -> Result<String, String> {
+    Ok(format!("{CHECKPOINT_REFS}/{}/{turn}", ref_safe(session)?))
+}
+
+/// Drops the checkpoint refs older than `CHECKPOINT_DAYS` (of every session).
+fn prune_checkpoints(dir: &Path) {
+    let Ok(list) = git_plumb(
+        dir,
+        None,
+        &[
+            "for-each-ref",
+            "--format=%(refname) %(committerdate:unix)",
+            "refs/jucode/",
+        ],
+    ) else {
+        return;
+    };
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    for line in list.lines() {
+        let Some((name, at)) = line.rsplit_once(' ') else {
+            continue;
+        };
+        let at = at.parse::<u64>().unwrap_or(now);
+        if now.saturating_sub(at) > CHECKPOINT_DAYS * 86_400 {
+            let _ = git_plumb(dir, None, &["update-ref", "-d", name]);
+        }
+    }
+}
+
+/// Snapshot the full working tree (tracked + untracked) as a commit object,
+/// WITHOUT touching the user's index or working tree (uses an isolated temp
+/// index). Returns the commit sha — a rewind file-checkpoint. Given a session
+/// and turn, it is kept under that turn's ref (`checkpoint_ref`), replacing
+/// the one a rewound turn left there.
 #[tauri::command(async)]
-fn git_checkpoint_capture(cwd: String) -> Result<String, String> {
-    let dir = PathBuf::from(&cwd);
+fn git_checkpoint_capture(
+    cwd: String,
+    session: Option<String>,
+    turn: Option<u32>,
+) -> Result<String, String> {
+    let commit = checkpoint_commit(&cwd)?;
+    if let (Some(session), Some(turn)) = (session, turn) {
+        let dir = PathBuf::from(&cwd);
+        let name = checkpoint_ref(&session, turn)?;
+        git_plumb(&dir, None, &["update-ref", &name, &commit])?;
+        prune_checkpoints(&dir);
+    }
+    Ok(commit)
+}
+
+/// The working tree as a commit (on HEAD, if any).
+fn checkpoint_commit(cwd: &str) -> Result<String, String> {
+    let dir = PathBuf::from(cwd);
     let idx = std::env::temp_dir().join(format!("jucode-ckpt-{}.idx", std::process::id()));
     let _ = std::fs::remove_file(&idx);
     let has_head = git_plumb(&dir, None, &["rev-parse", "--verify", "HEAD"]).is_ok();
@@ -2935,24 +3003,47 @@ fn git_checkpoint_capture(cwd: String) -> Result<String, String> {
     Ok(commit)
 }
 
-/// Restore the working tree + index to a checkpoint commit. First snapshots the
-/// CURRENT state as a recovery commit (returned, so nothing is ever unrecoverable),
-/// then restores the checkpoint's paths. Files created after the checkpoint are
-/// left in place — this never deletes untracked work.
+/// Restore the working tree + index to a checkpoint: the sha given, else the
+/// one kept for `session`'s turn `turn`. First snapshots the CURRENT state as
+/// a recovery commit (returned, and kept under `refs/jucode/rewind-backup/
+/// <session>`), then restores the checkpoint's paths. Files created after the
+/// checkpoint are left in place — this never deletes untracked work.
+/// `Ok(None)`: no checkpoint for that turn.
 #[tauri::command(async)]
-fn git_checkpoint_restore(cwd: String, checkpoint: String) -> Result<String, String> {
-    if checkpoint.len() < 7
-        || checkpoint.len() > 64
-        || !checkpoint.chars().all(|c| c.is_ascii_hexdigit())
-    {
-        return Err(format!("invalid checkpoint sha: {checkpoint}"));
-    }
+fn git_checkpoint_restore(
+    cwd: String,
+    checkpoint: String,
+    session: Option<String>,
+    turn: Option<u32>,
+) -> Result<Option<String>, String> {
     let dir = PathBuf::from(&cwd);
-    git_plumb(&dir, None, &["cat-file", "-e", &checkpoint])
-        .map_err(|_| format!("checkpoint object not found: {checkpoint}"))?;
-    let safety = git_checkpoint_capture(cwd.clone())?;
+    let checkpoint = if !checkpoint.is_empty() {
+        if checkpoint.len() < 7
+            || checkpoint.len() > 64
+            || !checkpoint.chars().all(|c| c.is_ascii_hexdigit())
+        {
+            return Err(format!("invalid checkpoint sha: {checkpoint}"));
+        }
+        git_plumb(&dir, None, &["cat-file", "-e", &checkpoint])
+            .map_err(|_| format!("checkpoint object not found: {checkpoint}"))?;
+        checkpoint
+    } else {
+        let (Some(session), Some(turn)) = (session.as_deref(), turn) else {
+            return Err("no checkpoint given".to_string());
+        };
+        let name = checkpoint_ref(session, turn)?;
+        match git_plumb(&dir, None, &["rev-parse", "--verify", "--quiet", &name]) {
+            Ok(sha) if !sha.is_empty() => sha,
+            _ => return Ok(None),
+        }
+    };
+    let safety = checkpoint_commit(&cwd)?;
+    if let Some(session) = session.as_deref() {
+        let name = format!("refs/jucode/rewind-backup/{}", ref_safe(session)?);
+        git_plumb(&dir, None, &["update-ref", &name, &safety])?;
+    }
     git_plumb(&dir, None, &["checkout", &checkpoint, "--", "."])?;
-    Ok(safety)
+    Ok(Some(safety))
 }
 
 // --- terminal (real PTY) ---
@@ -3786,19 +3877,44 @@ mod tests {
         git(&["commit", "-q", "-m", "init"]);
         let cwd = dir.to_string_lossy().to_string();
         // Snapshot the "v1" state.
-        let cp0 = super::git_checkpoint_capture(cwd.clone()).unwrap();
+        let cp0 = super::git_checkpoint_capture(cwd.clone(), None, None).unwrap();
         assert!(!cp0.is_empty());
         // The agent modifies a tracked file and adds a new one.
         std::fs::write(dir.join("a.txt"), "v2").unwrap();
         std::fs::write(dir.join("b.txt"), "new").unwrap();
         // Restore to the checkpoint: a.txt reverts, current state saved as safety.
-        let safety = super::git_checkpoint_restore(cwd.clone(), cp0).unwrap();
+        let safety = super::git_checkpoint_restore(cwd.clone(), cp0, None, None)
+            .unwrap()
+            .unwrap();
         assert!(!safety.is_empty());
         assert_eq!(std::fs::read_to_string(dir.join("a.txt")).unwrap(), "v1");
         // Files created after the checkpoint are left in place (never deleted).
         assert!(dir.join("b.txt").exists());
         // A bogus sha is rejected without touching the tree.
-        assert!(super::git_checkpoint_restore(cwd, "nothex!!".into()).is_err());
+        assert!(super::git_checkpoint_restore(cwd.clone(), "nothex!!".into(), None, None).is_err());
+
+        // Kept under the session's turn: found again by session and turn,
+        // with the state before the rewind kept too.
+        std::fs::write(dir.join("a.txt"), "v3").unwrap();
+        let cp1 = super::git_checkpoint_capture(cwd.clone(), Some("s-1".into()), Some(2)).unwrap();
+        std::fs::write(dir.join("a.txt"), "v4").unwrap();
+        let back =
+            super::git_checkpoint_restore(cwd.clone(), String::new(), Some("s-1".into()), Some(2))
+                .unwrap()
+                .unwrap();
+        assert_eq!(std::fs::read_to_string(dir.join("a.txt")).unwrap(), "v3");
+        let refs =
+            String::from_utf8(git(&["for-each-ref", "--format=%(refname) %(objectname)"]).stdout)
+                .unwrap();
+        assert!(refs.contains(&format!("refs/jucode/checkpoints/s-1/2 {cp1}")));
+        assert!(refs.contains(&format!("refs/jucode/rewind-backup/s-1 {back}")));
+        // No checkpoint for that turn; a session id that is not a ref name.
+        assert_eq!(
+            super::git_checkpoint_restore(cwd.clone(), String::new(), Some("s-1".into()), Some(9))
+                .unwrap(),
+            None
+        );
+        assert!(super::git_checkpoint_capture(cwd, Some("../x".into()), Some(1)).is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

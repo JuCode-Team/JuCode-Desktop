@@ -1097,17 +1097,22 @@
 		const cwd = workDir;
 		if (!cwd || (c.backendId !== 'codex' && c.backendId !== 'claude')) return;
 		const idx = c.userTurns;
-		gitCheckpointCapture(cwd)
+		gitCheckpointCapture(cwd, session.id, idx)
 			.then((sha) => {
 				if (sha) c.fileCheckpoints[idx] = sha;
 			})
 			.catch(() => {});
 	}
-	// Restore the working tree to the checkpoint captured before the target turn.
+	// Restore the working tree to the checkpoint captured before the target turn:
+	// this run's, else the one kept for the session (an earlier run of the app).
 	function restoreCheckpoint(userIndex: number) {
 		const cwd = workDir;
-		const sha = chat.fileCheckpoints[userIndex];
-		if (cwd && sha) gitCheckpointRestore(cwd, sha).catch((e) => console.error('checkpoint restore failed', e));
+		if (!cwd) return;
+		gitCheckpointRestore(cwd, chat.fileCheckpoints[userIndex] ?? '', session.id, userIndex)
+			.then((safety) => {
+				if (safety === null) toast.info(t('chat.rewindNoCheckpoint'));
+			})
+			.catch((e) => toast.error(t('chat.rewindRestoreFailed', { error: String(e) })));
 	}
 
 	// Where a reply's relative paths are read from: the directory the engine
