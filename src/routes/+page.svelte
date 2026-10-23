@@ -525,6 +525,9 @@
 	/** Build the canvas for the current workspace: reconcile the persisted
 	 *  layout with this run's sessions (migrating old dock-only layouts by
 	 *  grafting a chat leaf) and focus the active session's tile. */
+	/** The session restore made active while the layout shows no
+	 *  conversation (the user closed them all): not opened for that. */
+	let shownNowhere = '';
 	function initTiles() {
 		tiles = reconcileLayout(
 			workspaces.active?.layout ?? null,
@@ -538,6 +541,7 @@
 			.map((l) => (l.active ? chatSessionOf(l.active) : null))
 			.find((sid) => sid != null);
 		if (front) store.activeId = front;
+		shownNowhere = chatSessionsIn(tiles).length ? '' : store.activeId;
 		const activeLeaf = store.activeId ? leafOfTab(tiles.root, chatPanel(store.activeId)) : null;
 		focusedLeaf = activeLeaf?.id ?? leavesOf(tiles.root)[0]?.id ?? null;
 		tilesReady = true;
@@ -646,7 +650,8 @@
 	// (sidebar click, ⌘N, resume, deep link…) opens or focuses it.
 	$effect(() => {
 		const id = store.activeId;
-		if (!tilesReady || !id) return;
+		if (!tilesReady || !id || id === shownNowhere) return;
+		shownNowhere = '';
 		untrack(() => revealChat(id));
 	});
 

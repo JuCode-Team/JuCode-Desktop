@@ -80,9 +80,9 @@ const REMOVED_PANELS = new Set(['changes', 'turns', 'diag', 'agents']);
  *   are stable across restore when the saved tabs carry `id` (see
  *   SavedProject.tabs), so only truly missing sessions (and legacy files
  *   saved without ids) lose their tile;
- * - a layout left without any chat tile gets one seeded for `seedSessionId` —
- *   an old dock-only layout keeps its panel arrangement and gains a chat leaf
- *   on the left (the pre-canvas shape, chat | panels);
+ * - a layout left without any chat tile because one's session is gone gets
+ *   one seeded for `seedSessionId`, on the left of its panels (chat |
+ *   panels); a saved layout the user closed every chat of stays without;
  * - garbage / absent input falls back to a single chat leaf (or an empty
  *   canvas when there is no session to seed);
  * - tabs of removed tool panels are dropped.
@@ -92,15 +92,21 @@ export function reconcileLayout(
 	liveSessionIds: string[],
 	seedSessionId: string | null
 ): TileLayout {
-	let layout = deserializeLayout(raw) ?? emptyLayout();
+	const saved = deserializeLayout(raw);
+	let layout = saved ?? emptyLayout();
 	const live = new Set(liveSessionIds);
+	// A conversation it showed is gone: one is shown instead.
+	let lost = false;
 	for (const leaf of leavesOf(layout.root)) {
 		for (const tab of leaf.tabs) {
 			const sid = chatSessionOf(tab.panel);
+			if (sid && !live.has(sid)) lost = true;
 			// Subagent pages (`subagent:*`) moved into the conversation's background tasks.
 			if ((sid && !live.has(sid)) || REMOVED_PANELS.has(tab.panel) || tab.panel.startsWith('subagent:')) layout = closeTab(layout, tab.id);
 		}
 	}
+	// A saved layout the user closed every conversation of stays that way.
+	if (saved && !lost) return layout;
 	if (!seedSessionId || chatSessionsIn(layout).length) return layout;
 	if (!layout.root) return singleLeafLayout([chatTab(seedSessionId)]);
 	return wrapRoot(layout, 'left', chatTab(seedSessionId), CHAT_SEED_RATIO);

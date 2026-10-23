@@ -13,6 +13,7 @@ import {
 } from './canvas';
 import {
 	activateTab,
+	emptyLayout,
 	leavesOf,
 	serializeLayout,
 	singleLeafLayout,
@@ -74,17 +75,21 @@ describe('openChatTab', () => {
 });
 
 describe('reconcileLayout', () => {
-	it('migrates a dock-only layout into the canvas by grafting one chat leaf on the left', () => {
-		const saved = serializeLayout(dockOnlyLayout());
-		const next = reconcileLayout(saved, ['s1'], 's1');
-		const root = next.root as SplitNode;
+	it('keeps a saved layout the user closed every conversation of', () => {
+		const panelsOnly = reconcileLayout(serializeLayout(dockOnlyLayout()), ['s1'], 's1');
+		expect(chatSessionsIn(panelsOnly)).toEqual([]);
+		expect(leavesOf(panelsOnly.root).flatMap((l) => l.tabs.map((t) => t.panel))).toEqual(['plan', 'git', 'term']);
+		expect(reconcileLayout(serializeLayout(emptyLayout()), ['s1'], 's1').root).toBeNull();
+	});
+
+	it('shows a conversation on the left when the only one shown is gone', () => {
+		const layout = openChatTab(dockOnlyLayout(), null, 'dead');
+		const root = reconcileLayout(serializeLayout(layout), ['s1'], 's1').root as SplitNode;
 		expect(root.kind).toBe('split');
 		expect(root.dir).toBe('row');
 		expect(root.ratio).toBe(CHAT_SEED_RATIO);
 		expect((root.a as LeafNode).tabs.map((t) => t.panel)).toEqual(['chat:s1']);
-		// The old panel arrangement survives untouched on the other side.
-		const panels = leavesOf(root.b).flatMap((l) => l.tabs.map((t) => t.panel));
-		expect(panels).toEqual(['plan', 'git', 'term']);
+		expect(leavesOf(root.b).flatMap((l) => l.tabs.map((t) => t.panel))).toEqual(['plan', 'git', 'term']);
 	});
 
 	it('drops chat tiles for dead sessions and keeps live ones', () => {
