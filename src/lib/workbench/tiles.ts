@@ -158,13 +158,15 @@ export function closeTab(layout: TileLayout, tabId: string): TileLayout {
 }
 
 /** Split leaf `leafId`, seeding the new sibling leaf with `tab`. left/top put
- *  the new leaf before the target, right/bottom after. Returns the new layout
- *  and the created leaf's id (for follow-up focus). */
+ *  the new leaf before the target, right/bottom after; `share` is the new
+ *  leaf's part of the area. Returns the new layout and the created leaf's id
+ *  (for follow-up focus). */
 export function splitLeaf(
 	layout: TileLayout,
 	leafId: string,
 	zone: Exclude<DropZone, 'center'>,
-	tab: TileTab
+	tab: TileTab,
+	share = 0.5
 ): { layout: TileLayout; leafId: string } {
 	const target = layout.root && findLeaf(layout.root, leafId);
 	if (!target || !layout.root) return { layout, leafId };
@@ -175,7 +177,7 @@ export function splitLeaf(
 		kind: 'split',
 		id: newId('s'),
 		dir,
-		ratio: 0.5,
+		ratio: clampRatio(first ? share : 1 - share),
 		a: first ? fresh : target,
 		b: first ? target : fresh
 	};

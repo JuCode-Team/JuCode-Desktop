@@ -31,9 +31,9 @@ describe('timeline', () => {
 		const q = user('fix');
 		const work = [tool('read'), reply('found'), tool('edit')];
 		const answer = reply('done', 1000);
-		const err: Msg = { kind: 'error', text: 'x' };
-		const { blocks, blockOf, foldOf } = timeline([q, ...work, answer, err], opts);
-		expect(blocks.map((b) => (b.fold ? 'fold' : b.item!.m.kind))).toEqual(['user', 'fold', 'assistant', 'error']);
+		const plan: Msg = { kind: 'plan', id: 'p', title: 't', text: '', status: 'pending' };
+		const { blocks, blockOf, foldOf } = timeline([q, ...work, answer, plan], opts);
+		expect(blocks.map((b) => (b.fold ? 'fold' : b.item!.m.kind))).toEqual(['user', 'fold', 'assistant', 'plan']);
 		expect(blocks[1]!.fold!.items.map((it) => it.m)).toEqual(work);
 		expect(blockOf.get(work[2]!)).toBe(1);
 		expect(foldOf.get(work[0]!)?.key).toBe(q);

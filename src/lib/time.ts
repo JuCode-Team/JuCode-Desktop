@@ -10,3 +10,11 @@ export function when(ms: number, now = new Date()): string {
 	const date = `${d.getMonth() + 1}/${d.getDate()}`;
 	return d.getFullYear() === now.getFullYear() ? `${date} ${time}` : `${d.getFullYear()}/${date} ${time}`;
 }
+
+/** How long ago, as a sidebar card shows it: `1m` (at least), `5h`, `3d`. */
+export function ago(ms: number, now = Date.now()): string {
+	const m = Math.max(1, Math.floor((now - ms) / 60_000));
+	if (m < 60) return `${m}m`;
+	const h = Math.floor(m / 60);
+	return h < 24 ? `${h}h` : `${Math.floor(h / 24)}d`;
+}

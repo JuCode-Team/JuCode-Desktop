@@ -4,6 +4,7 @@ import markedKatex from 'marked-katex-extension';
 import hljs from '$lib/hljs';
 import { t } from '$lib/i18n';
 import { codeFileRef, fileHref, splitFileRefs, type FileRef } from '$lib/fileRefs';
+import { fileIconHtml } from '$lib/fileIcons';
 
 // One configured instance for the whole app. Configuring the shared `marked`
 // singleton from each <Markdown> instance stacks the highlight extension and
@@ -32,10 +33,16 @@ const escapeHtml = (s: string) =>
 	s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const escapeAttr = (s: string) => escapeHtml(s).replace(/"/g, '&quot;');
 
-/** A file reference as a link the chat opens in the editor (see <Markdown>). */
-function fileLink(ref: FileRef, inner: string): string {
+/** A file reference as a link the chat opens in the editor (see <Markdown>),
+ *  led by its file type's icon (inside the code box when it is inline code). */
+function fileLink(ref: FileRef, text: string, asCode = false): string {
 	const where = ref.line ? `:${ref.line}${ref.col ? `:${ref.col}` : ''}` : '';
-	return `<a class="fileref" href="${escapeAttr(fileHref(ref))}" title="${escapeAttr(ref.path + where)}">${inner}</a>`;
+	const inner = fileIconHtml(ref.path) + escapeHtml(text);
+	return (
+		`<a class="fileref" href="${escapeAttr(fileHref(ref))}" title="${escapeAttr(ref.path + where)}">` +
+		(asCode ? `<code>${inner}</code>` : inner) +
+		`</a>`
+	);
 }
 
 // Wrap fenced code in a header (language label + copy button). The copy is wired
@@ -54,16 +61,15 @@ marked.use({
 			return (
 				`<div class="codeblock"><div class="cb-head">` +
 				`<span class="cb-lang">${escapeHtml(lang)}</span>` +
-				(named ? fileLink(named, escapeHtml(pathPart!)) : '') +
+				(named ? fileLink(named, pathPart!) : '') +
 				`<button class="cb-copy" type="button">${escapeHtml(t('common.copy'))}</button></div>` +
 				`<pre><code class="hljs${langCls}">${body}</code></pre></div>`
 			);
 		},
 		// Inline code that is all one file path opens it.
 		codespan(token: { text: string }) {
-			const code = `<code>${escapeHtml(token.text)}</code>`;
 			const ref = codeFileRef(token.text);
-			return ref ? fileLink(ref, code) : code;
+			return ref ? fileLink(ref, token.text, true) : `<code>${escapeHtml(token.text)}</code>`;
 		}
 	},
 	extensions: [
@@ -72,7 +78,7 @@ marked.use({
 			level: 'inline',
 			renderer(token) {
 				const ref = token as unknown as FileRef & { raw: string };
-				return fileLink(ref, escapeHtml(ref.raw));
+				return fileLink(ref, ref.raw);
 			}
 		}
 	]

@@ -145,7 +145,7 @@
 		{#each shots as shot, i (shot.url)}
 			<span class="shot">
 				<img src={shot.url} alt="" />
-				<button aria-label={t('shell.requirement.removeImage')} onclick={() => shots.splice(i, 1)}><XIcon size={12} /></button>
+				<button aria-label={t('shell.feedback.removeImage')} onclick={() => shots.splice(i, 1)}><XIcon size={12} /></button>
 			</span>
 		{/each}
 		{#if shots.length < MAX_SHOTS}

@@ -46,7 +46,7 @@ process with `jucode_gateway` and reopens the conversation, as for Claude
 Code / Codex.
 
 Built-in agents are also offered on paired phones (`src/lib/remote/engines.ts`:
-the remote picker, requirements), in scheduled tasks (`ScheduleDialog`:
+the remote picker), in scheduled tasks (`ScheduleDialog`:
 `engine: "acp"`, `options: { agent, jucode_gateway }`) and as a TUI handoff:
 "在终端中打开" asks the daemon for `session_tui`, which runs the agent's own
 TUI resuming the same conversation (`tuiHandoff.ts`; the remote page shows it

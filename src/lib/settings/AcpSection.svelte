@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { agentCatalog } from '$lib/agentCatalog.svelte';
 	// Settings → 编程智能体 → ACP: the built-in agents the daemon starts by
 	// id (read-only: whether each is installed), then the registry of Agent
 	// Client Protocol agents the desktop may launch (id, name, command, args,
@@ -61,6 +62,7 @@
 		acpPresets()
 			.then((list) => {
 				presets = list;
+				agentCatalog.presets = list;
 				presetsError = '';
 			})
 			.catch((e) => (presetsError = String(e)));
@@ -76,6 +78,7 @@
 		acpAgentsList()
 			.then((list) => {
 				agents = list;
+				agentCatalog.setAgents(list);
 				listError = '';
 				syncTexts();
 				for (const a of list) check(a.id);
@@ -94,6 +97,7 @@
 		acpAgentUpsert(agent)
 			.then((list) => {
 				agents = list;
+				agentCatalog.setAgents(list);
 				rowError[agent.id] = '';
 				syncTexts();
 				check(agent.id);
@@ -114,6 +118,7 @@
 		acpAgentRemove(id)
 			.then((list) => {
 				agents = list;
+				agentCatalog.setAgents(list);
 				listError = '';
 				syncTexts();
 			})
@@ -137,6 +142,7 @@
 		acpAgentUpsert({ id, name, command, args: tokenizeArgs(draft.args), env })
 			.then((list) => {
 				agents = list;
+				agentCatalog.setAgents(list);
 				draftError = '';
 				adding = false;
 				draft = { name: '', command: '', args: '', env: '' };

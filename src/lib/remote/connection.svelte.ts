@@ -13,7 +13,6 @@ import { deviceKey, hostStaticKey, type RelayHost } from '$lib/relay/pairing';
 import { RelaySocket, type RelayError, type RelayErrorKind } from '$lib/relay/socket';
 import { deviceName, remoteEndpoint } from '$lib/remote';
 import { RemoteProjects } from './store.svelte';
-import { Requirements, provideRequirements, type Requirement } from '$lib/requirements.svelte';
 import { loadLists, saveLists } from './cache';
 import type { DaemonSessionView } from '$lib/daemonState.svelte';
 import type { WorkspaceView } from './store.svelte';
@@ -23,7 +22,6 @@ import type { AcpPreset } from '$lib/protocol';
 type Lists = {
 	sessions: DaemonSessionView[];
 	workspaces: WorkspaceView[];
-	requirements: Requirement[];
 };
 
 /** The id of the LAN connection (relay computers use their host id). */
@@ -61,7 +59,6 @@ export class HostConnection {
 	readonly daemon: DaemonClient;
 	readonly daemonState: DaemonState;
 	readonly projects: RemoteProjects;
-	readonly requirements: Requirements;
 	/** Why the last relay connection failed (relay only). */
 	relayError = $state<RelayError | null>(null);
 	/** The daemon accepted this device at least once since the page opened. */
@@ -88,14 +85,12 @@ export class HostConnection {
 		});
 		this.daemonState = new DaemonState(this.daemon);
 		this.projects = new RemoteProjects(this.daemon, this.daemonState);
-		this.requirements = new Requirements(this.daemon);
 		this.everConnected = kind === 'lan';
 		// What this phone saw last shows until the computer is reached.
 		const kept = loadLists<Lists>(id);
 		if (kept) {
 			this.daemonState.sessions = kept.sessions ?? [];
 			this.projects.workspaces = kept.workspaces ?? [];
-			this.requirements.list = kept.requirements ?? [];
 			this.everConnected = true;
 		}
 	}
@@ -147,7 +142,6 @@ export class HostConnection {
 		this.daemon.onEvent = (frame) => {
 			this.daemonState.handle(frame);
 			this.projects.handle(frame);
-			this.requirements.handle(frame);
 			this.#keepLists();
 		};
 		// Notifications keep reaching this phone after the computer restarts
@@ -203,8 +197,7 @@ export class HostConnection {
 		this.#saveTimer = setTimeout(() => {
 			const lists: Lists = {
 				sessions: this.daemonState.sessions,
-				workspaces: this.projects.workspaces,
-				requirements: this.requirements.list
+				workspaces: this.projects.workspaces
 			};
 			saveLists(this.id, $state.snapshot(lists));
 		}, 1000);
@@ -241,7 +234,6 @@ const KEY = Symbol('remote-host');
 export function provideHost(conn: HostConnection) {
 	setContext(KEY, conn);
 	provideDaemonState(conn.daemonState);
-	provideRequirements(conn.requirements);
 }
 
 /** The computer this part of the remote page shows. */

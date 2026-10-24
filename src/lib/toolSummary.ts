@@ -106,8 +106,39 @@ export function parseToolOutput(output: string): Record<string, unknown> | null 
 
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
 
+/** What a call does, for counting a run's work (workSummary). */
+export type ToolKind = 'command' | 'edit' | 'read' | 'search' | 'web' | 'other';
+const KINDS: Record<string, ToolKind> = {
+	bash: 'command',
+	exec_command: 'command',
+	write: 'edit',
+	str_replace: 'edit',
+	hashline_edit: 'edit',
+	apply_patch: 'edit',
+	read: 'read',
+	outline: 'read',
+	ls: 'search',
+	ripgrep: 'search',
+	web_search: 'web',
+	web_fetch: 'web'
+};
+// ACP agents name a call by its title ("Edit a.rs"); what it does is the
+// ACP kind the daemon puts in its card.
+const ACP_KINDS: Record<string, ToolKind> = {
+	execute: 'command',
+	edit: 'edit',
+	delete: 'edit',
+	move: 'edit',
+	read: 'read',
+	search: 'search',
+	fetch: 'web'
+};
+export function toolKind(name: string, parsed: Record<string, unknown> | null): ToolKind {
+	return KINDS[name] ?? ACP_KINDS[str(parsed?.kind)] ?? 'other';
+}
+
 /** A call that edits or writes files. */
-export const isEdit = (name: string) => VERBS[name] === 'Edited' || VERBS[name] === 'Wrote';
+export const isEdit = (name: string, parsed: Record<string, unknown> | null) => toolKind(name, parsed) === 'edit';
 
 /** The files an edit call touched. */
 export function editedPaths(parsed: Record<string, unknown> | null): string[] {

@@ -79,24 +79,6 @@
 	let activeId = $state<string | null>(null);
 	const active = $derived(conns.find((c) => c.id === activeId) ?? conns[0] ?? null);
 
-	// A requirement a notification is about (`?requirement=`): shown on the
-	// computer that has it (the shown one first) once its list has arrived.
-	let wanted = $state<string | null>(null);
-	let showing = $state<{ conn: string; requirement: string; n: number } | null>(null);
-	function want(url: string) {
-		const id = new URL(url, location.origin).searchParams.get('requirement');
-		if (id) wanted = id;
-	}
-	$effect(() => {
-		const id = wanted;
-		if (!id) return;
-		const conn = [active, ...conns].find((c) => c?.requirements.get(id));
-		if (!conn) return;
-		wanted = null;
-		select(conn.id);
-		showing = { conn: conn.id, requirement: id, n: (showing?.n ?? 0) + 1 };
-	});
-
 	let mounted = $state(false);
 	/** The relay PWA, as opposed to a page served by a daemon on the LAN. */
 	let relayOrigin = $state(false);
@@ -255,12 +237,6 @@
 	}
 
 	onMount(() => {
-		want(location.href);
-		if (wanted) history.replaceState(null, '', location.pathname);
-		const fromWorker = (e: MessageEvent) => {
-			if (e.data?.type === 'jucode-open' && typeof e.data.url === 'string') want(e.data.url);
-		};
-		navigator.serviceWorker?.addEventListener('message', fromWorker);
 		embedded = inAppBrowser();
 		const onInstallPrompt = (e: Event) => {
 			e.preventDefault();
@@ -304,7 +280,6 @@
 				.catch(() => {});
 		}
 		return () => {
-			navigator.serviceWorker?.removeEventListener('message', fromWorker);
 			window.removeEventListener('beforeinstallprompt', onInstallPrompt);
 			for (const conn of conns) conn.stop();
 		};
@@ -629,7 +604,6 @@
 			onAdd={startAdding}
 			onForget={(ask) => forget(conn, ask)}
 			onRepair={repair}
-			show={showing?.conn === conn.id ? showing : null}
 		/>
 	{/each}
 </div>

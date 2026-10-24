@@ -14,6 +14,8 @@ vi.mock('./protocol', () => ({
 	chatsDir: vi.fn(() => Promise.resolve('/home/u/.jucode/chats')),
 	writeConfig: vi.fn(() => Promise.resolve()),
 	git: vi.fn(() => Promise.resolve('')),
+	worktreeCreate: vi.fn((repo: string, slug: string, base: string) => Promise.resolve({ path: `/tmp/wt/${slug}`, branch: `jucode/${slug}`, base, slug })),
+	worktreeRestore: vi.fn(() => Promise.resolve()),
 	sessionHistory: vi.fn(() =>
 		Promise.resolve([
 			{ session: 's6old', title: 'old chat', updated_at: 1_700_000_000_000, entries: 4, archived: false, agent: null, open: false, engine: 'jucode' },
@@ -24,8 +26,8 @@ vi.mock('./protocol', () => ({
 
 import { SessionStore, listedSessions } from './session.svelte';
 import { UNTITLED } from './chat.svelte';
-import { dispatch, dropHeldOps, holdOps, startDraft } from './backends/router';
-import { daemon, hostSession, closeSession, sendLine, git, writeConfig, sessionHistory, sessionMeta } from './protocol';
+import { dispatch, dropHeldOps, holdOps } from './backends/router';
+import { daemon, hostSession, closeSession, sendLine, git, writeConfig, sessionHistory, sessionMeta, worktreeCreate } from './protocol';
 import type { EngineSpec } from './daemon';
 import { setLocale } from './i18n';
 import { LOOSE_ID, type Project, type WorktreeMeta } from './types';
@@ -46,6 +48,121 @@ beforeEach(() => {
 });
 
 describe('SessionStore lifecycle', () => {
+	it('forks a conversation beside it, or into a worktree, from its first turns', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p);
+		begin(id);
+		await flush();
+		const src = p.sessions[0];
+		src.chat.title = '修 bug';
+		src.chat.messages = [
+			{ kind: 'user', text: 'one' },
+			{ kind: 'assistant', text: 're one' },
+			{ kind: 'user', text: 'two' },
+			{ kind: 'assistant', text: 're two' }
+		];
+		const fork = store.forkSession(id, 1)!;
+		await flush();
+		const s = p.sessions.find((x) => x.id === fork)!;
+		expect(p.sessions.indexOf(s)).toBe(p.sessions.indexOf(src) + 1);
+		expect(store.activeId).toBe(fork);
+		expect(s.chat.messages.map((m) => (m.kind === 'user' || m.kind === 'assistant' ? m.text : ''))).toEqual(['one', 're one']);
+		expect(s.forkedFrom).toEqual({ sid: src.chat.sessionId, title: '修 bug', turns: 1 });
+		expect(lastSpec()).toEqual({ engine: 'jucode', options: { fork_from: src.chat.sessionId, fork_turns: 1 } });
+		expect(src.chat.messages).toHaveLength(4);
+
+		// Into a worktree: its own, in the same project, reading the session from the original's folder.
+		const meta: WorktreeMeta = { isWorktree: true, mainRepoPath: '/tmp/p1', branch: 'fork/x', baseBranch: 'main', slug: 'fork-x' };
+		const inTree = store.forkSession(id, 2, { path: '/tmp/wt/fork-x', meta })!;
+		await flush();
+		const tree = p.sessions.find((x) => x.id === inTree)!;
+		expect(tree).toMatchObject({ cwd: '/tmp/wt/fork-x', worktree: meta });
+		expect(store.projects.some((x) => x.worktree)).toBe(false);
+		expect(lastSpec()?.options).toMatchObject({ fork_from: src.chat.sessionId, fork_turns: 2, fork_cwd: '/tmp/p1' });
+		expect(vi.mocked(hostSession).mock.calls.at(-1)![1]).toBe('/tmp/wt/fork-x');
+	});
+
+	it('a draft that chose a new worktree makes it with its first message, named from it', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		SessionStore.nameWorktree = vi.fn(() => Promise.resolve('Fix Login Redirect'));
+		const ready = vi.fn();
+		SessionStore.onWorktree = ready;
+		const id = store.addSession(p);
+		store.setDraftWorktree(id, 'main');
+		const s = p.sessions[0]!;
+		s.chat.optimisticUser('fix the login redirect');
+		begin(id);
+		await flush();
+		await flush();
+		expect(worktreeCreate).toHaveBeenCalledWith('/tmp/p1', 'fix-login-redirect', 'main', true);
+		expect(s).toMatchObject({ cwd: '/tmp/wt/fix-login-redirect', worktree: { branch: 'jucode/fix-login-redirect', baseBranch: 'main', slug: 'fix-login-redirect', mainRepoPath: '/tmp/p1' } });
+		expect(vi.mocked(hostSession).mock.calls.at(-1)![1]).toBe('/tmp/wt/fix-login-redirect');
+		expect(ready).toHaveBeenCalledWith(s, p);
+		SessionStore.nameWorktree = null;
+		SessionStore.onWorktree = null;
+	});
+
+	it('a worktree that cannot be made leaves the draft with its message back in the composer', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		vi.mocked(worktreeCreate).mockRejectedValueOnce('not a git repository');
+		const id = store.addSession(p);
+		store.setDraftWorktree(id, 'main');
+		const s = p.sessions[0]!;
+		s.chat.optimisticUser('do it');
+		begin(id);
+		await flush();
+		await flush();
+		expect(hostSession).not.toHaveBeenCalled();
+		expect(s.draft).toBe(true);
+		expect(s.draftWorktree).toEqual({ base: 'main' });
+		expect(s.chat.pendingFill).toBe('do it');
+		expect(s.chat.messages.some((m) => m.kind === 'user')).toBe(false);
+	});
+
+	it('deleting the session in front shows a live one, not a draft', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		const q = proj('p2');
+		store.projects.push(p, q);
+		store.addSession(q);
+		const live = store.addSession(q);
+		begin(live);
+		await flush();
+		const id = store.addSession(p);
+		store.removeSession(id);
+		expect(store.activeId).toBe(live);
+	});
+
+	it('forks a Claude conversation at the reply that ends the turn', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p, undefined, 'claude');
+		begin(id);
+		await flush();
+		const src = p.sessions[0];
+		src.chat.messages = [
+			{ kind: 'user', text: 'one' },
+			{ kind: 'assistant', text: 're one', uuid: 'u-1' },
+			{ kind: 'user', text: 'two' },
+			{ kind: 'assistant', text: 're two' }
+		];
+		store.forkSession(id, 1);
+		await flush();
+		expect(lastSpec()?.options).toMatchObject({ fork_from: src.chat.sessionId, resume_at: 'u-1' });
+		// A turn whose reply is not located forks nothing.
+		src.chat.messages = src.chat.messages.map((m) => (m.kind === 'assistant' ? { kind: 'assistant', text: m.text } : m));
+		vi.mocked(hostSession).mockClear();
+		expect(store.forkSession(id, 1)).toBeUndefined();
+		expect(hostSession).not.toHaveBeenCalled();
+	});
+
 	it('a sleeping session wakes on a plan decision, and any start ends its sleep', async () => {
 		const store = new SessionStore();
 		const p = proj();
@@ -148,6 +265,23 @@ describe('SessionStore lifecycle', () => {
 			JSON.stringify({ op: 'command', input: '/model opus high' }),
 			JSON.stringify({ op: 'user_message', content: 'hi' })
 		]);
+	});
+
+	it('a Claude Code draft starts on the custom provider picked for it, and only the start names it', async () => {
+		const store = new SessionStore();
+		const p = proj();
+		store.projects.push(p);
+		const id = store.addSession(p);
+		await store.switchBackend(id, 'claude');
+		store.setDraftToolProvider(id, 'my-api', 'glm-4.6');
+		const s = p.sessions[0];
+		expect(s.chat.model).toBe('glm-4.6');
+		begin(id);
+		await flush();
+		expect(lastSpec()).toMatchObject({ engine: 'claude', options: { jucode_gateway: false, tool_provider: 'my-api' } });
+		expect(s.draftToolProvider).toBeUndefined();
+		const lines = vi.mocked(sendLine).mock.calls.filter(([sid]) => sid === id).map(([, l]) => l);
+		expect(lines[0]).toBe(JSON.stringify({ op: 'command', input: '/model glm-4.6' }));
 	});
 
 	it('an ACP draft starts with its picks as start options, not a /model the agent cannot take yet', async () => {
@@ -1009,7 +1143,6 @@ describe('switching workspaces and back', () => {
 		const draft = store.addSession(p, undefined, undefined, undefined, '/tmp/elsewhere');
 		const d = store.allSessions.find((x) => x.id === draft)!;
 		d.draftPick = { model: 'm-2', effort: 'high' };
-		d.requirement = 'R-1';
 		const running = store.addSession(p);
 		begin(running);
 		await flush();
@@ -1024,7 +1157,7 @@ describe('switching workspaces and back', () => {
 		await store.restore(saved);
 		const back = store.allSessions.find((x) => x.id === draft)!;
 		expect(back).toBe(d);
-		expect(back).toMatchObject({ draft: true, cwd: '/tmp/elsewhere', requirement: 'R-1', draftPick: { model: 'm-2', effort: 'high' } });
+		expect(back).toMatchObject({ draft: true, cwd: '/tmp/elsewhere', draftPick: { model: 'm-2', effort: 'high' } });
 		expect(dropHeldOps(running)).toEqual([{ op: 'user_message', content: 'queued' }]);
 	});
 });
@@ -1059,36 +1192,26 @@ describe('session order and pins', () => {
 		expect(p.sessions.find((s) => s.chat.title === 'c')!.pinned).toBeUndefined();
 	});
 
-	it('a dragged session lands before or after its target; new sessions join at the start', () => {
-		const { store, p, id } = three();
-		store.moveSession(id('c'), id('a'), false);
-		expect(titles(p)).toEqual(['c', 'a', 'b']);
-		store.moveSession(id('c'), id('b'), true);
-		expect(titles(p)).toEqual(['a', 'b', 'c']);
-		store.moveSession(id('a'), id('a'), true);
-		expect(titles(p)).toEqual(['a', 'b', 'c']);
-		store.setPinned(id('b'), true);
-		store.setPinned(id('c'), true);
-		store.moveSession(id('c'), id('b'), false);
-		expect(titles(p)).toEqual(['c', 'b', 'a']);
+	it('new sessions join at the start, after the pinned ones', () => {
+		const { store, p } = three();
+		store.setPinned(p.sessions.find((s) => s.chat.title === 'c')!.id, true);
 		started(store, p, 'd');
-		expect(titles(p)).toEqual(['c', 'b', 'd', 'a']);
+		expect(titles(p)).toEqual(['c', 'd', 'a', 'b']);
 	});
 
 	it('order and pins survive serialize and restore', async () => {
 		const { store, id } = three();
 		await flush();
-		store.moveSession(id('a'), id('c'), true);
 		store.setPinned(id('c'), true);
 		const saved = store.serialize();
 		expect(saved[0].tabs!.map((t) => [t.title, t.pinned])).toEqual([
+			['a', undefined],
 			['b', undefined],
-			['c', true],
-			['a', undefined]
+			['c', true]
 		]);
 		const again = new SessionStore();
 		await again.restore(saved);
-		expect(titles(again.projects[0])).toEqual(['c', 'b', 'a']);
+		expect(titles(again.projects[0])).toEqual(['c', 'a', 'b']);
 	});
 });
 
@@ -1476,33 +1599,6 @@ describe('daemon sessions', () => {
 		// A built-in ACP agent's run (a scheduled task's) keeps its preset.
 		const ompId = store.openDaemonSession('/srv/ops', 'daemon-4', null, 'acp', false, 'omp');
 		expect(store.allSessions.find((x) => x.id === ompId)?.acpAgent).toEqual({ id: 'omp', name: 'omp', preset: true });
-	});
-});
-
-describe('SessionStore: a session started on a requirement', () => {
-	it('begins the requirement once the daemon names it, in the mode the work runs in', async () => {
-		const store = new SessionStore();
-		const p = proj('rq');
-		store.projects.push(p);
-		const id = store.addSession(store.projects[0]);
-		const s = store.allSessions.find((x) => x.id === id)!;
-		s.chat.approvalMode = 'plan';
-		s.requirement = 'R-7';
-		s.requirementStart = { plan: true, text: 'only the API' };
-		startDraft(id);
-		await flush();
-		expect(vi.mocked(daemon.request)).toHaveBeenCalledWith(
-			expect.objectContaining({
-				op: 'requirement_begin',
-				requirement: 'R-7',
-				session: `conv-${id}`,
-				plan: true,
-				mode: 'edits',
-				text: 'only the API'
-			})
-		);
-		expect(s.requirement).toBeUndefined();
-		expect(s.requirementStart).toBeUndefined();
 	});
 });
 

@@ -20,6 +20,7 @@
 	   for ~11px so it matches the icons' 1.5px. */
 	--quote-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z'/%3E%3Cpath d='M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z'/%3E%3C/svg%3E");
 	--globe-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20'/%3E%3Cpath d='M2 12h20'/%3E%3C/svg%3E");
+	--file-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z'/%3E%3Cpath d='M14 2v4a2 2 0 0 0 2 2h4'/%3E%3C/svg%3E");
 
 	--brand: #8b5cf6;
 	--brand-bright: #a78bfa;
@@ -30,15 +31,15 @@
 	--accent-soft: rgba(255, 255, 255, 0.08);
 	--on-accent: #171717;
 
-	--bg: #1a1a1a;
-	--sidebar: #202020;
-	--rail: #141414;
-	--panel: #262626;
+	--bg: #151515;
+	--sidebar: #121212;
+	--rail: #0e0e0e;
+	--panel: #202020;
 	--surface: rgba(255, 255, 255, 0.03);
 	--surface2: rgba(255, 255, 255, 0.06);
 	--hairline: rgba(255, 255, 255, 0.06);
-	--border: #2e2e2e;
-	--border-strong: #3a3a3a;
+	--border: #2a2a2a;
+	--border-strong: #343434;
 
 	--text: #ececec;
 	--dim: #a3a3a3;
@@ -228,8 +229,8 @@ body {
 /* Windows uses the same fills over Mica / Acrylic (the window is transparent
    there too, see tauri.windows.conf.json); Linux has no native frost. */
 :root[data-vibrancy='on'] {
-	--vibrancy-tint: color-mix(in oklab, var(--sidebar) 36%, transparent);
-	--vibrancy-chrome: color-mix(in oklab, var(--rail) 32%, transparent);
+	--vibrancy-tint: color-mix(in oklab, var(--sidebar) 64%, transparent);
+	--vibrancy-chrome: color-mix(in oklab, var(--rail) 60%, transparent);
 }
 [data-theme='light']:root[data-vibrancy='on'] {
 	--vibrancy-tint: color-mix(in oklab, var(--sidebar) 56%, transparent);

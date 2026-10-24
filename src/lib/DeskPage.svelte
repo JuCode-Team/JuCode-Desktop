@@ -2,85 +2,40 @@
 	import ActiveIcon from '$lib/icons/ActiveIcon.svelte';
 	import { paneOut } from '$lib/ui/motion';
 	// The workbench: a page over the content panel, like Settings. The nav
-	// lists what waits for the user (approvals deferred while nobody watched,
-	// requirements on the user's turn), the requirements and the scheduled
-	// tasks; the main column shows one of them.
+	// lists what waits for the user (approvals deferred while nobody watched)
+	// and the scheduled tasks; the main column shows one of them.
 	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
 	import InboxIcon from '@lucide/svelte/icons/inbox';
 	import CalendarIcon from '@lucide/svelte/icons/calendar';
-	import ListChecksIcon from '@lucide/svelte/icons/list-checks';
 	import Notice from '$lib/ui/Notice.svelte';
 	import DeskCard from '$lib/DeskCard.svelte';
 	import DeskClosed from '$lib/DeskClosed.svelte';
 	import ScheduleBoard from '$lib/ScheduleBoard.svelte';
-	import RequirementBoard from '$lib/requirements/RequirementBoard.svelte';
-	import RequirementDetail from '$lib/requirements/RequirementDetail.svelte';
-	import RequirementTag from '$lib/requirements/RequirementTag.svelte';
-	import { statusLabel } from '$lib/requirements/labels';
-	import type { StartHow } from '$lib/requirements/StartButton.svelte';
-	import { needsYou, useRequirements, type Requirement } from '$lib/requirements.svelte';
 	import { daemonState } from '$lib/daemonState.svelte';
 	import { t } from '$lib/i18n';
 
 	let {
 		page = $bindable('pending'),
-		requirementId = $bindable(null),
 		navWidth,
 		projects,
-		currentProject,
-		captureSignal = 0,
-		currentStep,
 		onClose,
-		onOpenSession,
-		onStartRequirement
+		onOpenSession
 	}: {
-		page?: 'pending' | 'requirements' | 'schedules';
-		/** The requirement shown on the requirements page; null for the list. */
-		requirementId?: string | null;
+		page?: 'pending' | 'schedules';
 		navWidth: number;
-		/** The open workspace's projects: its requirements are those about them
-		 *  (or about none), and sessions start in them. */
+		/** The open workspace's projects: scheduled tasks run in them. */
 		projects: { id: string; path: string; name: string }[];
-		/** The open project's id: new requirements are noted in it. */
-		currentProject?: string;
-		/** Bumped to focus the box that notes an idea. */
-		captureSignal?: number;
-		/** What a running session is doing now, when this computer shows it. */
-		currentStep?: (session: string) => string | undefined;
 		onClose: () => void;
 		onOpenSession: (session: string) => void;
-		onStartRequirement: (r: Requirement, how: StartHow) => void;
 	} = $props();
 
-	const reqs = useRequirements();
-	const projectIds = $derived(new Set(projects.map((p) => p.id)));
-	/** The open workspace's requirements: about its projects, or about none. */
-	const shownReqs = $derived(reqs.list.filter((r) => !r.project || projectIds.has(r.project)));
-	const yourTurn = $derived(shownReqs.filter(needsYou).sort((a, b) => b.updated_at - a.updated_at));
-	const shownReq = $derived(requirementId ? reqs.get(requirementId) : undefined);
-	const pending = $derived(daemonState.actions.length + yourTurn.length);
+	const pending = $derived(daemonState.actions.length);
 	const scheduleCount = $derived(daemonState.schedules.filter((s) => s.enabled).length);
 
 	function openPage(p: typeof page) {
 		page = p;
-		requirementId = null;
-	}
-	function openRequirement(id: string | null) {
-		page = 'requirements';
-		requirementId = id;
-	}
-	/** J: the next requirement on the user's turn (outside text fields). */
-	function onKey(e: KeyboardEvent) {
-		if (e.key !== 'j' || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || e.defaultPrevented) return;
-		const el = e.target as HTMLElement | null;
-		if (el?.closest('input, textarea, [contenteditable="true"]')) return;
-		if (!yourTurn.length) return;
-		e.preventDefault();
-		const i = yourTurn.findIndex((r) => r.id === requirementId);
-		openRequirement(yourTurn[(i + 1) % yourTurn.length].id);
 	}
 </script>
-<svelte:window onkeydown={onKey} />
 <div class="desk-page" out:paneOut|global>
 	<nav class="nav" style:width="{navWidth}px" aria-label={t('shell.desk.title')}>
 		<div class="nav-head">
@@ -95,11 +50,6 @@
 				<span class="label">{t('shell.desk.pending')}</span>
 				{#if pending}<span class="badge">{pending}</span>{/if}
 			</button>
-			<button class="item" class:on={page === 'requirements'} aria-current={page === 'requirements' ? 'page' : undefined} onclick={() => openPage('requirements')}>
-				<ActiveIcon icon={ListChecksIcon} size={16} active={page === 'requirements'} />
-				<span class="label">{t('shell.requirement.title')}</span>
-				{#if yourTurn.length}<span class="badge">{yourTurn.length}</span>{/if}
-			</button>
 			<button class="item" class:on={page === 'schedules'} aria-current={page === 'schedules' ? 'page' : undefined} onclick={() => openPage('schedules')}>
 				<ActiveIcon icon={CalendarIcon} size={16} active={page === 'schedules'} />
 				<span class="label">{t('shell.schedule.title')}</span>
@@ -112,32 +62,6 @@
 			<div class="col">
 				<ScheduleBoard {projects} {onOpenSession} />
 			</div>
-		{:else if page === 'requirements'}
-			{#if shownReq}
-				<div class="col wide">
-					{#key shownReq.id}
-						<RequirementDetail
-							requirement={shownReq}
-							{projects}
-							onBack={() => (requirementId = null)}
-							onStart={onStartRequirement}
-							onOpenSession={(s) => onOpenSession(s)}
-						/>
-					{/key}
-				</div>
-			{:else}
-				<div class="col">
-					<RequirementBoard
-						list={shownReqs}
-						{projects}
-						{currentProject}
-						focusSignal={captureSignal}
-						{currentStep}
-						onOpen={openRequirement}
-						onStart={onStartRequirement}
-					/>
-				</div>
-			{/if}
 		{:else}
 			<div class="col">
 				<h1>{t('shell.desk.pending')}</h1>
@@ -146,16 +70,6 @@
 				<section>
 					{#if pending === 0}<p class="empty">{t('shell.desk.nothingPending')}</p>{/if}
 					<div class="cards">
-						{#each yourTurn as r (r.id)}
-							<button class="req" onclick={() => openRequirement(r.id)}>
-								<span class="req-head">
-									<RequirementTag id={r.id} />
-									<span class="req-title">{r.title}</span>
-									<span class="req-status {r.status}">{statusLabel(r.status)}</span>
-								</span>
-								{#if r.last_reply}<span class="req-tail">{r.last_reply.replace(/\s+/g, ' ')}</span>{/if}
-							</button>
-						{/each}
 						{#each daemonState.actions as a (a.id)}
 							<DeskCard action={a} {onOpenSession} />
 						{/each}
@@ -294,11 +208,6 @@
 		padding: 56px 32px 80px;
 		animation: rise var(--t-med) var(--ease-out);
 	}
-	/* A requirement's two columns. */
-	.col.wide {
-		max-width: 1120px;
-		padding-top: 40px;
-	}
 	h1 {
 		margin: 0;
 		font-family: var(--font-sans);
@@ -322,52 +231,5 @@
 		display: flex;
 		flex-direction: column;
 		gap: 10px;
-	}
-	.req {
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-		width: 100%;
-		padding: 11px 13px;
-		border: 1px solid var(--hairline);
-		border-radius: var(--r);
-		background: var(--panel);
-		color: var(--text);
-		font: inherit;
-		text-align: left;
-		cursor: pointer;
-	}
-	.req:hover {
-		border-color: var(--border-strong);
-	}
-	.req-head {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		min-width: 0;
-		font-size: var(--fs-sm);
-	}
-	.req-title {
-		flex: 1;
-		min-width: 0;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	.req-status {
-		flex: none;
-		font-size: var(--fs-xs);
-		color: var(--warn);
-	}
-	.req-status.approval,
-	.req-status.failed {
-		color: var(--err);
-	}
-	.req-tail {
-		font-size: var(--fs-xs);
-		color: var(--dim);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
 	}
 </style>

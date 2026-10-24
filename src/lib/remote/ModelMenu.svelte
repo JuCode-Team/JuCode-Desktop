@@ -44,6 +44,8 @@
 			onJucode: boolean;
 			/** On this machine through one of the tool's custom providers: its name. */
 			custom?: string;
+			/** That provider's models (the list instead of the tool's catalog). */
+			customModels?: string[];
 			group: string;
 			catalog: { models: { name: string; context_window?: number }[]; groups: JucodeGroup[] } | null;
 			onSwitch: (gateway: boolean, model: string, group?: string) => void;
@@ -85,7 +87,13 @@
 	const modelName = $derived(currentRow?.label || chat.modelLabel || chat.model);
 
 	// Claude Code / Codex: one list of this machine's catalog and the gateway's.
-	const merged = $derived(tool ? toolModels(models, tool.catalog?.models ?? [], tool.onJucode) : []);
+	const merged = $derived.by((): ToolModel[] => {
+		if (!tool) return [];
+		// A custom provider serves its own models, nothing else.
+		if (!tool.onJucode && tool.customModels?.length)
+			return tool.customModels.map((id) => ({ key: id, label: id, vendor: id, local: id, active: id === current }));
+		return toolModels(models, tool.catalog?.models ?? [], tool.onJucode);
+	});
 	const running = $derived<ToolModel | undefined>(
 		merged.find((m) => m.key === current || m.local === current || m.jucode === current) ?? merged.find((m) => m.active)
 	);

@@ -5,7 +5,7 @@
 
 import { appDataRead, appDataWrite } from '$lib/protocol';
 import type { SavedProject, SavedTab } from '$lib/session.svelte';
-import type { SerializedLayout } from './tiles';
+import type { SavedView } from './view';
 import { normalizeColor, parseTabIcon, type TabIcon } from './tabChrome';
 import {
 	createWorkspace,
@@ -116,8 +116,8 @@ export class WorkspaceStore {
 		this.#schedule();
 	}
 
-	/** Replace the active workspace's dock tile layout. */
-	updateLayout(layout: SerializedLayout | null) {
+	/** Replace what the active workspace shows. */
+	updateLayout(layout: SavedView | null) {
 		const ws = this.active;
 		if (!ws) return;
 		ws.layout = layout;

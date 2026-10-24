@@ -13,6 +13,9 @@ export interface AcpAgentRef {
 export interface Session {
 	id: string;
 	chat: ChatState;
+	/** The conversation it was forked from: its engine id, its title then,
+	 *  and the user turns the fork took from it. */
+	forkedFrom?: { sid: string; title: string; turns: number };
 	/** Engine backend driving this session (persisted; 'jucode' default). */
 	backendId: BackendId;
 	/** Tab tag color (persisted with the session's saved tab). */
@@ -49,10 +52,24 @@ export interface Session {
 	/** Its working directory, when not its project's `path` (persisted). A
 	 *  session of no project always has one. */
 	cwd?: string;
+	/** The worktree it works in, its own (as t3code has it): `cwd` is its
+	 *  path (persisted). */
+	worktree?: WorktreeMeta;
+	/** A draft's choice of a new worktree from local branch `base`, made
+	 *  when its first message is sent (SessionStore.#makeWorktree). */
+	draftWorktree?: { base: string };
 	/** When it last changed, as the daemon lists it (ms; not persisted). */
 	updatedAt?: number;
+	/** When the user last restored it from the archive (ms): auto-archive
+	 *  counts from then (sidebar/autoArchive.ts). */
+	keptAt?: number;
 	/** Model and effort picked while a draft, applied when it starts. */
 	draftPick?: { model?: string; effort?: string };
+	/** Claude Code / Codex off the gateway: the custom provider a draft starts
+	 *  on (Settings → its tool), '' for the tool's own login or config. Unset:
+	 *  the tool's default provider. The daemon keeps a session on the one it
+	 *  started on. */
+	draftToolProvider?: string;
 	/** Claude Code / Codex / an ACP preset with a gateway mode: runs through
 	 *  the JuCode gateway on the user's JuCode login (only this session's
 	 *  process; their own config is left alone). Unset: as it last ran (the daemon remembers it). */
@@ -63,13 +80,6 @@ export interface Session {
 	/** Claude Code: the model a restored session last ran on, until its engine
 	 *  reports one (see SessionStore.#keepModel). */
 	model?: string;
-	/** The requirement a new session starts on: begun on it once the daemon
-	 *  names the session (not persisted). */
-	requirement?: string;
-	/** How it starts on `requirement` (a draft shows the start card until
-	 *  the user starts it): with a plan to confirm, the user's words, and
-	 *  the mode the work runs in (see `Requirements.begin`). */
-	requirementStart?: { plan: boolean; text?: string; mode?: string };
 }
 
 /** 并行任务（git worktree）项目的元数据，随项目布局持久化。 */
@@ -91,6 +101,10 @@ export interface Project {
 	/** 附加目录（绝对路径，不含主目录 path）：引擎在主目录启动时也能读写这些目录。
 	 *  随 workspaces.json 保存并同步给后台服务。 */
 	dirs?: string[];
+	/** Run in each new worktree of its sessions, in a terminal there (install
+	 *  dependencies, copy .env…), with JUCODE_PROJECT_ROOT and
+	 *  JUCODE_WORKTREE_PATH set. Saved with the workspace. */
+	setup?: string;
 	sessions: Session[];
 	/** 并行任务 worktree 项目才有；普通项目为 undefined。 */
 	worktree?: WorktreeMeta;

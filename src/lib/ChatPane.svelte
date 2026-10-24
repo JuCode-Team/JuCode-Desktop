@@ -48,11 +48,13 @@
 		git,
 		gitCheckpointCapture,
 		gitCheckpointRestore,
+		generateText,
 		resolveFileRef,
 		type FileTarget,
 		type Op
 	} from '$lib/protocol';
 	import { buildModelRows, providerModels, toolModels, type ToolModel } from '$lib/composer/modelRows';
+	import { draftProvider, loadToolProviders, toolProviderConfigs } from '$lib/toolProviders.svelte';
 	import { confirm } from '$lib/ui/confirm.svelte';
 	import { BACKEND_LABELS, caps } from '$lib/backends';
 	import { defaultEffort } from '$lib/composer/effort';
@@ -60,6 +62,7 @@
 	import { browser } from '$lib/browser.svelte';
 	import { prefs } from '$lib/prefs.svelte';
 	import { fileMention } from '$lib/fileMention';
+	import { attachmentToken, expandAttachments, type Attachment } from '$lib/composer/attachments';
 	import { followAfterScroll, fromEnd, followTop, shortOfEnd } from '$lib/chatFollow';
 	import { clickAnchor, type ClickAnchor } from '$lib/chatAnchor';
 	import { t } from '$lib/i18n';
@@ -68,6 +71,10 @@
 	import { editorStore } from '$lib/editor/editorStore.svelte';
 	import Composer from '$lib/Composer.svelte';
 	import MessageList from '$lib/MessageList.svelte';
+	import ForkDialog from '$lib/ForkDialog.svelte';
+	import GitForkIcon from '@lucide/svelte/icons/git-fork';
+	import { HANDOFF_SYSTEM, handoffPrompt } from '$lib/forkHandoff';
+	import { llmTarget } from '$lib/llmTarget';
 	import TurnRail from '$lib/TurnRail.svelte';
 	import StatusStrip from '$lib/composer/StatusStrip.svelte';
 	import ApprovalCard from '$lib/ApprovalCard.svelte';
@@ -76,6 +83,7 @@
 	import Button from '$lib/ui/Button.svelte';
 	import SideAnswers from '$lib/composer/SideAnswers.svelte';
 	import TaskPanel from '$lib/agents/TaskPanel.svelte';
+	import SubagentPage from '$lib/agents/SubagentPage.svelte';
 	import NewSessionPicker from '$lib/NewSessionPicker.svelte';
 	import { agentRows, backgroundCommands, handedOffWork, planShown, planSummary, tasksEntry, type AgentRow } from '$lib/agentProgress';
 	import { parseToolOutput, toolTarget, toolVerb } from '$lib/toolSummary';
@@ -106,11 +114,6 @@
 	import { autoRetry } from '$lib/autoRetry.svelte';
 	import { parseDelivery } from '$lib/delivery';
 	import { loadComposerExtras, loadComposerText, saveComposerExtras, saveComposerText } from '$lib/composerText';
-	import RequirementTag from '$lib/requirements/RequirementTag.svelte';
-	import { statusLabel } from '$lib/requirements/labels';
-	import { gateNext, gateOf, useRequirements } from '$lib/requirements.svelte';
-	import RequirementStart, { beginRequirement } from '$lib/requirements/RequirementStart.svelte';
-	import { telemetry } from '$lib/telemetry.svelte';
 
 	// One full conversation (transcript + composer + approvals + pickers) for a
 	// single session, extracted from the page so several chats can tile side by
@@ -124,8 +127,7 @@
 		isActive = false,
 		onRegister,
 		onUnregister,
-		onOpenSettings,
-		onOpenRequirement
+		onOpenSettings
 	}: {
 		session: Session;
 		store: SessionStore;
@@ -141,59 +143,19 @@
 		/** Passes the api back so a remount (tile drag) can't drop the fresh one. */
 		onUnregister?: (id: string, api: ChatPaneApi) => void;
 		onOpenSettings?: (section: SectionKey) => void;
-		/** Show a requirement on the workbench. */
-		onOpenRequirement?: (id: string) => void;
 	} = $props();
 
 	const chat = $derived(session.chat);
 	const project = $derived(store.projects.find((p) => p.sessions.some((s) => s.id === session.id)));
 	/** Where this session works: its own folder, else its project's. */
 	const workDir = $derived(store.cwdOf(session.id) || chat.cwd);
-	// The requirement this session works on (or, a draft, will once it starts).
-	const reqs = useRequirements();
-	const linked = $derived(chat.sessionId ? reqs.bySession.get(chat.sessionId) : undefined);
-	const willLink = $derived(!linked && session.requirement ? reqs.get(session.requirement) : undefined);
-	/** A draft made for a requirement shows its start card until started. */
-	const starting = $derived(session.draft && session.requirementStart ? willLink : undefined);
-	/** The start's confirmation, once this session's turn has ended. */
-	const gate = $derived(linked?.status === 'confirm' && !chat.busy ? gateOf(linked, chat.sessionId) : undefined);
-	let confirming = $state(false);
-	/** Confirms the gate's stage, with the composer's words. */
-	async function confirmGate() {
-		if (!linked || confirming) return;
-		confirming = true;
-		try {
-			await reqs.confirm(linked.id, input.trim());
-			input = '';
-		} catch (e) {
-			toast.error(e instanceof Error ? e.message : String(e));
-		} finally {
-			confirming = false;
-		}
-	}
-	/** A passage of a reply, noted as a requirement about this session's project. */
-	async function noteRequirement(text: string) {
-		try {
-			const r = await reqs.create({
-				text,
-				...(chat.sessionId ? { session: chat.sessionId } : project ? { project: project.id } : {})
-			});
-			telemetry.track('requirement_create');
-			toast.success(t('shell.requirement.noted', { id: r.id }), {
-				action: { label: t('shell.requirement.undo'), run: () => void reqs.remove(r.id).catch((e) => toast.error(e instanceof Error ? e.message : String(e))) }
-			});
-		} catch (e) {
-			toast.error(e instanceof Error ? e.message : String(e));
-		}
-	}
-
 	// Unsent text is kept per session: it survives switching away and restarts.
 	// svelte-ignore state_referenced_locally
 	let input = $state(loadComposerText(session.id));
 	$effect(() => saveComposerText(session.id, input));
 	// What else is not sent yet comes back with the pane (see the effect below).
 	type Extras = {
-		attachments: { path: string; image: boolean }[];
+		attachments: Attachment[];
 		videos: { path: string; frames: string[]; duration: number }[];
 		webRefs: PickedRef[];
 		refSeq: number;
@@ -202,7 +164,8 @@
 	};
 	// svelte-ignore state_referenced_locally
 	const kept = loadComposerExtras<Extras>(session.id);
-	let attachments = $state<{ path: string; image: boolean }[]>(kept?.attachments ?? []);
+	let attachments = $state<Attachment[]>(kept?.attachments ?? []);
+	let attachSeq = Math.max(0, ...(kept?.attachments ?? []).map((a) => a.id));
 	// Videos attach as extracted keyframes (images) + a text description — the
 	// engine protocol only understands image paths.
 	let videos = $state<{ path: string; frames: string[]; duration: number }[]>(kept?.videos ?? []);
@@ -418,10 +381,11 @@
 		// reported last time, marked with the draft's own pick.
 		if (session.draft) {
 			const pick = session.draftPick?.model;
-			// Never listed here yet: the provider's own catalog (a JuCode draft).
-			if (!chat.modelCatalog.length && chat.backendId === 'jucode')
+			// A JuCode draft: its provider's models as configured now (an engine's
+			// list comes from its probe, see engineProbe).
+			if (chat.backendId === 'jucode')
 				chat.modelCatalog = providerModels(
-					providersList.find((p) => p.id === chat.provider),
+					providersList.find((p) => p.id === chat.provider) ?? providersList.find((p) => p.id === 'jucode') ?? providersList[0],
 					chat.model
 				);
 			const models = chat.modelCatalog.map((m) => ({ ...m, active: pick ? m.model === pick : m.active }));
@@ -488,8 +452,18 @@
 	// engine can read it back.
 	const canOpenAgent = $derived(caps(chat).agentTrace);
 	function openTasks(agentId: string | null) {
-		chat.agentFocus = canOpenAgent ? agentId : null;
+		// A subagent opens as a page in place of the conversation.
+		if (agentId && canOpenAgent) {
+			chat.agentFocus = agentId;
+			chat.agentPage = agentId;
+			return;
+		}
+		chat.agentFocus = null;
 		chat.tasksOpen = true;
+	}
+	function closeAgentPage() {
+		chat.agentPage = null;
+		chat.agentFocus = null;
 	}
 	function traceOf(m: Msg): { label: string; run: () => void } | null {
 		if (m.kind !== 'tool' || !m.callId) return null;
@@ -506,7 +480,8 @@
 		return m ? `${toolVerb(m.name)} ${toolTarget(m.name, parseToolOutput(m.output))}`.trim() : '';
 	};
 	const allAgents = $derived(agentRows({ runs: chat.agentRuns, subagents: chat.subagents, lastTool }));
-	// The turn goes on while work it handed off runs (its work stays unfolded).
+	// The turn stays unfolded while work it handed off runs (which does not
+	// make the session working: sessionStatus).
 	const turnOpen = $derived(chat.busy || handedOffWork(allAgents, chat.bgTasks));
 	// The entry under the conversation: the plan's steps and the tasks that run.
 	const plan = $derived(planSummary(chat.plan));
@@ -564,6 +539,17 @@
 			return p.items.map((it) => ({ id: it.id, label: it.label, detail: it.detail, active: it.active, command: `/resume ${it.id}`, depth: nil }));
 		if (p.kind === 'checkpoint')
 			return p.items.map((it) => ({ id: it.id, label: it.label, detail: it.detail, active: it.active, command: `/rewind ${it.id}`, depth: nil }));
+		// A custom provider serves the models picked for it in Settings.
+		if (customProvider)
+			return customProvider.models.map((id) => ({
+				id,
+				label: id,
+				vendor: id,
+				detail: customProvider.name,
+				active: id === (session.draft ? (session.draftPick?.model ?? chat.model) : chat.model),
+				command: `/model ${id}`,
+				depth: nil
+			}));
 		// Model picker rows (pure packing in $lib/composer/modelRows): the active
 		// provider's models from the engine's model_view plus, for jucode
 		// sessions, the catalog of every other provider with credentials.
@@ -581,6 +567,30 @@
 			localLabel: t('chat.providerLocal'),
 			unsetWindow: t('chat.windowUnset')
 		});
+	});
+
+	// Claude Code / Codex: the custom provider the session runs on (its engine
+	// says), or a draft starts on (its pick, else the tool's default).
+	const customProvider = $derived.by(() => {
+		const tool = chat.backendId;
+		if (tool !== 'claude' && tool !== 'codex') return undefined;
+		if (!session.draft) return chat.toolProvider ?? undefined;
+		if (session.gateway) return undefined;
+		return draftProvider(tool, session.draftToolProvider);
+	});
+	$effect(() => {
+		const tool = chat.backendId;
+		if (tool === 'claude' || tool === 'codex') untrack(() => void loadToolProviders(tool).catch(() => {}));
+	});
+	// A draft on a custom provider shows a model it serves (the daemon starts
+	// it on the provider's default).
+	$effect(() => {
+		const p = customProvider;
+		if (session.draft && p && !p.models.includes(chat.model))
+			untrack(() => {
+				chat.model = p.model;
+				chat.modelLabel = '';
+			});
 	});
 
 	// Claude Code / Codex: the current model and where it can run, for the
@@ -621,7 +631,30 @@
 		return true;
 	}
 
-	async function pickProvider(m: ToolModel, choice: { local: true } | { group: string }) {
+	async function pickProvider(m: ToolModel, choice: { local: true } | { group: string } | { custom: string }) {
+		if ('custom' in choice) {
+			chat.closePicker();
+			const p = toolProviderConfigs[chat.backendId as 'claude' | 'codex']?.providers.find((x) => x.id === choice.custom);
+			store.setDraftToolProvider(session.id, choice.custom, p?.model);
+			return;
+		}
+		// A draft leaves its custom provider: for the tool's own config, or
+		// for the gateway on a model it serves.
+		if (session.draft && customProvider) {
+			chat.closePicker();
+			if ('local' in choice) {
+				// The provider's model may not be the tool's: its own default.
+				const own = chat.modelCatalog.find((x) => x.active)?.model ?? chat.modelCatalog[0]?.model;
+				store.setDraftToolProvider(session.id, '', own);
+				return;
+			}
+			const served = providers.includes('jucode') ? (providersList.find((p) => p.id === 'jucode')?.models ?? []) : [];
+			const model = m.jucode ?? served.find((g) => g.name === chat.model)?.name ?? served[0]?.name;
+			store.setDraftToolProvider(session.id, '');
+			await store.applyToolProfile(session.id, 'jucode', model);
+			store.setSessionGroup(session.id, choice.group);
+			return;
+		}
 		if (toolMode === 'jucode' && !('local' in choice)) {
 			store.setSessionGroup(session.id, choice.group);
 			return;
@@ -629,6 +662,8 @@
 		chat.closePicker();
 		if ('local' in choice) {
 			if (toolMode === 'jucode' && m.local) await switchTool('system', m.local);
+			// A draft names it: not the tool's default custom provider.
+			if (session.draft) store.setDraftToolProvider(session.id, '');
 			return;
 		}
 		// Set once the switch is confirmed; the gateway reads it per request.
@@ -668,16 +703,12 @@
 		if (!back) return;
 		chat.unqueued = null;
 		untrack(() => {
-			input = input.trim() ? `${back.content}\n${input}` : back.content;
-			for (const path of back.images) addAttachment(path);
+			// Its images' [图片 #n] become their placeholders again.
+			const ids = back.images.map((path) => addImage(path, undefined, false));
+			const content = back.content.replace(/\[图片 #(\d+)\]/g, (m, n: string) => (ids[Number(n) - 1] ? attachmentToken(ids[Number(n) - 1]) : m));
+			input = input.trim() ? `${content}\n${input}` : content;
 		});
 		composerEl?.focus();
-	});
-	$effect(() => {
-		if (!chat.pendingAttach.length) return;
-		const paths = chat.pendingAttach;
-		chat.pendingAttach = [];
-		for (const path of paths) addAttachment(path);
 	});
 	// This pane became the workbench-active one: its unread marker clears.
 	$effect(() => {
@@ -693,11 +724,20 @@
 			return;
 		}
 		if (isImage(path)) addImage(path);
-		else if (!attachments.some((a) => a.path === path)) attachments.push({ path, image: false });
+		else attach({ path, image: false });
 	}
 	// Images sit above the text as cards, sent in the order they were added.
-	function addImage(path: string) {
-		if (!attachments.some((a) => a.path === path)) attachments.push({ path, image: true });
+	function addImage(path: string, size?: number, chip = true) {
+		return attach({ path, image: true, size }, chip);
+	}
+	/** Adds it once, with its placeholder at the caret (`chip`); its id. */
+	function attach(a: Omit<Attachment, 'id'>, chip = true): number {
+		const had = attachments.find((x) => x.path === a.path);
+		if (had) return had.id;
+		const id = ++attachSeq;
+		attachments.push({ ...a, id });
+		if (chip) composerRef?.insertToken(attachmentToken(id));
+		return id;
 	}
 	async function pickFiles() {
 		const sel = await open({ multiple: true, title: t('shell.attachTitle') });
@@ -752,12 +792,6 @@
 	function submit(now?: SendNow) {
 		const text = input.trim();
 		if (!text && attachments.length === 0 && videos.length === 0) return;
-		// A draft made for a requirement starts from it; the words go with it.
-		if (starting && !text.startsWith('/')) {
-			beginRequirement(session, text);
-			input = '';
-			return;
-		}
 		if (text.startsWith('/')) {
 			const btw = caps(chat).sideQuestions ? text.match(/^\/btw\s+([\s\S]+)/) : null;
 			if (btw) chat.sideAnswers.push({ question: btw[1].trim(), answer: '', error: '', pending: true });
@@ -765,8 +799,10 @@
 		} else {
 			const sent = attachments.filter((a) => a.image).map((a) => a.path);
 			const imagePaths = [...sent];
-			const files = attachments.filter((a) => !a.image).map((a) => a.path);
-			let content = text;
+			const hasFiles = attachments.some((a) => !a.image);
+			const expanded = expandAttachments(text, attachments, fileMention);
+			const files = expanded.files;
+			let content = expanded.content;
 			// Expand each web-element token in place (order = its position in the
 			// text). Match by id so an edited descriptor still resolves; refs whose
 			// token was deleted are simply never expanded.
@@ -786,7 +822,7 @@
 			content = content.replace(/\n{3,}/g, '\n\n').trim();
 			// Revising a proposed plan: the message is the user's feedback on it.
 			const revising = chat.planRevising;
-			if (revising && !files.length && !videos.length && !imagePaths.length) {
+			if (revising && !hasFiles && !videos.length && !imagePaths.length) {
 				const plan = chat.messages.find((m) => m.kind === 'plan' && m.id === revising);
 				if (plan?.kind === 'plan') plan.status = 'revising';
 				chat.planRevising = null;
@@ -828,11 +864,13 @@
 	function interruptFor(index: number) {
 		autoRetry.cancel(chat);
 		limitResume.cancel(chat);
+		chat.stopping();
 		return caps(chat).steer ? { op: 'interrupt' as const, index } : { op: 'steer' as const, index };
 	}
 	function stop() {
 		autoRetry.cancel(chat);
 		limitResume.cancel(chat);
+		chat.stopping();
 		send({ op: 'interrupt' });
 	}
 	function respondApproval(op: ApproveOp) {
@@ -955,8 +993,9 @@
 		const want = prefs.thinkingSummaries;
 		if (chat.thinkingSummaries === null || chat.thinkingSummaries === want || thinkingAsked === want) return;
 		if (chat.busy || chat.restarting || chat.engineState === 'exited') return;
-		// Asleep: the engine it wakes to starts with the setting.
-		if (session.dormant) return;
+		// Asleep or a draft: the engine it wakes to (or starts) starts with the
+		// setting; asking a draft would start its engine.
+		if (session.dormant || session.draft) return;
 		thinkingAsked = want;
 		untrack(() => send({ op: 'command', input: `/thinking ${want ? 'on' : 'off'}` }));
 	});
@@ -1101,13 +1140,16 @@
 	// Real edit-and-resend: rewind the conversation (and files) to the turn that
 	// produced this user message, then drop its text back into the composer. The
 	// engine lists user turns in order, so the i-th turn matches the i-th message.
-	// Before each codex/claude turn, snapshot the working tree so a later rewind
-	// can restore files to this turn's starting state (the engines rewind only the
-	// conversation). Fire-and-forget; the sha lands under its turn index.
+	// Before each turn, snapshot the working tree so a later rewind can restore
+	// files to this turn's starting state (the engines rewind only the
+	// conversation) and a fork's worktree can start from it. Fire-and-forget;
+	// the sha lands under its turn index.
 	function captureCheckpoint() {
 		const c = chat;
 		const cwd = workDir;
-		if (!cwd || (c.backendId !== 'codex' && c.backendId !== 'claude')) return;
+		// Rewinds (Codex, Claude Code) and forks into a worktree restore them;
+		// an ACP agent does neither.
+		if (!cwd || c.backendId === 'acp') return;
 		const idx = c.userTurns;
 		gitCheckpointCapture(cwd, session.id, idx)
 			.then((sha) => {
@@ -1287,6 +1329,38 @@
 		else if (key === 'reveal' && abs) revealItemInDir(abs).catch((e) => toast.error(String(e)));
 	}
 
+	// A conversation the engine has (not a draft's) forks from a reply, here
+	// or in a worktree of its own (ForkDialog).
+	const canFork = $derived(caps(chat).fork && !!chat.sessionId && !session.draft);
+	let forkAt = $state<number | null>(null);
+
+	// A fork: the conversation it came from (when it is in this window), and
+	// what it found, written up for that conversation's composer.
+	const forkSource = $derived(session.forkedFrom ? store.allSessions.find((s) => s.chat.sessionId === session.forkedFrom!.sid) : undefined);
+	let bringing = $state(false);
+	async function bringBack() {
+		const from = session.forkedFrom;
+		const src = forkSource;
+		if (!from || bringing) return;
+		if (!src) return toast.error(t('chat.fork.sourceGone'));
+		const prompt = handoffPrompt(chat.messages, from.turns, (session.worktree ?? project?.worktree)?.branch);
+		if (!prompt) return toast.info(t('chat.fork.nothingYet'));
+		const llm = llmTarget(providersList, chat);
+		if (!llm) return toast.error(t('chat.fork.noModel'));
+		bringing = true;
+		try {
+			const text = (await generateText(llm.provider, llm.baseUrl, llm.format, llm.model, HANDOFF_SYSTEM, prompt)).trim();
+			if (!text) throw new Error(t('chat.fork.empty'));
+			// Into the original's composer, to read and send.
+			src.chat.pendingFill = text;
+			store.activeId = src.id;
+			toast.info(t('chat.fork.brought'));
+		} catch (e) {
+			toast.error(String(e));
+		} finally {
+			bringing = false;
+		}
+	}
 	function rewindToMessage(text: string, userIndex: number) {
 		// codex (thread/rollback) and claude (resume-at-uuid respawn) rewind without
 		// the jucode checkpoint_view round-trip — confirm directly from the index.
@@ -1345,8 +1419,8 @@
 	});
 	onDestroy(() => {
 		if (findDebounce != null) clearTimeout(findDebounce);
-		// Moving the tile to another leaf remounts the pane — stash the draft so
-		// the composer text survives the drag (pendingFill restores it).
+		// A conversation left long enough is unmounted (workbench/view.ts KEPT):
+		// stash the draft so the composer text survives (pendingFill restores it).
 		if (input.trim()) chat.pendingFill = input;
 	});
 </script>
@@ -1364,22 +1438,6 @@
 
 <div class="chatpane">
 	<div class="chatcol" style:--chat-w="{chatW}px" style:--chat-pad="{chatPad}px">
-		{#if linked}
-			<div class="owner">
-				<RequirementTag id={linked.id} />
-				<span class="owner-name">{linked.title}</span>
-				<span class="owner-role">{statusLabel(linked.status)}</span>
-				{#if onOpenRequirement}<button class="owner-link" onclick={() => onOpenRequirement(linked.id)}>{t('shell.requirement.viewRequirement')}</button>{/if}
-			</div>
-		{:else if willLink}
-			<div class="owner">
-				<RequirementTag id={willLink.id} />
-				<span class="owner-name">{t('shell.requirement.willLink', { id: willLink.id })}</span>
-				<span class="owner-role">{willLink.title}</span>
-				<button class="owner-link" onclick={() => ((session.requirement = undefined), (session.requirementStart = undefined))}>{t('shell.requirement.unlink')}</button>
-			</div>
-		{/if}
-
 		{#if showFind}
 			<FindBar
 				bind:value={findInput}
@@ -1395,10 +1453,26 @@
 		{/if}
 
 		<div class="mainwrap" bind:clientWidth={wrapW}>
+		{#if session.forkedFrom}
+			<!-- A fork: where it came from, and taking what it found back there. -->
+			<div class="forkbar">
+				<GitForkIcon size={14} />
+				{#if forkSource}
+					<button class="forklink" onclick={() => (store.activeId = forkSource!.id)} title={t('chat.fork.open')}>{t('chat.fork.from', { title: session.forkedFrom.title || forkSource.chat.title })}</button>
+				{:else}
+					<span>{t('chat.fork.from', { title: session.forkedFrom.title })}</span>
+				{/if}
+				{#if session.worktree ?? project?.worktree}<span class="forkbranch">{(session.worktree ?? project?.worktree)!.branch}</span>{/if}
+				<span class="grow"></span>
+				<Button size="sm" variant="ghost" onclick={bringBack} disabled={bringing || !forkSource || chat.busy} title={forkSource ? t('chat.fork.bringHint') : t('chat.fork.sourceGone')}>
+					{#if bringing}<LoaderCircleIcon size={14} class="spin" /> {t('chat.fork.bringing')}{:else}{t('chat.fork.bring')}{/if}
+				</Button>
+			</div>
+		{/if}
 		<main bind:this={scroller} onscroll={onScroll} onwheel={onWheel}>
 			<!-- Pressing inside the conversation (opening a card, selecting text) stops following the end: what was pressed stays under the pointer instead of being pushed up as the reply grows. -->
 			<div bind:this={contentEl} onpointerdowncapture={() => (atBottom = false)} oncontextmenu={onFileMenu} role="presentation">
-				<MessageList bind:this={messageList} bind:mark messages={chat.messages} follow={() => atBottom} busy={turnOpen} foldTurns={prefs.foldTurns} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onNote={noteRequirement} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} traceOf={traceOf} agents={allAgents} onOpenAgent={openAgent} tail={tasksEntryButton} onPlan={planAction} {planMode} onOpenPlan={(id) => planPages.open(session.id, id)} root={workDir || ''} onReveal={revealFile} onSchedule={scheduleFrom} scheduleCreated={(id) => daemonState.schedules.some((s) => s.origin === id)} onOpenSession={openChild} onOpenEdited={openEdited} />
+				<MessageList bind:this={messageList} bind:mark messages={chat.messages} follow={() => atBottom} busy={turnOpen} foldTurns={prefs.foldTurns} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} traceOf={traceOf} agents={allAgents} onOpenAgent={openAgent} tail={tasksEntryButton} onPlan={planAction} {planMode} onOpenPlan={(id) => planPages.open(session.id, id)} root={workDir || ''} onReveal={revealFile} onSchedule={scheduleFrom} scheduleCreated={(id) => daemonState.schedules.some((s) => s.origin === id)} onOpenSession={openChild} onOpenEdited={openEdited} onFork={canFork ? (keep) => (forkAt = keep) : undefined} />
 			</div>
 			{#if proposing}
 				<ScheduleDialog preset={proposing} projects={store.workspaceProjects} onClose={() => (proposing = null)} />
@@ -1412,10 +1486,6 @@
 				<div class="welcome spawning">
 					<span class="spawn-spin"><LoaderCircleIcon size={28} class="spin" /></span>
 					<p class="welcome-tip">{t('shell.spawning')}</p>
-				</div>
-			{:else if starting && chat.messages.length === 0}
-				<div class="welcome">
-					<RequirementStart requirement={starting} {session} />
 				</div>
 			{:else if chat.messages.length === 0 && !chat.busy}
 				<div class="welcome">
@@ -1492,15 +1562,6 @@
 				</div>
 			{/if}
 
-			{#if gate && !chat.pendingApproval}
-				<div class="approval-wrap" in:paneIn out:paneOut>
-					<div class="gate">
-						<span class="gate-hint">{t('shell.requirement.confirmHint')}</span>
-						<Button size="sm" variant="primary" disabled={confirming} onclick={confirmGate}>{t(`shell.requirement.${gateNext(gate)}`)}</Button>
-					</div>
-				</div>
-			{/if}
-
 			<Composer
 				{chat}
 				foot={statusBell}
@@ -1516,6 +1577,8 @@
 				onSteer={(index) => send({ op: 'steer', index })}
 				onInterrupt={(index) => send(interruptFor(index))}
 				onUnqueue={(index) => send({ op: 'unqueue', index })}
+				onDiscard={(index) => send({ op: 'unqueue', index, discard: true })}
+				onMove={(index, to) => send({ op: 'queue_move', index, to })}
 				onPick={pickFiles}
 				onModel={openModelPicker}
 				onModelSelect={selectRow}
@@ -1528,9 +1591,20 @@
 							model: toolModel.jucode ?? toolModel.key,
 							name: BACKEND_LABELS[chat.backendId],
 							local: toolModel.local !== undefined,
-							jucode: toolModel.jucode !== undefined,
+							// A draft may leave its custom provider for the gateway.
+							jucode: toolModel.jucode !== undefined || (!!customProvider && !!session.draft && providers.includes('jucode')),
 							onJucode: toolMode === 'jucode',
-							custom: chat.toolProvider?.name,
+							custom: customProvider?.name,
+							customs:
+								session.draft && (chat.backendId === 'claude' || chat.backendId === 'codex')
+									? (toolProviderConfigs[chat.backendId]?.providers ?? []).map((p) => ({
+											id: p.id,
+											name: p.name,
+											model: p.model,
+											models: p.models.length
+										}))
+									: undefined,
+							customId: customProvider?.id,
 							group: session.group ?? '',
 							groups: store.takesSessionGroup(session),
 							onPick: (choice) => pickProvider(toolModel, choice)
@@ -1554,10 +1628,15 @@
 				onRespond={respondApproval}
 			/>
 		</div>
+		{#if chat.agentPage}
+			<div class="agentpage" in:paneIn>
+				<SubagentPage {chat} agentId={chat.agentPage} rows={allAgents} parentTitle={chat.title || t('shell.untitled')} active={isActive} onOp={send} onOpen={(id) => openTasks(id)} onBack={closeAgentPage} />
+			</div>
+		{/if}
 	</div>
 	{#if chat.tasksOpen}
 		<aside class="tasks" aria-label={t('dock.agents.title')} in:sideIn out:sideOut>
-			<TaskPanel {chat} rows={allAgents} canOpen={canOpenAgent} onOp={send} onClose={() => (chat.tasksOpen = false)} />
+			<TaskPanel {chat} rows={allAgents} canOpen={canOpenAgent} onOp={send} onOpenAgent={(id) => openTasks(id)} onClose={() => (chat.tasksOpen = false)} />
 		</aside>
 	{/if}
 </div>
@@ -1611,6 +1690,24 @@
 	</Modal>
 {/if}
 
+{#if isActive && forkAt !== null}
+	<ForkDialog
+		repo={session.worktree?.mainRepoPath ?? project?.worktree?.mainRepoPath ?? project?.path ?? workDir ?? ''}
+		cwd={workDir ?? ''}
+		title={chat.title}
+		session={session.id}
+		keep={forkAt}
+		latest={forkAt >= chat.userTurns}
+		checkpoint={chat.fileCheckpoints[forkAt]}
+		onFork={(worktree) => {
+			const keep = forkAt!;
+			forkAt = null;
+			store.forkSession(session.id, keep, worktree);
+		}}
+		onClose={() => (forkAt = null)}
+	/>
+{/if}
+
 {#snippet statusBell()}<StatusStrip {chat} />{/snippet}
 
 <style>
@@ -1623,48 +1720,6 @@
 	.file-menu :global(.pm) {
 		top: 0;
 		min-width: 180px;
-	}
-	/* Whose session this is: a quiet line above the transcript. */
-	.owner {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		flex: none;
-		padding: 7px 16px;
-		border-bottom: 1px solid var(--hairline);
-		font-size: var(--fs-xs);
-		color: var(--dim);
-	}
-	.owner-name {
-		flex: 0 1 auto;
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		color: var(--text);
-		font-weight: 500;
-	}
-	.owner-role {
-		flex: 1;
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		color: var(--dim2);
-	}
-	.owner-link {
-		flex: none;
-		margin-left: auto;
-		padding: 0;
-		border: none;
-		background: none;
-		color: var(--dim);
-		font: inherit;
-		cursor: pointer;
-	}
-	.owner-link:hover {
-		color: var(--text);
-		text-decoration: underline;
 	}
 	.chatpane {
 		position: relative;
@@ -1682,6 +1737,15 @@
 		flex-direction: column;
 		min-width: 0;
 		min-height: 0;
+	}
+	/* A subagent's page covers the conversation, which stays mounted below. */
+	.agentpage {
+		position: absolute;
+		inset: 0;
+		z-index: 4;
+		display: flex;
+		flex-direction: column;
+		background: var(--bg);
 	}
 	/* The background tasks region: beside the conversation, or over it when
 	   the pane is too narrow for both. */
@@ -1771,16 +1835,6 @@
 		margin: 0 auto;
 		padding: 0 var(--chat-pad) 10px;
 	}
-	.gate {
-		display: flex;
-		align-items: center;
-		justify-content: flex-end;
-		gap: 12px;
-	}
-	.gate-hint {
-		font-size: var(--fs-xs);
-		color: var(--dim2);
-	}
 	.enginedown {
 		display: flex;
 		align-items: center;
@@ -1847,6 +1901,44 @@
 		min-height: 0;
 		display: flex;
 		flex-direction: column;
+	}
+	/* Over a fork's conversation, in its column: it does not scroll away. */
+	.forkbar {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		flex-shrink: 0;
+		padding: 6px max(var(--chat-pad), calc((100% - var(--chat-w)) / 2));
+		border-bottom: 1px solid var(--hairline);
+		color: var(--dim);
+		font-size: var(--fs-xs);
+	}
+	.forkbar > :global(svg) {
+		flex-shrink: 0;
+		color: var(--dim2);
+	}
+	.forklink {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		padding: 0;
+		border: none;
+		background: none;
+		color: var(--dim);
+		font: inherit;
+		cursor: pointer;
+	}
+	.forklink:hover {
+		color: var(--text);
+	}
+	.forkbranch {
+		flex-shrink: 0;
+		font-family: var(--font-mono);
+		color: var(--dim2);
+	}
+	.forkbar .grow {
+		flex: 1;
 	}
 	main {
 		flex: 1;

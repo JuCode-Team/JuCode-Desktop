@@ -9,6 +9,7 @@
 	import SessionMark from '$lib/SessionMark.svelte';
 	import { sessionStatus } from '$lib/sessionStatus';
 	import PlusIcon from '@lucide/svelte/icons/plus';
+	import XIcon from '@lucide/svelte/icons/x';
 	import ListChecksIcon from '@lucide/svelte/icons/list-checks';
 	import TargetIcon from '@lucide/svelte/icons/target';
 	import FilesIcon from '@lucide/svelte/icons/files';
@@ -36,6 +37,8 @@
 		listProviders,
 		listDir,
 		gitCheckpointCapture,
+		generateText,
+		git,
 		daemon
 	} from '$lib/protocol';
 	import { dispatch, isAsleep } from '$lib/backends/router';
@@ -57,40 +60,24 @@
 	import { autoRetry } from '$lib/autoRetry.svelte';
 	import { limitResume } from '$lib/limitResume.svelte';
 	import { refreshJucodeModels } from '$lib/jucodeModels';
-	import {
-		activateTab,
-		closeTab,
-		emptyLayout,
-		findLeaf,
-		leafOfTab,
-		leavesOf,
-		openTab,
-		serializeLayout,
-		splitLeaf,
-		type TileLayout,
-		type TileTab
-	} from '$lib/workbench/tiles';
-	import {
-		chatPanel,
-		chatSessionOf,
-		chatSessionsIn,
-		openChatTab,
-		openElsewhere as placeElsewhere,
-		projectOf,
-		projectPanel,
-		reconcileLayout
-	} from '$lib/workbench/canvas';
+	import { bare, canDrop, FRONT, keep, openTool, restoreView, saveView as savedView, viewKey, type View } from '$lib/workbench/view';
+	import { closeTab, leafOfTab, leavesOf, type TileLayout, type TileTab } from '$lib/workbench/tiles';
+	import Mosaic from '$lib/workbench/Mosaic.svelte';
+	import { staleSessions } from '$lib/sidebar/autoArchive';
+	import { terminals, watchTerminals } from '$lib/terminals.svelte';
+	import { agentCatalog } from '$lib/agentCatalog.svelte';
+	import { probeEngine } from '$lib/engineProbe';
+	import WorkspaceDialog from '$lib/workbench/WorkspaceDialog.svelte';
 	import { tuiBackendOf, tuiTabTitle } from '$lib/workbench/tuiTab';
 	import { canHandOffToTui, isValidResumeSessionId, presetOf } from '$lib/tuiHandoff';
 	import { inWorkspace, workspaceAlerts, type WorkspaceEntry } from '$lib/workbench/workspaces';
-	import type { TabIcon } from '$lib/workbench/tabChrome';
-	import Mosaic from '$lib/workbench/Mosaic.svelte';
 	import WorkspaceRail from '$lib/workbench/WorkspaceRail.svelte';
 	import TitleBar from '$lib/shell/TitleBar.svelte';
 	import ProjectMenu from '$lib/shell/ProjectMenu.svelte';
 	import { fade } from 'svelte/transition';
 	import TabChromePopover from '$lib/workbench/TabChromePopover.svelte';
 	import ChatPane, { type ChatPaneApi, type ProviderOption } from '$lib/ChatPane.svelte';
+	import { llmTarget as llmTargetOf } from '$lib/llmTarget';
 	import SettingsPage from '$lib/settings/SettingsPage.svelte';
 	import type { SectionKey } from '$lib/settings/nav';
 	import { folderName } from '$lib/agentImport';
@@ -101,15 +88,12 @@
 	import CommandPalette from '$lib/CommandPalette.svelte';
 	import ShortcutsDialog from '$lib/ShortcutsDialog.svelte';
 	import { matches } from '$lib/shortcuts';
-	import TaskDialog from '$lib/TaskDialog.svelte';
 	import DeskPage from '$lib/DeskPage.svelte';
 	import ProjectPage from '$lib/ProjectPage.svelte';
 	import FeedbackDialog from '$lib/FeedbackDialog.svelte';
 	import { telemetry } from '$lib/telemetry.svelte';
 	import { sendTelemetry } from '$lib/protocol';
-	import { Requirements, needsYou, provideRequirements, type Requirement } from '$lib/requirements.svelte';
-	import type { StartHow } from '$lib/requirements/StartButton.svelte';
-	import { normalizeBackendId, BACKEND_LABELS, type BackendId } from '$lib/backends';
+	import { BACKEND_LABELS, type BackendId } from '$lib/backends';
 	import Modal from '$lib/ui/Modal.svelte';
 	import BackendIcon from '$lib/BackendIcon.svelte';
 	import { daemonState } from '$lib/daemonState.svelte';
@@ -144,18 +128,6 @@
 	// read got the old map, so its new conversation showed as closed); a scan
 	// of a few hundred sessions per lookup costs nothing next to that.
 	const sessionById = (id: string) => store.allSessions.find((s) => s.id === id);
-	// The requirements on this computer (the daemon's list).
-	const requirements = new Requirements(daemon);
-	provideRequirements(requirements);
-	// A session at a requirement's start gate is held read-only by the daemon:
-	// it shows the engine's mode, and this client's mode is neither pushed
-	// over it nor saved from it (also when it was started elsewhere).
-	$effect(() => {
-		for (const s of allSessions) {
-			const sid = s.chat.sessionId;
-			if (sid && requirements.bySession.get(sid)?.gate?.session === sid) s.chat.followEngineMode = true;
-		}
-	});
 
 	let providers = $state<string[]>([]);
 
@@ -205,94 +177,44 @@
 	let showPalette = $state(false);
 	let showShortcuts = $state(false);
 	let showFeedback = $state(false);
-	// 「新建并行任务」对话框：为哪个（主仓库）项目开任务。
-	let taskDialogFor = $state<Project | null>(null);
-	// The workbench page: what waits for the user, the requirements, the
-	// scheduled tasks.
+	// The workbench page: what waits for the user, the scheduled tasks.
 	let showDesk = $state(false);
-	let deskPage = $state<'pending' | 'requirements' | 'schedules'>('pending');
-	let deskRequirement = $state<string | null>(null);
-	let captureSignal = $state(0);
+	let deskPage = $state<'pending' | 'schedules'>('pending');
 	/** `page`: the one to show; the last one shown otherwise. */
 	function openDesk(page?: typeof deskPage) {
-		if (page) {
-			deskPage = page;
-			deskRequirement = null;
-		}
+		if (page) deskPage = page;
 		showSettings = false;
 		showDesk = true;
 	}
-	// A project's page is a canvas tab like a conversation (one per project).
+	// What is shown right of the sidebar (see "what is shown" below).
+	let view = $state<View>(null);
+	/** Each conversation's and project page's panes (by viewKey): the main
+	 *  one (FRONT) and up to two of tool tabs. */
+	let layouts = $state<Record<string, TileLayout>>({});
+	/** Per view, the tool pane last used, where tools open (view.openTool). */
+	const toolLeaf: Record<string, string> = {};
+	/** The panes of a view that has opened no tool yet (one per view, so its
+	 *  ids stay put until it does). */
+	const bares = new Map<string, TileLayout>();
+	function layoutOf(key: string): TileLayout {
+		const own = layouts[key];
+		if (own) return own;
+		if (!bares.has(key)) bares.set(key, bare());
+		return bares.get(key)!;
+	}
+	let viewReady = $state(false);
+	/** Conversations kept mounted behind the one in front (view.keep). */
+	let kept = $state<string[]>([]);
+	// A project's page comes to the front like a conversation.
 	function openProjectPage(p: Project) {
 		showDesk = false;
 		showSettings = false;
-		if (!tilesReady) return;
-		const panel = projectPanel(p.id);
-		applyTiles(openTab(tiles, focusedLeaf, { id: panel, panel }));
-		focusedLeaf = leafOfTab(tiles.root, panel)?.id ?? focusedLeaf;
+		if (viewReady) show({ kind: 'project', id: p.id });
 	}
-	/** The project whose page is the focused tile's tab, if any. */
-	const shownProject = $derived.by(() => {
-		const leaf = focusedLeaf ? findLeaf(tiles.root, focusedLeaf) : null;
-		const id = leaf?.active ? projectOf(leaf.active) : null;
-		return id ? store.projects.find((p) => p.id === id) : undefined;
-	});
-	/** The session the sidebar shows as selected: the focused tab's, while
-	 *  it has a tab (a project page focused selects the project instead). */
-	const selectedSession = $derived.by(() => (shownProject || !tilesReady || !chatSessionsIn(tiles).includes(activeId) ? '' : activeId));
-	/** The workbench's requirements page: one requirement, or the list. */
-	function openRequirements(id: string | null = null) {
-		openDesk('requirements');
-		deskRequirement = id;
-	}
-
-	/** Starts a session on requirement `r`: a new draft in its project (or
-	 *  a parallel task's) that shows the start card; once the user starts
-	 *  it, the daemon has the agent explain its understanding first and wait
-	 *  for confirmation (see Requirements.begin). */
-	let taskRequirement = $state<{ id: string; name: string } | null>(null);
-	async function startRequirement(r: Requirement, how: StartHow) {
-		try {
-			telemetry.track('requirement_start');
-			const project = store.workspaceProjects.find((p) => p.id === (how.project ?? r.project) && !p.stale);
-			if (!project) return toast.warn(t('shell.requirement.pickProject'));
-			if (!r.project) await requirements.update(r.id, { project: project.id });
-			if (how.mode === 'worktree') {
-				// The id keeps the branch name readable whatever the title's script.
-				taskRequirement = { id: r.id, name: `${r.id} ${r.title}` };
-				newTask(project);
-				return;
-			}
-			// An empty new session there (one a new project starts with) is used
-			// rather than a second one.
-			const backend = how.backend ? normalizeBackendId(how.backend) : undefined;
-			const empty = project.sessions.find(
-				(s) => s.draft && !s.requirement && !s.chat.messages.length && (!backend || s.backendId === backend)
-			);
-			const id = empty?.id ?? store.addSession(project, undefined, backend);
-			store.activeId = id;
-			const session = store.allSessions.find((s) => s.id === id);
-			if (session) {
-				session.requirement = r.id;
-				session.requirementStart = { plan: session.chat.approvalMode === 'plan' };
-			}
-			showDesk = false;
-		} catch (e) {
-			toast.error(e instanceof Error ? e.message : String(e));
-		}
-	}
-	/** What a running daemon session shown here is doing now (its plan's
-	 *  current step). */
-	function currentStep(session: string): string | undefined {
-		const chat = allSessions.find((s) => s.chat.sessionId === session)?.chat;
-		return chat?.plan.find((p) => p.status === 'in_progress')?.step;
-	}
-	/** Requirements of the open workspace on the user's turn (as the
-	 *  workbench counts them). */
-	const yourTurnCount = $derived.by(() => {
-		const ids = new Set(workspaceProjects.map((p) => p.id));
-		return requirements.list.filter((r) => needsYou(r) && (!r.project || ids.has(r.project))).length;
-	});
+	/** The project whose page is in front, if any. */
+	const shownProject = $derived(view?.kind === 'project' ? store.projects.find((p) => p.id === view!.id) : undefined);
+	/** The session the sidebar shows as selected: the one in front. */
+	const selectedSession = $derived(view?.kind === 'chat' ? view.id : '');
 	const workspaceProjects = $derived(
 		store.workspaceProjects.filter((p) => !p.worktree).map((p) => ({ id: p.id, path: p.path, name: p.name }))
 	);
@@ -349,22 +271,8 @@
 			})
 			.catch(() => {});
 	}
-	// Target endpoint for one-shot AI text (commit / PR). Prefer the active
-	// session's provider; fall back to the default jucode gateway or the first
-	// configured provider. Strip any `[1m]`-style alias suffix from the model id.
-	const llmTarget = $derived.by(() => {
-		const pick =
-			providersList.find((p) => p.id === chat?.provider) ??
-			providersList.find((p) => p.id === 'jucode') ??
-			providersList[0];
-		if (!pick) return null;
-		const model =
-			chat?.provider === pick.id && chat?.model
-				? chat.model.replace(/\[.*?\]$/, '')
-				: (pick.models[0]?.name ?? '');
-		if (!model) return null;
-		return { provider: pick.id, baseUrl: pick.base_url, format: pick.format, model };
-	});
+	// Target endpoint for one-shot AI text (commit / PR), on the active session's provider.
+	const llmTarget = $derived(llmTargetOf(providersList, chat));
 
 	let sidebarWidth = $state(292);
 	let showSidebar = $state(true);
@@ -401,18 +309,16 @@
 		window.addEventListener('pointerup', up);
 	}
 
-	// ---------- the canvas: ONE mosaic for chats + tool panels ----------
-	// Everything right of the navigator is a single tile tree. Tabs are chat
-	// sessions (`chat:<sessionId>`), the former dock panels, `tui:<backend>`
-	// terminals and the audit pane. The layout is workspace state: it loads
-	// from and persists to the active workspace's app-data entry.
-	let tiles = $state<TileLayout>(emptyLayout());
-	let tilesReady = $state(false);
-	let focusedLeaf = $state<string | null>(null);
+	// ---------- what is shown: one thing in front, tools beside it ----------
+	// The sidebar picks what is in front: a conversation or a project's page,
+	// in the main pane. Tool panels (plan, goal, files, git, terminal, browser,
+	// a plan's page, the editor, a backend's TUI) are tabs of up to two more
+	// panes, which the user arranges by dragging tabs. It is workspace state,
+	// loaded from and saved to the active workspace's entry (view.ts).
 
 	const ALL_PANELS = ['plan', 'goal', 'files', 'git', 'term', 'browser'] as const;
 	// Plan/Goal are engine features. Goal stays gated by the backend cap; the plan
-	// tab also appears whenever there's an actual plan (e.g. claude's TodoWrite),
+	// panel also appears whenever there's an actual plan (e.g. claude's TodoWrite),
 	// even on backends that don't advertise goals.
 	const panelKeys = $derived(
 		ALL_PANELS.filter((k) => {
@@ -421,9 +327,6 @@
 			return true;
 		})
 	);
-	// One agent-session type only: the coding agent is picked INSIDE the
-	// session (model popup), never at tab creation. Persisted `tui:*` tabs
-	// still render, but TUI tabs are no longer offered as new options.
 	const PANEL_ICONS: Record<(typeof ALL_PANELS)[number], typeof PlusIcon> = {
 		plan: ListChecksIcon, goal: TargetIcon,
 		files: FilesIcon, git: GitBranchIcon, term: SquareTerminalIcon, browser: GlobeIcon
@@ -433,17 +336,14 @@
 		...panelKeys.map((k) => ({ key: k, label: t(`dock.tabs.${k}`), icon: PANEL_ICONS[k] }))
 	]);
 
-	function tileLabel(tab: TileTab): string {
-		const sid = chatSessionOf(tab.panel);
-		if (sid) return sessionById(sid)?.chat.title || t('shell.untitled');
-		const tui = tuiBackendOf(tab.panel);
+	function toolLabel(panel: string): string {
+		const tui = tuiBackendOf(panel);
 		if (tui) return tuiTabTitle(tui);
-		if (tab.panel === 'audit') return t('editor.title');
-		const pid = projectOf(tab.panel);
-		if (pid) return store.projects.find((p) => p.id === pid)?.name ?? pid;
-		const proposal = proposalOf(tab.panel);
+		if (panel === 'audit') return t('editor.title');
+		if (panel === 'setup') return t('dock.tabs.setup');
+		const proposal = proposalOf(panel);
 		if (proposal) return planOf(proposal.sessionId, proposal.planId)?.title || t('chat.planCard.label');
-		return (ALL_PANELS as readonly string[]).includes(tab.panel) ? t(`dock.tabs.${tab.panel}`) : tab.panel;
+		return (ALL_PANELS as readonly string[]).includes(panel) ? t(`dock.tabs.${panel}`) : panel;
 	}
 	function tuiReady(sid: string): boolean {
 		const session = sessionById(sid);
@@ -500,110 +400,93 @@
 		}
 	});
 
-	// A tool tab is an *instance* of a panel kind (two terminals are two tabs);
-	// chat tabs derive their id from the session instead.
-	let tabSeq = 0;
-	const newTabId = () => `p${Date.now().toString(36)}-${(tabSeq++).toString(36)}`;
-
-	const findPanelTab = (kind: string) =>
-		leavesOf(tiles.root)
-			.flatMap((l) => l.tabs)
-			.find((tb) => tb.panel === kind);
-
-	/** Apply + persist a layout change; keep editorStore in sync when the user
-	 *  closed the audit tab directly (so a later ⌘E can re-create it). */
-	function applyTiles(next: TileLayout) {
-		if (next === tiles) return;
-		// A draft whose tab closes before its first message leaves nothing behind.
-		const open = new Set(chatSessionsIn(next));
-		const dropped = chatSessionsIn(tiles).filter((sid) => !open.has(sid) && sessionById(sid)?.draft);
-		tiles = next;
-		for (const sid of dropped) store.removeSession(sid);
-		if (tilesReady) workspaces.updateLayout(serializeLayout(next));
-		if (editorStore.visible && !findPanelTab('audit')) editorStore.visible = false;
+	function saveView() {
+		if (viewReady) workspaces.updateLayout(savedView(view, layouts));
 	}
-
-	/** Build the canvas for the current workspace: reconcile the persisted
-	 *  layout with this run's sessions (migrating old dock-only layouts by
-	 *  grafting a chat leaf) and focus the active session's tile. */
-	/** The session restore made active while the layout shows no
-	 *  conversation (the user closed them all): not opened for that. */
-	let shownNowhere = '';
-	function initTiles() {
-		tiles = reconcileLayout(
+	/** Puts `next` in front. */
+	function show(next: View) {
+		view = next;
+		if (next?.kind === 'chat') kept = keep(kept, next.id);
+		saveView();
+	}
+	/** Build what is shown for the current workspace from its saved view. */
+	function initView() {
+		const restored = restoreView(
 			workspaces.active?.layout ?? null,
 			store.shownSessions.map((s) => s.id),
+			store.projects.map((p) => p.id),
 			store.activeId || null
 		);
-		// The conversation in front when the app closed comes back in front:
-		// restore() picks the sidebar's first session, and activating one the
-		// layout does not show in front would open or raise its tab.
-		const front = leavesOf(tiles.root)
-			.map((l) => (l.active ? chatSessionOf(l.active) : null))
-			.find((sid) => sid != null);
-		if (front) store.activeId = front;
-		shownNowhere = chatSessionsIn(tiles).length ? '' : store.activeId;
-		const activeLeaf = store.activeId ? leafOfTab(tiles.root, chatPanel(store.activeId)) : null;
-		focusedLeaf = activeLeaf?.id ?? leavesOf(tiles.root)[0]?.id ?? null;
-		tilesReady = true;
-		// Persist the reconciled result so migrated layouts land on disk too.
-		workspaces.updateLayout(serializeLayout(tiles));
+		view = restored.view;
+		layouts = restored.layouts;
+		kept = view?.kind === 'chat' ? [view.id] : [];
+		if (view?.kind === 'chat') store.activeId = view.id;
+		viewReady = true;
+		saveView();
+	}
+	/** The panes of what is in front. */
+	const frontKey = $derived(view ? viewKey(view) : '');
+
+	/** A change to view `key`'s panes (a tab moved, closed, a pane resized).
+	 *  Closing the editor's tab hides it, so ⌘E can show it again. */
+	function applyTiles(key: string, next: TileLayout) {
+		if (!key || next === layoutOf(key)) return;
+		layouts[key] = next;
+		if (editorStore.visible && !leafOfTab(next.root, 'audit') && key === frontKey) editorStore.visible = false;
+		saveView();
+	}
+	function onLeafFocus(key: string, leafId: string) {
+		if (!leafOfTab(layoutOf(key).root, FRONT) || leafOfTab(layoutOf(key).root, FRONT)!.id !== leafId) toolLeaf[key] = leafId;
+	}
+	/** One browser and one editor in the window: opening either in a view
+	 *  takes it out of the others'. */
+	const SINGLE = new Set(['browser', 'audit']);
+	/** Tool `panel` as a tab of view `key` (what is in front by default), in
+	 *  its tool pane last used (view.openTool). */
+	function openSide(panel: string, key = frontKey) {
+		if (!key) return;
+		if (SINGLE.has(panel))
+			for (const other of Object.keys(layouts)) if (other !== key && leafOfTab(layouts[other]!.root, panel)) layouts[other] = closeTab(layouts[other]!, panel);
+		const next = openTool(layoutOf(key), panel, toolLeaf[key] ?? null);
+		applyTiles(key, next);
+		const leaf = leafOfTab(next.root, panel);
+		if (leaf) toolLeaf[key] = leaf.id;
+	}
+	/** Toggles: the tool in front of its pane closes, else it shows. */
+	function toggleSide(panel: string) {
+		const leaf = leafOfTab(layoutOf(frontKey).root, panel);
+		if (leaf?.active === panel) applyTiles(frontKey, closeTab(layoutOf(frontKey), panel));
+		else openSide(panel);
 	}
 
-	/** The focused leaf's chat session (if its active tab is one) becomes the
-	 *  workbench-active session — engine actions and tool panels target it. */
-	function syncActiveFromFocus() {
-		const leaf = focusedLeaf ? findLeaf(tiles.root, focusedLeaf) : null;
-		const tab = leaf?.tabs.find((tb) => tb.id === leaf.active);
-		const sid = tab ? chatSessionOf(tab.panel) : null;
-		if (sid && sid !== store.activeId && !!sessionById(sid)) store.activeId = sid;
-	}
-	function onMosaicChange(next: TileLayout) {
-		applyTiles(next);
-		syncActiveFromFocus();
-	}
-	function onLeafFocus(leafId: string) {
-		focusedLeaf = leafId;
-		syncActiveFromFocus();
-	}
+	// A session's new worktree (SessionStore.#makeWorktree): named by a
+	// one-shot model call from its first message, then set up by its
+	// project's script, in a terminal tab of that session (run once).
+	const WORKTREE_NAME_SYSTEM =
+		'Name a git branch for the coding task the user describes: 2 to 4 lowercase English words joined by hyphens, like fix-login-redirect. Output the name only.';
+	SessionStore.nameWorktree = async (message) => {
+		const llm = llmTarget;
+		if (!llm) return '';
+		return (await generateText(llm.provider, llm.baseUrl, llm.format, llm.model, WORKTREE_NAME_SYSTEM, message.slice(0, 2000))).trim().split('\n')[0] ?? '';
+	};
+	/** Setup commands waiting for their session's terminal, by session id. */
+	const setupRuns = new Map<string, string>();
+	const quoted = (v: string) => `'${v.replace(/'/g, `'\\''`)}'`;
+	SessionStore.onWorktree = (s, project) => {
+		if (!project.setup?.trim() || !s.cwd) return;
+		const windows = document.documentElement.dataset.os === 'windows';
+		const env = windows
+			? `$env:JUCODE_PROJECT_ROOT=${quoted(project.path)}; $env:JUCODE_WORKTREE_PATH=${quoted(s.cwd)}; `
+			: `export JUCODE_PROJECT_ROOT=${quoted(project.path)} JUCODE_WORKTREE_PATH=${quoted(s.cwd)}; `;
+		setupRuns.set(s.id, env + project.setup.trim());
+		openSide('setup', `chat:${s.id}`);
+	};
 
-	/** Per-leaf “+” menu (and the empty-canvas buttons). */
-	function mosaicAdd(leafId: string | null, key: string) {
-		if (key === 'chat') {
-			const p = activeProject ?? store.shownProjects[0];
-			if (!p) return;
-			if (leafId) focusedLeaf = leafId;
-			newSession(p); // the activeId effect opens its tile in the focused leaf
-			return;
-		}
-		// The embedded browser is a singleton native webview — a second tab
-		// would fight over it, so re-activate the existing one instead.
-		if (key === 'browser') {
-			const existing = findPanelTab('browser');
-			if (existing) {
-				applyTiles(activateTab(tiles, existing.id));
-				return;
-			}
-		}
-		applyTiles(openElsewhere({ id: newTabId(), panel: key }, { leafId }));
-	}
-
-	/** A tool window, where settings say (canvas.openElsewhere). */
-	function openElsewhere(
-		tab: TileTab,
-		{ leafId = null, place = prefs.openElsewhere, sessionId = store.activeId }: { leafId?: string | null; place?: 'side' | 'tab'; sessionId?: string | null } = {}
-	): TileLayout {
-		const chatLeaf = sessionId ? (leafOfTab(tiles.root, chatPanel(sessionId))?.id ?? null) : null;
-		return placeElsewhere(tiles, tab, { place, chatLeaf, leafId, focused: focusedLeaf });
-	}
-
-	/** Palette / signals: re-activate an existing tab of this panel kind (a
-	 *  second instance shouldn't spawn by accident — the + menu does that),
-	 *  otherwise open one in the focused leaf. */
-	function openPanelTile(kind: string) {
-		const existing = findPanelTab(kind);
-		if (existing) applyTiles(activateTab(tiles, existing.id));
-		else applyTiles(openElsewhere({ id: newTabId(), panel: kind }));
+	/** The title bar's + menu: a new conversation, or a tool beside. */
+	function addFromTitle(key: string) {
+		if (key !== 'chat') return openSide(key);
+		const p = activeProject ?? store.shownProjects[0];
+		if (p) newSession(p);
 	}
 
 	/** The approval mode a plan runs in once approved: the one before plan mode. */
@@ -616,84 +499,96 @@
 		const m = sessionById(sessionId)?.chat.messages.find((x) => x.kind === 'plan' && x.id === planId);
 		return m?.kind === 'plan' ? m : undefined;
 	}
-	/** A plan's page in the side column beside its session's chat: shown
-	 *  again if open, else a new tab (one per plan, closed one by one). */
+	/** A plan's page beside its session's conversation. */
 	function openPlanPage(sessionId: string, planId: string) {
-		const panel = proposalPanel(sessionId, planId);
-		const existing = findPanelTab(panel);
-		if (existing) return applyTiles(activateTab(tiles, existing.id));
-		applyTiles(openElsewhere({ id: newTabId(), panel }, { place: 'side', sessionId }));
+		openSide(proposalPanel(sessionId, planId), `chat:${sessionId}`);
 	}
 	$effect(() => {
 		const request = planPages.request;
-		if (!request || !tilesReady) return;
+		if (!request || !viewReady) return;
 		untrack(() => openPlanPage(request.sessionId, request.planId));
 	});
 
-	/** A sidebar click: the session becomes active and its tab comes to the
-	 *  front, also when it already was the active one behind another tab. */
+	/** A subagent's name, for the title bar while its page is shown. */
+	function agentLabel(c: ChatState, id: string): string {
+		const run = [...c.agentRuns.agents, ...c.agentRuns.workflows.flatMap((w) => w.agents)].find((a) => a.id === id);
+		return run?.label || c.subagents[id]?.label || id;
+	}
+
+	/** A sidebar click: the session becomes active and comes to the front,
+	 *  also when it already was the active one behind a project page. */
 	function showSession(id: string) {
 		store.activeId = id;
-		// Its tab may have been closed while it stayed the active session:
-		// the effect below sees no change then.
-		revealChat(id);
-	}
-	/** Focuses session `id`'s chat tab, opening one in the focused leaf. */
-	function revealChat(id: string) {
-		if (!tilesReady || !store.shownSessions.some((s) => s.id === id)) return;
-		if (chatSessionsIn(tiles).includes(id)) applyTiles(activateTab(tiles, chatPanel(id)));
-		else applyTiles(openChatTab(tiles, focusedLeaf, id));
-		const leaf = leafOfTab(tiles.root, chatPanel(id));
-		if (leaf) focusedLeaf = leaf.id;
+		show({ kind: 'chat', id });
 	}
 
-	// The workbench-active session always has a chat tile: activating a session
-	// (sidebar click, ⌘N, resume, deep link…) opens or focuses it.
+	// The active session is the one in front: activating one (⌘N, resume,
+	// deep link, archiving the one in front…) shows it.
 	$effect(() => {
 		const id = store.activeId;
-		if (!tilesReady || !id || id === shownNowhere) return;
-		shownNowhere = '';
-		untrack(() => revealChat(id));
+		if (!viewReady || !id) return;
+		untrack(() => {
+			if (view?.kind !== 'chat' || view.id !== id) show({ kind: 'chat', id });
+		});
 	});
 
-	// Chat tiles of closed (or hidden) sessions disappear with them, and a
-	// removed project's page with the project.
+	// A closed (or hidden) session leaves the front and the kept ones, a
+	// removed project's page goes with it, and a plan page with its session.
 	$effect(() => {
 		const ids = new Set(store.shownSessions.map((s) => s.id));
 		const projectIds = new Set(store.projects.map((p) => p.id));
-		if (!tilesReady) return;
+		if (!viewReady) return;
 		untrack(() => {
-			let next = tiles;
-			for (const sid of chatSessionsIn(next)) if (!ids.has(sid)) next = closeTab(next, chatPanel(sid));
-			for (const tab of leavesOf(next.root).flatMap((l) => l.tabs)) {
-				const pid = projectOf(tab.panel);
-				if (pid && !projectIds.has(pid)) next = closeTab(next, tab.id);
+			if (kept.some((id) => !ids.has(id))) kept = kept.filter((id) => ids.has(id));
+			const gone = (view?.kind === 'chat' && !ids.has(view.id)) || (view?.kind === 'project' && !projectIds.has(view.id));
+			if (gone) show(store.activeId && ids.has(store.activeId) ? { kind: 'chat', id: store.activeId } : null);
+			// A closed conversation's panes and project page's go with them.
+			let pruned = false;
+			for (const key of Object.keys(layouts)) {
+				const [kind, id] = [key.slice(0, key.indexOf(':')), key.slice(key.indexOf(':') + 1)];
+				if ((kind === 'chat' && !ids.has(id)) || (kind === 'project' && !projectIds.has(id))) {
+					delete layouts[key];
+					pruned = true;
+				}
 			}
-			applyTiles(next);
+			if (pruned) saveView();
 		});
 	});
 
 	// Opening a page in the embedded browser (agent tool / element pick / typed
-	// URL) must reveal the browser tile, or the webview has nowhere to render.
+	// URL) must show the browser, or the webview has nowhere to render.
 	$effect(() => {
 		if (browser.openSignal === 0) return;
 		untrack(() => {
-			if (tilesReady) openPanelTile('browser');
+			if (viewReady) openSide('browser');
 		});
 	});
 
-	// The audit pane (CodeMirror diff review) is a singleton tile driven by
-	// editorStore.visible: ⌘E / chat file links / quick-open reveal it, its own
-	// close button (and closing the tab, via applyTiles) hides it.
+	// The audit pane (CodeMirror diff review) follows editorStore.visible: ⌘E /
+	// chat file links / quick-open show it, its own close button (and closing
+	// its tab, via applyTiles) hides it.
 	$effect(() => {
 		const want = editorStore.visible;
-		if (!tilesReady) return;
+		if (!viewReady) return;
 		untrack(() => {
-			const existing = findPanelTab('audit');
-			if (want && !existing) applyTiles(openElsewhere({ id: newTabId(), panel: 'audit' }));
-			else if (want && existing) applyTiles(activateTab(tiles, existing.id));
-			else if (!want && existing) applyTiles(closeTab(tiles, existing.id));
+			const holder = Object.keys(layouts).find((key) => leafOfTab(layouts[key]!.root, 'audit'));
+			if (want && holder !== frontKey) openSide('audit');
+			else if (!want && holder) applyTiles(holder, closeTab(layouts[holder]!, 'audit'));
 		});
+	});
+
+	// Sessions idle past prefs.autoArchiveDays settle themselves: checked
+	// when the setting changes and every ten minutes (sidebar/autoArchive.ts).
+	$effect(() => {
+		const days = prefs.autoArchiveDays;
+		if (!viewReady || !days) return;
+		const sweep = () =>
+			untrack(() => {
+				for (const s of staleSessions(store.shownSessions, days, view?.kind === 'chat' ? view.id : '')) store.archiveSession(s.id);
+			});
+		sweep();
+		const timer = setInterval(sweep, 10 * 60_000);
+		return () => clearInterval(timer);
 	});
 
 	// ---------- pane registry ----------
@@ -723,7 +618,6 @@
 			showSetup ||
 			showPalette ||
 			showQuickOpen ||
-			!!taskDialogFor ||
 			// The model picker is an in-composer popover (like effort/approval),
 			// not a centered overlay, so it needn't collapse the browser webview.
 			(!!chat?.picker && chat.picker.kind !== 'model') ||
@@ -861,12 +755,12 @@
 		const gen = ++wsGen;
 		wsBusy = true;
 		try {
-			tilesReady = false; // gate the tile effects during the swap
+			viewReady = false; // gate the view effects during the swap
 			for (const p of [...store.projects]) store.detachProject(p);
 			store.loaded = false; // re-gate the persist effect during the swap
 			await store.restore(entry.projects, entry.loose);
 			if (gen !== wsGen) return;
-			initTiles();
+			initView();
 		} finally {
 			if (gen === wsGen) wsBusy = false;
 		}
@@ -904,10 +798,19 @@
 		const s = store.allSessions.find((x) => x.chat.sessionId === sid);
 		if (s) showSession(s.id);
 	}
-	async function newWorkspace() {
+	// A new workspace takes a step on purpose (WorkspaceDialog): a few, not one
+	// per project.
+	let creatingWorkspace = $state(false);
+	function newWorkspace() {
+		if (!wsBusy) creatingWorkspace = true;
+	}
+	async function createWorkspace(name: string, move: Project[]) {
+		creatingWorkspace = false;
 		if (wsBusy) return;
-		const entry = workspaces.create(t('shell.workspace.nth', { n: workspaces.workspaces.length + 1 }));
-		if (entry) await switchWorkspace(entry.id);
+		const entry = workspaces.create(name);
+		if (!entry) return;
+		for (const p of move) moveProjectToWorkspace(p, entry.id, true);
+		await switchWorkspace(entry.id);
 	}
 	/** Delete a workspace (confirmed). Deleting the active one swaps the live
 	 *  session tree to the default workspace returned by the store. */
@@ -931,69 +834,22 @@
 		await swapToWorkspace(next);
 	}
 
-	// ---------- session tab chrome (color / icon / rename) ----------
-	// One shared popover serves the mosaic tabs and the sidebar rows.
-	// `tab` is set when opened from a mosaic tab: the menu then offers 关闭其他/全部.
-	let sessionChromeFor = $state<{ sid: string; x: number; y: number; tab?: string } | null>(null);
+	// ---------- session chrome (color / icon / rename) ----------
+	// One shared popover serves the sidebar's session rows.
+	let sessionChromeFor = $state<{ sid: string; x: number; y: number } | null>(null);
 	const chromeSession = $derived(sessionChromeFor ? (sessionById(sessionChromeFor.sid) ?? null) : null);
 
-	function tileChrome(tab: TileTab): { color?: string; icon?: TabIcon } | null {
-		const pid = projectOf(tab.panel);
-		if (pid) {
-			const p = store.projects.find((x) => x.id === pid);
-			return { color: p?.color, icon: p?.icon ?? { kind: 'builtin', id: 'folder' } };
-		}
-		const sid = chatSessionOf(tab.panel);
-		const s = sid ? sessionById(sid) : null;
-		if (!s || (!s.color && !s.icon)) return null;
-		return { color: s.color, icon: s.icon };
-	}
-	/** Open the popover for a tab (context menu / dblclick). Chat and
-	 *  project tabs get their chrome editor; other tabs only the close
-	 *  actions, and only on right-click. */
-	let tabMenuFor = $state<{ tab: string; label: string; x: number; y: number } | null>(null);
-	function openTileChrome(tab: TileTab, ev: MouseEvent) {
-		const pid = projectOf(tab.panel);
-		const p = pid ? store.projects.find((x) => x.id === pid) : undefined;
-		if (p) return openProjectMenu(p, ev, tab.id);
-		const sid = chatSessionOf(tab.panel);
-		if (sid && sessionById(sid)) {
-			ev.preventDefault();
-			sessionChromeFor = { sid, x: ev.clientX, y: ev.clientY, tab: tab.id };
-			return;
-		}
-		if (ev.type !== 'contextmenu') return;
-		ev.preventDefault();
-		tabMenuFor = { tab: tab.id, label: tileLabel(tab), x: ev.clientX, y: ev.clientY };
-	}
-	/** The popover's close actions for a tab (none when opened elsewhere). */
-	function tabCloseActions(tab: string | undefined, dismiss: () => void) {
-		if (!tab) return {};
-		const leaf = leafOfTab(tiles.root, tab);
-		return {
-			onCloseOthers: leaf && leaf.tabs.length > 1 ? () => (dismiss(), closeTabGroup(tab, true)) : undefined,
-			onCloseAll: () => (dismiss(), closeTabGroup(tab, false))
-		};
-	}
-	/** 关闭其他 / 关闭全部: the other tabs (or all) of the tab's own group. */
-	function closeTabGroup(tabId: string, keep: boolean) {
-		const leaf = leafOfTab(tiles.root, tabId);
-		if (!leaf) return;
-		let next = tiles;
-		for (const tab of leaf.tabs) if (!keep || tab.id !== tabId) next = closeTab(next, tab.id);
-		onMosaicChange(next);
-	}
 	function openSessionMenu(sid: string, ev: MouseEvent) {
 		if (!!!sessionById(sid)) return;
 		ev.preventDefault();
 		sessionChromeFor = { sid, x: ev.clientX, y: ev.clientY };
 	}
 	// The same popover colours a sidebar project folder and sets its icon.
-	let projectChromeFor = $state<{ id: string; x: number; y: number; tab?: string } | null>(null);
+	let projectChromeFor = $state<{ id: string; x: number; y: number } | null>(null);
 	const chromeProject = $derived(projectChromeFor ? (projects.find((p) => p.id === projectChromeFor!.id) ?? null) : null);
-	function openProjectMenu(p: Project, ev: MouseEvent, tab?: string) {
+	function openProjectMenu(p: Project, ev: MouseEvent) {
 		ev.preventDefault();
-		projectChromeFor = { id: p.id, x: ev.clientX, y: ev.clientY, tab };
+		projectChromeFor = { id: p.id, x: ev.clientX, y: ev.clientY };
 	}
 	/** Where a session can move (移到项目): this workspace's other projects,
 	 *  and out of any. Chats stay chats. */
@@ -1007,7 +863,7 @@
 	const otherWorkspaces = $derived(workspaces.workspaces.filter((w) => w.id !== workspaces.activeId).map((w) => ({ id: w.id, name: w.name })));
 	/** A project, its tabs with it, moves to another workspace. Its sessions
 	 *  keep running in the daemon and open there. */
-	function moveProjectToWorkspace(p: Project, wsId: string) {
+	function moveProjectToWorkspace(p: Project, wsId: string, quiet = false) {
 		const saved = store.serialize().find((x) => x.id === p.id);
 		const target = workspaces.workspaces.find((w) => w.id === wsId);
 		if (!saved || !target) return;
@@ -1018,7 +874,7 @@
 		workspaces.setProjects(wsId, [...target.projects.filter((x) => x.id !== p.id), saved]);
 		store.detachProject(p);
 		workspaces.updateProjects(store.serialize(), store.serializeLoose());
-		toast.info(t('shell.workspace.moved', { name: p.name, ws: target.name }));
+		if (!quiet) toast.info(t('shell.workspace.moved', { name: p.name, ws: target.name }));
 	}
 	/** A session of no project moves to another workspace's; it keeps
 	 *  running in the daemon and opens there. */
@@ -1093,44 +949,52 @@
 			});
 			if (!ok) return;
 		}
+		// Its own worktree, which no other session works in: kept or removed
+		// with it (its branch stays either way, as t3code does).
+		const tree = s?.worktree && s.cwd ? { path: s.cwd, ...s.worktree } : null;
+		const shared = !!tree && store.allSessions.some((x) => x.id !== id && x.cwd && normPath(x.cwd) === normPath(tree.path));
+		const drop =
+			!!tree &&
+			!shared &&
+			(await confirm({
+				title: t('shell.worktreeDelete.title'),
+				message: t('shell.worktreeDelete.message', { name: tree.slug, branch: tree.branch }),
+				confirmLabel: t('shell.worktreeDelete.confirm'),
+				cancelLabel: t('shell.worktreeDelete.keep')
+			}));
 		store.removeSession(id);
+		if (drop && tree) git(['worktree', 'remove', '--force', tree.path], tree.mainRepoPath).catch((e) => toast.error(String(e)));
 	}
 
 	// ---------- 并行任务（git worktree） ----------
 	/** 把任务 worktree 作为项目打开（已在列表中则聚焦），可携带首条消息（任务描述）。 */
-	function openTaskProject(path: string, meta: WorktreeMeta, description = '') {
-		taskDialogFor = null;
-		const requirement = taskRequirement?.id;
-		taskRequirement = null;
-		const existing = store.projects.find((p) => normPath(p.path) === normPath(path));
-		if (existing) {
-			store.activeId = existing.sessions[0]?.id ?? store.addSession(existing);
-			return;
-		}
-		// Started on a requirement: the description goes with its start (the
-		// start card), not as a first message.
-		const project = store.createProject(path, meta, (!requirement && description) || undefined);
-		const first = project.sessions[0];
-		if (requirement && first) {
-			first.requirement = requirement;
-			first.requirementStart = { plan: first.chat.approvalMode === 'plan', ...(description ? { text: description } : {}) };
-		}
-		if (requirement) showDesk = false;
+	/** A worktree from the Git panel's list: the session working there, else
+	 *  a new one in it, of the project of its main repository. */
+	function openTaskProject(path: string, meta: WorktreeMeta) {
+		const working = store.allSessions.find((s) => s.cwd && normPath(s.cwd) === normPath(path) && !s.archived);
+		if (working) return showSession(working.id);
+		const main = store.projects.find((p) => !p.worktree && normPath(p.path) === normPath(meta.mainRepoPath));
+		if (!main) return void store.createProject(path, meta);
+		const id = store.addSession(main);
+		store.useWorktree(id, path, meta);
 	}
-	/** 任务清理完成（worktree 已删除）后，把对应项目从侧边栏移除。 */
+	/** A worktree removed in the Git panel: a project of it (made before
+	 *  worktrees were sessions') closes, sessions working in it settle. */
 	function closeTaskProject(path: string) {
 		const p = store.projects.find((x) => normPath(x.path) === normPath(path));
 		if (p) store.removeProject(p);
+		for (const s of store.allSessions) if (s.cwd && normPath(s.cwd) === normPath(path) && !s.archived) store.archiveSession(s.id);
 	}
-	/** 打开「新建并行任务」对话框；worktree 项目上则回落到其主仓库项目。 */
-	function newTask(p: Project | undefined) {
+	/** 新建并行任务: a new session that will work in a new worktree of the
+	 *  project's main repository, from its current branch (the session's
+	 *  "where to work" menu changes it). */
+	async function newTask(p: Project | undefined) {
 		if (!p) return;
-		if (p.worktree) {
-			const main = store.projects.find((x) => normPath(x.path) === normPath(p.worktree!.mainRepoPath));
-			taskDialogFor = main ?? { ...p, path: p.worktree.mainRepoPath, name: base(p.worktree.mainRepoPath) };
-			return;
-		}
-		taskDialogFor = p;
+		const main = p.worktree ? store.projects.find((x) => !x.worktree && normPath(x.path) === normPath(p.worktree!.mainRepoPath)) : p;
+		if (!main) return;
+		const id = store.addSession(main);
+		const branch = (await git(['branch', '--show-current'], main.path).catch(() => '')).trim();
+		if (branch) store.setDraftWorktree(id, branch);
 	}
 
 	// ---------- 深链（jucode://） ----------
@@ -1206,18 +1070,13 @@
 		if (matches(e, 'zoomIn')) return act(() => stepZoom(1));
 		if (matches(e, 'zoomOut')) return act(() => stepZoom(-1));
 		if (matches(e, 'zoomReset')) return act(() => stepZoom(0));
-		if (matches(e, 'captureRequirement'))
-			return act(() => {
-				openRequirements();
-				captureSignal += 1;
-			});
 		if (matches(e, 'find') && chat) return act(() => pane?.toggleFind());
 		if (matches(e, 'newSession')) return act(() => activeProject && newSession(activeProject));
 		if (matches(e, 'settings')) return act(() => !showSettings && openSettings());
 		if (matches(e, 'sidebar')) return act(toggleSidebar);
 		if (matches(e, 'audit')) return act(toggleAudit);
 		if (matches(e, 'quickOpen')) return act(() => activeProject && (showQuickOpen = !showQuickOpen));
-		if (matches(e, 'terminal')) return act(() => openPanelTile('terminal'));
+		if (matches(e, 'terminal')) return act(() => toggleSide('term'));
 		if (matches(e, 'history')) return act(() => activeProject && !activeProject.loose && store.openHistory(activeProject));
 		if (matches(e, 'focusComposer') && pane) return act(pane.focusComposer);
 		if (matches(e, 'stop') && pane) return act(pane.stop);
@@ -1346,7 +1205,7 @@
 				// A plan the model starts writing (or proposes whole) opens in its
 				// page beside this session's chat.
 				const newPlan = s.chat.messages.findLast((m) => m.kind === 'plan');
-				if (newPlan && newPlan !== lastPlan && newPlan.kind === 'plan' && (newPlan.status === 'drafting' || newPlan.status === 'pending') && tilesReady && chatSessionsIn(tiles).includes(s.id))
+				if (newPlan && newPlan !== lastPlan && newPlan.kind === 'plan' && (newPlan.status === 'drafting' || newPlan.status === 'pending') && viewReady && view?.kind === 'chat' && view.id === s.id)
 					openPlanPage(s.id, newPlan.id);
 								// This session's tile (if any) sticks to the bottom while streaming.
 				panes.get(s.id)?.scrollToEnd();
@@ -1358,7 +1217,6 @@
 				if (frame.type === 'session_reopened' && typeof frame.session === 'string') store.followReopened(frame.session);
 				daemonState.handle(frame);
 				sync.handle(frame);
-				requirements.handle(frame);
 				devServers.handle(frame);
 			};
 			daemon.onDisconnect = () => {
@@ -1428,6 +1286,7 @@
 			limitResume.store = store;
 			ChatState.onTurnFailed = (c, message, started) => autoRetry.failed(c, message, started);
 			cleanups.push(() => (ChatState.onTurnFailed = null));
+			cleanups.push(watchTerminals());
 			if (disposed) {
 				cleanups.forEach((f) => f());
 				return;
@@ -1436,7 +1295,7 @@
 			// (resume by id), or seed a default project on first run — then build
 			// the canvas from the persisted layout.
 			await store.restore(wsEntry.projects, wsEntry.loose);
-			initTiles();
+			initView();
 			// 深链在项目恢复完成后再注册，冷启动携带的链接（onOpenUrl 会补发当前
 			// 深链）才能作用于已恢复的项目列表。
 			const undeep = await onOpenUrl((urls) => {
@@ -1450,6 +1309,13 @@
 			const updateEvery = setInterval(() => updater.check(true, true), 10 * 60 * 1000);
 			cleanups.push(() => clearTimeout(updateTimer), () => clearInterval(updateEvery));
 			loadProviders();
+			// The agents, then what each offers (its models before any session
+			// of it: engineProbe), one at a time in the background.
+			void agentCatalog.refresh().then(async () => {
+				for (const id of ['claude', 'codex'] as const) if (agentCatalog.native[id]?.found) await probeEngine(id);
+				for (const p of agentCatalog.presets) if (p.status === 'ready') await probeEngine('acp', { id: p.id, name: p.name, preset: true });
+				for (const a of agentCatalog.agents) await probeEngine('acp', { id: a.id, name: a.name });
+			});
 			readAuthProviders()
 				.then(async (p) => {
 					if (p.includes('jucode')) {
@@ -1474,14 +1340,35 @@
 	});
 </script>
 
-<svelte:window onkeydown={onWindowKey} />
-
-<!-- A chat tab's status, the same marks as its sidebar row. -->
-{#snippet tabMark(tab: TileTab)}
-	{@const sid = chatSessionOf(tab.panel)}
-	{@const s = sid ? sessionById(sid) : undefined}
-	{#if s}<SessionMark status={sessionStatus(s.chat)} />{/if}
+<!-- A tool tab's content, for the view it belongs to: that conversation's
+     directory and state, or the project page's directory. -->
+{#snippet tool(kind: string, cwd: string, c: ChatState | undefined, worktree: WorktreeMeta | null, sid?: string)}
+	{#if kind === 'plan'}<PlanPanel plan={c?.plan ?? []} />
+	{:else if proposalOf(kind)}
+		{@const p = proposalOf(kind)!}
+		{@const plan = planOf(p.sessionId, p.planId)}
+		{@const lastPlan = sessionById(p.sessionId)?.chat.messages.findLast((m) => m.kind === 'plan')}
+		<ProposalPane
+			{plan}
+			actionable={!!plan && plan === lastPlan}
+			defaultMode={planModeOf(p.sessionId)}
+			onAction={(id, action) => {
+				panes.get(p.sessionId)?.planAction(id, action);
+				if (action.decision === 'revise') panes.get(p.sessionId)?.focusComposer();
+			}}
+		/>
+	{:else if kind === 'goal'}<GoalPanel goal={c?.goal ?? null} />
+	{:else if kind === 'files'}<FilesPanel rootDir={cwd} />
+	{:else if kind === 'git'}<GitPanel cwd={cwd} worktree={worktree} llm={llmTarget} onOpenTask={(path, meta) => openTaskProject(path, meta)} onTaskRemoved={closeTaskProject} />
+	{:else if kind === 'term'}<TerminalPanel cwd={cwd} owner={sid ? { session: sid, tab: 'term' } : undefined} />
+	{:else if kind === 'setup'}<TerminalPanel cwd={cwd} run={sid ? setupRuns.get(sid) : undefined} onRan={() => sid && setupRuns.delete(sid)} owner={sid ? { session: sid, tab: 'setup' } : undefined} />
+	{:else if kind === 'browser'}<BrowserPanel />
+	{:else if kind === 'audit'}<EditorPane onAiSend={sendAiEdit} />
+	{:else if tuiBackendOf(kind)}<TuiPanel backend={tuiBackendOf(kind)!} cwd={cwd} onOpenSettings={() => openSettings('agents')} />
+	{/if}
 {/snippet}
+
+<svelte:window onkeydown={onWindowKey} />
 
 <Toaster />
 {#if zoomNote}
@@ -1496,14 +1383,14 @@
 	<TitleBar
 		sidebarOpen={showSidebar}
 		onToggleSidebar={toggleSidebar}
-		title={showSettings ? t('settings.title') : showDesk ? t('shell.desk.title') : shownProject ? shownProject.name : (active?.chat.title ?? '')}
-		subtitle={showSettings || showDesk || shownProject ? '' : (activeProject?.name ?? '')}
+		title={showSettings ? t('settings.title') : showDesk ? t('shell.desk.title') : shownProject ? shownProject.name : active?.chat.agentPage ? agentLabel(active.chat, active.chat.agentPage) : (active?.chat.title ?? '')}
+		subtitle={showSettings || showDesk || shownProject ? '' : active?.chat.agentPage ? [activeProject?.name, active.chat.title].filter(Boolean).join(' / ') : (activeProject?.name ?? '')}
 		addOptions={showSettings || showDesk ? [] : addOptions}
-		onAdd={(key) => mosaicAdd(focusedLeaf, key)}
+		onAdd={addFromTitle}
 	>
 		{#snippet actions()}
 			{@const editorPath = showSettings || showDesk ? undefined : shownProject ? shownProject.path : activeProject && !activeProject.chats && !activeProject.stale ? activeCwd : undefined}
-			{#if editorPath}<ProjectMenu path={editorPath} name={(shownProject ?? activeProject)?.name ?? ''} onOpenGit={() => openPanelTile('git')} />{/if}
+			{#if editorPath}<ProjectMenu path={editorPath} name={(shownProject ?? activeProject)?.name ?? ''} onOpenGit={() => openSide('git')} />{/if}
 			{#if !showSettings && !showDesk && active && active.surface === 'tui'}
 				<button class="tile-action" title={t('dock.tui.backToGui')} aria-label={t('dock.tui.backToGui')} onclick={() => active && tuiPanels[active.id]?.backToGui()}>
 					<MessageSquareTextIcon size={16} />
@@ -1563,12 +1450,11 @@
 				onNewTask={newTask}
 				onNewSession={(p) => newSession(p)}
 				onNewChat={() => store.newChat()}
-				onCloseSession={removeSession}
+				onDeleteSession={removeSession}
 				onCloseProject={removeProject}
-				onArchiveSession={(id) => store.archiveSession(id)}
-				onUnarchiveSession={(id) => store.unarchiveSession(id)}
+				onSettleSession={(id) => store.archiveSession(id)}
+				onUnsettleSession={(id) => store.unarchiveSession(id)}
 				onPinSession={(id, pinned) => store.setPinned(id, pinned)}
-				onMoveSession={(id, target, after) => store.moveSession(id, target, after)}
 				onMoveProject={(id, target, after) => store.moveProject(id, target, after)}
 				onMoveProjectToWorkspace={(id, ws) => {
 					const p = store.workspaceProjects.find((x) => x.id === id);
@@ -1578,13 +1464,18 @@
 				onSessionMenu={openSessionMenu}
 				onProjectMenu={openProjectMenu}
 				onHistory={(p) => store.openHistory(p)}
-				pendingCount={daemonState.actions.length + yourTurnCount}
+				pendingCount={daemonState.actions.length}
+				terminals={terminals.busy}
+				onOpenTerminal={(id) => {
+					showSession(id);
+					openSide(terminals.busy[id]?.tab ?? 'term', `chat:${id}`);
+				}}
 				onDesk={() => openDesk()}
 			/>
 			<div class="resizer side" class:hidden={!showSidebar} role="separator" aria-label="resize sidebar" onpointerdown={startSidebarResize}></div>
 
-			<!-- THE CANVAS: workspace tabs on top, one mosaic for chats, tool panels,
-			     TUI and audit tiles below. -->
+			<!-- The panes: what is in front (a conversation or a project's page)
+			     and the tool tabs beside it. -->
 			<div class="canvas">
 
 				<div class="stage">
@@ -1598,107 +1489,96 @@
 							</div>
 						</div>
 					{:else}
-						<Mosaic
-							layout={tiles}
-							onchange={onMosaicChange}
-							label={tileLabel}
-							{addOptions}
-							onAdd={mosaicAdd}
-							barAdd={false}
-							emptyText={t('dock.dock.empty')}
-							emptyHint={t('dock.dock.hint')}
-							focused={focusedLeaf}
-							onFocus={onLeafFocus}
-							decorate={tileChrome}
-							{tabMark}
-							onTabContext={openTileChrome}
-							onTabRename={openTileChrome}
-						>
-								{#snippet panel(tab)}
-								{@const sid = chatSessionOf(tab.panel)}
-								{@const tui = tuiBackendOf(tab.panel)}
-								{#if sid}
-									{@const sess = sessionById(sid)}
-									{#if sess}
-										{#if sess.surface === 'tui'}
-											<!-- Session handoff: the same chat tile renders the native TUI
-											     resuming this conversation by id (never a standalone tui:* tab),
-											     once the engine has its daemon session (a new one is starting). -->
-											{#if sess.chat.sessionId && daemon.sessionOf(sid)}
-											<TuiPanel
-												bind:this={tuiPanels[sid]}
-												backend={sess.backendId}
-												cwd={store.cwdOf(sid) ?? ''}
-												session={daemon.sessionOf(sid)}
-												terminal={sess.chat.terminal}
-												onBackToGui={() => store.returnToGui(sid)}
-												onReattach={() => store.rewatch(sid)}
-												onOpenSettings={() => openSettings('agents')}
-											/>
-											{/if}
+						{#each kept as sid (sid)}
+							{@const sess = sessionById(sid)}
+							{@const key = `chat:${sid}`}
+							<div class="slot" class:hidden={view?.kind !== 'chat' || view.id !== sid}>
+								<Mosaic
+									layout={layoutOf(key)}
+									onchange={(next) => applyTiles(key, next)}
+									label={(tab: TileTab) => toolLabel(tab.panel)}
+									barAdd={false}
+									fixed={FRONT}
+									canDrop={(tab, leaf, zone) => canDrop(layoutOf(key), tab, leaf, zone)}
+									onFocus={(leaf) => onLeafFocus(key, leaf)}
+								>
+									{#snippet panel(tab)}
+										{#if tab.id !== FRONT}
+											{@render tool(tab.panel, store.cwdOf(sid) ?? '', sess?.chat, sess?.worktree ?? store.ownerOf(sid)?.worktree ?? null, sid)}
 										{:else}
-											<!-- A render error in one conversation must not blank the
-											     pane silently: it shows, is logged, and can be retried. -->
-											<svelte:boundary onerror={(e: unknown) => reportUiError(e, sid)}>
-												<ChatPane
-													session={sess}
-													{store}
-													{providers}
-													{providersList}
-													isActive={sid === activeId && !showSettings && !showDesk}
-													onRegister={registerPane}
-													onUnregister={unregisterPane}
-													onOpenSettings={openSettings}
-													onOpenRequirement={openRequirements}
-												/>
-												{#snippet failed(error: unknown, reset: () => void)}
-													<div class="pane-error">
-														<p>{t('shell.paneError')}</p>
-														<code>{String((error as Error)?.message ?? error).slice(0, 300)}</code>
-														<button onclick={reset}>{t('shell.paneErrorRetry')}</button>
-													</div>
-												{/snippet}
-											</svelte:boundary>
+											{#if sess}
+												{#if sess.surface === 'tui'}
+													<!-- Session handoff: the same chat tile renders the native TUI
+													     resuming this conversation by id (never a standalone tui:* tab),
+													     once the engine has its daemon session (a new one is starting). -->
+													{#if sess.chat.sessionId && daemon.sessionOf(sid)}
+													<TuiPanel
+														bind:this={tuiPanels[sid]}
+														backend={sess.backendId}
+														cwd={store.cwdOf(sid) ?? ''}
+														session={daemon.sessionOf(sid)}
+														terminal={sess.chat.terminal}
+														onBackToGui={() => store.returnToGui(sid)}
+														onReattach={() => store.rewatch(sid)}
+														onOpenSettings={() => openSettings('agents')}
+													/>
+													{/if}
+												{:else}
+													<!-- A render error in one conversation must not blank the
+													     pane silently: it shows, is logged, and can be retried. -->
+													<svelte:boundary onerror={(e: unknown) => reportUiError(e, sid)}>
+														<ChatPane
+															session={sess}
+															{store}
+															{providers}
+															{providersList}
+															isActive={sid === activeId && view?.kind === 'chat' && view.id === sid && !showSettings && !showDesk}
+															onRegister={registerPane}
+															onUnregister={unregisterPane}
+															onOpenSettings={openSettings}
+														/>
+														{#snippet failed(error: unknown, reset: () => void)}
+															<div class="pane-error">
+																<p>{t('shell.paneError')}</p>
+																<code>{String((error as Error)?.message ?? error).slice(0, 300)}</code>
+																<button onclick={reset}>{t('shell.paneErrorRetry')}</button>
+															</div>
+														{/snippet}
+													</svelte:boundary>
+												{/if}
+											{:else}
+												<div class="gone">{t('shell.chatGone')}</div>
+											{/if}
 										{/if}
-									{:else}
-										<div class="gone">{t('shell.chatGone')}</div>
-									{/if}
-								{:else if projectOf(tab.panel)}
-									{@const project = store.projects.find((p) => p.id === projectOf(tab.panel))}
-									{#if project}
-										<ProjectPage
-											{project}
-											projects={workspaceProjects}
-											{currentStep}
-											onDirs={(dirs) => store.setProjectDirs(project, dirs)}
-											onStartRequirement={startRequirement}
-											onOpenSession={(s) => openDaemonSession(s)}
-										/>
-									{/if}
-								{:else if tab.panel === 'plan'}<PlanPanel plan={chat?.plan ?? []} />
-								{:else if proposalOf(tab.panel)}
-									{@const p = proposalOf(tab.panel)!}
-									{@const plan = planOf(p.sessionId, p.planId)}
-									{@const lastPlan = sessionById(p.sessionId)?.chat.messages.findLast((m) => m.kind === 'plan')}
-									<ProposalPane
-										{plan}
-										actionable={!!plan && plan === lastPlan}
-										defaultMode={planModeOf(p.sessionId)}
-										onAction={(id, action) => {
-											panes.get(p.sessionId)?.planAction(id, action);
-											if (action.decision === 'revise') panes.get(p.sessionId)?.focusComposer();
-										}}
-									/>
-								{:else if tab.panel === 'goal'}<GoalPanel goal={chat?.goal ?? null} />
-								{:else if tab.panel === 'files'}<FilesPanel rootDir={activeCwd ?? ''} />
-								{:else if tab.panel === 'git'}<GitPanel cwd={activeCwd ?? ''} worktree={activeProject?.worktree ?? null} llm={llmTarget} onOpenTask={(path, meta) => openTaskProject(path, meta)} onTaskRemoved={closeTaskProject} />
-								{:else if tab.panel === 'term'}<TerminalPanel cwd={activeCwd ?? ''} />
-								{:else if tab.panel === 'browser'}<BrowserPanel />
-								{:else if tab.panel === 'audit'}<EditorPane onAiSend={sendAiEdit} />
-								{:else if tui}<TuiPanel backend={tui} cwd={activeCwd ?? ''} onOpenSettings={() => openSettings('agents')} />
-								{/if}
-							{/snippet}
-						</Mosaic>
+									{/snippet}
+								</Mosaic>
+							</div>
+						{/each}
+						{#if shownProject}
+							{@const project = shownProject}
+							{@const key = `project:${project.id}`}
+							<div class="slot">
+								<Mosaic
+									layout={layoutOf(key)}
+									onchange={(next) => applyTiles(key, next)}
+									label={(tab: TileTab) => toolLabel(tab.panel)}
+									barAdd={false}
+									fixed={FRONT}
+									canDrop={(tab, leaf, zone) => canDrop(layoutOf(key), tab, leaf, zone)}
+									onFocus={(leaf) => onLeafFocus(key, leaf)}
+								>
+									{#snippet panel(tab)}
+										{#if tab.id !== FRONT}
+											{@render tool(tab.panel, project.path, undefined, project.worktree ?? null)}
+										{:else}
+											<ProjectPage {project} onDirs={(dirs) => store.setProjectDirs(project, dirs)} onSetup={(script) => (project.setup = script || undefined)} />
+										{/if}
+									{/snippet}
+								</Mosaic>
+							</div>
+						{:else if !view}
+							<div class="nothing" data-tauri-drag-region>{t('shell.nothingShown')}</div>
+						{/if}
 					{/if}
 				</div>
 			</div>
@@ -1721,12 +1601,7 @@
 			{#if showDesk}
 				<DeskPage
 					bind:page={deskPage}
-					bind:requirementId={deskRequirement}
 					projects={workspaceProjects}
-					currentProject={activeProject?.loose ? undefined : activeProject?.id}
-					{captureSignal}
-					{currentStep}
-					onStartRequirement={startRequirement}
 					navWidth={sidebarWidth}
 					onClose={() => (showDesk = false)}
 					onOpenSession={openDaemonSession}
@@ -1795,12 +1670,12 @@
 		<FeedbackDialog onClose={() => (showFeedback = false)} />
 	{/if}
 
-	{#if taskDialogFor}
-		<TaskDialog
-			project={taskDialogFor}
-			name={taskRequirement?.name}
-			onClose={() => ((taskDialogFor = null), (taskRequirement = null))}
-			onCreated={openTaskProject}
+	{#if creatingWorkspace}
+		<WorkspaceDialog
+			count={workspaces.workspaces.length}
+			projects={store.workspaceProjects.filter((p) => !p.loose && !p.chats && !p.worktree)}
+			onCreate={createWorkspace}
+			onClose={() => (creatingWorkspace = false)}
 		/>
 	{/if}
 
@@ -1829,18 +1704,7 @@
 				sessionChromeFor = null;
 				moveLooseToWorkspace(id, ws);
 			}}
-			{...tabCloseActions(sessionChromeFor.tab, () => (sessionChromeFor = null))}
 			onClose={() => (sessionChromeFor = null)}
-		/>
-	{/if}
-
-	{#if tabMenuFor}
-		<TabChromePopover
-			x={tabMenuFor.x}
-			y={tabMenuFor.y}
-			name={tabMenuFor.label}
-			{...tabCloseActions(tabMenuFor.tab, () => (tabMenuFor = null))}
-			onClose={() => (tabMenuFor = null)}
 		/>
 	{/if}
 
@@ -1859,7 +1723,6 @@
 				projectChromeFor = null;
 				moveProjectToWorkspace(p, ws);
 			}}
-			{...tabCloseActions(projectChromeFor.tab, () => (projectChromeFor = null))}
 			onClose={() => (projectChromeFor = null)}
 		>
 			{#snippet defaultIcon()}
@@ -1895,7 +1758,7 @@
 			onNewTask={() => newTask(activeProject)}
 			onSettings={() => openSettings()}
 			onMarket={() => (showMarket = true)}
-			onOpenPanel={openPanelTile}
+			onOpenPanel={openSide}
 			onToggleSidebar={toggleSidebar}
 			onToggleTheme={cycleTheme}
 			onSetup={(view) => {
@@ -1986,13 +1849,31 @@
 		position: relative;
 	}
 	.stage {
+		position: relative;
 		flex: 1;
 		display: flex;
 		min-width: 0;
 		min-height: 0;
 	}
-	.stage > :global(.mosaic) {
+	.slot > :global(.mosaic) {
 		flex: 1;
+	}
+	.slot {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		flex-direction: column;
+	}
+	.slot.hidden {
+		display: none;
+	}
+	.nothing {
+		height: 100%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: var(--dim2);
+		font-size: var(--fs-sm);
 	}
 	.tile-action {
 		display: inline-flex;

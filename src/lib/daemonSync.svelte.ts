@@ -266,6 +266,8 @@ export class DaemonSync {
 				// Not open here yet: it runs the way the daemon last ran it (a tab
 				// saved without the flag would otherwise read as the official one).
 				if (s.dormant && typeof r.gateway === 'boolean') s.gateway = r.gateway;
+				if (r.worktree?.gone && s.worktree?.branch === r.worktree.branch) s.worktree = undefined;
+				else if (!s.worktree && r.worktree) s.worktree = worktreeOf(r);
 				s.updatedAt = r.updated_at ?? r.created_at;
 				// Moved by another client: within this window it follows; to a
 				// project of another workspace it leaves (and is there). An
@@ -286,7 +288,7 @@ export class DaemonSync {
 			const home = this.#homeOf(r);
 			if (!home || (home.loose && !this.#looseHere(r))) continue;
 			// At the start, with the project's newest: it came from elsewhere just now.
-			const id = this.store.listDormant(home, r, undefined, true);
+			const id = this.store.listDormant(home, { ...r, worktree: worktreeOf(r) }, undefined, true);
 			const listed = home.sessions.find((x) => x.id === id);
 			if (listed) listed.updatedAt = r.updated_at ?? r.created_at;
 		}
@@ -331,6 +333,15 @@ export class DaemonSync {
 		if (!r.project) return this.store.looseGroup();
 		return this.store.workspaceProjects.find((p) => p.id === r.project && !p.stale);
 	}
+}
+
+/** The worktree the daemon made for session `r`, as the desktop keeps one:
+ *  none once removed, and none for a run in a folder inside it (the desktop
+ *  takes a session's folder for its worktree's). */
+function worktreeOf(r: DaemonSessionView): WorktreeMeta | undefined {
+	const w = r.worktree;
+	if (!w || w.gone || trim(r.cwd) !== trim(w.path)) return undefined;
+	return { isWorktree: true, mainRepoPath: w.repo, branch: w.branch, baseBranch: w.base, slug: w.slug };
 }
 
 /** An inactive workspace's saved projects after another client's change:

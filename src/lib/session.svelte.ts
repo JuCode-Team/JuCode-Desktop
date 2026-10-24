@@ -1,15 +1,16 @@
 import { AUTO_CONTINUE, ChatState, UNTITLED } from './chat.svelte';
-import { acpAgentsList, closeSession, daemon, hostSession, sessionMeta, sessionHistory, projectRoot, chatsDir, writeConfig, git } from './protocol';
+import { acpAgentsList, closeSession, daemon, hostSession, sessionMeta, sessionHistory, projectRoot, chatsDir, writeConfig, git, worktreeCreate, worktreeRestore } from './protocol';
+import { slugifyTaskName } from './gitops';
+import { probeEngine } from './engineProbe';
 import { DaemonError, type EngineSpec } from './daemon';
 import { canHandOffToTui, isValidResumeSessionId, presetOf } from './tuiHandoff';
-import { normalizeBackendId, type BackendId } from './backends';
+import { caps, normalizeBackendId, type BackendId } from './backends';
 import { createJucodeAdapter } from './backends/jucode';
 import { clearAsleep, clearDraft, dispatch, dropHeldOps, holdOps, ioFor, isAsleep, markAsleep, markDraft, registerAdapter, startDraft, unregisterAdapter } from './backends/router';
 import { buildBackendOpts, defaultBackendFor } from './backends/settings';
 import { toEngineMode } from './approval';
-import { getLocale, t } from '$lib/i18n';
+import { t } from '$lib/i18n';
 import { prefs } from './prefs.svelte';
-import { workMode } from './requirements.svelte';
 import { saveComposerText } from './composerText';
 import { toast } from './ui/toast.svelte';
 import { telemetry } from './telemetry.svelte';
@@ -45,6 +46,12 @@ export type SavedTab = {
 	model?: string;
 	/** Its own working directory (Session.cwd). */
 	cwd?: string;
+	/** Session.forkedFrom. */
+	forkedFrom?: { sid: string; title: string; turns: number };
+	/** Session.keptAt. */
+	keptAt?: number;
+	/** Session.worktree. */
+	worktree?: WorktreeMeta;
 } & SavedTabChrome;
 
 export interface SavedProject extends SavedTabChrome {
@@ -62,6 +69,8 @@ export interface SavedProject extends SavedTabChrome {
 	chats?: boolean;
 	/** 附加目录（见 Project.dirs）。 */
 	dirs?: string[];
+	/** Project.setup. */
+	setup?: string;
 }
 
 /** Waits between attempts to reach an unreachable daemon, ms (~4.5 min). */
@@ -85,6 +94,9 @@ function savedTab(s: Session): SavedTab {
 		...(s.archived ? { archived: true } : {}),
 		...(s.pinned ? { pinned: true } : {}),
 		...(s.cwd ? { cwd: s.cwd } : {}),
+		...(s.forkedFrom ? { forkedFrom: s.forkedFrom } : {}),
+		...(s.keptAt ? { keptAt: s.keptAt } : {}),
+		...(s.worktree ? { worktree: s.worktree } : {}),
 		...(s.color ? { color: s.color } : {}),
 		...(s.icon ? { icon: s.icon } : {})
 	};
@@ -125,7 +137,7 @@ export class SessionStore {
 	 *  context and timings that the daemon's replay does not carry. */
 	#parked = new Map<string, Session>();
 	/** Drafts taken off this window, by desktop id: they come back with
-	 *  their picks (model, effort, folder, a requirement to start on). */
+	 *  their picks (model, effort, folder). */
 	#parkedDrafts = new Map<string, Session>();
 	uid() {
 		return `s${Date.now().toString(36)}-${(this.#counter++).toString(36)}`;
@@ -243,7 +255,44 @@ export class SessionStore {
 	 *  to reopen when it is not the session's own. The daemon translates
 	 *  every engine into jucode
 	 *  events, so the session's adapter is the jucode one. */
-	#spawn(
+	async #spawn(
+		s: Session,
+		cwd: string | undefined,
+		after?: () => void,
+		extraOpts?: Record<string, unknown>,
+		resume?: string
+	) {
+		// A session in a worktree deleted outside the app gets it back first.
+		if (s.worktree && s.cwd) {
+			holdOps(s.id);
+			await this.#ensureWorktree(s);
+		}
+		return this.#spawnNow(s, s.cwd || cwd, after, extraOpts, resume);
+	}
+
+	/** A session's worktree, there again: checked out from its branch when
+	 *  its folder went away; with its branch gone too, the session goes on in
+	 *  its project's folder, saying so. */
+	async #ensureWorktree(s: Session) {
+		const wt = s.worktree!;
+		const path = s.cwd!;
+		try {
+			await git(['rev-parse', '--show-toplevel'], path);
+			return;
+		} catch {
+			/* gone: put it back */
+		}
+		try {
+			await worktreeRestore(wt.mainRepoPath, path, wt.branch);
+			s.chat.messages.push({ kind: 'system', text: t('chat.worktree.restored', { name: wt.slug }) });
+		} catch (e) {
+			s.chat.messages.push({ kind: 'error', text: t('chat.worktree.gone', { name: wt.slug, msg: String(e) }) });
+			s.cwd = undefined;
+			s.worktree = undefined;
+		}
+	}
+
+	#spawnNow(
 		s: Session,
 		cwd: string | undefined,
 		after?: () => void,
@@ -257,17 +306,7 @@ export class SessionStore {
 		// engine started in another mode than the desktop's would then be
 		// restarted mid-turn (yolo can't be set live), losing a turn it had not
 		// saved yet. Start it in the desktop's mode.
-		// Started on a requirement: read-only until the user confirms (the
-		// daemon's gate switches it later), and this client's last mode is
-		// neither pushed over it nor saved from it.
-		if (s.requirementStart) {
-			// The mode to work in, as picked before the engine reports read-only.
-			s.requirementStart.mode ??= workMode(s.chat.approvalMode);
-			s.chat.followEngineMode = true;
-		}
-		const mode = s.requirementStart
-			? 'read-only'
-			: String(extraOpts?.permission_mode ?? toEngineMode(s.chat.approvalMode));
+		const mode = String(extraOpts?.permission_mode ?? toEngineMode(s.chat.approvalMode));
 		if (s.backendId === 'claude') s.spawnedMode = mode === 'full-auto' ? 'bypassPermissions' : mode;
 		// Ops sent until the engine is up wait for it instead of reaching no
 		// engine (or the one being replaced).
@@ -305,7 +344,9 @@ export class SessionStore {
 							...gateway,
 							...program,
 							...(extraOpts?.model ? { model: extraOpts.model } : {}),
+							...(typeof extraOpts?.tool_provider === 'string' ? { tool_provider: extraOpts.tool_provider } : {}),
 							...(extraOpts?.resume_session_at ? { resume_at: extraOpts.resume_session_at } : {}),
+							...(extraOpts?.fork_from ? { fork_from: extraOpts.fork_from } : {}),
 							// A restarted engine keeps the session's settings.
 							...(s.chat.ultracode ? { ultracode: true } : {}),
 							...(s.chat.fast ? { fast: true } : {}),
@@ -320,8 +361,10 @@ export class SessionStore {
 								approval_mode: mode,
 								...gateway,
 								...program,
+								...(typeof extraOpts?.tool_provider === 'string' ? { tool_provider: extraOpts.tool_provider } : {}),
 								// A restarted engine keeps the session's switches.
 								...(s.chat.fast ? { fast: true } : {}),
+								...(extraOpts?.fork_from ? { fork_from: extraOpts.fork_from, fork_turns: extraOpts.fork_turns } : {}),
 								...(!prefs.thinkingSummaries ? { thinking: false } : {})
 							}
 						})
@@ -354,7 +397,10 @@ export class SessionStore {
 									}
 								};
 							})
-						: Promise.resolve(undefined);
+						: // JuCode's own engine takes no options, except a fork's.
+							extraOpts?.fork_from
+							? Promise.resolve({ engine: 'jucode', options: { fork_from: extraOpts.fork_from, fork_turns: extraOpts.fork_turns, ...(extraOpts.fork_cwd ? { fork_cwd: extraOpts.fork_cwd } : {}) } })
+							: Promise.resolve(undefined);
 		const reopen = resume ?? (s.chat.sessionId || undefined);
 		const owner = this.ownerOf(s.id);
 		// A new session names its project (a chat's is the chats folder's).
@@ -368,25 +414,6 @@ export class SessionStore {
 						s.chat.sessionId = daemon.sessionOf(s.id) ?? '';
 						// A group picked while it was a draft goes in with its id.
 						if (s.group) this.#share(s, { group: s.group });
-						// Started on a requirement: the daemon links it and has the
-						// agent explain its understanding first (see Requirements.begin).
-						if (s.requirement && s.chat.sessionId) {
-							const requirement = s.requirement;
-							const start = s.requirementStart;
-							s.requirement = undefined;
-							s.requirementStart = undefined;
-							daemon
-								.request({
-									op: 'requirement_begin',
-									requirement,
-									session: s.chat.sessionId,
-									plan: !!start?.plan,
-									mode: start?.mode ?? workMode(s.chat.approvalMode),
-									text: start?.text ?? '',
-									lang: getLocale()
-								})
-								.catch((e) => toast.error(String(e)));
-						}
 					}
 				})
 			)
@@ -470,6 +497,14 @@ export class SessionStore {
 		s.chat.engineState = 'ready';
 		s.chat.seedFromProfile();
 		markDraft(s.id, () => this.#startDraft(s.id));
+		// Its menus from what the agent offers now, when that was not known
+		// lately (engineProbe): the draft takes the answer while still a draft.
+		if (s.backendId === 'jucode') return;
+		const { id, chat } = s;
+		void probeEngine(s.backendId, s.acpAgent).then((changed) => {
+			const now = this.allSessions.find((x) => x.id === id);
+			if (changed && now?.draft && now.chat === chat) chat.seedFromProfile();
+		});
 	}
 
 	/** The first message: the draft becomes a session of its backend. Looked
@@ -495,13 +530,82 @@ export class SessionStore {
 			const effort = pick.effort ?? '';
 			dispatch(s.id, { op: 'command', input: effort ? `/model ${model} ${effort}` : `/model ${model}` });
 		};
-		const startOpts = acp && pick ? { ...(pick.model ? { model: pick.model } : {}), ...(pick.effort ? { effort: pick.effort } : {}) } : undefined;
-		this.#spawn(s, s.cwd || project.path, applyPick, startOpts)
-			.then(() => {
-				// Renamed while a draft, before it had a daemon session.
-				if (s.chat.title !== UNTITLED) this.#share(s, { title: s.chat.title });
-			})
-			.catch((e) => this.#engineFailed(s.chat, e));
+		// Claude Code / Codex off the gateway: the custom provider picked (the
+		// daemon takes the tool's default otherwise, and keeps it after).
+		const provider = s.draftToolProvider;
+		s.draftToolProvider = undefined;
+		const startOpts =
+			acp && pick
+				? { ...(pick.model ? { model: pick.model } : {}), ...(pick.effort ? { effort: pick.effort } : {}) }
+				: provider !== undefined && !s.gateway
+					? { tool_provider: provider }
+					: undefined;
+		const go = () =>
+			this.#spawn(s, s.cwd || project.path, applyPick, startOpts)
+				.then(() => {
+					// Renamed while a draft, before it had a daemon session.
+					if (s.chat.title !== UNTITLED) this.#share(s, { title: s.chat.title });
+				})
+				.catch((e) => this.#engineFailed(s.chat, e));
+		const want = s.draftWorktree;
+		s.draftWorktree = undefined;
+		if (!want) return void go();
+		void this.#makeWorktree(s, project, want.base).then((made) => {
+			if (made) void go();
+		});
+	}
+
+	/** Gives a new worktree its name from the session's first message (the
+	 *  page sets it: a one-shot model call). */
+	static nameWorktree: ((message: string) => Promise<string>) | null = null;
+	/** A session's new worktree is ready (the page runs the project's setup
+	 *  script in it). */
+	static onWorktree: ((s: Session, project: Project) => void) | null = null;
+
+	/** The worktree a draft chose, made as its first message goes: named
+	 *  from that message (else from the time), from `base`. When it cannot be
+	 *  made the session is a draft again, its message back in the composer. */
+	async #makeWorktree(s: Session, project: Project, base: string): Promise<boolean> {
+		const first = s.chat.messages.find((m) => m.kind === 'user');
+		const text = first?.kind === 'user' ? first.text : '';
+		const note = { kind: 'system' as const, text: t('chat.worktree.creating') };
+		s.chat.messages.push(note);
+		const named = SessionStore.nameWorktree && text ? await Promise.race([SessionStore.nameWorktree(text).catch(() => ''), new Promise<string>((r) => setTimeout(() => r(''), 8000))]) : '';
+		const slug = slugifyTaskName(named) || `task-${Date.now().toString(36)}`;
+		try {
+			const wt = await worktreeCreate(project.path, slug, base, prefs.worktreeFromOrigin);
+			s.cwd = wt.path;
+			s.worktree = { isWorktree: true, mainRepoPath: project.path, branch: wt.branch, baseBranch: wt.base, slug: wt.slug };
+			s.chat.messages = s.chat.messages.map((m) => (m === note ? { kind: 'system', text: t('chat.worktree.created', { name: wt.slug, branch: wt.branch, base: wt.base }) } : m));
+			SessionStore.onWorktree?.(s, project);
+			return true;
+		} catch (e) {
+			s.chat.messages = s.chat.messages.filter((m) => m !== note && m !== first);
+			s.chat.messages.push({ kind: 'error', text: t('chat.worktree.failed', { msg: String(e) }) });
+			s.draftWorktree = { base };
+			this.#makeDraft(s);
+			if (text) s.chat.pendingFill = text;
+			return false;
+		}
+	}
+
+	/** A draft goes on in a new worktree from local branch `base` (made with
+	 *  its first message), or (null) where it was. */
+	setDraftWorktree(id: string, base: string | null) {
+		const s = this.allSessions.find((x) => x.id === id);
+		if (!s?.draft) return;
+		s.draftWorktree = base ? { base } : undefined;
+		s.worktree = undefined;
+		if (base) s.cwd = undefined;
+	}
+
+	/** A draft goes on in an existing worktree. */
+	useWorktree(id: string, path: string, meta: WorktreeMeta) {
+		const s = this.allSessions.find((x) => x.id === id);
+		if (!s?.draft) return;
+		s.draftWorktree = undefined;
+		s.cwd = path;
+		s.worktree = meta;
 	}
 
 	/**
@@ -621,6 +725,7 @@ export class SessionStore {
 		const s = this.allSessions.find((x) => x.id === id);
 		if (!s) return;
 		s.archived = false;
+		s.keptAt = Date.now();
 		this.#share(s, { archived: false });
 	}
 
@@ -628,19 +733,6 @@ export class SessionStore {
 	setPinned(id: string, pinned: boolean) {
 		const s = this.allSessions.find((x) => x.id === id);
 		if (s) s.pinned = pinned || undefined;
-	}
-
-	/** Moves a session next to `targetId` in its project's order (a sidebar
-	 *  drag); the two are expected in the same pinned group. */
-	moveSession(id: string, targetId: string, after: boolean) {
-		const p = this.projects.find((pr) => pr.sessions.some((x) => x.id === id));
-		const s = p?.sessions.find((x) => x.id === id);
-		if (!p || !s || id === targetId) return;
-		const rest = p.sessions.filter((x) => x !== s);
-		const i = rest.findIndex((x) => x.id === targetId);
-		if (i < 0) return;
-		rest.splice(after ? i + 1 : i, 0, s);
-		p.sessions = rest;
 	}
 
 	/** A new conversation not started yet (a draft) moves to another
@@ -751,6 +843,8 @@ export class SessionStore {
 			gateway?: boolean;
 			/** Where it works (left out: the project's folder). */
 			cwd?: string;
+			/** The worktree it works in, when the daemon made one. */
+			worktree?: WorktreeMeta;
 		},
 		reuseId?: string,
 		atStart = false
@@ -759,6 +853,7 @@ export class SessionStore {
 		const parked = this.#unpark(rec.session);
 		if (parked) {
 			parked.cwd = cwd;
+			if (rec.worktree) parked.worktree = rec.worktree;
 			parked.dormant = true;
 			parked.archived = !!rec.archived;
 			if (rec.title) parked.chat.title = rec.title;
@@ -770,6 +865,7 @@ export class SessionStore {
 		const s = this.#newSession(normalizeBackendId(rec.engine), agent, reuseId);
 		if (rec.gateway) s.gateway = true;
 		if (cwd) s.cwd = cwd;
+		if (rec.worktree) s.worktree = rec.worktree;
 		s.dormant = true;
 		s.restored = true;
 		s.archived = !!rec.archived;
@@ -875,6 +971,60 @@ export class SessionStore {
 		if (chrome.icon === undefined) return;
 		const icon = parseTabIcon(chrome.icon);
 		if (JSON.stringify(icon) !== JSON.stringify(p.icon)) p.icon = icon;
+	}
+
+	/** A new session that goes on from session `id`'s first `keep` turns,
+	 *  beside it in its project, or in a worktree made for it (`worktree`:
+	 *  its directory, already checked out, opened as a project of its own);
+	 *  the original stays as it is. The engine
+	 *  forks its conversation (`fork_from`): Claude Code resumes it at the
+	 *  turn's last reply as a new one, Codex forks the thread through the
+	 *  turn, JuCode copies the session's turns. Until the engine replays it,
+	 *  the new session shows the turns copied from this one. */
+	forkSession(id: string, keep: number, worktree?: { path: string; meta: WorktreeMeta }) {
+		const src = this.allSessions.find((x) => x.id === id);
+		const project = this.ownerOf(id);
+		const from = src?.chat.sessionId;
+		if (!src || !project || !from || !caps(src.chat).fork) return;
+		// Claude Code resumes at a reply's id: one not known here (a reply
+		// from before replies carried it) would fork the whole conversation.
+		const at = src.backendId === 'claude' ? src.chat.claudeRewindTarget(keep) : null;
+		if (src.backendId === 'claude' && !at && keep < src.chat.userTurns) {
+			toast.error(t('chat.msg.forkUnknown'));
+			return;
+		}
+		const s = this.#newSession(src.backendId);
+		const fromCwd = this.cwdOf(id);
+		// In a worktree, its own (in the same project); else where the original works.
+		if (worktree) {
+			s.cwd = worktree.path;
+			s.worktree = worktree.meta;
+		} else if (src.cwd) {
+			s.cwd = src.cwd;
+			if (src.worktree) s.worktree = src.worktree;
+		}
+		s.forkedFrom = { sid: from, title: src.chat.title, turns: keep };
+		if (src.gateway !== undefined) s.gateway = src.gateway;
+		if (src.model) s.model = src.model;
+		s.chat.approvalMode = src.chat.approvalMode;
+		s.chat.title = t('chat.msg.forkTitle', { title: src.chat.title || UNTITLED });
+		// Its engine goes on from this conversation: no other backend.
+		s.restored = true;
+		s.updatedAt = Date.now();
+		let users = 0;
+		const upTo = src.chat.messages.findIndex((m) => m.kind === 'user' && users++ === keep);
+		s.chat.messages = $state.snapshot(src.chat.messages.slice(0, upTo < 0 ? undefined : upTo)) as typeof src.chat.messages;
+		project.sessions.splice(project.sessions.indexOf(src) + 1, 0, s);
+		this.activeId = s.id;
+		// JuCode keeps sessions by directory: a fork elsewhere reads it from the original's.
+		const fork =
+			src.backendId === 'claude'
+				? { fork_from: from, ...(at ? { resume_session_at: at } : {}) }
+				: { fork_from: from, fork_turns: keep, ...(worktree && fromCwd ? { fork_cwd: fromCwd } : {}) };
+		this.#spawn(s, this.cwdOf(s.id), undefined, { ...this.#keepModel(src), ...fork })
+			.then(() => this.renameSession(s.id, s.chat.title))
+			.catch((e) => this.#engineFailed(s.chat, e));
+		return s.id;
 	}
 
 	/** Set a project's extra directories (only absolute paths; none clears).
@@ -1163,6 +1313,20 @@ export class SessionStore {
 		}
 	}
 
+	/** A Claude Code / Codex draft starts on custom provider `provider` (on
+	 *  its default `model`), or on the tool's own login or config (''). */
+	setDraftToolProvider(id: string, provider: string, model?: string) {
+		const s = this.allSessions.find((x) => x.id === id);
+		if (!s?.draft || (s.backendId !== 'claude' && s.backendId !== 'codex')) return;
+		s.gateway = false;
+		s.draftToolProvider = provider;
+		if (model) {
+			s.draftPick = { ...s.draftPick, model };
+			s.chat.model = model;
+			s.chat.modelLabel = '';
+		}
+	}
+
 	/** Run this Claude Code / Codex session (or an ACP agent with a gateway
 	 *  mode) through the JuCode gateway (`jucode`, optionally on `model`) or
 	 *  the provider in the user's own config (`system`). Only this session's
@@ -1328,7 +1492,10 @@ export class SessionStore {
 		ChatState.forgetRunTime(id);
 		const p = this.projects.find((pr) => pr.sessions.some((s) => s.id === id));
 		if (p) p.sessions = p.sessions.filter((s) => s.id !== id);
-		if (this.activeId === id) this.activeId = this.shownSessions[0]?.id ?? '';
+		// The one in front instead: a live session of the same project, else
+		// of any, before a draft (which shows, not starts) or a settled one.
+		const live = (x: Session) => !x.draft && !x.archived;
+		if (this.activeId === id) this.activeId = (p?.sessions.find(live) ?? this.shownSessions.find(live) ?? p?.sessions.find((x) => !x.archived))?.id ?? '';
 	}
 
 	/** Move a whole project next to another, preserving its sessions. */
@@ -1476,6 +1643,7 @@ export class SessionStore {
 			...(p.worktree ? { worktree: p.worktree } : {}),
 			...(p.chats ? { chats: true } : {}),
 			...(p.dirs?.length ? { dirs: p.dirs } : {}),
+			...(p.setup ? { setup: p.setup } : {}),
 			...(p.lastBackend && p.lastBackend !== 'jucode' ? { lastBackend: p.lastBackend } : {}),
 			...(p.lastBackend === 'acp' && p.lastAcpAgent ? { lastAcpAgent: p.lastAcpAgent } : {}),
 			...(p.color ? { color: p.color } : {}),
@@ -1546,6 +1714,12 @@ export class SessionStore {
 			const s = proj.sessions.find((x) => x.id === id)!;
 			if (t.pinned === true) s.pinned = true;
 			if (typeof t.cwd === 'string' && isAbsolute(t.cwd) && !samePath(t.cwd, proj.path)) s.cwd = t.cwd;
+			if (typeof t.forkedFrom?.sid === 'string')
+				s.forkedFrom = { sid: t.forkedFrom.sid, title: String(t.forkedFrom.title ?? ''), turns: Number(t.forkedFrom.turns) || 0 };
+			if (typeof t.keptAt === 'number') s.keptAt = t.keptAt;
+			const wt = t.worktree;
+			if (s.cwd && wt && typeof wt.branch === 'string' && typeof wt.mainRepoPath === 'string' && typeof wt.slug === 'string')
+				s.worktree = { isWorktree: true, mainRepoPath: wt.mainRepoPath, branch: wt.branch, baseBranch: String(wt.baseBranch ?? ''), slug: wt.slug };
 		}
 	}
 
@@ -1570,6 +1744,7 @@ export class SessionStore {
 				const proj: Project = { id: p.id, name: p.name, path: p.path, sessions: [] };
 				if (p.chats === true) proj.chats = true;
 				this.setProjectDirs(proj, p.dirs);
+				if (typeof p.setup === 'string' && p.setup.trim()) proj.setup = p.setup;
 				this.setProjectChrome(proj, p);
 				if (p.lastBackend) proj.lastBackend = normalizeBackendId(p.lastBackend);
 				const lastAgent = proj.lastBackend === 'acp' ? acpAgentRef(p.lastAcpAgent) : undefined;

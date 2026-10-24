@@ -34,7 +34,9 @@ export const JUCODE_CAPS: BackendCaps = {
 	// drops the refusal and the spawn calls report the agents).
 	agentTrace: true,
 	// An older engine refuses context_usage: the panel shows the total only.
-	contextBreakdown: true
+	contextBreakdown: true,
+	// A copy of the session's first turns (an older daemon starts it empty).
+	fork: true
 };
 
 /** Wire protocol version this desktop speaks (`hello.protocol`). */

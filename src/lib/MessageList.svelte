@@ -1,11 +1,14 @@
 <script lang="ts">
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
 	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
 	import { flushSync, untrack, type Snippet } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import Markdown from '$lib/Markdown.svelte';
+	import MessageBar from '$lib/MessageBar.svelte';
+	import { forkPoints } from '$lib/forkPoints';
 	import Collapse from '$lib/ui/Collapse.svelte';
 	import ToolGroup from '$lib/ToolGroup.svelte';
 	import SubagentCard from '$lib/agents/SubagentCard.svelte';
@@ -26,13 +29,13 @@
 	import ErrorNotice from '$lib/ErrorNotice.svelte';
 	import type { ErrorAction } from '$lib/errorInfo';
 	import { t } from '$lib/i18n';
+	import { when } from '$lib/time';
 	import type { CallTiming, Msg, RetryState } from '$lib/chat.svelte';
 	import { prefs } from '$lib/prefs.svelte';
 	import { fmtDur, turnParts } from '$lib/turnStats';
 	import { SvelteSet } from 'svelte/reactivity';
 	import UserImage from '$lib/UserImage.svelte';
 	import QuoteIcon from '@lucide/svelte/icons/quote';
-	import ListPlusIcon from '@lucide/svelte/icons/list-plus';
 	import EditedFiles from '$lib/EditedFiles.svelte';
 	import ArtifactCards from '$lib/ArtifactCards.svelte';
 	import ScheduleProposal from '$lib/ScheduleProposal.svelte';
@@ -54,7 +57,6 @@
 		scroller = null,
 		onEdit,
 		onCite,
-		onNote,
 		onRewind,
 		onFile,
 		onDismiss,
@@ -77,6 +79,7 @@
 		onOpenSession,
 		follow,
 		onOpenEdited,
+		onFork,
 		mark = $bindable(-1)
 	}: {
 		messages: Msg[];
@@ -99,8 +102,6 @@
 		onEdit: (text: string) => void;
 		/** Quote text selected in a reply into the composer. */
 		onCite?: (text: string) => void;
-		/** Notes the selected passage as a requirement (offered beside quoting). */
-		onNote?: (text: string) => void;
 		onRewind: (text: string, userIndex: number) => void;
 		/** Open a workspace file referenced by a chat link (editor / browser). */
 		onFile?: (href: string) => void;
@@ -147,6 +148,9 @@
 		follow?: () => boolean;
 		/** Opens a file a turn edited with that turn's changes (absent: as a file). */
 		onOpenEdited?: (file: EditedFile) => void;
+		/** Forks the conversation into a new session keeping its first `keep`
+		 *  user turns (absent: the backend cannot fork). */
+		onFork?: (keep: number) => void;
 	} = $props();
 
 	// ── Rendered blocks ──────────────────────────────────────────────────────
@@ -285,7 +289,7 @@
 		// streams, or while the reader scrolls (a batch is a frame's work).
 		let idle = setTimeout(function step() {
 			idle = setTimeout(step, IDLE_MS / 2);
-			if (active || performance.now() - lastScroll < IDLE_MS) return;
+			if (streamingMsg || streamingReasoning || performance.now() - lastScroll < IDLE_MS) return;
 			if (startAt > 0 && tl.blocks.length - startAt < PREFILL) extend(startAt - BATCH);
 		}, IDLE_MS);
 		return () => {
@@ -365,6 +369,11 @@
 		return map;
 	});
 
+	// The replies a fork can start from (none when the backend cannot fork).
+	// Each finished turn's last reply: the one that carries copy, fork and time
+	// (not the narration between its tool calls).
+	const turnEnds = $derived(forkPoints(messages, busy));
+
 	// Selecting text inside one reply (or its reasoning) offers to quote it.
 	let cite = $state<{ text: string; x: number; top: number; bottom: number } | null>(null);
 	function offerCite() {
@@ -378,9 +387,9 @@
 		const r = range.getBoundingClientRect();
 		cite = { text, x: r.left + r.width / 2, top: r.top, bottom: r.bottom };
 	}
-	function takeCite(to: ((text: string) => void) | undefined = onCite) {
+	function takeCite() {
 		if (!cite) return;
-		to?.(cite.text);
+		onCite?.(cite.text);
 		window.getSelection()?.removeAllRanges();
 		cite = null;
 	}
@@ -395,53 +404,6 @@
 		return false;
 	});
 	const shownPhase = $derived(sendingShown && (phase === 'connecting' || phase === 'waiting') ? null : phase);
-
-	// Smoothing buffer: SSE deltas arrive in big bursts every few seconds, which
-	// reads as jerky chunk-by-chunk output. Reveal the received text at an adaptive
-	// pace so it flows continuously. `shown` chases the active message's length with
-	// a proportional controller (speed grows with backlog, floored so it never
-	// stalls while content is pending), integrated over real time.
-	const REVEAL_TAU = 0.5; // s — backlog time constant (higher = smoother, more lag)
-	const MIN_CPS = 60; // chars/s floor while streaming
-	let shownChars = $state(0);
-	let smoothing: Msg | null = null;
-	const active = $derived<Msg | null>(streamingMsg ?? streamingReasoning);
-	const textOf = (m: Msg | null) => (m && 'text' in m ? m.text : '');
-
-	$effect(() => {
-		if (!active) {
-			shownChars = 0;
-			smoothing = null;
-			return;
-		}
-		let raf = 0;
-		let last = performance.now();
-		const tick = (now: number) => {
-			const cur = streamingMsg ?? streamingReasoning;
-			if (!cur) return;
-			if (cur !== smoothing) {
-				smoothing = cur;
-				shownChars = 0;
-				last = now;
-			}
-			const len = textOf(cur).length;
-			const dt = Math.min(0.1, (now - last) / 1000);
-			last = now;
-			const pending = len - shownChars;
-			if (pending > 0) {
-				const cps = Math.max(MIN_CPS, pending / REVEAL_TAU);
-				shownChars = Math.min(len, shownChars + cps * dt);
-			}
-			raf = requestAnimationFrame(tick);
-		};
-		raf = requestAnimationFrame(tick);
-		return () => cancelAnimationFrame(raf);
-	});
-
-	// Text to show for a message — smoothed slice for the one currently streaming.
-	function revealed(m: Msg): string {
-		return m === active ? textOf(m).slice(0, Math.floor(shownChars)) : textOf(m);
-	}
 
 	// Incremental streaming markdown: render completed blocks as markdown (memoized
 	// by the slice, so it only re-parses when a block finalizes) and the in-progress
@@ -502,8 +464,10 @@
 	function hasContent(m: Msg): boolean {
 		// Meta/status notices render in the collapsible status strip, not inline.
 		if (m.kind === 'system') return false;
-		// present_files / propose_schedule show in the turn's summary instead.
-		if (m.kind === 'tool') return !!(m.name || m.output) && !USER_TOOLS.has(m.name);
+		// present_files / propose_schedule show in the turn's summary instead;
+		// a subagent's calls in its own conversation (its card opens it), as
+		// in t3code, so they neither interleave with this one nor fold into it.
+		if (m.kind === 'tool') return !!(m.name || m.output) && !USER_TOOLS.has(m.name) && !m.subagent;
 		if (m.kind === 'plan') return !!(m.title || m.text);
 		// Not trim(): this runs over every message whenever a reply grows.
 		return /\S/.test(m.text);
@@ -547,11 +511,10 @@
 		return () => cancelAnimationFrame(raf);
 	});
 
-	function foldLine(f: TurnFold): string {
-		const parts = [f.elapsed !== null ? t('chat.fold.worked', { t: fmtDur(f.elapsed) }) : t('chat.fold.steps', { n: f.calls })];
-		if (f.files) parts.push(t('chat.fold.files', { n: f.files }));
-		if (f.commands) parts.push(t('chat.fold.commands', { n: f.commands }));
-		return parts.join(' · ');
+	// A folded turn's line says only how long it worked; what it did is in
+	// the runs it folds (ToolGroup), as in t3code.
+	function foldHead(f: TurnFold): string {
+		return f.elapsed !== null ? t('chat.fold.worked', { t: fmtDur(f.elapsed) }) : t('chat.fold.workedPlain');
 	}
 </script>
 
@@ -567,7 +530,7 @@
 		{#if delivery}
 			<DeliveryNotice {delivery} />
 		{:else}
-		<div class="row user">
+		<div class="row user mhover">
 			<button class="uedit rewind" onclick={() => onRewind(m.text, userOrdinal.get(m) ?? 0)} aria-label="rewind" title={t('chat.rewindTitleN', { n: drop })}>
 				<RotateCcwIcon size={12} />{#if drop > 1}<span class="rwn">{drop}</span>{/if}
 			</button>
@@ -584,16 +547,16 @@
 						</div>
 					{/key}
 				{/if}
+				{#if !m.state}<MessageBar text={m.text} at={m.at} />{/if}
 			</div>
 		</div>
 		{/if}
 	{:else if m.kind === 'assistant'}
-		<div class="answer">
+		<div class="answer mhover">
 			{#if m === streamingMsg}
-				{@const rt = revealed(m)}
-				{@const si = splitIdx(rt)}
-				{#each stableBlocks(rt.slice(0, si)) as block (block.key)}<Markdown text={block.text} />{/each}
-				<div class="stream">{rt.slice(si)}</div>
+				{@const si = splitIdx(m.text)}
+				{#each stableBlocks(m.text.slice(0, si)) as block (block.key)}<Markdown text={block.text} />{/each}
+				<div class="stream">{m.text.slice(si)}</div>
 			{:else}
 				<Markdown text={m.text} {onFile} />
 				<!-- Only the turn's last reply carries the request's totals. -->
@@ -609,6 +572,8 @@
 						{#if m.tokens}<span class="mono">{t('chat.tokens', { n: m.tokens })}</span>{/if}
 					</div>
 				{/if}
+				{@const keep = turnEnds.get(m)}
+				{#if keep !== undefined}<MessageBar text={m.text} at={m.at} onFork={onFork ? () => onFork(keep) : undefined} />{/if}
 	{/if}
 		</div>
 	{:else if m.kind === 'reasoning'}
@@ -625,7 +590,7 @@
 						     tail block re-parses as it grows. -->
 						<!-- While it streams: plain text (no per-frame Markdown);
 						     it renders as Markdown once finished. -->
-						<div class="stream">{revealed(m)}</div>
+						<div class="stream">{m.text}</div>
 					{:else}
 						<Markdown text={m.text} {onFile} />
 					{/if}
@@ -657,9 +622,10 @@
 			{@const open = openFolds.has(fold.key) || closing === fold.key}
 			<div class="mwrap">
 				<button class="fold" class:open onclick={() => (open ? openFolds.delete(fold.key) : openFolds.add(fold.key))} aria-expanded={open}>
-					<span class="rchev"><ChevronRightIcon size={14} /></span>
-					<span>{foldLine(fold)}</span>
-					<span class="fold-rule"></span>
+					<span>{foldHead(fold)}</span>
+					<span class="fchev"><ChevronDownIcon size={14} /></span>
+					<!-- When it was asked, as t3code shows it. -->
+					{#if fold.key.kind === 'user' && fold.key.at}<span class="fold-at">{when(fold.key.at)}</span>{/if}
 				</button>
 				<Collapse {open}>
 					<div class="fold-rows">
@@ -693,11 +659,6 @@
 		<button onmousedown={(e) => e.preventDefault()} onclick={() => takeCite()}>
 			<QuoteIcon size={14} />{t('chat.cite')}
 		</button>
-		{#if onNote}
-			<button onmousedown={(e) => e.preventDefault()} onclick={() => takeCite(onNote)}>
-				<ListPlusIcon size={14} />{t('shell.requirement.note')}
-			</button>
-		{/if}
 	</div>
 {/if}
 
@@ -994,18 +955,19 @@
 		color: var(--dim2);
 		transition: transform var(--t-med) var(--ease-out);
 	}
-	.reason.open .rchev,
-	.fold.open .rchev {
+	.reason.open .rchev {
 		transform: rotate(90deg);
 	}
+	/* The head: how long the turn worked, over a hairline. */
 	.fold {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: 6px;
 		width: 100%;
-		min-height: 26px;
-		padding: 2px 0;
+		min-height: 30px;
+		padding: 2px 0 6px;
 		border: none;
+		border-bottom: 1px solid var(--hairline);
 		background: none;
 		color: var(--dim);
 		font-size: var(--fs-sm);
@@ -1016,10 +978,19 @@
 	.fold:hover {
 		color: var(--text);
 	}
-	.fold-rule {
-		flex: 1;
-		height: 1px;
-		background: var(--hairline);
+	.fchev {
+		display: inline-flex;
+		color: var(--dim2);
+		transition: transform var(--t-med) var(--ease-out);
+	}
+	.fold.open .fchev {
+		transform: rotate(180deg);
+	}
+	.fold-at {
+		margin-left: auto;
+		color: var(--dim2);
+		font-size: var(--fs-xs);
+		font-variant-numeric: tabular-nums;
 	}
 	/* Open, the line heads the work it folds. */
 	.fold-rows {

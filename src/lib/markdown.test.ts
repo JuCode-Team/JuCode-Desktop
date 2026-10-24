@@ -4,8 +4,9 @@ import { renderMarkdown } from './markdown';
 describe('renderMarkdown file references', () => {
 	it('links file paths in prose, lists and inline code', () => {
 		const html = renderMarkdown('Changed src/lib/a.ts:12 and `Cargo.toml`.\n\n- see crates/x.rs:3:4');
-		expect(html).toContain('<a class="fileref" href="src/lib/a.ts#L12" title="src/lib/a.ts:12">src/lib/a.ts:12</a>');
-		expect(html).toContain('<a class="fileref" href="Cargo.toml" title="Cargo.toml"><code>Cargo.toml</code></a>');
+		expect(html).toMatch(/<a class="fileref" href="src\/lib\/a.ts#L12" title="src\/lib\/a.ts:12"><svg class="fi"[^]*?<\/svg>src\/lib\/a.ts:12<\/a>/);
+		// Inline code keeps its box, with the icon inside it.
+		expect(html).toMatch(/<a class="fileref" href="Cargo.toml" title="Cargo.toml"><code><svg class="fi fi-dark"[^]*<svg class="fi fi-light"[^]*?<\/svg>Cargo.toml<\/code><\/a>/);
 		expect(html).toContain('href="crates/x.rs#L3:4"');
 	});
 

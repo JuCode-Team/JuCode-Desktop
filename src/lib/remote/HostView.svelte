@@ -1,8 +1,7 @@
 <script lang="ts">
 	import ActiveIcon from '$lib/icons/ActiveIcon.svelte';
-	// One paired computer on the remote page: its lists (sessions,
-	// requirements, what waits for the user) and
-	// the pages opened over it, or, until its daemon has accepted this device,
+	// One paired computer on the remote page: its lists (sessions, what
+	// waits for the user) and the pages opened over it, or, until its daemon has accepted this device,
 	// a connecting / pair-again screen. The page keeps one mounted per
 	// computer and hides all but the shown one, so each keeps its open pages
 	// and their sessions keep streaming while another computer is shown.
@@ -14,11 +13,7 @@
 	import QrCodeIcon from '@lucide/svelte/icons/qr-code';
 	import MonitorIcon from '@lucide/svelte/icons/monitor';
 	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
-	import ListChecksIcon from '@lucide/svelte/icons/list-checks';
 	import PlusIcon from '@lucide/svelte/icons/plus';
-	import RequirementList from './RequirementList.svelte';
-	import RequirementCompose from './RequirementCompose.svelte';
-	import RequirementScreen from './RequirementScreen.svelte';
 	import DeskList from './DeskList.svelte';
 	import DeskItemScreen from './DeskItemScreen.svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -43,8 +38,7 @@
 		chatHref,
 		onAdd,
 		onForget,
-		onRepair,
-		show
+		onRepair
 	}: {
 		conn: HostConnection;
 		/** The computer's name. */
@@ -72,9 +66,6 @@
 		onForget: (ask?: boolean) => void;
 		/** LAN: pair this device again. */
 		onRepair: () => void;
-		/** A requirement to show (a notification was opened); `n` makes the
-		 *  same one again a new request. */
-		show?: { requirement: string; n: number } | null;
 	} = $props();
 	/* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -82,12 +73,11 @@
 	// svelte-ignore state_referenced_locally
 	provideHost(conn);
 
-	type Tab = 'projects' | 'requirements' | 'desk';
-	const TABS: Tab[] = ['projects', 'requirements', 'desk'];
+	type Tab = 'projects' | 'desk';
+	const TABS: Tab[] = ['projects', 'desk'];
 	let tab = $state<Tab>('projects');
 	const TAB_TITLES = {
 		projects: 'shell.remote.sessions',
-		requirements: 'shell.requirement.title',
 		desk: 'shell.desk.pending'
 	} as const;
 	/** Pages opened over the tabs, last on top. */
@@ -97,12 +87,10 @@
 		| { kind: 'add' }
 		| { kind: 'files' | 'changes'; root: string; title: string; file?: string; line?: number }
 		| { kind: 'desk'; action: string }
-		| { kind: 'requirement'; id: string }
-		| { kind: 'capture' }
 	);
 	/** Each tab keeps its own pages: switching tabs on a wide page shows that
 	 *  tab's pane as it was left (and keeps its sessions streaming). */
-	let stacks = $state<Record<Tab, Screen[]>>({ projects: [], requirements: [], desk: [] });
+	let stacks = $state<Record<Tab, Screen[]>>({ projects: [], desk: [] });
 	const stack = $derived(stacks[tab]);
 	let nextKey = 0;
 	type NewScreen = Screen extends infer S ? (S extends Screen ? Omit<S, 'key'> : never) : never;
@@ -116,10 +104,6 @@
 	function pop() {
 		if (history.state?.jucodePage) history.back();
 		else drop();
-	}
-	/** The page on top gives way to `screen` (one history entry still). */
-	function replace(screen: NewScreen) {
-		stacks[tab] = [...stacks[tab].slice(0, -1), { ...screen, key: nextKey++ } as Screen];
 	}
 	function drop() {
 		stacks[tab] = stacks[tab].slice(0, -1);
@@ -195,14 +179,6 @@
 	const top = $derived(stack.at(-1));
 	const currentSession = $derived(top?.kind === 'session' ? top.session : undefined);
 	const currentAction = $derived(top?.kind === 'desk' ? top.action : undefined);
-	const currentRequirement = $derived(top?.kind === 'requirement' ? top.id : undefined);
-
-	// A requirement asked for from outside (an opened notification).
-	$effect(() => {
-		if (!show) return;
-		tab = 'requirements';
-		open({ kind: 'requirement', id: show.requirement });
-	});
 
 	/** A daemon session's page, from what the daemon's list knows of it. */
 	function sessionScreen(session: string, title?: string): NewScreen {
@@ -255,11 +231,6 @@
 					<ActiveIcon icon={MenuIcon} size={16} active={tab === 'projects'} />
 					<span class="label">{t('shell.remote.sessions')}</span>
 				</button>
-				<button class:on={tab === 'requirements'} onclick={() => (tab = 'requirements')} title={t('shell.requirement.title')}>
-					<ActiveIcon icon={ListChecksIcon} size={16} active={tab === 'requirements'} />
-					<span class="label">{t('shell.requirement.title')}</span>
-					{#if conn.requirements.pending > 0}<span class="badge">{conn.requirements.pending}</span>{/if}
-				</button>
 				<button class:on={tab === 'desk'} onclick={() => (tab = 'desk')} title={t('shell.desk.pending')}>
 					<ActiveIcon icon={InboxIcon} size={16} active={tab === 'desk'} />
 					<span class="label">{t('shell.desk.pending')}</span>
@@ -304,14 +275,6 @@
 						onChanges={(project) => open({ kind: 'changes', root: project.path, title: project.name })}
 					/>
 				</div>
-				<div class="tabbody" hidden={tab !== 'requirements'}>
-					<RequirementList
-						current={currentRequirement}
-						composing={wide ? stacks.requirements.length === 0 : false}
-						onNew={() => (wide ? (stacks.requirements = []) : push({ kind: 'capture' }))}
-						onOpen={(id) => open({ kind: 'requirement', id })}
-					/>
-				</div>
 				<div class="tabbody" hidden={tab !== 'desk'}>
 					<DeskList current={currentAction} onOpen={(action) => open({ kind: 'desk', action })} />
 				</div>
@@ -330,17 +293,13 @@
 			{/if}
 		</aside>
 		<section class="pane">
-			<!-- With nothing opened from the list, a wide pane shows the tab's
-			     own page: the requirement composer, or a new session. -->
+			<!-- With nothing opened from the list, a wide pane offers a new
+			     session. -->
 			{#if wide && stack.length === 0}
-				{#if tab === 'requirements'}
-					<RequirementCompose onNoted={(id) => open({ kind: 'requirement', id })} />
-				{:else}
-					<div class="pane-empty">
-						<h1>{t('shell.remote.pickSomething')}</h1>
-						<button class="start" onclick={() => newSession()}><PlusIcon size={16} />{t('shell.remote.newSession')}</button>
-					</div>
-				{/if}
+				<div class="pane-empty">
+					<h1>{t('shell.remote.pickSomething')}</h1>
+					<button class="start" onclick={() => newSession()}><PlusIcon size={16} />{t('shell.remote.newSession')}</button>
+				</div>
 			{/if}
 			{#each TABS as name (name)}
 			{#each stacks[name] as screen, i (screen.key)}
@@ -380,15 +339,6 @@
 						/>
 					{:else if screen.kind === 'add'}
 						<AddProjectScreen onBack={pop} onAdded={pop} />
-					{:else if screen.kind === 'requirement'}
-						<RequirementScreen id={screen.id} onBack={pop} onOpenSession={(s, title) => push(sessionScreen(s, title))} />
-					{:else if screen.kind === 'capture'}
-						<RequirementCompose
-							onBack={pop}
-							onNoted={(id) => {
-								replace({ kind: 'requirement', id });
-							}}
-						/>
 					{:else if screen.kind === 'desk'}
 						<DeskItemScreen id={screen.action} onBack={pop} onOpenSession={(s) => push(sessionScreen(s))} />
 					{:else if screen.kind === 'files'}

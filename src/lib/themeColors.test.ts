@@ -9,7 +9,7 @@ describe('themeTokens', () => {
 	// mix only approximates): custom themes mix their fills in the
 	// same ratios, so the built-in colors must come out (nearly) unchanged.
 	const BUILTIN = {
-		dark: { '--sidebar': '#202020', '--rail': '#141414', '--panel': '#262626', '--border': '#2e2e2e', '--border-strong': '#3a3a3a', '--dim': '#a3a3a3', '--dim2': '#737373', '--accent-deep': '#a3a3a3' },
+		dark: { '--sidebar': '#121212', '--rail': '#0e0e0e', '--panel': '#202020', '--border': '#2a2a2a', '--border-strong': '#343434', '--dim': '#a3a3a3', '--dim2': '#737373', '--accent-deep': '#a3a3a3' },
 		light: { '--sidebar': '#f7f7f7', '--rail': '#ececec', '--panel': '#ffffff', '--border': '#e8e8e8', '--border-strong': '#d6d6d6', '--dim': '#5c5c5c', '--dim2': '#9a9a9a', '--accent-deep': '#525252' }
 	};
 

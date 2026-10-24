@@ -24,6 +24,7 @@
 		rows,
 		canOpen,
 		onOp,
+		onOpenAgent,
 		onClose
 	}: {
 		chat: ChatState;
@@ -32,6 +33,9 @@
 		/** The engine reads a subagent's own conversation back (caps.agentTrace). */
 		canOpen: boolean;
 		onOp: (op: Op) => void;
+		/** A subagent opens as a page of its own (Desktop) instead of in
+		 *  this region. */
+		onOpenAgent?: (id: string) => void;
 		onClose?: () => void;
 	} = $props();
 
@@ -83,6 +87,7 @@
 	let scroller = $state<HTMLElement | null>(null);
 	function pick(id: string) {
 		if (!canOpen || !id) return;
+		if (onOpenAgent) return onOpenAgent(id);
 		chat.agentFocus = id;
 		scroller?.scrollTo({ top: 0 });
 	}

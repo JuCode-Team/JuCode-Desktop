@@ -37,9 +37,6 @@ type PrefsShape = {
 	/** The view an existing conversation opens in: the chat, or its
 	 *  engine's own TUI. */
 	defaultSurface: 'gui' | 'tui';
-	/** Where subagents and tool windows (agents, changes, files…) open: in a
-	 *  column beside the chat, or as a tab next to it. */
-	openElsewhere: 'side' | 'tab';
 	/** Sending a message scrolls the conversation to its end. */
 	scrollOnSend: boolean;
 	/** A finished turn folds its work (tool calls, thinking, interim text)
@@ -58,6 +55,11 @@ type PrefsShape = {
 	sessionAgentIcon: boolean;
 	/** Interface zoom (the webview's page zoom), one of ZOOM_STEPS. */
 	zoom: number;
+	/** Sessions idle this many days archive themselves (0: never). */
+	autoArchiveDays: number;
+	/** A new worktree starts from its base branch's remote tip, fetched
+	 *  first (else from the local branch). */
+	worktreeFromOrigin: boolean;
 };
 
 /** The zoom levels ⌘+ / ⌘- step through. */
@@ -79,7 +81,6 @@ const DEFAULTS: PrefsShape = {
 	chatFont: 'default',
 	codeFont: 'default',
 	defaultSurface: 'gui',
-	openElsewhere: 'side',
 	scrollOnSend: true,
 	foldTurns: true,
 	footContext: true,
@@ -88,11 +89,15 @@ const DEFAULTS: PrefsShape = {
 	devServerAutoOpen: false,
 	sounds: true,
 	sessionAgentIcon: true,
-	zoom: 1
+	zoom: 1,
+	autoArchiveDays: 3,
+	worktreeFromOrigin: true
 };
 
 /** A terminal font size within 8–32 px; anything else is the default. */
 const fontSize = (v: unknown) => (typeof v === 'number' && v >= 8 && v <= 32 ? v : DEFAULTS.terminalFontSize);
+/** Whole days within 0–90; anything else is the default. */
+const archiveDays = (v: unknown) => (typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 90 ? v : DEFAULTS.autoArchiveDays);
 const zoomLevel = (v: unknown) => (typeof v === 'number' && ZOOM_STEPS.includes(v) ? v : DEFAULTS.zoom);
 const inTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -146,7 +151,6 @@ class PrefsStore {
 	chatFont = $state(DEFAULTS.chatFont);
 	codeFont = $state(DEFAULTS.codeFont);
 	defaultSurface = $state(DEFAULTS.defaultSurface);
-	openElsewhere = $state(DEFAULTS.openElsewhere);
 	scrollOnSend = $state(DEFAULTS.scrollOnSend);
 	foldTurns = $state(DEFAULTS.foldTurns);
 	footContext = $state(DEFAULTS.footContext);
@@ -156,6 +160,8 @@ class PrefsStore {
 	sounds = $state(DEFAULTS.sounds);
 	sessionAgentIcon = $state(DEFAULTS.sessionAgentIcon);
 	zoom = $state(DEFAULTS.zoom);
+	autoArchiveDays = $state(DEFAULTS.autoArchiveDays);
+	worktreeFromOrigin = $state(DEFAULTS.worktreeFromOrigin);
 
 	init() {
 		const p = load();
@@ -176,7 +182,6 @@ class PrefsStore {
 		applyFont('chat', this.chatFont);
 		applyFont('code', this.codeFont);
 		this.defaultSurface = p.defaultSurface === 'tui' ? 'tui' : 'gui';
-		this.openElsewhere = p.openElsewhere === 'tab' ? 'tab' : 'side';
 		this.scrollOnSend = p.scrollOnSend !== false;
 		this.foldTurns = p.foldTurns !== false;
 		this.footContext = p.footContext !== false;
@@ -186,6 +191,8 @@ class PrefsStore {
 		this.sounds = p.sounds !== false;
 		this.sessionAgentIcon = p.sessionAgentIcon !== false;
 		this.zoom = zoomLevel(p.zoom);
+		this.autoArchiveDays = archiveDays(p.autoArchiveDays);
+		this.worktreeFromOrigin = p.worktreeFromOrigin !== false;
 		this.#applyVibrancy();
 		if (inTauri()) {
 			if (this.zoom !== 1) this.#applyZoom();
@@ -215,7 +222,6 @@ class PrefsStore {
 					chatFont: this.chatFont,
 					codeFont: this.codeFont,
 					defaultSurface: this.defaultSurface,
-					openElsewhere: this.openElsewhere,
 					scrollOnSend: this.scrollOnSend,
 					foldTurns: this.foldTurns,
 					footContext: this.footContext,
@@ -224,7 +230,9 @@ class PrefsStore {
 					devServerAutoOpen: this.devServerAutoOpen,
 					sounds: this.sounds,
 					sessionAgentIcon: this.sessionAgentIcon,
-					zoom: this.zoom
+					zoom: this.zoom,
+					autoArchiveDays: this.autoArchiveDays,
+					worktreeFromOrigin: this.worktreeFromOrigin
 				})
 			);
 		} catch {
@@ -279,13 +287,8 @@ class PrefsStore {
 		this.#save();
 	}
 
-	setOpenElsewhere(v: 'side' | 'tab') {
-		this.openElsewhere = v;
-		this.#save();
-	}
-
 	/** The switches without side effects of their own. */
-	setFlag(name: 'foldTurns' | 'footContext' | 'footCost' | 'thinkingSummaries' | 'devServerAutoOpen' | 'sounds' | 'sessionAgentIcon', v: boolean) {
+	setFlag(name: 'foldTurns' | 'footContext' | 'footCost' | 'thinkingSummaries' | 'devServerAutoOpen' | 'sounds' | 'sessionAgentIcon' | 'worktreeFromOrigin', v: boolean) {
 		this[name] = v;
 		this.#save();
 	}
@@ -307,6 +310,10 @@ class PrefsStore {
 		this.#save();
 	}
 
+	setAutoArchiveDays(days: number) {
+		this.autoArchiveDays = archiveDays(days);
+		this.#save();
+	}
 	/** Step the interface zoom up (1) or down (-1), or reset it (0). */
 	stepZoom(dir: 1 | -1 | 0) {
 		const i = ZOOM_STEPS.indexOf(this.zoom);

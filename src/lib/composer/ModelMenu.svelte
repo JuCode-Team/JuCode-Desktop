@@ -13,9 +13,9 @@
 	import Segmented from '$lib/ui/Segmented.svelte';
 	import Select from '$lib/ui/Select.svelte';
 	import Switch from '$lib/ui/Switch.svelte';
-	import { acpAgentsList, acpPresets, checkBackend, type AcpAgent, type AcpPreset } from '$lib/protocol';
+	import type { AcpPreset } from '$lib/protocol';
+	import { agentCatalog } from '$lib/agentCatalog.svelte';
 	import type { AcpAgentRef } from '$lib/types';
-	import { loadBackendSettings, versionLabel } from '$lib/backends/settings';
 	import { CAPS, NATIVE_BACKEND_IDS, BACKEND_LABELS, type BackendId } from '$lib/backends';
 	import { t } from '$lib/i18n';
 	import type { ChatState } from '$lib/chat.svelte';
@@ -102,24 +102,13 @@
 		return () => ro.disconnect();
 	});
 
-	// Agent availability (best-effort), the built-in and the registered ACP agents.
-	let probe = $state<Partial<Record<BackendId, { found: boolean; version: string }>>>({});
-	let presets = $state<AcpPreset[]>([]);
-	let acpAgents = $state<AcpAgent[]>([]);
+	// Agent availability, the built-in and the registered ACP agents: as last
+	// known at once, checked again in the background (agentCatalog).
+	const probe = $derived(agentCatalog.native);
+	const presets = $derived(agentCatalog.presets);
+	const acpAgents = $derived(agentCatalog.agents);
 	onMount(() => {
-		if (backendLocked) return;
-		const settings = loadBackendSettings();
-		for (const id of NATIVE_BACKEND_IDS) {
-			checkBackend(id, settings.paths[id])
-				.then((s) => (probe[id] = { found: s.found, version: versionLabel(s) }))
-				.catch(() => {});
-		}
-		acpPresets()
-			.then((p) => (presets = p))
-			.catch(() => {});
-		acpAgentsList()
-			.then((a) => (acpAgents = a))
-			.catch(() => {});
+		if (!backendLocked) void agentCatalog.refresh();
 	});
 	const presetTitle = (p: AcpPreset) =>
 		p.status === 'missing'

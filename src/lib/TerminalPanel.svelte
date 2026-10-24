@@ -6,8 +6,22 @@
 	import '@xterm/xterm/css/xterm.css';
 	import { terminalLook, useTerminalInput, useWebgl } from './terminal';
 	import { ptyOpen, ptyWrite, ptyResize, ptyClose } from '$lib/protocol';
+	import { dropTerminal, ownTerminal } from '$lib/terminals.svelte';
 
-	let { cwd = '' }: { cwd?: string } = $props();
+	let {
+		cwd = '',
+		run,
+		onRan,
+		owner
+	}: {
+		cwd?: string;
+		/** The session and tool tab it belongs to (the sidebar marks a session
+		 *  whose terminal runs something). */
+		owner?: { session: string; tab: string };
+		/** A command the shell runs once it is up (a worktree's setup script). */
+		run?: string;
+		onRan?: () => void;
+	} = $props();
 	let host = $state<HTMLDivElement | null>(null);
 	let term: Terminal | undefined;
 	let fit: FitAddon | undefined;
@@ -54,6 +68,11 @@
 				ptyClose(id);
 				return runCleanups();
 			}
+			if (owner) ownTerminal(id, owner);
+			if (run) {
+				ptyWrite(id, run + '\r');
+				onRan?.();
+			}
 
 			const ro = new ResizeObserver(refit);
 			if (host) ro.observe(host);
@@ -72,6 +91,7 @@
 	onDestroy(() => {
 		disposed = true;
 		runCleanups();
+		dropTerminal(id);
 		ptyClose(id);
 		term?.dispose();
 	});

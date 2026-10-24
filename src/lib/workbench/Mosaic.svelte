@@ -42,7 +42,9 @@
 		tabMark,
 		actions,
 		onTabContext,
-		onTabRename
+		onTabRename,
+		fixed,
+		canDrop
 	}: {
 		layout: TileLayout;
 		onchange: (next: TileLayout) => void;
@@ -72,6 +74,11 @@
 		onTabContext?: (tab: TileTab, ev: MouseEvent) => void;
 		/** Double-click on a tab (rename affordance). */
 		onTabRename?: (tab: TileTab, ev: MouseEvent) => void;
+		/** A tab whose pane shows it alone, without a tab bar: it is not
+		 *  dragged, closed or stacked with others. */
+		fixed?: string;
+		/** Whether a dragged tab may land on a pane's zone (the caller's limits). */
+		canDrop?: (tabId: string, leafId: string, zone: DropZone) => boolean;
 	} = $props();
 
 	let rootEl = $state<HTMLElement | null>(null);
@@ -131,6 +138,13 @@
 			return { leafId: el.dataset.leaf!, zone: edges[0][0] < 0.22 ? edges[0][1] : 'center' };
 		}
 		return null;
+	}
+
+	/** `z` if the caller lets the tab land there; an edge it refuses falls
+	 *  back to joining that pane's stack, when that is allowed. */
+	function allowed(tabId: string, z: { leafId: string; zone: DropZone } | null) {
+		if (!z || !canDrop || canDrop(tabId, z.leafId, z.zone)) return z;
+		return z.zone !== 'center' && canDrop(tabId, z.leafId, 'center') ? { leafId: z.leafId, zone: 'center' as const } : null;
 	}
 
 	/** The tab-bar slot under the pointer: the bar the tab came from keeps it
@@ -205,7 +219,7 @@
 			drag.x = ev.clientX;
 			drag.y = ev.clientY;
 			drag.dx = ev.clientX - startX;
-			hover = slotAt(bars, ev.clientX, ev.clientY, fromLeaf) ?? zoneAt(ev.clientX, ev.clientY);
+			hover = slotAt(bars, ev.clientX, ev.clientY, fromLeaf) ?? allowed(drag.tabId, zoneAt(ev.clientX, ev.clientY));
 		};
 		const up = () => {
 			window.removeEventListener('pointermove', move);
@@ -317,6 +331,7 @@
 		data-leaf={leaf.id}
 		onpointerdowncapture={() => onFocus?.(leaf.id)}
 	>
+		{#if !fixed || !leaf.tabs.some((x) => x.id === fixed)}
 		<div class="lbar" data-tauri-drag-region data-bar={leaf.id} role="tablist" tabindex="-1">
 			<div class="ltabs">
 				{#each leaf.tabs as tab, j (tab.id)}
@@ -379,6 +394,7 @@
 				/>
 			{/if}
 		</div>
+		{/if}
 		<div class="lbody">
 			{#each leaf.tabs as tab (tab.id)}
 				<div class="lpane" class:hidden={leaf.active !== tab.id}>{@render panel(tab)}</div>

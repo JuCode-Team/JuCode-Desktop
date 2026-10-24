@@ -116,11 +116,17 @@
 		z-index: 30;
 		cursor: default;
 	}
+	/* At least as wide as its trigger (and a readable minimum), as wide as
+	   its longest option up to a cap: a narrow trigger no longer squeezes
+	   its options onto several lines. It grows leftwards, from the
+	   trigger's right edge, where a settings row puts it. */
 	.menu {
 		position: absolute;
 		top: calc(100% + 5px);
-		left: 0;
 		right: 0;
+		width: max-content;
+		min-width: max(100%, 160px);
+		max-width: min(360px, calc(100vw - 32px));
 		z-index: 31;
 		max-height: 240px;
 		overflow-y: auto;
@@ -128,7 +134,7 @@
 		background: var(--panel);
 		border-radius: var(--r);
 		box-shadow: var(--shadow-pop);
-		transform-origin: bottom left;
+		transform-origin: top right;
 		animation: pop-in var(--t-med) var(--ease-out);
 	}
 	.opt {
@@ -170,6 +176,8 @@
 		align-items: center;
 		gap: 8px;
 		overflow: hidden;
+		white-space: nowrap;
+		text-overflow: ellipsis;
 	}
 	:global(.opt-chk) {
 		color: var(--accent-bright);

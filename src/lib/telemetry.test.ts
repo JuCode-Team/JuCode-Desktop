@@ -41,9 +41,9 @@ describe('telemetry', () => {
 	it('counts nothing and drops what is kept when turned off', async () => {
 		const send = vi.fn(async () => {});
 		const t = new Telemetry();
-		t.track('requirement_create');
+		t.track('feedback_send');
 		prefs.telemetry = false;
-		t.track('requirement_create');
+		t.track('feedback_send');
 		t.start(send);
 		await t.flush();
 		expect(send).not.toHaveBeenCalled();

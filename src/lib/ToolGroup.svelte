@@ -9,15 +9,17 @@
 	import ToolCard from '$lib/ToolCard.svelte';
 	import { t } from '$lib/i18n';
 	import type { Msg } from '$lib/chat.svelte';
-	import { diffStat, editedPaths, isEdit, parseToolOutput, toolTarget, toolVerb } from '$lib/toolSummary';
+	import { diffStat, isEdit, parseToolOutput, toolTarget, toolVerb } from '$lib/toolSummary';
+	import { workLine, workSummary } from '$lib/workSummary';
 	import DiffStat from '$lib/DiffStat.svelte';
 	import { fmtDur } from '$lib/turnStats';
 
 	type Tool = Extract<Msg, { kind: 'tool' }>;
 
 	// A run of consecutive tool calls, with the reasoning between them, as one
-	// card: folded, a header with the run's status, latest call and time;
-	// open, the calls and reasoning in the order they happened.
+	// card: folded, a header with the run's status, its latest call while it
+	// runs and what it did once done (workSummary), and its time; open, the
+	// calls and reasoning in the order they happened.
 	let {
 		run,
 		open,
@@ -37,25 +39,22 @@
 	const running = $derived(tools.some((x) => x.running));
 	const anyFailed = $derived(tools.some(failed));
 	const latest = $derived(tools[tools.length - 1]);
-	// A run that only edits files says which, and how much changed.
-	const edits = $derived.by(() => {
-		if (!tools.length || !tools.every((x) => isEdit(x.name))) return null;
-		const files = new Set<string>();
+	const work = $derived(running ? null : workLine(workSummary(tools)));
+	// Lines the run's edits added and removed (null: it edited nothing that says).
+	const stat = $derived.by(() => {
 		let add = 0;
 		let del = 0;
 		let counted = false;
 		for (const x of tools) {
 			const parsed = parseToolOutput(x.output);
-			for (const p of editedPaths(parsed)) files.add(p);
-			const stat = diffStat(parsed);
-			if (stat) {
+			const s = isEdit(x.name, parsed) && !failed(x) ? diffStat(parsed) : null;
+			if (s) {
 				counted = true;
-				add += stat.add;
-				del += stat.del;
+				add += s.add;
+				del += s.del;
 			}
 		}
-		const names = [...files].map((p) => p.split('/').pop() || p);
-		return { names, stat: counted ? { add, del } : null };
+		return counted ? { add, del } : null;
 	});
 
 	// Ticks while a call runs, for the live times.
@@ -100,20 +99,15 @@
 			<span class="st">
 				{#if running}<LoaderCircleIcon size={14} class="spin" />{:else if anyFailed}<XIcon size={14} class="bad" />{:else}<CheckIcon size={14} class="good" />{/if}
 			</span>
-			{#if edits}
-				<span class="verb">{t('chat.editedFiles', { n: edits.names.length })}</span>
-				{#if edits.names.length}<span class="sep">·</span><span class="target">{edits.names.join(', ')}</span>{/if}
-				<span class="grow"></span>
-				{#if edits.stat}<DiffStat {...edits.stat} />{/if}
-			{:else}
-				{#if latest}
-					<span class="verb">{toolVerb(latest.name)}</span>
-					<span class="target">{toolTarget(latest.name, parseToolOutput(latest.output))}</span>
-				{/if}
-				<span class="grow"></span>
-				{#if tools.length > 1}<span class="count">{t('chat.toolGroup', { n: tools.length })}</span>{/if}
-				{#if took !== null}<span class="took">{fmtDur(took)}</span>{/if}
+			{#if work}
+				<span class="work">{work}</span>
+			{:else if latest}
+				<span class="verb">{toolVerb(latest.name)}</span>
+				<span class="target">{toolTarget(latest.name, parseToolOutput(latest.output))}</span>
 			{/if}
+			<span class="grow"></span>
+			{#if stat}<DiffStat {...stat} live={running} />{/if}
+			{#if took !== null}<span class="took">{fmtDur(took)}</span>{/if}
 			<span class="chev"><ChevronRightIcon size={14} /></span>
 		</button>
 		<Collapse {open}>
@@ -194,14 +188,15 @@
 		font-family: var(--font-mono);
 		font-size: var(--fs-xs);
 	}
+	.work {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
 	.grow {
 		flex: 1;
 	}
-	.sep {
-		flex-shrink: 0;
-		color: var(--dim2);
-	}
-	.count,
 	.took {
 		flex-shrink: 0;
 		color: var(--dim2);

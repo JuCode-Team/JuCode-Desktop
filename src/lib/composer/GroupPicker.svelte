@@ -21,10 +21,15 @@
 		/** On this machine through one of the tool's custom providers (set in
 		 *  Settings): its name. */
 		custom?: string;
+		/** A draft: the tool's custom providers it may start on instead (a
+		 *  started session stays on its own). */
+		customs?: { id: string; name: string; model: string; models: number }[];
+		/** The one of `customs` it starts on. */
+		customId?: string;
 		group: string;
 		/** The session's group reaches its requests (it runs in the daemon). */
 		groups: boolean;
-		onPick: (choice: { local: true } | { group: string }) => void;
+		onPick: (choice: { local: true } | { group: string } | { custom: string }) => void;
 	};
 </script>
 
@@ -72,8 +77,11 @@
 	const listed = $derived(served.length > 1 ? served : []);
 	// A custom provider is named even with nothing else to choose.
 	const custom = $derived(local ? (tool?.custom ?? '') : '');
+	const customs = $derived(tool?.customs ?? []);
 	const shown = $derived(
-		tool ? !!custom || (tool.local ? 1 : 0) + (tool.jucode ? 1 : 0) + listed.length > 1 : listed.length > 0
+		tool
+			? !!custom || customs.length > 0 || (tool.local ? 1 : 0) + (tool.jucode ? 1 : 0) + listed.length > 1
+			: listed.length > 0
 	);
 	const mult = (n: number) => `×${Number(n.toFixed(3))}`;
 	const billing = (g: JucodeGroup) =>
@@ -115,6 +123,10 @@
 		open = false;
 		tool?.onPick({ local: true });
 	}
+	function pickCustom(id: string) {
+		open = false;
+		tool?.onPick({ custom: id });
+	}
 </script>
 
 <!-- Nothing to choose when one option (or none) serves the model. -->
@@ -130,7 +142,26 @@
 		</button>
 		{#if open}
 			<div use:overBrowser class="list" role="listbox" aria-label={tool ? t('chat.provider') : t('chat.groupTitle')}>
-				{#if tool?.local || custom}
+				{#if customs.length}
+					<!-- A draft: the tool's own login or config, or one of its providers. -->
+					<button class="pop-row" role="option" aria-selected={local && !tool?.customId} onclick={pickLocal}>
+						<span class="pop-txt">
+							<span class="pop-label">{t('chat.providerLocal')}</span>
+							<span class="pop-desc">{t('chat.providerLocalDesc', { tool: tool?.name ?? '' })}</span>
+						</span>
+						<span class="pop-check" class:off={!local || !!tool?.customId}><CheckIcon size={16} /></span>
+					</button>
+					{#each customs as c (c.id)}
+						{@const on = local && tool?.customId === c.id}
+						<button class="pop-row" role="option" aria-selected={on} onclick={() => pickCustom(c.id)}>
+							<span class="pop-txt">
+								<span class="pop-label">{t('chat.providerCustom', { name: c.name })}</span>
+								<span class="pop-desc">{t('chat.providerCustomModels', { n: c.models, model: c.model })}</span>
+							</span>
+							<span class="pop-check" class:off={!on}><CheckIcon size={16} /></span>
+						</button>
+					{/each}
+				{:else if tool?.local || custom}
 					<button class="pop-row" role="option" aria-selected={local} onclick={pickLocal}>
 						<span class="pop-txt">
 							<span class="pop-label">{localLabel}</span>

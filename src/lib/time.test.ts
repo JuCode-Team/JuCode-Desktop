@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { when } from './time';
+import { ago, when } from './time';
 
 describe('when', () => {
 	const now = new Date(2026, 9, 10, 15, 0);
@@ -7,5 +7,15 @@ describe('when', () => {
 		expect(when(new Date(2026, 9, 10, 0, 4).getTime(), now)).toBe('00:04');
 		expect(when(new Date(2026, 9, 9, 13, 30).getTime(), now)).toBe('10/9 13:30');
 		expect(when(new Date(2025, 0, 2, 9, 5).getTime(), now)).toBe('2025/1/2 09:05');
+	});
+});
+
+describe('ago', () => {
+	const now = 1_000_000_000_000;
+	it('counts minutes, hours, then days', () => {
+		expect(ago(now - 5_000, now)).toBe('1m');
+		expect(ago(now - 10 * 60_000, now)).toBe('10m');
+		expect(ago(now - 5 * 3_600_000, now)).toBe('5h');
+		expect(ago(now - 3 * 86_400_000, now)).toBe('3d');
 	});
 });

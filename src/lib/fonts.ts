@@ -1,15 +1,14 @@
-// The fonts Settings offers for the interface, the conversation and code: a
-// fixed list, of which only those installed on this computer are shown. Each
-// named font falls back to the app's own, so a font later removed changes
-// nothing. The conversation follows the interface unless set.
+// The fonts of the interface, the conversation and code: a generic choice
+// (the app's own, the system's, a serif) or any family installed here, which
+// Settings lists from the system (system_fonts). A named font falls back to
+// the app's own, so one later removed changes nothing. The conversation
+// follows the interface unless set.
 
 export type FontSlot = 'ui' | 'chat' | 'code';
 
+/** A generic choice; its label is in the messages (`settings.behavior.font*`). */
 export interface FontChoice {
 	id: string;
-	/** A font family name, shown as is; unset for the generic choices, which
-	 *  are named in the messages (`settings.font.<id>`). */
-	family?: string;
 	/** The CSS list it applies; unset for the default. */
 	stack?: string;
 }
@@ -17,57 +16,43 @@ export interface FontChoice {
 const SANS = "'Inter Variable', Inter, -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif";
 const MONO = "'Geist Mono Variable', 'Geist Mono', 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace";
 const SYSTEM_SANS = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei UI', 'Noto Sans SC', system-ui, sans-serif";
-const named = (family: string, rest: string): FontChoice => ({ id: family, family, stack: `'${family}', ${rest}` });
 
-const SANS_FAMILIES = ['HarmonyOS Sans SC', 'MiSans', 'Source Han Sans SC', 'Noto Sans SC'];
-
+/** The generic choices of each slot (named in `settings.behavior.font*`). */
 export const FONT_CHOICES: Record<FontSlot, FontChoice[]> = {
-	ui: [{ id: 'default' }, { id: 'system', stack: SYSTEM_SANS }, ...SANS_FAMILIES.map((f) => named(f, SANS))],
+	ui: [{ id: 'default' }, { id: 'system', stack: SYSTEM_SANS }],
 	chat: [
 		{ id: 'default' },
 		{ id: 'system', stack: SYSTEM_SANS },
-		{ id: 'serif', stack: "'Source Han Serif SC', 'Noto Serif SC', 'Songti SC', STSong, SimSun, serif" },
-		...[...SANS_FAMILIES, 'LXGW WenKai'].map((f) => named(f, 'var(--font-sans)'))
+		{ id: 'serif', stack: "'Source Han Serif SC', 'Noto Serif SC', 'Songti SC', STSong, SimSun, serif" }
 	],
-	code: [
-		{ id: 'default' },
-		{ id: 'system', stack: "ui-monospace, 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace" },
-		...['JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Source Code Pro', 'Maple Mono', 'Sarasa Mono SC'].map((f) => named(f, MONO))
-	]
+	code: [{ id: 'default' }, { id: 'system', stack: "ui-monospace, 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace" }]
 };
+
+/** What a named font falls back to, per slot. */
+const FALLBACK: Record<FontSlot, string> = { ui: SANS, chat: 'var(--font-sans)', code: MONO };
+
+/** A family name that can go into CSS as it is quoted there. */
+const isFamily = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length <= 100 && !/['";{}\\<>]/.test(v);
 
 /** The CSS variable each slot sets (app.css defines their defaults). */
 const VARS: Record<FontSlot, string> = { ui: '--font-sans', chat: '--font-chat', code: '--font-mono' };
 
-/** A saved id that is on the slot's list, else the default. */
+/** A saved id: a generic choice of the slot or a family name, else the default. */
 export function fontChoice(slot: FontSlot, id: unknown): string {
-	return FONT_CHOICES[slot].some((c) => c.id === id) ? (id as string) : 'default';
+	return FONT_CHOICES[slot].some((c) => c.id === id) || isFamily(id) ? (id as string) : 'default';
+}
+
+/** The CSS list a choice applies (none for the default). */
+export function fontStack(slot: FontSlot, id: string): string | undefined {
+	const generic = FONT_CHOICES[slot].find((c) => c.id === id);
+	if (generic) return generic.stack;
+	return isFamily(id) ? `'${id}', ${FALLBACK[slot]}` : undefined;
 }
 
 /** Applies the slot's choice to the page. */
 export function applyFont(slot: FontSlot, id: string) {
 	if (typeof document === 'undefined') return;
-	const stack = FONT_CHOICES[slot].find((c) => c.id === id)?.stack;
+	const stack = fontStack(slot, id);
 	if (stack) document.documentElement.style.setProperty(VARS[slot], stack);
 	else document.documentElement.style.removeProperty(VARS[slot]);
-}
-
-/** Whether `family` is installed: text set in it measures differently from
- *  each generic font it would otherwise fall back to. */
-export function installed(family: string): boolean {
-	const ctx = typeof document === 'undefined' ? null : document.createElement('canvas').getContext('2d');
-	if (!ctx) return false;
-	const text = 'mmmmmmmmmmlli10WQ字体样本';
-	return ['monospace', 'serif', 'sans-serif'].some((base) => {
-		ctx.font = `72px ${base}`;
-		const width = ctx.measureText(text).width;
-		ctx.font = `72px '${family}', ${base}`;
-		return ctx.measureText(text).width !== width;
-	});
-}
-
-/** The slot's choices to offer: the generic ones, the named fonts installed
- *  here, and the current one whatever it is. */
-export function offeredFonts(slot: FontSlot, current: string): FontChoice[] {
-	return FONT_CHOICES[slot].filter((c) => !c.family || c.id === current || installed(c.family));
 }

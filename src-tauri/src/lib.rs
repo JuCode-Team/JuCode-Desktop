@@ -2977,7 +2977,11 @@ fn git_checkpoint_capture(
 /// The working tree as a commit (on HEAD, if any).
 fn checkpoint_commit(cwd: &str) -> Result<String, String> {
     let dir = PathBuf::from(cwd);
-    let idx = std::env::temp_dir().join(format!("jucode-ckpt-{}.idx", std::process::id()));
+    // Its own index file: captures run at once (two sessions' turns) would
+    // otherwise write each other's trees.
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let idx = std::env::temp_dir().join(format!("jucode-ckpt-{}-{n}.idx", std::process::id()));
     let _ = std::fs::remove_file(&idx);
     let has_head = git_plumb(&dir, None, &["rev-parse", "--verify", "HEAD"]).is_ok();
     if has_head {
@@ -3044,6 +3048,168 @@ fn git_checkpoint_restore(
     }
     git_plumb(&dir, None, &["checkout", &checkpoint, "--", "."])?;
     Ok(Some(safety))
+}
+
+/// A fork of a conversation in its own worktree: a new branch at the commit
+/// the checkpoint was taken on, in `<container>/<slug>` (`path`), with the
+/// working tree as the checkpoint has it (what was not committed then is
+/// not committed there either). The checkpoint is the sha given, else the
+/// one kept for the session's turn. Returns the branch's base commit.
+#[tauri::command(async)]
+fn git_fork_worktree(
+    repo: String,
+    path: String,
+    branch: String,
+    checkpoint: String,
+    session: Option<String>,
+    turn: Option<u32>,
+) -> Result<String, String> {
+    let dir = PathBuf::from(&repo);
+    if !is_valid_ref_name(&branch) {
+        return Err(format!("invalid ref name: {branch}"));
+    }
+    confine_worktree_path(&path, &dir)?;
+    let checkpoint = if checkpoint.is_empty() {
+        let (Some(session), Some(turn)) = (session.as_deref(), turn) else {
+            return Err("no checkpoint given".to_string());
+        };
+        match git_plumb(&dir, None, &["rev-parse", "--verify", "--quiet", &checkpoint_ref(session, turn)?]) {
+            Ok(sha) if !sha.is_empty() => sha,
+            _ => return Err("no checkpoint for that turn".to_string()),
+        }
+    } else if checkpoint.len() < 7 || checkpoint.len() > 64 || !checkpoint.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(format!("invalid checkpoint sha: {checkpoint}"));
+    } else {
+        checkpoint
+    };
+    let base = git_plumb(&dir, None, &["rev-parse", "--verify", "--quiet", &format!("{checkpoint}^")])
+        .map_err(|_| "the repository had no commit when the checkpoint was taken".to_string())?;
+    git_plumb(&dir, None, &["worktree", "add", "-b", &branch, &path, &base])?;
+    let tree = PathBuf::from(&path);
+    git_plumb(&tree, None, &["read-tree", "-u", "--reset", &checkpoint])?;
+    git_plumb(&tree, None, &["reset", "-q"])?;
+    Ok(base)
+}
+
+/// A font family installed on this computer (system_fonts).
+#[derive(Clone, Serialize)]
+struct FontFamily {
+    family: String,
+    /// Every face of it is fixed-width: offered for code and the terminal.
+    mono: bool,
+}
+
+/// The font families installed here, sorted, for Settings to offer (the
+/// webview cannot list them). Read once per run: a scan of the font folders.
+#[tauri::command(async)]
+fn system_fonts() -> Vec<FontFamily> {
+    static FONTS: std::sync::OnceLock<Vec<FontFamily>> = std::sync::OnceLock::new();
+    FONTS
+        .get_or_init(|| {
+            let mut db = fontdb::Database::new();
+            db.load_system_fonts();
+            let mut families: std::collections::BTreeMap<String, bool> = std::collections::BTreeMap::new();
+            for face in db.faces() {
+                // The family's own name as English lists it; macOS's hidden
+                // `.`-faces are the system's private ones.
+                let Some((name, _)) = face.families.first() else { continue };
+                if name.is_empty() || name.starts_with('.') {
+                    continue;
+                }
+                let mono = families.entry(name.clone()).or_insert(true);
+                *mono &= face.monospaced;
+            }
+            let mut list: Vec<FontFamily> = families.into_iter().map(|(family, mono)| FontFamily { family, mono }).collect();
+            list.sort_by_key(|f| f.family.to_lowercase());
+            list
+        })
+        .clone()
+}
+
+/// A session's new worktree (worktree_create).
+#[derive(Serialize)]
+struct NewWorktree {
+    path: String,
+    branch: String,
+    /// The local branch it was based on (also kept in git config as
+    /// `branch.<branch>.jucode-base`).
+    base: String,
+    slug: String,
+}
+
+/// A worktree of its own for a session, as t3code makes one: a new branch
+/// `jucode/<slug>` in `<container>/<slug>`, from local branch `base`, or,
+/// with `from_origin`, from its remote's tip once fetched (the local branch
+/// when that fails: offline, no remote). A slug or branch already taken gets
+/// `-2`, `-3`…; submodules are checked out (their failure is not the
+/// worktree's).
+#[tauri::command(async)]
+fn worktree_create(repo: String, slug: String, base: String, from_origin: bool) -> Result<NewWorktree, String> {
+    if !is_valid_task_slug(&slug) {
+        return Err(format!("invalid task slug: {slug}"));
+    }
+    if !is_valid_ref_name(&base) {
+        return Err(format!("invalid ref name: {base}"));
+    }
+    let root = PathBuf::from(git_plumb(Path::new(&repo), None, &["rev-parse", "--show-toplevel"])?);
+    let container = worktree_base_dir(&root)?;
+    std::fs::create_dir_all(&container).map_err(|e| format!("failed to create worktree container dir: {e}"))?;
+    let taken = |s: &str| {
+        container.join(s).exists()
+            || git_plumb(&root, None, &["rev-parse", "--verify", "--quiet", &format!("refs/heads/jucode/{s}")]).is_ok()
+    };
+    let slug = (1..=100)
+        .map(|n| if n == 1 { slug.clone() } else { format!("{slug}-{n}") })
+        .find(|s| s.len() <= 100 && !taken(s))
+        .ok_or_else(|| format!("no free worktree name for {slug}"))?;
+    let branch = format!("jucode/{slug}");
+    let path = container.join(&slug);
+    let path_str = path.to_string_lossy().to_string();
+    let start = from_origin
+        .then(|| {
+            let remote = git_plumb(&root, None, &["config", "--get", &format!("branch.{base}.remote")])
+                .ok()
+                .filter(|r| !r.is_empty() && r != ".")
+                .unwrap_or_else(|| "origin".to_string());
+            git_plumb(&root, None, &["fetch", "--quiet", &remote, &base]).ok()?;
+            let tip = format!("refs/remotes/{remote}/{base}");
+            git_plumb(&root, None, &["rev-parse", "--verify", "--quiet", &tip]).ok()?;
+            Some(tip)
+        })
+        .flatten()
+        .unwrap_or_else(|| base.clone());
+    git_plumb(&root, None, &["worktree", "add", "-b", &branch, &path_str, &start])?;
+    let _ = git_plumb(&root, None, &["config", &format!("branch.{branch}.jucode-base"), &base]);
+    if root.join(".gitmodules").exists() {
+        let _ = git_plumb(&path, None, &["submodule", "update", "--init", "--recursive"]);
+    }
+    Ok(NewWorktree { path: path_str, branch, base, slug })
+}
+
+/// A session's worktree deleted outside the app, put back: the stale entry
+/// pruned, its branch checked out in the same place again.
+#[tauri::command(async)]
+fn worktree_restore(repo: String, path: String, branch: String) -> Result<(), String> {
+    if !is_valid_ref_name(&branch) {
+        return Err(format!("invalid ref name: {branch}"));
+    }
+    let root = PathBuf::from(git_plumb(Path::new(&repo), None, &["rev-parse", "--show-toplevel"])?);
+    confine_worktree_path(&path, &root)?;
+    git_plumb(&root, None, &["worktree", "prune"])?;
+    git_plumb(&root, None, &["worktree", "add", &path, &branch])?;
+    Ok(())
+}
+
+/// The branch a worktree's branch was based on, as worktree_create kept it
+/// (None for one made otherwise).
+#[tauri::command(async)]
+fn worktree_base_of(repo: String, branch: String) -> Result<Option<String>, String> {
+    if !is_valid_ref_name(&branch) {
+        return Err(format!("invalid ref name: {branch}"));
+    }
+    Ok(git_plumb(Path::new(&repo), None, &["config", "--get", &format!("branch.{branch}.jucode-base")])
+        .ok()
+        .filter(|b| !b.is_empty()))
 }
 
 // --- terminal (real PTY) ---
@@ -3259,6 +3425,33 @@ fn pty_resize(id: String, cols: u16, rows: u16, ptys: tauri::State<Ptys>) -> Res
             pixel_height: 0,
         })
         .map_err(|e| e.to_string())
+}
+
+/// The terminals among `ids` running something: their shell has a child
+/// process (a command it started). Unix only; elsewhere none.
+#[tauri::command]
+fn pty_busy(ids: Vec<String>, ptys: tauri::State<Ptys>) -> Result<Vec<String>, String> {
+    let shells: Vec<(String, u32)> = {
+        let map = ptys.map.lock().map_err(|e| format!("lock poisoned: {e}"))?;
+        ids.into_iter()
+            .filter_map(|id| {
+                let pid = map.get(&id)?.child.lock().ok()?.process_id()?;
+                Some((id, pid))
+            })
+            .collect()
+    };
+    if !cfg!(unix) || shells.is_empty() {
+        return Ok(Vec::new());
+    }
+    // One `ps` for all of them: the parent of every process.
+    let mut cmd = Command::new("ps");
+    no_window(&mut cmd);
+    let out = cmd.args(["-A", "-o", "ppid="]).output().map_err(|e| format!("failed to run ps: {e}"))?;
+    let parents: std::collections::HashSet<u32> = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter_map(|l| l.trim().parse().ok())
+        .collect();
+    Ok(shells.into_iter().filter(|(_, pid)| parents.contains(pid)).map(|(id, _)| id).collect())
 }
 
 #[tauri::command]
@@ -3521,6 +3714,11 @@ pub fn run() {
             generate_text,
             git_checkpoint_capture,
             git_checkpoint_restore,
+            git_fork_worktree,
+            worktree_create,
+            system_fonts,
+            worktree_restore,
+            worktree_base_of,
             project_root,
             chats_dir,
             list_providers,
@@ -3563,6 +3761,7 @@ pub fn run() {
             pty_write,
             pty_resize,
             pty_close,
+            pty_busy,
             browser::browser_open,
             browser::browser_navigate,
             browser::browser_back,
@@ -3916,6 +4115,116 @@ mod tests {
         );
         assert!(super::git_checkpoint_capture(cwd, Some("../x".into()), Some(1)).is_err());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn system_fonts_lists_installed_families_sorted_and_marks_mono_ones() {
+        let fonts = super::system_fonts();
+        assert!(!fonts.is_empty());
+        let names: Vec<String> = fonts.iter().map(|f| f.family.to_lowercase()).collect();
+        let mut sorted = names.clone();
+        sorted.sort();
+        assert_eq!(names, sorted);
+        assert!(fonts.iter().all(|f| !f.family.starts_with('.')));
+        if cfg!(target_os = "macos") {
+            assert!(fonts.iter().any(|f| f.family == "Menlo" && f.mono));
+            assert!(fonts.iter().any(|f| f.family == "Helvetica" && !f.mono));
+        }
+    }
+
+    #[test]
+    fn a_session_worktree_gets_a_free_name_and_comes_back_when_deleted() {
+        use std::process::Command;
+        let dir = std::env::temp_dir().join(format!("jucode-session-wt-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let git = |at: &Path, args: &[&str]| {
+            let out = Command::new("git")
+                .current_dir(at)
+                .env("GIT_AUTHOR_NAME", "T")
+                .env("GIT_AUTHOR_EMAIL", "t@t")
+                .env("GIT_COMMITTER_NAME", "T")
+                .env("GIT_COMMITTER_EMAIL", "t@t")
+                .args(args)
+                .output()
+                .unwrap();
+            String::from_utf8(out.stdout).unwrap()
+        };
+        git(&dir, &["init", "-q", "-b", "main"]);
+        std::fs::write(dir.join("a.txt"), "v1").unwrap();
+        git(&dir, &["add", "."]);
+        git(&dir, &["commit", "-q", "-m", "init"]);
+        let repo = dir.to_string_lossy().to_string();
+        // No remote: from_origin falls back to the local branch.
+        let first = super::worktree_create(repo.clone(), "fix-login".into(), "main".into(), true).unwrap();
+        assert_eq!(first.branch, "jucode/fix-login");
+        assert_eq!(std::fs::read_to_string(Path::new(&first.path).join("a.txt")).unwrap(), "v1");
+        assert_eq!(super::worktree_base_of(repo.clone(), first.branch.clone()).unwrap().as_deref(), Some("main"));
+        // The same name again: the next free one.
+        let second = super::worktree_create(repo.clone(), "fix-login".into(), "main".into(), false).unwrap();
+        assert_eq!((second.slug.as_str(), second.branch.as_str()), ("fix-login-2", "jucode/fix-login-2"));
+        assert!(super::worktree_create(repo.clone(), "Bad Name".into(), "main".into(), false).is_err());
+        // Deleted outside the app: back on its branch in the same place.
+        std::fs::remove_dir_all(&first.path).unwrap();
+        super::worktree_restore(repo.clone(), first.path.clone(), first.branch.clone()).unwrap();
+        assert_eq!(git(Path::new(&first.path), &["branch", "--show-current"]).trim(), "jucode/fix-login");
+        assert!(super::worktree_restore(repo.clone(), "/tmp/elsewhere".into(), first.branch.clone()).is_err());
+        let _ = std::fs::remove_dir_all(super::worktree_base_dir(&dir).unwrap());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_fork_worktree_has_the_checkpoints_files_uncommitted() {
+        use std::process::Command;
+        let dir = std::env::temp_dir().join(format!("jucode-fork-wt-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let git = |at: &Path, args: &[&str]| {
+            let out = Command::new("git")
+                .current_dir(at)
+                .env("GIT_AUTHOR_NAME", "T")
+                .env("GIT_AUTHOR_EMAIL", "t@t")
+                .env("GIT_COMMITTER_NAME", "T")
+                .env("GIT_COMMITTER_EMAIL", "t@t")
+                .args(args)
+                .output()
+                .unwrap();
+            String::from_utf8(out.stdout).unwrap()
+        };
+        git(&dir, &["init", "-q"]);
+        std::fs::write(dir.join("a.txt"), "v1").unwrap();
+        std::fs::write(dir.join("b.txt"), "gone later").unwrap();
+        git(&dir, &["add", "."]);
+        git(&dir, &["commit", "-q", "-m", "init"]);
+        let head = git(&dir, &["rev-parse", "HEAD"]).trim().to_string();
+        // The state at the fork: a change, a deletion and a new file, none committed.
+        std::fs::write(dir.join("a.txt"), "v2").unwrap();
+        std::fs::remove_file(dir.join("b.txt")).unwrap();
+        std::fs::write(dir.join("c.txt"), "new").unwrap();
+        let repo = dir.to_string_lossy().to_string();
+        let cp = super::git_checkpoint_capture(repo.clone(), Some("s-1".into()), Some(1)).unwrap();
+        // The source goes on after the fork point; the fork does not see it.
+        std::fs::write(dir.join("a.txt"), "v3").unwrap();
+        let container = super::worktree_base_dir(&dir).unwrap();
+        let path = container.join("fork-one").to_string_lossy().to_string();
+        let base = super::git_fork_worktree(repo.clone(), path.clone(), "fork/one".into(), String::new(), Some("s-1".into()), Some(1)).unwrap();
+        assert_eq!(base, head);
+        let tree = Path::new(&path);
+        assert_eq!(std::fs::read_to_string(tree.join("a.txt")).unwrap(), "v2");
+        assert!(!tree.join("b.txt").exists());
+        assert_eq!(std::fs::read_to_string(tree.join("c.txt")).unwrap(), "new");
+        assert_eq!(git(tree, &["rev-parse", "HEAD"]).trim(), head);
+        assert_eq!(git(tree, &["branch", "--show-current"]).trim(), "fork/one");
+        let status = git(tree, &["status", "--porcelain"]);
+        assert!(status.contains(" M a.txt") && status.contains(" D b.txt") && status.contains("?? c.txt"), "{status}");
+        assert_eq!(std::fs::read_to_string(dir.join("a.txt")).unwrap(), "v3");
+        // The sha form, and the checks.
+        let other = container.join("fork-two").to_string_lossy().to_string();
+        assert!(super::git_fork_worktree(repo.clone(), other.clone(), "fork/two".into(), cp, None, None).is_ok());
+        assert!(super::git_fork_worktree(repo.clone(), "/tmp/elsewhere".into(), "fork/x".into(), String::new(), Some("s-1".into()), Some(1)).is_err());
+        assert!(super::git_fork_worktree(repo.clone(), container.join("fork-three").to_string_lossy().to_string(), "fork/three".into(), String::new(), Some("s-1".into()), Some(9)).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&container);
     }
 
     #[test]

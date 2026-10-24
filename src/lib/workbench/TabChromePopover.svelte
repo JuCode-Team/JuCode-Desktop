@@ -17,8 +17,7 @@
 
 	// Shared chrome editor for workspace tabs, session tabs, project folders
 	// and agents: rename, tag color, and icon (builtin grid / slug / pasted
-	// SVG), the latter two folded under 外观. Mosaic tabs add close actions;
-	// tabs without chrome get only those. Fixed-position at the invoking
+	// SVG), the latter two folded under 外观. Fixed-position at the invoking
 	// pointer/anchor, clamped to the viewport.
 	let {
 		x,
@@ -38,8 +37,6 @@
 		onMove,
 		workspaceTargets = [],
 		onMoveWorkspace,
-		onCloseOthers,
-		onCloseAll,
 		onClose,
 		defaultIcon,
 		children
@@ -67,9 +64,6 @@
 		/** Sessions of no project: the other workspaces they can move to. */
 		workspaceTargets?: { id: string; name: string }[];
 		onMoveWorkspace?: (workspace: string) => void;
-		/** Mosaic tabs: close the other tabs / every tab of its group. */
-		onCloseOthers?: () => void;
-		onCloseAll?: () => void;
 		onClose: () => void;
 		/** What shows with no icon set (a project's folder, an agent's
 		 *  generated avatar): the first choice, so it can be picked back. */
@@ -261,12 +255,6 @@
 		{#each workspaceTargets as w (w.id)}
 			<Button size="sm" full onclick={() => onMoveWorkspace(w.id)}><ArrowRightLeftIcon size={12} />{w.name}</Button>
 		{/each}
-	{/if}
-	{#if onCloseOthers}
-		<Button size="sm" full onclick={onCloseOthers}>{t('shell.chrome.closeOthers')}</Button>
-	{/if}
-	{#if onCloseAll}
-		<Button size="sm" full onclick={onCloseAll}>{t('shell.chrome.closeAll')}</Button>
 	{/if}
 	{#if onDelete}
 		<Button variant="danger" size="sm" full onclick={onDelete}><TrashIcon size={12} />{deleteLabel || t('shell.chrome.delete')}</Button>

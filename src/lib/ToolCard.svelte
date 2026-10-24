@@ -171,7 +171,7 @@
 			<span class="partial">{t('chat.partialApply', { n: partialApply.n, m: partialApply.m })}</span>
 		{/if}
 		<span class="grow"></span>
-		{#if stat}<DiffStat {...stat} />{/if}
+		{#if stat}<DiffStat {...stat} live={running} />{/if}
 		{#if took !== null}<span class="took">{fmtDur(took)}</span>{/if}
 		{#if !isRead}
 			<span class="chev" class:open={!collapsed}><ChevronRightIcon size={14} /></span>

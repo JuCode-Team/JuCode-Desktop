@@ -173,11 +173,25 @@
 		font-size: 1em;
 		color: inherit;
 	}
+	/* Its file type's icon, ahead of the name. */
+	.md :global(a.fileref .fi) {
+		width: 1.15em;
+		height: 1.15em;
+		margin-right: 0.3em;
+		vertical-align: -0.2em;
+	}
+	:global(:root[data-theme='light']) .md :global(a.fileref .fi-dark),
+	:global(:root:not([data-theme='light'])) .md :global(a.fileref .fi-light) {
+		display: none;
+	}
 	/* Names no file: plain text (inline code stays code). */
 	.md :global(a.fileref.dead) {
 		color: inherit;
 		text-decoration: none;
 		cursor: text;
+	}
+	.md :global(a.fileref.dead .fi) {
+		display: none;
 	}
 	.md :global(.cb-head .fileref) {
 		margin: 0 auto 0 10px;

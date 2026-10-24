@@ -10,6 +10,7 @@
 	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
+	import PaletteIcon from '@lucide/svelte/icons/palette';
 	import CircleUserIcon from '@lucide/svelte/icons/circle-user';
 	import ChartColumnIcon from '@lucide/svelte/icons/chart-column';
 	import MicIcon from '@lucide/svelte/icons/mic';
@@ -43,11 +44,10 @@
 	} from '$lib/protocol';
 	import { dispatch } from '$lib/backends/router';
 	import { caps } from '$lib/backends';
-	import { prefs, TURN_STAT_KEYS, vibrancySupported } from '$lib/prefs.svelte';
+	import { prefs, TURN_STAT_KEYS } from '$lib/prefs.svelte';
 	import { playChime } from '$lib/chime';
 	import { turnParts } from '$lib/turnStats';
-	import { themeState, setTheme, setThemeSlot, type ThemePref } from '$lib/theme.svelte';
-	import ThemeEditor from './ThemeEditor.svelte';
+	import AppearanceSection from './AppearanceSection.svelte';
 	import type { ChatState, TurnStats } from '$lib/chat.svelte';
 	import { modelSetup } from '$lib/modelSetupState.svelte';
 	import { loginErrorSince } from '$lib/loginWatch';
@@ -69,7 +69,6 @@
 	import { toast } from '$lib/ui/toast.svelte';
 	import SettingsSection from './SettingsSection.svelte';
 	import SettingsRow from './SettingsRow.svelte';
-	import { offeredFonts, type FontChoice, type FontSlot } from '$lib/fonts';
 	import BackendSection from './BackendSection.svelte';
 	import AcpSection from './AcpSection.svelte';
 	import DaemonSection from './DaemonSection.svelte';
@@ -115,6 +114,7 @@
 
 	const ICONS: Record<SectionKey, typeof SettingsIcon> = {
 		general: SettingsIcon,
+		appearance: PaletteIcon,
 		account: CircleUserIcon,
 		usage: ChartColumnIcon,
 		voice: MicIcon,
@@ -223,13 +223,6 @@
 	const models = $derived<ModelCfg[]>(Array.isArray(cfg.models) ? cfg.models : []);
 	const efforts = $derived(models.find((m) => m.name === cfg.model)?.reasoning_efforts ?? []);
 	const fmt = (n?: number) => (!n ? '' : n >= 1_000_000 ? `${(n / 1e6).toFixed(2)}M` : n >= 1000 ? `${Math.round(n / 1000)}k` : `${n}`);
-	const fontLabel = (slot: FontSlot, c: FontChoice) =>
-		c.family ??
-		(c.id === 'system'
-			? t('settings.behavior.fontSystem')
-			: c.id === 'serif'
-				? t('settings.behavior.fontSerif')
-				: t(slot === 'chat' ? 'settings.behavior.fontFollowUi' : 'settings.behavior.fontDefault'));
 	const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 	const allProviders = $derived<Provider[]>([
@@ -609,47 +602,12 @@
 				<h1>{t(`settings.section.${current}`)}</h1>
 				{#if JUCODE_ONLY.has(current)}<p class="scope">{t('settings.page.jucodeOnly')}</p>{/if}
 
-				{#if current === 'general'}
-					<SettingsSection title={t('settings.page.appearance')}>
+				{#if current === 'appearance'}
+					<AppearanceSection />
+				{:else if current === 'general'}
+					<SettingsSection title={t('settings.page.basics')}>
 						<SettingsRow id="language" title={t('settings.language')}>
 							<Segmented value={getLocale()} options={LOCALES.map((l) => ({ value: l, label: LOCALE_LABELS[l] }))} onChange={(v) => setLocale(v as (typeof LOCALES)[number])} />
-						</SettingsRow>
-						<SettingsRow id="theme" title={t('settings.theme')}>
-							<Segmented
-								value={themeState.pref}
-								options={[
-									{ value: 'system', label: t('settings.themeSystem') },
-									{ value: 'light', label: t('settings.themeLight') },
-									{ value: 'dark', label: t('settings.themeDark') }
-								]}
-								onChange={(v) => setTheme(v as ThemePref)}
-							/>
-						</SettingsRow>
-						{#if themeState.custom.length}
-							<!-- Following the system, both modes' colors; else only the fixed mode's. -->
-							{#each themeState.pref === 'system' ? (['light', 'dark'] as const) : [themeState.pref] as mode (mode)}
-								<SettingsRow id="theme-{mode}" title={t(`settings.themes.${mode}Slot`)} description={t(`settings.themes.${mode}SlotHint`)}>
-									<Select
-										value={themeState[mode]}
-										options={[
-											{ value: '', label: t(mode === 'light' ? 'settings.themes.builtinLight' : 'settings.themes.builtinDark') },
-											...themeState.custom.map((c) => ({ value: c.id, label: c.name || t('settings.themes.untitled') }))
-										]}
-										onChange={(v) => setThemeSlot(mode, v)}
-									/>
-								</SettingsRow>
-							{/each}
-						{/if}
-						<SettingsRow id="custom-themes" title={t('settings.themes.custom')} description={t('settings.themes.customHint')} stacked>
-							<ThemeEditor />
-						</SettingsRow>
-						{#if vibrancySupported()}
-							<SettingsRow id="vibrancy" title={t('settings.behavior.vibrancy')} description={t('settings.behavior.vibrancyHint')}>
-								<Switch checked={prefs.sidebarVibrancy} label={t('settings.behavior.vibrancy')} onChange={(on) => prefs.setSidebarVibrancy(on)} />
-							</SettingsRow>
-						{/if}
-						<SettingsRow id="session-agent-icon" title={t('settings.behavior.sessionAgentIcon')} description={t('settings.behavior.sessionAgentIconHint')}>
-							<Switch checked={prefs.sessionAgentIcon} label={t('settings.behavior.sessionAgentIcon')} onChange={(on) => prefs.setFlag('sessionAgentIcon', on)} />
 						</SettingsRow>
 						<SettingsRow id="default-surface" title={t('settings.behavior.defaultSurface')} description={t('settings.behavior.defaultSurfaceHint')}>
 							<Segmented
@@ -661,33 +619,14 @@
 								onChange={(v) => prefs.setDefaultSurface(v === 'tui' ? 'tui' : 'gui')}
 							/>
 						</SettingsRow>
-						<SettingsRow id="open-elsewhere" title={t('settings.behavior.openElsewhere')} description={t('settings.behavior.openElsewhereHint')}>
-							<Segmented
-								value={prefs.openElsewhere}
-								options={[
-									{ value: 'side', label: t('settings.behavior.placeSide') },
-									{ value: 'tab', label: t('settings.behavior.placeTab') }
-								]}
-								onChange={(v) => prefs.setOpenElsewhere(v === 'tab' ? 'tab' : 'side')}
-							/>
+						<SettingsRow id="worktree-origin" title={t('settings.behavior.worktreeFromOrigin')} description={t('settings.behavior.worktreeFromOriginHint')}>
+							<Switch checked={prefs.worktreeFromOrigin} label={t('settings.behavior.worktreeFromOrigin')} onChange={(on) => prefs.setFlag('worktreeFromOrigin', on)} />
 						</SettingsRow>
-						{#each [['ui', 'ui-font', 'uiFont'], ['chat', 'chat-font', 'chatFont'], ['code', 'code-font', 'codeFont']] as const as [slot, id, key] (slot)}
-							<SettingsRow {id} title={t(`settings.behavior.${key}`)} description={t(`settings.behavior.${key}Hint`)}>
-								<Select
-									value={prefs[key]}
-									options={offeredFonts(slot, prefs[key]).map((c) => ({ value: c.id, label: fontLabel(slot, c) }))}
-									onChange={(v) => prefs.setFont(slot, v)}
-								/>
-							</SettingsRow>
-						{/each}
-						<SettingsRow id="terminal-font" title={t('settings.behavior.terminalFont')} description={t('settings.behavior.terminalFontHint')}>
-							<TextField mono placeholder="MesloLGS NF" bind:value={() => prefs.terminalFont, (v) => prefs.setTerminalFont(String(v ?? ''))} />
-						</SettingsRow>
-						<SettingsRow id="terminal-font-size" title={t('settings.behavior.terminalFontSize')}>
+						<SettingsRow id="auto-archive" title={t('settings.behavior.autoArchive')} description={t('settings.behavior.autoArchiveHint')}>
 							<Select
-								value={String(prefs.terminalFontSize)}
-								options={[10, 11, 12, 12.5, 13, 14, 15, 16, 18, 20].map((n) => ({ value: String(n) }))}
-								onChange={(v) => prefs.setTerminalFontSize(Number(v))}
+								value={String(prefs.autoArchiveDays)}
+								options={[0, 1, 3, 7, 14, 30].map((n) => ({ value: String(n), label: n ? t('settings.behavior.autoArchiveDays', { n }) : t('settings.behavior.autoArchiveOff') }))}
+								onChange={(v) => prefs.setAutoArchiveDays(Number(v))}
 							/>
 						</SettingsRow>
 					</SettingsSection>

@@ -162,6 +162,14 @@ describe('ChatState.handle', () => {
 		expect(tool('bg')).toMatchObject({ running: false });
 	});
 
+	it("does not cut the reply where a background subagent's call starts", () => {
+		const c = new ChatState();
+		c.handle({ type: 'assistant_delta', delta: 'Looking ' });
+		c.handle({ type: 'tool_start', call_id: 'bg', name: 'grep', subagent: 'Scan auth' });
+		c.handle({ type: 'assistant_delta', delta: 'into it' });
+		expect(c.messages.filter((m) => m.kind === 'assistant').map((m) => (m.kind === 'assistant' ? m.text : ''))).toEqual(['Looking into it']);
+	});
+
 	it('keeps how many queued messages the engine has, and a message taken back', () => {
 		const c = new ChatState();
 		c.handle({ type: 'pending_messages', messages: ['a', 'b'], fixed: 1 });
@@ -246,7 +254,10 @@ describe('ChatState.handle', () => {
 		// It may come before the process's startup, which leaves it.
 		c.handle({ type: 'tool_provider', session: 's1', provider: { id: 'my-api', name: 'My API', model: 'glm-4.6' } });
 		c.handle({ type: 'startup', model: 'glm-4.6', cwd: '/w', session_id: '', context_window: 0 });
-		expect(c.toolProvider).toEqual({ id: 'my-api', name: 'My API', model: 'glm-4.6' });
+		// An older daemon names only its one model.
+		expect(c.toolProvider).toEqual({ id: 'my-api', name: 'My API', model: 'glm-4.6', models: ['glm-4.6'] });
+		c.handle({ type: 'tool_provider', session: 's1', provider: { id: 'my-api', name: 'My API', model: 'a', models: ['a', 'b'] } });
+		expect(c.toolProvider?.models).toEqual(['a', 'b']);
 		// The next process (moved to the gateway, or the tool's own config) clears it.
 		c.handle({ type: 'tool_provider', session: 's1', provider: null });
 		expect(c.toolProvider).toBeNull();
@@ -951,12 +962,19 @@ describe('claude session extras', () => {
 	it('shows the images a message was sent with, live and in a transcript', () => {
 		const c = new ChatState();
 		c.handle({ type: 'user_message', content: 'look', images: ['/u/a.png'] });
-		expect(c.messages.at(-1)).toEqual({ kind: 'user', text: 'look', images: ['/u/a.png'] });
+		expect(c.messages.at(-1)).toEqual({ kind: 'user', text: 'look', images: ['/u/a.png'], at: expect.any(Number) });
 		c.handle({ type: 'transcript', items: [{ role: 'user', content: 'look', images: ['/u/a.png'] }, { role: 'user', content: 'plain' }] });
 		expect(c.messages).toEqual([
 			{ kind: 'user', text: 'look', images: ['/u/a.png'] },
 			{ kind: 'user', text: 'plain' }
 		]);
+	});
+
+	it('keeps where a replayed reply sits, for a rewind or a fork to resume at', () => {
+		const c = new ChatState();
+		c.handle({ type: 'transcript', items: [{ role: 'user', content: 'q', at: 1 }, { role: 'assistant', content: 'a', uuid: 'u-1', at: 2 }] });
+		expect(c.messages[1]).toEqual({ kind: 'assistant', text: 'a', uuid: 'u-1', at: 2 });
+		expect(c.claudeRewindTarget(1)).toBe('u-1');
 	});
 
 	it('keeps an elicitation page with its approval', () => {

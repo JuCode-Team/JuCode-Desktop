@@ -1,11 +1,11 @@
 // Workspace model + on-disk format. A workspace owns a set of projects (the
-// existing SavedProject shape, unchanged) plus its canvas tile layout; the
+// existing SavedProject shape, unchanged) plus what it shows (view.ts); the
 // file holds every workspace and which one is active. Pure data + pure
 // transforms — the reactive store and the Tauri IO live in
 // workspaceStore.svelte.ts.
 
 import type { SavedProject, SavedTab } from '$lib/session.svelte';
-import { serializeLayout, singleLeafLayout, type SerializedLayout, type TileTab } from './tiles';
+import type { SavedView } from './view';
 import { normalizeColor, parseTabIcon, type TabIcon } from './tabChrome';
 
 export const WORKSPACES_FILE = 'workspaces.json';
@@ -17,7 +17,7 @@ export const LEGACY_PROJECTS_KEY = 'jucode-projects';
 export const LEGACY_DOCK_TABS_KEY = 'jucode-dock-tabs';
 export const LEGACY_DOCK_ACTIVE_KEY = 'jucode-dock-active';
 
-/** Tool panel kinds a tile tab may reference (besides chat:/tui: tabs). */
+/** Tool panel kinds the legacy dock tabs may name. */
 export const DOCK_PANELS = ['plan', 'goal', 'files', 'git', 'term', 'browser'] as const;
 
 export interface WorkspaceEntry {
@@ -27,8 +27,9 @@ export interface WorkspaceEntry {
 	/** Its sessions of no project (left out: none). Sessions of no project
 	 *  made elsewhere (a phone, the CLI) belong to the default workspace. */
 	loose?: SavedTab[];
-	/** Serialized dock tile layout; null until the user arranges one. */
-	layout: SerializedLayout | null;
+	/** What it shows (a SavedView; an older file's tile layout, read by
+	 *  view.restoreView); null until something is shown. */
+	layout: SavedView | object | null;
 	/** The one always-present workspace: cannot be deleted. Exactly one per file. */
 	isDefault?: boolean;
 	/** Tab tag color (`#rgb` / `#rrggbb`). */
@@ -50,7 +51,7 @@ const newId = () => `w${Date.now().toString(36)}-${(counter++).toString(36)}`;
 export function createWorkspace(
 	name: string,
 	projects: SavedProject[] = [],
-	layout: SerializedLayout | null = null,
+	layout: SavedView | object | null = null,
 	opts?: { isDefault?: boolean; color?: string; icon?: TabIcon }
 ): WorkspaceEntry {
 	return {
@@ -139,8 +140,8 @@ export function parseWorkspacesFile(text: string): WorkspacesFile | null {
 			id: o.id,
 			name: o.name,
 			projects: sanitizeProjects(o.projects),
-			// Layout blobs are validated lazily by tiles.deserializeLayout at use.
-			layout: o.layout && typeof o.layout === 'object' ? (o.layout as SerializedLayout) : null
+			// Validated when a workspace loads (view.restoreView).
+			layout: o.layout && typeof o.layout === 'object' ? o.layout : null
 		};
 		const loose = sanitizeTabs(o.loose);
 		if (loose.length) entry.loose = loose;
@@ -161,7 +162,7 @@ export function parseWorkspacesFile(text: string): WorkspacesFile | null {
 
 /** Tolerant parse of the legacy dock-tabs value: bare panel strings (oldest
  *  format) and {id, panel} objects, filtered to known panel kinds. */
-export function parseLegacyDockTabs(raw: string | null): TileTab[] {
+export function parseLegacyDockTabs(raw: string | null): { id: string; panel: string }[] {
 	if (!raw) return [];
 	let parsed: unknown;
 	try {
@@ -171,7 +172,7 @@ export function parseLegacyDockTabs(raw: string | null): TileTab[] {
 	}
 	if (!Array.isArray(parsed)) return [];
 	let n = 0;
-	const tabs: TileTab[] = [];
+	const tabs: { id: string; panel: string }[] = [];
 	for (const item of parsed) {
 		const o = item as Record<string, unknown>;
 		const tab =
@@ -204,7 +205,9 @@ export function migrateLegacy(read: (key: string) => string | null, name: string
 	}
 	const tabs = parseLegacyDockTabs(dockRaw);
 	const active = read(LEGACY_DOCK_ACTIVE_KEY);
-	const layout = tabs.length ? serializeLayout(singleLeafLayout(tabs, active ?? undefined)) : null;
+	// The dock's active tool comes back beside the conversation.
+	const side = (tabs.find((x) => x.id === active) ?? tabs[0])?.panel ?? null;
+	const layout = side ? { v: 2, view: null, side } : null;
 	return defaultWorkspacesFile(createWorkspace(name, projects, layout));
 }
 

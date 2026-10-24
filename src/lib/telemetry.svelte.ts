@@ -1,9 +1,9 @@
 // Anonymous usage counts: how often a few things happen in the app, by day
-// (app start, a session started on a backend, a requirement noted or
-// started, a dispatch, a bug report, an error of some kind). No content, no
-// account: a random id per install. Kept on this computer and sent now and
-// then (and again later if offline); the server adds them up. Off in
-// Settings → General. Shown once on first start.
+// (app start, a session started on a backend, a dispatch, a bug report, an
+// error of some kind). No content, no account: a random id per install.
+// Kept on this computer and sent now and then (and again later if offline);
+// the server adds them up. Off in Settings → General. Shown once on first
+// start.
 
 import { prefs } from './prefs.svelte';
 

@@ -15,7 +15,7 @@ export interface ThemeSeeds {
 
 /** The built-in themes' four colors (app.css). */
 export const BUILTIN_SEEDS: Record<'dark' | 'light', ThemeSeeds> = {
-	dark: { bg: '#1a1a1a', text: '#ececec', accent: '#ececec', brand: '#8b5cf6' },
+	dark: { bg: '#151515', text: '#ececec', accent: '#ececec', brand: '#8b5cf6' },
 	light: { bg: '#ffffff', text: '#1f1f1f', accent: '#1f1f1f', brand: '#7c3aed' }
 };
 
@@ -69,9 +69,9 @@ const SHARED: Record<string, Mix> = {
 const MIXES: Record<'dark' | 'light', Record<string, Mix>> = {
 	dark: {
 		...SHARED,
-		'--sidebar': ['text', 'bg', 0.03],
-		'--rail': ['bg', 'black', 0.77],
-		'--panel': ['text', 'bg', 0.06],
+		'--sidebar': ['bg', 'black', 0.857],
+		'--rail': ['bg', 'black', 0.667],
+		'--panel': ['text', 'bg', 0.051],
 		'--border-strong': ['text', 'bg', 0.15],
 		'--surface': ['text', 'transparent', 0.03],
 		'--surface2': ['text', 'transparent', 0.06],

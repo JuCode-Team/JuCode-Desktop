@@ -90,6 +90,9 @@ export interface BackendCaps {
 	agentTrace: boolean;
 	/** What the context holds, by category (`context_usage` → `context_breakdown`). */
 	contextBreakdown: boolean;
+	/** A conversation forks into a new session from one of its turns
+	 *  (`session_create` with `fork_from`). */
+	fork: boolean;
 }
 
 /** Normalized events are the existing jucode AgentEvent dialect — adapters

@@ -63,7 +63,7 @@
 		onNewTask: () => void;
 		onSettings: () => void;
 		onMarket: () => void;
-		/** Open (or focus) a tool tile on the canvas mosaic. */
+		/** Open a tool panel beside the conversation. */
 		onOpenPanel: (kind: string) => void;
 		onToggleSidebar: () => void;
 		onToggleTheme: () => void;

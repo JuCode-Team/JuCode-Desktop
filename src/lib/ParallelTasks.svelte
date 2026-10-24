@@ -14,7 +14,7 @@
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import { confirm } from '$lib/ui/confirm.svelte';
-	import { git, worktreeBase } from '$lib/protocol';
+	import { git, worktreeBase, worktreeBaseOf } from '$lib/protocol';
 	import {
 		parseWorktreeList,
 		taskWorktrees,
@@ -41,6 +41,8 @@
 
 	let error = $state('');
 	let busy = $state(false);
+	/** The main repository a merge left conflicted (it can abort it). */
+	let conflictIn = $state('');
 
 	// --- 任务 worktree 形态 ---
 	let dirty = $state(false);
@@ -117,9 +119,37 @@
 		refresh();
 	});
 
-	function mergeError(e: unknown): string {
-		const msg = String(e);
-		return /conflict/i.test(msg) ? `${t('dock.tasks.mergeConflict')}\n\n${msg}` : msg;
+	/** Merges `branch` into the main repository `repo`, which must be on
+	 *  `base` (when known) with nothing uncommitted: a merge there lands on
+	 *  whatever it has checked out. A conflict leaves it mid-merge, which
+	 *  `abortMerge` undoes. */
+	async function merge(repo: string, branch: string, base: string) {
+		const [on, status] = await Promise.all([git(['branch', '--show-current'], repo), git(['status', '--porcelain=v1'], repo)]);
+		if (status.trim()) throw new Error(t('dock.tasks.mainDirty'));
+		if (base && on.trim() !== base) throw new Error(t('dock.tasks.mainElsewhere', { branch: on.trim() || 'HEAD', base }));
+		try {
+			await git(['merge', '--no-ff', '--no-edit', branch], repo);
+		} catch (e) {
+			if (/conflict/i.test(String(e))) {
+				conflictIn = repo;
+				throw new Error(`${t('dock.tasks.mergeConflict')}\n\n${String(e)}`);
+			}
+			throw e;
+		}
+	}
+	async function abortMerge() {
+		if (!conflictIn || busy) return;
+		busy = true;
+		try {
+			await git(['merge', '--abort'], conflictIn);
+			conflictIn = '';
+			error = '';
+			refresh();
+		} catch (e) {
+			error = String(e);
+		} finally {
+			busy = false;
+		}
 	}
 
 	// --- 任务 worktree 操作（merge / cleanup 都在主仓库目录执行） ---
@@ -128,12 +158,34 @@
 		busy = true;
 		error = '';
 		try {
-			await git(['merge', '--no-ff', '--no-edit', worktree.branch], worktree.mainRepoPath);
+			await merge(worktree.mainRepoPath, worktree.branch, resolvedBase);
 			refresh();
 		} catch (e) {
-			error = mergeError(e);
+			error = e instanceof Error ? e.message : String(e);
 		} finally {
 			busy = false;
+		}
+	}
+
+	/** Removes worktree `path` and its branch from `repo`: the safe way
+	 *  first (git refuses unmerged work), then, confirmed, by force. */
+	async function removeTask(repo: string, path: string, branch: string | null): Promise<boolean> {
+		try {
+			await git(['worktree', 'remove', path], repo);
+			if (branch) await git(['branch', '-d', branch], repo);
+			return true;
+		} catch (e) {
+			busy = false;
+			const force = await confirm({
+				title: t('dock.tasks.forceCleanupTitle'),
+				message: t('dock.tasks.forceCleanupConfirm', { msg: String(e) }),
+				danger: true
+			});
+			if (!force) return false;
+			busy = true;
+			await git(['worktree', 'remove', '--force', path], repo).catch(() => {});
+			if (branch) await git(['branch', '-D', branch], repo);
+			return true;
 		}
 	}
 
@@ -148,9 +200,7 @@
 		busy = true;
 		error = '';
 		try {
-			await git(['worktree', 'remove', cwd], worktree.mainRepoPath);
-			await git(['branch', '-d', worktree.branch], worktree.mainRepoPath);
-			onTaskRemoved?.(cwd);
+			if (await removeTask(worktree.mainRepoPath, cwd, worktree.branch)) onTaskRemoved?.(cwd);
 		} catch (e) {
 			error = String(e);
 		} finally {
@@ -181,13 +231,19 @@
 	}
 
 	// --- 主仓库列表操作 ---
-	function openRow(r: Row) {
+	/** A row's base branch: as worktree_create kept it, else the main
+	 *  repository's current one. */
+	async function baseOf(r: Row): Promise<string> {
+		return (r.branch && (await worktreeBaseOf(cwd, r.branch).catch(() => null))) || mainBranch;
+	}
+
+	async function openRow(r: Row) {
 		if (!r.branch) return;
 		onOpenTask?.(r.path, {
 			isWorktree: true,
 			mainRepoPath: cwd,
 			branch: r.branch,
-			baseBranch: mainBranch,
+			baseBranch: await baseOf(r),
 			slug: r.slug
 		});
 	}
@@ -197,10 +253,10 @@
 		busy = true;
 		error = '';
 		try {
-			await git(['merge', '--no-ff', '--no-edit', r.branch], cwd);
+			await merge(cwd, r.branch, await baseOf(r));
 			refresh();
 		} catch (e) {
-			error = mergeError(e);
+			error = e instanceof Error ? e.message : String(e);
 		} finally {
 			busy = false;
 		}
@@ -211,28 +267,12 @@
 		busy = true;
 		error = '';
 		try {
-			// 先走安全路径：脏 worktree / 未合并分支会被 git 拒绝。
-			await git(['worktree', 'remove', r.path], cwd);
-			if (r.branch) await git(['branch', '-d', r.branch], cwd);
-			onTaskRemoved?.(r.path);
-			refresh();
-		} catch (e) {
-			busy = false;
-			const force = await confirm({
-				title: t('dock.tasks.forceCleanupTitle'),
-				message: t('dock.tasks.forceCleanupConfirm', { msg: String(e) }),
-				danger: true
-			});
-			if (!force) return;
-			busy = true;
-			try {
-				await git(['worktree', 'remove', '--force', r.path], cwd);
-				if (r.branch) await git(['branch', '-D', r.branch], cwd);
+			if (await removeTask(cwd, r.path, r.branch)) {
 				onTaskRemoved?.(r.path);
 				refresh();
-			} catch (e2) {
-				error = String(e2);
 			}
+		} catch (e) {
+			error = String(e);
 		} finally {
 			busy = false;
 		}
@@ -291,6 +331,9 @@
 		{#if error}
 			<Notice mono onDismiss={() => (error = '')}>{error}</Notice>
 		{/if}
+		{#if conflictIn}
+			<Button size="sm" onclick={abortMerge} disabled={busy}>{t('dock.tasks.abortMerge')}</Button>
+		{/if}
 	</div>
 {:else if listAvailable}
 	<div class="sec">
@@ -327,6 +370,9 @@
 	{/if}
 	{#if error}
 		<div class="terr"><Notice mono onDismiss={() => (error = '')}>{error}</Notice></div>
+	{/if}
+	{#if conflictIn}
+		<div class="terr"><Button size="sm" onclick={abortMerge} disabled={busy}>{t('dock.tasks.abortMerge')}</Button></div>
 	{/if}
 {/if}
 

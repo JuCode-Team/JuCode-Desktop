@@ -1,38 +1,52 @@
 <script lang="ts">
-	import ActiveIcon from '$lib/icons/ActiveIcon.svelte';
+	// The session list, as t3code lays it out: every project's sessions at once
+	// (or one project's, picked in the filter), each a card with its project,
+	// title, state and when it last moved; under them, two shelves that open:
+	// the settled sessions (settled by hand when done, or on their own after a
+	// few idle days, see sidebar/autoArchive.ts; stored as `archived`) and the
+	// projects, each with all its sessions under it, settled ones too.
+	// Deleting a session takes it out of the app only; its conversation stays.
 	import { tick } from 'svelte';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import RotateCcwClockIcon from '@lucide/svelte/icons/rotate-ccw-clock';
 	import XIcon from '@lucide/svelte/icons/x';
 	import GitBranchIcon from '@lucide/svelte/icons/git-branch';
+	import FolderGit2Icon from '@lucide/svelte/icons/folder-git-2';
 	import GitForkIcon from '@lucide/svelte/icons/git-fork';
-	import ArchiveIcon from '@lucide/svelte/icons/archive';
-	import ArchiveRestoreIcon from '@lucide/svelte/icons/archive-restore';
+	import CheckIcon from '@lucide/svelte/icons/check';
+	import Undo2Icon from '@lucide/svelte/icons/undo-2';
+	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import InboxIcon from '@lucide/svelte/icons/inbox';
 	import SquarePenIcon from '@lucide/svelte/icons/square-pen';
-	import FolderIcon from '@lucide/svelte/icons/folder';
-	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
-	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
-	import CheckIcon from '@lucide/svelte/icons/check';
+	import FolderPlusIcon from '@lucide/svelte/icons/folder-plus';
+	import ListFilterIcon from '@lucide/svelte/icons/list-filter';
+	import LayersIcon from '@lucide/svelte/icons/layers';
 	import PinIcon from '@lucide/svelte/icons/pin';
 	import PinOffIcon from '@lucide/svelte/icons/pin-off';
 	import { rowIn, rowOut } from '$lib/ui/motion';
 	import Collapse from '$lib/ui/Collapse.svelte';
-	import Button from '$lib/ui/Button.svelte';
+	import PopMenu, { type PopMenuItem } from '$lib/ui/PopMenu.svelte';
 	import { t } from '$lib/i18n';
-	import { shortcutLabel, withShortcut } from '$lib/shortcuts';
+	import { withShortcut } from '$lib/shortcuts';
 	import { BACKEND_LABELS } from '$lib/backends';
 	import BackendIcon from '$lib/BackendIcon.svelte';
 	import TabGlyph from '$lib/workbench/TabGlyph.svelte';
 	import SessionMark from '$lib/SessionMark.svelte';
+	import Elapsed from '$lib/agents/Elapsed.svelte';
+	import DiffStat from '$lib/DiffStat.svelte';
+	import ListChecksIcon from '@lucide/svelte/icons/list-checks';
+	import NetworkIcon from '@lucide/svelte/icons/network';
+	import ClockIcon from '@lucide/svelte/icons/clock';
+	import SquareTerminalIcon from '@lucide/svelte/icons/square-terminal';
+	import { cardInfo } from '$lib/sidebar/cardInfo';
+	import ProjectBadge from '$lib/sidebar/ProjectBadge.svelte';
 	import { sessionStatus } from '$lib/sessionStatus';
-	import { listedSessions } from '$lib/session.svelte';
-	import { CHATS_ENABLED, LOOSE_ID, type Project, type Session } from '$lib/types';
+	import { ago } from '$lib/time';
+	import { CHATS_ENABLED, type Project, type Session } from '$lib/types';
 	import { railDrop } from '$lib/workbench/railDrop.svelte';
-	import RequirementTag from '$lib/requirements/RequirementTag.svelte';
-	import { useRequirements } from '$lib/requirements.svelte';
 	import { prefs } from '$lib/prefs.svelte';
 
 	let {
@@ -48,12 +62,11 @@
 		onNewSession,
 		onNewChat,
 		onNewTask,
-		onCloseSession,
+		onDeleteSession,
 		onCloseProject,
-		onArchiveSession,
-		onUnarchiveSession,
+		onSettleSession,
+		onUnsettleSession,
 		onPinSession,
-		onMoveSession,
 		onMoveProject,
 		onMoveProjectToWorkspace,
 		onRenameSession,
@@ -61,12 +74,14 @@
 		onProjectMenu,
 		onHistory,
 		pendingCount = 0,
-		onDesk = () => {}
+		onDesk = () => {},
+		terminals = {},
+		onOpenTerminal = () => {}
 	}: {
 		projects: Project[];
 		activeId: string;
-		/** The one row shown as selected: the session of the focused tab
-		 *  ('' when that tab is no conversation's). */
+		/** The one session shown as selected: the one in front ('' when a
+		 *  project page is). */
 		selectedId: string;
 		width: number;
 		/** True while the user drags the resizer — disables the width transition. */
@@ -80,88 +95,57 @@
 		onNewSession: (p: Project) => void;
 		onNewChat: () => void;
 		onNewTask: (p: Project) => void;
-		onCloseSession: (id: string) => void;
+		/** Takes a session out of the app (its conversation stays). */
+		onDeleteSession: (id: string) => void;
 		onCloseProject: (p: Project) => void;
-		onArchiveSession: (id: string) => void;
-		onUnarchiveSession: (id: string) => void;
+		/** Done with it: off the cards, still under its project. */
+		onSettleSession: (id: string) => void;
+		onUnsettleSession: (id: string) => void;
 		onPinSession: (id: string, pinned: boolean) => void;
-		/** A dragged row dropped before or after `target` (same project and pinned group). */
-		onMoveSession: (id: string, target: string, after: boolean) => void;
 		/** A project and its sessions dropped before or after another project. */
 		onMoveProject: (id: string, target: string, after: boolean) => void;
 		/** A project dropped on another workspace in the rail. */
 		onMoveProjectToWorkspace: (id: string, workspace: string) => void;
-		/** Inline rename committed on a session row (dblclick the title). */
+		/** Inline rename committed on a session (dblclick the title). */
 		onRenameSession: (id: string, title: string) => void;
-		/** Right-click on a session row: the page opens the chrome popover. */
+		/** Right-click on a session: the page opens the chrome popover. */
 		onSessionMenu: (id: string, ev: MouseEvent) => void;
 		/** Right-click on a project folder: the page opens the chrome popover. */
 		onProjectMenu: (p: Project, ev: MouseEvent) => void;
 		onHistory: (p: Project) => void;
-		/** Approvals and requirements waiting for the user. */
+		/** Approvals waiting for the user. */
 		pendingCount?: number;
 		/** Opens the workbench. */
 		onDesk?: () => void;
+		/** Per session, its terminals running a command (terminals.svelte). */
+		terminals?: Record<string, { count: number; tab: string }>;
+		/** The terminal mark clicked: that session's terminal. */
+		onOpenTerminal?: (id: string) => void;
 	} = $props();
-	const reqs = useRequirements();
 
-	// Which projects have their archived section expanded (collapsed by default).
-	let showArchived = $state<Record<string, boolean>>({});
-	// Bulk restore: the project whose archived list is in selection mode, and
-	// the picked session ids.
-	let selecting = $state('');
-	let picked = $state<string[]>([]);
-	function toggleSelecting(id: string) {
-		selecting = selecting === id ? '' : id;
-		picked = [];
-	}
-	function togglePick(id: string) {
-		picked = picked.includes(id) ? picked.filter((x) => x !== id) : [...picked, id];
-	}
-	function restorePicked() {
-		for (const id of picked) onUnarchiveSession(id);
-		selecting = '';
-		picked = [];
-	}
-	// Collapsed project folders (kept across restarts), and folders showing
-	// all of their sessions instead of the first SHOW_LIMIT.
-	const COLLAPSED_KEY = 'jucode-sidebar-collapsed';
-	let collapsed = $state<Record<string, boolean>>(
-		(() => {
-			try {
-				return JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '{}') ?? {};
-			} catch {
-				return {};
-			}
-		})()
-	);
-	function toggleCollapsed(id: string) {
-		if (collapsed[id]) delete collapsed[id];
-		else collapsed[id] = true;
-		localStorage.setItem(COLLAPSED_KEY, JSON.stringify(collapsed));
-	}
-	let showAll = $state<Record<string, boolean>>({});
-	const SHOW_LIMIT = 6;
-	/** A project's first sessions, and the active one wherever it is. */
-	function firstSessions(list: Session[]): Session[] {
-		const top = list.slice(0, SHOW_LIMIT);
-		const current = list.find((s) => s.id === activeId);
-		return current && !top.includes(current) ? [...top, current] : top;
-	}
-	const chats = $derived(CHATS_ENABLED ? projects.find((p) => p.chats) : undefined);
 	const codeProjects = $derived(projects.filter((p) => !p.chats && !p.loose));
-	const loose = $derived(projects.find((p) => p.loose));
-	/** Recents: this workspace's sessions and those of no project, the
-	 *  latest first. */
-	const recents = $derived(
-		[...codeProjects, ...(loose ? [loose] : [])]
-			.flatMap((p) => listedSessions(p).filter((s) => sessionMatches(p, s)))
-			.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
-	);
-	const looseArch = $derived(loose ? loose.sessions.filter((s) => s.archived && sessionMatches(loose, s)) : []);
 
-	// Session filter: case-insensitive substring over session title + project
-	// name; empty project groups are hidden while a query is set.
+	// The project filter: every project's sessions (''), or one project's.
+	// Kept across restarts; a project that went away shows them all again.
+	const SCOPE_KEY = 'jucode-sidebar-scope';
+	let scopeId = $state(localStorage.getItem(SCOPE_KEY) ?? '');
+	const scope = $derived(codeProjects.find((p) => p.id === scopeId));
+	let scopeMenu = $state<{ x: number; y: number } | null>(null);
+	function toggleScopeMenu(e: MouseEvent) {
+		const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+		scopeMenu = scopeMenu ? null : { x: r.left, y: r.bottom };
+	}
+	const scopeItems = $derived<PopMenuItem[]>([
+		{ key: '', label: t('shell.sidebar.allProjects'), icon: LayersIcon, checked: !scope },
+		...codeProjects.map((p) => ({ key: p.id, label: p.name, checked: scope?.id === p.id }))
+	]);
+	function pickScope(id: string) {
+		scopeId = id;
+		localStorage.setItem(SCOPE_KEY, id);
+		scopeMenu = null;
+	}
+
+	// Session filter: case-insensitive substring over session title + project name.
 	let searchQuery = $state('');
 	let searchEl = $state<HTMLInputElement | null>(null);
 	const query = $derived(searchQuery.trim().toLowerCase());
@@ -176,14 +160,78 @@
 			searchEl?.blur();
 		}
 	}
-	const sessionMatches = (p: Project, s: Project['sessions'][number]) =>
-		!query || s.chat.title.toLowerCase().includes(query) || p.name.toLowerCase().includes(query);
+	const matches = (p: Project, s: Session) => !query || s.chat.title.toLowerCase().includes(query) || p.name.toLowerCase().includes(query);
+
+	const recency = (s: Session) => Math.max(s.updatedAt ?? 0, s.keptAt ?? 0);
+	/** Sessions in the filter's projects, with their project, the latest first. */
+	function sessionsWhere(keep: (s: Session) => boolean): { s: Session; p: Project }[] {
+		return projects
+			.filter((p) => !scope || p === scope)
+			.flatMap((p) => p.sessions.filter((s) => keep(s) && matches(p, s)).map((s) => ({ s, p })))
+			.sort((a, b) => recency(b.s) - recency(a.s));
+	}
+	/** The cards: what is not settled, pinned first. */
+	const cards = $derived(sessionsWhere((s) => !s.archived).sort((a, b) => Number(!!b.s.pinned) - Number(!!a.s.pinned)));
+	const settled = $derived(sessionsWhere((s) => !!s.archived));
+
+	// The shelves, open or not across restarts.
+	const SHELVES_KEY = 'jucode-sidebar-shelves';
+	let shelves = $state<{ settled?: boolean; projects?: boolean }>(
+		(() => {
+			try {
+				return JSON.parse(localStorage.getItem(SHELVES_KEY) ?? '{}') ?? {};
+			} catch {
+				return {};
+			}
+		})()
+	);
+	function toggleShelf(key: 'settled' | 'projects') {
+		shelves[key] = !shelves[key];
+		localStorage.setItem(SHELVES_KEY, JSON.stringify(shelves));
+	}
+	// Each shelf shows a page at a time (and scrolls within its own height):
+	// settled sessions, projects, and the sessions of each project.
+	const PAGE = 10;
+	const PROJECT_PAGE = 8;
+	const SESSION_PAGE = 6;
+	let settledShown = $state(PAGE);
+	let projectsShown = $state(PROJECT_PAGE);
+	let sessionsShown = $state<Record<string, number>>({});
+	// A new search starts from the first page again.
+	$effect(() => {
+		void query;
+		settledShown = PAGE;
+		projectsShown = PROJECT_PAGE;
+		sessionsShown = {};
+	});
+	/** The projects shelf: while searching, the projects whose name or a
+	 *  session matches. */
+	const shelfProjects = $derived(query ? codeProjects.filter((p) => p.name.toLowerCase().includes(query) || p.sessions.some((s) => matches(p, s))) : codeProjects);
+	const projectsOpen = $derived(!!shelves.projects || (!!query && shelfProjects.length > 0));
+
+	// Projects open in the projects shelf (closed by default; kept across
+	// restarts), and those showing every session instead of the first few.
+	const EXPANDED_KEY = 'jucode-sidebar-expanded';
+	let expanded = $state<Record<string, boolean>>(
+		(() => {
+			try {
+				return JSON.parse(localStorage.getItem(EXPANDED_KEY) ?? '{}') ?? {};
+			} catch {
+				return {};
+			}
+		})()
+	);
+	function toggleExpanded(id: string) {
+		if (expanded[id]) delete expanded[id];
+		else expanded[id] = true;
+		localStorage.setItem(EXPANDED_KEY, JSON.stringify(expanded));
+	}
 
 	// Inline rename (dblclick a session title).
 	let renaming = $state<string | null>(null);
 	let renameVal = $state('');
 	let renameEl = $state<HTMLInputElement | null>(null);
-	function startRename(s: Project['sessions'][number]) {
+	function startRename(s: Session) {
 		renaming = s.id;
 		renameVal = s.chat.title;
 		tick().then(() => renameEl?.select());
@@ -202,54 +250,46 @@
 		}
 	}
 
-	// "New chat" starts where you are: in the project of the active session,
-	// or as a chat when the active session is a chat (or nothing is open).
-	// With chats hidden it starts in the first project, or asks for one.
+	// "New session" starts where you are: in the filtered project, else in
+	// the project of the active session, else in the first project (or asks
+	// for one).
 	function newHere() {
-		const p = projects.find((pr) => pr.sessions.some((s) => s.id === activeId));
-		const first = codeProjects.find((pr) => !pr.stale);
-		if (p && !p.chats) onNewSession(p);
+		const owner = projects.find((pr) => pr.sessions.some((s) => s.id === activeId));
+		const p = scope ?? (owner && !owner.chats ? owner : undefined) ?? codeProjects.find((pr) => !pr.stale);
+		if (p) onNewSession(p);
 		else if (CHATS_ENABLED) onNewChat();
-		else if (first) onNewSession(first);
 		else onNewProject();
 	}
 
-	// Drag projects, or session rows within their project and pinned group.
-	// Pointer events, as the workbench tabs do (HTML drag and drop is not
-	// reliable in the macOS webview): a press stays a click until the
-	// pointer travels, then the row follows it and the others of its group
-	// slide aside to show where it lands.
+	// Drag a project in the projects shelf: to reorder it, or onto another
+	// workspace in the rail. Pointer events (HTML drag and drop is not reliable
+	// in the macOS webview): a press stays a click until the pointer travels,
+	// then the row follows it and the others slide aside to show where it lands.
 	let listEl = $state<HTMLElement | null>(null);
-	/** `dy`: how far the row has moved; `others`: the group's other rows in
-	 *  order; `at`: where it would land among them; `size`: the room it takes. */
-	let drag = $state<{ id: string; group: string; live: boolean; dy: number; from: number; at: number; size: number; others: string[] } | null>(null);
-	function rowDown(e: PointerEvent, p: Project, s?: Session) {
-		if (e.button !== 0 || (s && renaming === s.id) || !listEl) return;
+	let drag = $state<{ id: string; live: boolean; dy: number; from: number; at: number; size: number; others: string[] } | null>(null);
+	function projectDown(e: PointerEvent, p: Project) {
+		if (e.button !== 0 || !listEl) return;
 		const list = listEl;
-		const id = s?.id ?? p.id;
-		const group = s ? `${p.id}:${s.pinned ? 'pin' : ''}` : 'projects';
+		const id = p.id;
 		const startX = e.clientX;
 		const startY = e.clientY;
 		let y = startY;
 		let frame = 0;
-		// The group's rows as they were when the drag began: the rows move
-		// aside while it goes on, so where it lands is read from these.
 		let centres: number[] = [];
 		let startScroll = 0;
-		drag = { id, group, live: false, dy: 0, from: 0, at: 0, size: 0, others: [] };
+		drag = { id, live: false, dy: 0, from: 0, at: 0, size: 0, others: [] };
 		const begin = () => {
-			const rows = [...list.querySelectorAll<HTMLElement>('[data-group]')].filter((el) => el.dataset.group === group);
+			const rows = [...list.querySelectorAll<HTMLElement>('[data-project-row]')];
 			const rects = rows.map((el) => el.getBoundingClientRect());
-			const from = rows.findIndex((el) => el.dataset.rowId === id);
+			const from = rows.findIndex((el) => el.dataset.projectRow === id);
 			if (!drag || from < 0) return false;
-			// A row's room is its height plus the space to its neighbour.
 			const next = rects[from + 1] ?? null;
 			const prev = rects[from - 1] ?? null;
 			const size = next ? next.top - rects[from]!.top : prev ? rects[from]!.bottom - prev.bottom : rects[from]!.height;
 			const others = rows.filter((_, i) => i !== from);
 			centres = rects.filter((_, i) => i !== from).map((r) => r.top + r.height / 2);
 			startScroll = list.scrollTop;
-			Object.assign(drag, { live: true, from, at: from, size, others: others.map((el) => el.dataset.rowId!) });
+			Object.assign(drag, { live: true, from, at: from, size, others: others.map((el) => el.dataset.projectRow!) });
 			return true;
 		};
 		const update = () => {
@@ -258,7 +298,6 @@
 			drag.dy = y - startY + scrolled;
 			drag.at = centres.filter((c) => c < y + scrolled).length;
 		};
-		// Held near the top or bottom edge, the list scrolls.
 		const scroll = () => {
 			const r = list.getBoundingClientRect();
 			const step = y < r.top + 32 ? -8 : y > r.bottom - 32 ? 8 : 0;
@@ -276,8 +315,7 @@
 				frame = requestAnimationFrame(scroll);
 			}
 			update();
-			// A project over another workspace in the rail moves there.
-			if (!s) railDrop.id = railTarget(ev);
+			railDrop.id = railTarget(ev);
 		};
 		const end = (ev: PointerEvent) => {
 			window.removeEventListener('pointermove', move);
@@ -297,7 +335,7 @@
 			if (ev.type === 'pointerup' && ws) return onMoveProjectToWorkspace(id, ws);
 			if (ev.type !== 'pointerup' || d.at === d.from || !d.others.length) return;
 			const to = d.at < d.others.length ? { id: d.others[d.at]!, after: false } : { id: d.others[d.others.length - 1]!, after: true };
-			(s ? onMoveSession : onMoveProject)(id, to.id, to.after);
+			onMoveProject(id, to.id, to.after);
 		};
 		window.addEventListener('pointermove', move);
 		window.addEventListener('pointerup', end);
@@ -309,19 +347,21 @@
 		const el = document.elementFromPoint(ev.clientX, ev.clientY)?.closest<HTMLElement>('[data-ws-id]');
 		return el && el.getAttribute('aria-selected') !== 'true' ? (el.dataset.wsId ?? null) : null;
 	}
-	/** How far row `id` of `group` moves while a row of it is dragged. */
-	function shiftOf(group: string, id: string): number {
-		if (!drag?.live || drag.group !== group) return 0;
-		if (id === drag.id) return drag.dy;
+	function shiftStyle(id: string) {
+		if (!drag?.live) return undefined;
+		if (id === drag.id) return `translateY(${drag.dy}px)`;
 		const k = drag.others.indexOf(id);
-		if (k >= drag.from && k < drag.at) return -drag.size;
-		if (k >= drag.at && k < drag.from) return drag.size;
-		return 0;
-	}
-	const shiftStyle = (group: string, id: string) => {
-		const dy = shiftOf(group, id);
+		const dy = k >= drag.from && k < drag.at ? -drag.size : k >= drag.at && k < drag.from ? drag.size : 0;
 		return dy ? `translateY(${dy}px)` : undefined;
-	};
+	}
+
+	// The cards' times move on once a minute.
+	let now = $state(Date.now());
+	$effect(() => {
+		const id = setInterval(() => (now = Date.now()), 60_000);
+		return () => clearInterval(id);
+	});
+
 	// Width the content lays out at; kept while the panel closes.
 	let openWidth = $state(292);
 	$effect(() => {
@@ -329,274 +369,281 @@
 	});
 </script>
 
+{#snippet title(s: Session, status: ReturnType<typeof sessionStatus>)}
+	{#if renaming === s.id}
+		<!-- svelte-ignore a11y_no_static_element_interactions (keep row clicks out of the editor) -->
+		<input
+			class="sess-edit"
+			bind:this={renameEl}
+			bind:value={renameVal}
+			onblur={commitRename}
+			onkeydown={renameKey}
+			onclick={(e) => e.stopPropagation()}
+			ondblclick={(e) => e.stopPropagation()}
+		/>
+	{:else}
+		<span
+			class="sess-title"
+			class:running={status?.kind === 'running'}
+			class:unread={status?.kind === 'unread'}
+			ondblclick={(e) => {
+				e.stopPropagation();
+				startRename(s);
+			}}
+			role="presentation">{s.draft ? t('shell.sidebar.newSession') : s.chat.title || t('shell.untitled')}</span
+		>
+	{/if}
+{/snippet}
+
+<!-- What a session is doing: working (for how long, this turn), waiting on
+     the user, failed; else when it last moved (with the unread dot). -->
+{#snippet state(s: Session, status: ReturnType<typeof sessionStatus>)}
+	{#if status}<SessionMark {status} />{/if}
+	{#if status?.kind === 'running' && s.chat.busy && s.chat.turnStartedAt > 0}
+		<Elapsed row={{ state: 'running', startedAt: s.chat.turnStartedAt, durationMs: 0, endedAt: 0 }} />
+	{:else if status?.kind !== 'input' && status?.kind !== 'running' && s.updatedAt}
+		<span class="when">{ago(recency(s), now)}</span>
+	{/if}
+{/snippet}
+
+{#snippet action(label: string, run: () => void, icon: typeof XIcon)}
+	{@const Icon = icon}
+	<span
+		class="act"
+		role="button"
+		tabindex="0"
+		onclick={(e) => {
+			e.stopPropagation();
+			run();
+		}}
+		onkeydown={(e) => e.key === 'Enter' && (e.stopPropagation(), run())}
+		aria-label={label}
+		title={label}><Icon size={14} /></span
+	>
+{/snippet}
+
+<!-- A session as a card: project, state or time; title; where it works. -->
+{#snippet card(s: Session, p: Project)}
+	{@const status = sessionStatus(s.chat)}
+	{@const info = cardInfo(s.chat)}
+	{@const tree = s.worktree ?? p.worktree}
+	{@const term = terminals[s.id]?.count ?? 0}
+	<button
+		in:rowIn
+		out:rowOut
+		class="card"
+		class:on={s.id === selectedId}
+		data-sid={s.id}
+		onclick={() => onSelect(s.id)}
+		oncontextmenu={(e) => onSessionMenu(s.id, e)}
+	>
+		<span class="line top">
+			<ProjectBadge project={p} size={16} />
+			<span class="proj">{p.name}</span>
+			{#if s.pinned}<span class="mark" title={t('shell.pin')}><PinIcon size={11} fill="currentColor" /></span>{/if}
+			<span class="right">
+				<span class="idle">{@render state(s, status)}</span>
+				<span class="acts">
+					{@render action(s.pinned ? t('shell.unpin') : t('shell.pin'), () => onPinSession(s.id, !s.pinned), s.pinned ? PinOffIcon : PinIcon)}
+					{@render action(t('shell.sidebar.settle'), () => onSettleSession(s.id), CheckIcon)}
+					{@render action(t('shell.sidebar.delete'), () => onDeleteSession(s.id), Trash2Icon)}
+				</span>
+			</span>
+		</span>
+		<span class="line">
+			{#if s.icon}<TabGlyph icon={s.icon} color={s.color} size={14} />{:else if s.color}<span class="tag-dot" style:background={s.color}></span>{/if}
+			{@render title(s, status)}
+			<!-- A draft belongs to no backend until its first message. -->
+			{#if prefs.sessionAgentIcon && s.backendId && !s.draft}
+				<span class="backend-chip" title={BACKEND_LABELS[s.backendId]}><BackendIcon backend={s.backendId} agent={s.chat.acpAgentId} size={13} mono /></span>
+			{/if}
+		</span>
+		{#if tree || s.forkedFrom || term || info.diff || info.plan || info.tasks || info.queued}
+			<span class="line meta">
+				<!-- A session in a worktree: which one (none for the main checkout). -->
+				{#if tree}<span class="branch" title={t('shell.task.worktreeTip', { branch: tree.branch, base: tree.baseBranch || '?' })}><FolderGit2Icon size={12} /><span>{tree.slug}</span></span>{/if}
+				{#if s.forkedFrom}<span class="mark" title={t('chat.fork.from', { title: s.forkedFrom.title })}><GitForkIcon size={12} /></span>{/if}
+				<span class="info">
+					{#if term}
+						<span
+							class="term"
+							role="button"
+							tabindex="0"
+							title={t('shell.sidebar.terminals', { n: term })}
+							aria-label={t('shell.sidebar.terminals', { n: term })}
+							onclick={(e) => {
+								e.stopPropagation();
+								onOpenTerminal(s.id);
+							}}
+							onkeydown={(e) => e.key === 'Enter' && (e.stopPropagation(), onOpenTerminal(s.id))}><SquareTerminalIcon size={13} /></span
+						>
+					{/if}
+					{#if info.plan}<span class="fact" title={t('shell.sidebar.plan', info.plan)}><ListChecksIcon size={12} />{info.plan.done}/{info.plan.total}</span>{/if}
+					{#if info.tasks}<span class="fact" title={t('shell.sidebar.tasks', { n: info.tasks })}><NetworkIcon size={12} />{info.tasks}</span>{/if}
+					{#if info.queued}<span class="fact" title={t('shell.sidebar.queued', { n: info.queued })}><ClockIcon size={12} />{info.queued}</span>{/if}
+					{#if info.diff}<span title={t('shell.sidebar.diff')}><DiffStat {...info.diff} /></span>{/if}
+				</span>
+			</span>
+		{/if}
+	</button>
+{/snippet}
+
+<!-- A session as one slim row (settled, or under its project). -->
+{#snippet row(s: Session, p: Project, nested: boolean)}
+	{@const status = sessionStatus(s.chat)}
+	<button
+		in:rowIn
+		out:rowOut
+		class="sess"
+		class:nested
+		class:arch={s.archived}
+		class:on={s.id === selectedId}
+		data-sid={s.id}
+		onclick={() => onSelect(s.id)}
+		oncontextmenu={(e) => onSessionMenu(s.id, e)}
+	>
+		{#if !nested}<ProjectBadge project={p} size={14} />{/if}
+		{@render title(s, status)}
+		<span class="right">
+			<span class="idle">{@render state(s, status)}</span>
+			<span class="acts">
+				{#if s.archived}
+					{@render action(t('shell.sidebar.unsettle'), () => onUnsettleSession(s.id), Undo2Icon)}
+				{:else}
+					{@render action(t('shell.sidebar.settle'), () => onSettleSession(s.id), CheckIcon)}
+				{/if}
+				{@render action(t('shell.sidebar.delete'), () => onDeleteSession(s.id), Trash2Icon)}
+			</span>
+		</span>
+	</button>
+{/snippet}
+
+<!-- "Load more": the next `step` of `left` rows not shown yet. -->
+{#snippet more(left: number, step: number, onMore: () => void, nested = false)}
+	{#if left > 0}
+		<button class="more" class:nested onclick={onMore}>{t('shell.sidebar.showMore', { n: Math.min(step, left) })}</button>
+	{/if}
+{/snippet}
+
+{#snippet shelfHead(key: 'settled' | 'projects', label: string, open: boolean)}
+	<button class="shelf-head" onclick={() => toggleShelf(key)} aria-expanded={open}>
+		<span>{label}</span>
+		<span class="rule"></span>
+		<span class="chev" class:open><ChevronDownIcon size={14} /></span>
+	</button>
+{/snippet}
+
 <aside class="sidebar" class:resizing class:closed={width === 0} style:width="{width}px">
 <!-- The content keeps the open width while the panel animates, so it slides
      out of view instead of re-wrapping at every intermediate width. -->
 <div class="sb-inner" style:width="{openWidth}px">
-	<div class="brand" data-tauri-drag-region>
-		<span class="word">JuCode</span>
+	<div class="tools">
+		<label class="search">
+			<SearchIcon size={15} />
+			<input
+				class="filter"
+				bind:this={searchEl}
+				bind:value={searchQuery}
+				placeholder={t('shell.searchSessions')}
+				aria-label={t('shell.searchSessions')}
+				title={withShortcut(t('shell.searchSessions'), 'searchSessions')}
+				onkeydown={searchKey}
+			/>
+			{#if searchQuery}
+				<button class="clear" onclick={() => ((searchQuery = ''), searchEl?.focus())} aria-label={t('shell.closeSearch')} title={t('shell.closeSearch')}><XIcon size={14} /></button>
+			{/if}
+		</label>
+		<span class="anchor">
+			<button class="tool" class:scoped={!!scope} onclick={toggleScopeMenu} aria-label={t('shell.sidebar.filter')} title={scope ? scope.name : t('shell.sidebar.filter')}>
+				{#if scope}<ProjectBadge project={scope} size={16} />{:else}<ListFilterIcon size={16} />{/if}
+			</button>
+			{#if scopeMenu}
+				<!-- Fixed at the button, so the sidebar (which clips what overflows
+				     it) does not cut the menu off. -->
+				<span class="menu-at" style:left="{scopeMenu.x}px" style:top="{scopeMenu.y}px">
+					<PopMenu items={scopeItems} title={t('shell.sidebar.filter')} placement="down-left" onSelect={pickScope} onClose={() => (scopeMenu = null)} />
+				</span>
+			{/if}
+		</span>
+		<button class="tool" onclick={onNewProject} aria-label={t('shell.newProjectTitle')} title={t('shell.newProjectTitle')}><FolderPlusIcon size={16} /></button>
+		<button class="tool" onclick={newHere} aria-label={t('shell.newChat')} title={withShortcut(t('shell.newChat'), 'newSession')}><SquarePenIcon size={16} /></button>
 	</div>
-	<!-- The session filter, a row of its own under the wordmark. -->
-	<label class="search">
-		<SearchIcon size={16} />
-		<input
-			class="filter"
-			bind:this={searchEl}
-			bind:value={searchQuery}
-			placeholder={t('shell.searchSessions')}
-			aria-label={t('shell.searchSessions')}
-			onkeydown={searchKey}
-		/>
-		{#if searchQuery}
-			<button class="clear" onclick={() => ((searchQuery = ''), searchEl?.focus())} aria-label={t('shell.closeSearch')} title={t('shell.closeSearch')}><XIcon size={14} /></button>
-		{:else}
-			<kbd>{shortcutLabel('searchSessions')}</kbd>
-		{/if}
-	</label>
-
-	<nav class="primary">
-		<button class="row" onclick={newHere}><SquarePenIcon size={16} /><span>{t('shell.newChat')}</span></button>
-		<button class="row" onclick={onDesk}>
-			<InboxIcon size={16} /><span>{t('shell.desk.title')}</span>
-			{#if pendingCount > 0}<span class="count">{pendingCount}</span>{/if}
-		</button>
-	</nav>
-
-
-	<!-- Selected once: a session of a project in its project, one of none in Recents. -->
-	{#snippet sessRow(s: Session, nested = false, selectable = false, p?: Project)}
-		{@const status = sessionStatus(s.chat)}
-		{@const req = s.chat.sessionId ? reqs.bySession.get(s.chat.sessionId) : undefined}
-		<!-- Listed rows (`p` given) drag within their project and pinned group. -->
-		<button
-			in:rowIn
-			out:rowOut
-			class="sess"
-			class:nested
-			class:on={!selectable && s.id === selectedId && (!!p || !!loose?.sessions.includes(s))}
-			class:arch={s.archived}
-			class:selectable
-			class:held={drag?.live && drag.group !== 'projects' && drag.id === s.id}
-			style:transform={p ? shiftStyle(`${p.id}:${s.pinned ? 'pin' : ''}`, s.id) : undefined}
-			data-sid={s.id}
-			data-row-id={s.id}
-			data-group={p ? `${p.id}:${s.pinned ? 'pin' : ''}` : undefined}
-			aria-pressed={selectable ? picked.includes(s.id) : undefined}
-			onpointerdown={(e) => p && rowDown(e, p, s)}
-			onclick={() => (selectable ? togglePick(s.id) : onSelect(s.id))}
-			oncontextmenu={(e) => onSessionMenu(s.id, e)}
-		>
-			{#if selectable}
-				<span class="pick" class:on={picked.includes(s.id)} aria-hidden="true">
-					{#if picked.includes(s.id)}<CheckIcon size={12} />{/if}
-				</span>
-			{/if}
-			<!-- A draft belongs to no backend until its first message. -->
-			{#if prefs.sessionAgentIcon && s.backendId && !s.draft}
-				<span class="backend-chip" title={BACKEND_LABELS[s.backendId]}><BackendIcon backend={s.backendId} agent={s.chat.acpAgentId} size={14} mono /></span>
-			{/if}
-			{#if s.icon}
-				<TabGlyph icon={s.icon} color={s.color} size={14} />
-			{:else if s.color}
-				<!-- The tab colour the user picked, without an icon to carry it. -->
-				<span class="tag-dot" style:background={s.color}></span>
-			{/if}
-			{#if renaming === s.id}
-				<!-- svelte-ignore a11y_no_static_element_interactions (keep row clicks out of the editor) -->
-				<input
-					class="sess-edit"
-					bind:this={renameEl}
-					bind:value={renameVal}
-					onblur={commitRename}
-					onkeydown={renameKey}
-					onclick={(e) => e.stopPropagation()}
-					ondblclick={(e) => e.stopPropagation()}
-				/>
-			{:else}
-				<span
-					class="sess-title"
-					class:running={status?.kind === 'running'}
-					class:unread={status?.kind === 'unread'}
-					ondblclick={(e) => { e.stopPropagation(); startRename(s); }}
-					role="presentation">{s.chat.title}</span
-				>
-			{/if}
-			{#if req}<RequirementTag id={req.id} title={req.title} />{/if}
-			{#if s.pinned && !s.archived}<span class="pin-mark" title={t('shell.pin')}><PinIcon size={12} fill="currentColor" /></span>{/if}
-			<SessionMark status={status} />
-			{#if !selectable}
-			{#if !s.archived}
-				<span
-					class="act"
-					role="button"
-					tabindex="0"
-					onclick={(e) => {
-						e.stopPropagation();
-						onPinSession(s.id, !s.pinned);
-					}}
-					onkeydown={(e) => e.key === 'Enter' && (e.stopPropagation(), onPinSession(s.id, !s.pinned))}
-					aria-label={s.pinned ? t('shell.unpin') : t('shell.pin')}
-					title={s.pinned ? t('shell.unpin') : t('shell.pin')}
-				>
-					{#if s.pinned}<PinOffIcon size={16} />{:else}<PinIcon size={16} />{/if}
-				</span>
-			{/if}
-			<span
-				class="act"
-				role="button"
-				tabindex="0"
-				onclick={(e) => {
-					e.stopPropagation();
-					s.archived ? onUnarchiveSession(s.id) : onArchiveSession(s.id);
-				}}
-				onkeydown={(e) => e.key === 'Enter' && (e.stopPropagation(), s.archived ? onUnarchiveSession(s.id) : onArchiveSession(s.id))}
-				aria-label={s.archived ? 'unarchive' : 'archive'}
-				title={s.archived ? t('shell.unarchive') : t('shell.archive')}
-			>
-				{#if s.archived}<ArchiveRestoreIcon size={16} />{:else}<ArchiveIcon size={16} />{/if}
-			</span>
-			<span
-				class="act"
-				role="button"
-				tabindex="0"
-				onclick={(e) => {
-					e.stopPropagation();
-					onCloseSession(s.id);
-				}}
-				onkeydown={(e) => e.key === 'Enter' && (e.stopPropagation(), onCloseSession(s.id))}
-				aria-label="close"><XIcon size={16} /></span
-			>
-			{/if}
-		</button>
-	{/snippet}
-
-	{#snippet archived(p: Project, arch: Session[], nested: boolean)}
-		{#if arch.length}
-			{@const open = showArchived[p.id] || !!query}
-			{@const sel = selecting === p.id && open}
-			<div class="more-line" class:nested>
-				<button class="more" onclick={() => (showArchived[p.id] = !showArchived[p.id])}>
-					<span class="chev" class:open={showArchived[p.id]}><ChevronRightIcon size={16} /></span>
-					<span>{t('shell.archived')} · {arch.length}</span>
-				</button>
-				{#if open && arch.length > 1}
-					<button class="more-act" onclick={() => toggleSelecting(p.id)}>
-						{sel ? t('shell.archiveSelectCancel') : t('shell.archiveSelect')}
-					</button>
-				{/if}
-			</div>
-			<Collapse {open}>
-				{#each arch as s (s.id)}{@render sessRow(s, nested, sel)}{/each}
-				{#if sel}
-					{@const all = arch.every((s) => picked.includes(s.id))}
-					<div class="bulk" class:nested>
-						<button class="more-act" onclick={() => (picked = all ? [] : arch.map((s) => s.id))}>
-							{all ? t('shell.archiveSelectNone') : t('shell.archiveSelectAll')}
-						</button>
-						<span class="grow"></span>
-						<Button size="sm" variant="primary" disabled={!picked.length} onclick={restorePicked}>
-							{t('shell.archiveRestore', { n: picked.length })}
-						</Button>
-					</div>
-				{/if}
-			</Collapse>
-		{/if}
-	{/snippet}
+	{#if pendingCount > 0}
+		<nav class="primary">
+			<button class="row" onclick={onDesk}>
+				<InboxIcon size={16} /><span>{t('shell.desk.title')}</span>
+				<span class="count">{pendingCount}</span>
+			</button>
+		</nav>
+	{/if}
 
 	<div class="list" class:dragging={drag?.live} bind:this={listEl}>
-		<!-- Chats: conversations without a project. -->
-		{#if chats}
-			{@const active = listedSessions(chats).filter((s) => sessionMatches(chats, s))}
-			{@const arch = chats.sessions.filter((s) => s.archived && sessionMatches(chats, s))}
-			{#if !query || active.length || arch.length}
-				<section>
-					<div class="head">
-						<span>{chats.name}</span>
-						<button class="head-act" onclick={() => onHistory(chats)} aria-label="history" title={t('shell.history')}><RotateCcwClockIcon size={16} /></button>
-						<button class="head-act" onclick={onNewChat} aria-label={t('shell.newChat')} title={t('shell.newChat')}><PlusIcon size={16} /></button>
-					</div>
-					{#each showAll[chats.id] || query ? active : firstSessions(active) as s (s.id)}{@render sessRow(s, false, false, chats)}{/each}
-					{#if active.length > SHOW_LIMIT && !query}
-						<button class="more" onclick={() => (showAll[chats.id] = !showAll[chats.id])}>{showAll[chats.id] ? t('shell.showLess') : t('shell.showMore')}</button>
-					{/if}
-					{@render archived(chats, arch, false)}
-				</section>
+		<div class="cards">
+			{#each cards as { s, p } (s.id)}{@render card(s, p)}{/each}
+			{#if !cards.length}
+				<p class="empty">{query ? t('shell.sidebar.noMatch') : t('shell.sidebar.empty')}</p>
 			{/if}
-		{/if}
+		</div>
 
-		<!-- Projects: folders with their coding sessions nested. -->
-		<section>
-			<div class="head">
-				<span>{t('shell.projects')}</span>
-				<button class="head-act" onclick={onNewProject} aria-label="new project" title={t('shell.newProjectTitle')}><PlusIcon size={16} /></button>
-			</div>
-			{#each codeProjects as p (p.id)}
-				{@const active = listedSessions(p).filter((s) => sessionMatches(p, s))}
-				{@const arch = p.sessions.filter((s) => s.archived && sessionMatches(p, s))}
-				{@const open = !collapsed[p.id] || !!query}
-				{@const holdsActive = p.sessions.some((s) => s.id === selectedId)}
-				{#if !query || active.length || arch.length}
-					<div
-						class="project"
-						class:held={drag?.live && drag.group === 'projects' && drag.id === p.id}
-						style:transform={shiftStyle('projects', p.id)}
-						data-group="projects"
-						data-row-id={p.id}
-					>
+		<div class="shelves">
+			{#if settled.length}
+				{@const open = !!shelves.settled || !!query}
+				{@render shelfHead('settled', open ? t('shell.sidebar.settled') : `${t('shell.sidebar.settled')} (${settled.length})`, open)}
+				<Collapse {open}>
+					<div class="shelf-body">
+						{#each settled.slice(0, settledShown) as { s, p } (s.id)}{@render row(s, p, false)}{/each}
+						{@render more(settled.length - settledShown, PAGE, () => (settledShown += PAGE))}
+					</div>
+				</Collapse>
+			{/if}
+
+			{@render shelfHead('projects', projectsOpen ? t('shell.projects') : `${t('shell.projects')} (${codeProjects.length})`, projectsOpen)}
+			<Collapse open={projectsOpen}>
+				<div class="shelf-body">
+				{#each shelfProjects.slice(0, projectsShown) as p (p.id)}
+					{@const all = p.sessions.filter((s) => matches(p, s)).sort((a, b) => recency(b) - recency(a))}
+					{@const open = !!expanded[p.id] || (!!query && all.length > 0)}
+					{@const shown = sessionsShown[p.id] ?? SESSION_PAGE}
+					<div class="project" class:held={drag?.live && drag.id === p.id} style:transform={shiftStyle(p.id)} data-project-row={p.id}>
 						<div class="folder" class:stale={p.stale} class:on={openProject === p.id}>
+							<button class="caret" class:open aria-expanded={open} aria-label={t('shell.projectPage.toggle')} title={t('shell.projectPage.toggle')} onclick={() => toggleExpanded(p.id)}><ChevronRightIcon size={12} /></button>
 							<button
-								class="caret"
-								class:open
-								aria-expanded={open}
-								aria-label={t('shell.projectPage.toggle')}
-								title={t('shell.projectPage.toggle')}
-								onclick={() => toggleCollapsed(p.id)}><ChevronRightIcon size={12} /></button
+								class="folder-row"
+								onpointerdown={(e) => projectDown(e, p)}
+								onclick={() => onOpenProject(p)}
+								oncontextmenu={(e) => onProjectMenu(p, e)}
+								title={p.worktree ? t('shell.task.worktreeTip', { branch: p.worktree.branch, base: p.worktree.baseBranch || '?' }) : p.path}
 							>
-							<button class="folder-row" onpointerdown={(e) => rowDown(e, p)} onclick={() => onOpenProject(p)} oncontextmenu={(e) => onProjectMenu(p, e)} title={p.worktree ? t('shell.task.worktreeTip', { branch: p.worktree.branch, base: p.worktree.baseBranch || '?' }) : p.path}>
-								{#if p.icon}<TabGlyph icon={p.icon} color={p.color ?? 'var(--dim)'} active={holdsActive} size={16} />{:else if p.worktree}<ActiveIcon icon={GitBranchIcon} size={16} active={holdsActive} color={p.color} />{:else if open}<ActiveIcon icon={FolderOpenIcon} size={16} active={holdsActive} color={p.color} />{:else}<ActiveIcon icon={FolderIcon} size={16} active={holdsActive} color={p.color} />{/if}
+								{#if p.worktree}<GitBranchIcon size={14} />{:else}<ProjectBadge project={p} size={16} />{/if}
 								<span class="folder-name">{p.name}</span>
 							</button>
 							{#if p.stale}
 								<span class="tag" title={p.path}>{t('shell.task.stale')}</span>
 							{:else}
-								<button class="act" onclick={() => onHistory(p)} aria-label="history" title={withShortcut(t('shell.history'), 'history')}><RotateCcwClockIcon size={16} /></button>
+								<button class="act" onclick={() => onHistory(p)} aria-label="history" title={withShortcut(t('shell.history'), 'history')}><RotateCcwClockIcon size={14} /></button>
 								{#if !p.worktree}
-									<button class="act" onclick={() => onNewTask(p)} aria-label="new parallel task" title={t('shell.newTask')}><GitForkIcon size={16} /></button>
+									<button class="act" onclick={() => onNewTask(p)} aria-label="new parallel task" title={t('shell.newTask')}><GitForkIcon size={14} /></button>
 								{/if}
-								<button class="act" onclick={() => onNewSession(p)} aria-label="new session" title={withShortcut(t('shell.newSessionInProject'), 'newSession')}><PlusIcon size={16} /></button>
+								<button class="act" onclick={() => onNewSession(p)} aria-label="new session" title={withShortcut(t('shell.newSessionInProject'), 'newSession')}><PlusIcon size={14} /></button>
 							{/if}
 							{#if codeProjects.length > 1 || p.stale}
-								<button class="act" class:always={p.stale} onclick={() => onCloseProject(p)} aria-label="close project" title={p.stale ? t('shell.task.staleRemove') : t('shell.closeProject')}><XIcon size={16} /></button>
+								<button class="act" class:always={p.stale} onclick={() => onCloseProject(p)} aria-label="close project" title={p.stale ? t('shell.task.staleRemove') : t('shell.closeProject')}><XIcon size={14} /></button>
 							{/if}
 						</div>
 						<Collapse {open}>
-							{#each showAll[p.id] || query ? active : firstSessions(active) as s (s.id)}{@render sessRow(s, true, false, p)}{/each}
-							{#if active.length > SHOW_LIMIT && !query}
-								<button class="more nested" onclick={() => (showAll[p.id] = !showAll[p.id])}>{showAll[p.id] ? t('shell.showLess') : t('shell.showMore')}</button>
-							{/if}
-							{#if active.length === 0 && arch.length === 0 && !p.stale && !query}
+							{#each all.slice(0, shown) as s (s.id)}{@render row(s, p, true)}{/each}
+							{@render more(all.length - shown, PAGE, () => (sessionsShown[p.id] = shown + PAGE), true)}
+							{#if !all.length && !p.stale && !query}
 								<button class="sess ghost nested" onclick={() => onNewSession(p)}><span class="sess-title">{t('shell.newChat')}</span></button>
 							{/if}
-							{@render archived(p, arch, true)}
 						</Collapse>
 					</div>
-				{/if}
-			{/each}
-		</section>
-
-		<!-- Recents: the latest sessions, of this workspace's projects or of none. -->
-		{#if recents.length || looseArch.length}
-			<section>
-				<div class="head"><span>{t('shell.recents')}</span></div>
-				{#each showAll[LOOSE_ID] || query ? recents : firstSessions(recents) as s (s.id)}{@render sessRow(s)}{/each}
-				{#if recents.length > SHOW_LIMIT && !query}
-					<button class="more" onclick={() => (showAll[LOOSE_ID] = !showAll[LOOSE_ID])}>{showAll[LOOSE_ID] ? t('shell.showLess') : t('shell.showMore')}</button>
-				{/if}
-				{#if loose}{@render archived(loose, looseArch, false)}{/if}
-			</section>
-		{/if}
+				{/each}
+				{@render more(shelfProjects.length - projectsShown, PROJECT_PAGE, () => (projectsShown += PROJECT_PAGE))}
+				</div>
+			</Collapse>
+		</div>
 	</div>
-
 </div>
 </aside>
 
@@ -627,39 +674,41 @@
 	:global(:root[data-vibrancy='on']) .sidebar {
 		background: var(--vibrancy-tint);
 	}
-	.brand {
+	.tools {
 		display: flex;
 		align-items: center;
-		gap: 8px;
-		height: 40px;
-		margin: 14px 12px 10px;
-		padding: 0 4px 0 10px;
+		gap: 2px;
+		margin: 6px 10px 10px;
 		flex-shrink: 0;
 	}
 	.search {
+		flex: 1;
+		min-width: 0;
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		height: 36px;
-		margin: 0 10px 8px;
-		padding: 0 8px 0 12px;
+		height: 32px;
+		margin-right: 4px;
+		padding: 0 8px 0 10px;
 		border-radius: var(--r);
 		background: var(--surface2);
-		flex-shrink: 0;
 		cursor: text;
 	}
 	.search > :global(svg) {
 		color: var(--dim);
 		flex-shrink: 0;
 	}
-	.search kbd {
-		flex-shrink: 0;
-		padding: 1px 6px;
-		border-radius: var(--r);
-		background: var(--surface2);
-		color: var(--dim2);
-		font-family: var(--font-sans);
-		font-size: var(--fs-2xs);
+	.filter {
+		flex: 1;
+		min-width: 0;
+		height: 28px;
+		padding: 0;
+		border: none;
+		background: none;
+		color: var(--text);
+		font: inherit;
+		font-size: var(--fs-sm);
+		outline: none;
 	}
 	.clear {
 		display: inline-flex;
@@ -674,31 +723,42 @@
 	.clear:hover {
 		color: var(--text);
 	}
-	.filter {
-		flex: 1;
-		min-width: 0;
-		height: 28px;
-		padding: 0;
-		border: none;
-		background: none;
-		color: var(--text);
-		font: inherit;
-		font-size: var(--fs-sm);
-		outline: none;
+	.anchor {
+		position: relative;
+		display: inline-flex;
 	}
-	.word {
-		flex: 1;
-		font-family: var(--font-sans);
-		font-size: var(--fs-xl);
-		font-weight: 700;
-		letter-spacing: -0.005em;
+	.menu-at {
+		position: fixed;
+		z-index: 80;
+		width: 0;
+		height: 0;
+	}
+	.menu-at :global(.pm) {
+		max-height: 60vh;
+		overflow-y: auto;
+	}
+	.tool {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 28px;
+		height: 28px;
+		flex-shrink: 0;
+		border: none;
+		border-radius: var(--r);
+		background: none;
+		color: var(--dim);
+		cursor: pointer;
+	}
+	.tool:hover,
+	.tool.scoped {
+		background: var(--surface2);
 		color: var(--text);
 	}
 	.primary {
 		display: flex;
 		flex-direction: column;
-		gap: 1px;
-		padding: 0 10px 8px;
+		padding: 0 10px 6px;
 	}
 	.row,
 	.sess,
@@ -708,8 +768,8 @@
 		align-items: center;
 		gap: 10px;
 		width: 100%;
-		min-height: 38px;
-		padding: 0 12px;
+		min-height: 34px;
+		padding: 0 10px;
 		border: none;
 		border-radius: var(--r);
 		background: none;
@@ -723,7 +783,6 @@
 			color var(--t-fast) var(--ease-out);
 	}
 	.row :global(svg),
-	.sess > :global(svg),
 	.folder-row > :global(svg) {
 		color: var(--dim);
 		flex-shrink: 0;
@@ -737,12 +796,6 @@
 	.row span:first-of-type {
 		flex: 1;
 	}
-	.tag-dot {
-		flex: none;
-		width: 7px;
-		height: 7px;
-		border-radius: 50%;
-	}
 	.count {
 		flex: none !important;
 		min-width: 20px;
@@ -755,35 +808,120 @@
 		text-align: center;
 	}
 
+	/* The cards on top, the shelves kept at the bottom while the cards leave
+	   room; it all scrolls together once they do not. */
 	.list {
 		flex: 1;
 		min-height: 0;
-		overflow-y: auto;
-		padding: 4px 10px 12px;
-	}
-	section + section {
-		margin-top: 22px;
-	}
-	.head {
 		display: flex;
-		align-items: center;
-		gap: 2px;
-		height: 32px;
-		padding: 0 4px 0 12px;
+		flex-direction: column;
+		overflow-y: auto;
+		padding: 2px 8px 10px;
+	}
+	.cards {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+	.shelves {
+		margin-top: auto;
+		padding-top: 12px;
+	}
+	/* An open shelf takes at most this much of the list and scrolls inside. */
+	.shelf-body {
+		max-height: 40vh;
+		overflow-y: auto;
+	}
+	.empty {
+		margin: 8px 10px;
 		color: var(--dim2);
 		font-size: var(--fs-xs);
-		font-weight: 500;
 	}
-	.head span {
-		flex: 1;
+	.card {
+		display: flex;
+		flex-direction: column;
+		gap: 5px;
+		width: 100%;
+		padding: 10px 12px;
+		border: none;
+		border-radius: var(--r);
+		background: none;
+		color: var(--text);
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+		transition: background var(--t-fast) var(--ease-out);
 	}
-	.head-act,
+	.card:hover {
+		background: var(--surface);
+	}
+	.card.on {
+		background: var(--surface2);
+	}
+	.line {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		min-width: 0;
+		width: 100%;
+		font-size: var(--fs-sm);
+	}
+	.line.top,
+	.line.meta {
+		font-size: var(--fs-xs);
+		color: var(--dim);
+	}
+	.line.top {
+		min-height: 20px;
+	}
+	.proj {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.right {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		justify-content: flex-end;
+		margin-left: auto;
+		flex-shrink: 0;
+		min-width: 24px;
+	}
+	.idle {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+	}
+	.when {
+		color: var(--dim2);
+		font-size: var(--fs-xs);
+		font-variant-numeric: tabular-nums;
+	}
+	/* On hover the time gives way to the actions. */
+	.acts {
+		display: none;
+		align-items: center;
+	}
+	.card:hover .acts,
+	.card:focus-within .acts,
+	.sess:hover .acts,
+	.sess:focus-within .acts {
+		display: inline-flex;
+	}
+	.card:hover .idle,
+	.card:focus-within .idle,
+	.sess:hover .idle,
+	.sess:focus-within .idle {
+		display: none;
+	}
 	.act {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 30px;
-		height: 30px;
+		width: 24px;
+		height: 22px;
 		flex-shrink: 0;
 		border: none;
 		border-radius: var(--r);
@@ -791,118 +929,115 @@
 		color: var(--dim2);
 		cursor: pointer;
 	}
-	.head-act:hover,
 	.act:hover {
 		background: var(--surface2);
 		color: var(--text);
 	}
-	/* Row actions appear on hover / keyboard focus only. */
-	.sess .act,
 	.folder .act {
 		display: none;
+		width: 26px;
+		height: 26px;
 	}
-	.sess:hover .act,
-	.sess:focus-within .act,
 	.folder:hover .act,
 	.folder .act.always {
 		display: inline-flex;
+	}
+	.mark {
+		display: inline-flex;
+		color: var(--dim2);
+		flex-shrink: 0;
+	}
+	.info {
+		display: inline-flex;
+		align-items: center;
+		gap: 10px;
+		margin-left: auto;
+		flex-shrink: 0;
+	}
+	.term {
+		display: inline-flex;
+		padding: 1px;
+		border-radius: var(--r);
+		color: var(--ok);
+		cursor: pointer;
+	}
+	.term:hover {
+		background: var(--surface2);
+	}
+	.fact {
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
+		color: var(--dim2);
+		font-variant-numeric: tabular-nums;
+	}
+	.branch {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		min-width: 0;
+		color: var(--dim2);
+	}
+	.branch span {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.tag-dot {
+		flex: none;
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+	}
+	.backend-chip {
+		display: inline-flex;
+		color: var(--dim);
+		flex-shrink: 0;
+	}
+	.backend-chip :global(.mark) {
+		color: inherit;
+	}
+
+	.shelf-head {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		width: 100%;
+		height: 32px;
+		padding: 0 6px 0 10px;
+		border: none;
+		background: none;
+		color: var(--dim2);
+		font: inherit;
+		font-size: var(--fs-xs);
+		font-weight: 500;
+		cursor: pointer;
+	}
+	.shelf-head:hover {
+		color: var(--dim);
+	}
+	.rule {
+		flex: 1;
+		height: 1px;
+		background: var(--hairline);
+	}
+	.chev {
+		display: inline-flex;
+		transition: transform var(--t-fast) var(--ease-out);
+		transform: rotate(180deg);
+	}
+	.chev.open {
+		transform: none;
 	}
 
 	.sess.on {
 		background: var(--surface2);
 	}
-	.sess,
-	.project {
-		position: relative;
-	}
-	/* Dragging a row: it follows the pointer above the others, which slide
-	   aside to show where it lands. */
-	.list.dragging {
-		cursor: grabbing;
-		user-select: none;
-	}
-	.list.dragging .sess,
-	.list.dragging .project {
-		pointer-events: none;
-		transition: transform 150ms var(--ease-out);
-	}
-	.list.dragging .sess.held,
-	.list.dragging .project.held {
-		z-index: 2;
-		border-radius: var(--r);
-		background: var(--panel);
-		box-shadow: var(--shadow-sm);
-		transition: none;
-	}
-	.pin-mark {
-		display: inline-flex;
-		color: var(--dim2);
-		flex-shrink: 0;
-	}
 	.sess.nested {
-		padding-left: 42px;
-	}
-	.more-line {
-		display: flex;
-		align-items: center;
-		gap: 4px;
-	}
-	.more-line .more {
-		flex: 1;
-		min-width: 0;
-	}
-	.more-act {
-		flex-shrink: 0;
-		padding: 4px 8px;
-		border: none;
-		border-radius: var(--r);
-		background: none;
-		color: var(--dim);
-		font: inherit;
-		font-size: var(--fs-xs);
-		cursor: pointer;
-		transition:
-			background var(--t-fast) var(--ease-out),
-			color var(--t-fast) var(--ease-out);
-	}
-	.more-act:hover {
-		background: var(--surface2);
-		color: var(--text);
-	}
-	.bulk {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		padding: 6px 4px 8px 12px;
-		animation: rise var(--t-fast) var(--ease-out);
-	}
-	.bulk.nested {
-		padding-left: 28px;
-	}
-	.grow {
-		flex: 1;
-	}
-	.pick {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 16px;
-		height: 16px;
-		flex-shrink: 0;
-		border: 1px solid var(--border-strong);
-		border-radius: var(--r);
-		background: var(--surface);
-		color: var(--on-accent);
-		transition:
-			background var(--t-fast) var(--ease-out),
-			border-color var(--t-fast) var(--ease-out);
-	}
-	.pick.on {
-		border-color: var(--accent);
-		background: var(--accent);
+		padding-left: 36px;
 	}
 	.sess.arch .sess-title {
-		color: var(--dim2);
+		color: var(--dim);
 	}
 	.sess.ghost {
 		color: var(--dim2);
@@ -913,6 +1048,9 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+	.card .sess-title {
+		font-weight: 500;
 	}
 	.sess-edit {
 		flex: 1;
@@ -925,18 +1063,6 @@
 		color: var(--text);
 		font: inherit;
 	}
-	.sess :global(.state) {
-		color: var(--dim);
-		flex-shrink: 0;
-	}
-	.tag {
-		flex-shrink: 0;
-		padding: 1px 7px;
-		border: 1px solid var(--border);
-		border-radius: var(--r);
-		color: var(--dim);
-		font-size: var(--fs-2xs);
-	}
 	/* A reply not seen yet: the title stands out with the dot. */
 	.sess-title.unread {
 		color: var(--text);
@@ -944,7 +1070,7 @@
 	}
 	/* Working: a highlight sweeps across the title. */
 	.sess-title.running {
-		/* Only as wide as the text, so the sweep crosses it (the marks stay right). */
+		/* Only as wide as the text, so the sweep crosses it. */
 		flex: 0 1 auto;
 		margin-right: auto;
 		background: linear-gradient(100deg, var(--dim) 42%, var(--text) 50%, var(--dim) 58%) 0 0 / 250% 100%;
@@ -966,16 +1092,33 @@
 			animation: none;
 		}
 	}
-	.backend-chip {
-		display: inline-flex;
-		color: var(--text);
-		flex-shrink: 0;
+	.more {
+		min-height: 28px;
+		color: var(--dim);
+		font-size: var(--fs-xs);
 	}
-	/* Every engine's mark in the same plain colour, the ACP plug included. */
-	.backend-chip :global(.mark) {
-		color: inherit;
+	.more.nested {
+		padding-left: 36px;
 	}
 
+	.project {
+		position: relative;
+	}
+	.list.dragging {
+		cursor: grabbing;
+		user-select: none;
+	}
+	.list.dragging .project {
+		pointer-events: none;
+		transition: transform 150ms var(--ease-out);
+	}
+	.list.dragging .project.held {
+		z-index: 2;
+		border-radius: var(--r);
+		background: var(--panel);
+		box-shadow: var(--shadow-sm);
+		transition: none;
+	}
 	.folder {
 		display: flex;
 		align-items: center;
@@ -986,13 +1129,24 @@
 	.folder:hover {
 		background: var(--surface);
 	}
+	.folder.on {
+		background: var(--surface2);
+	}
 	.folder-row {
 		flex: 1;
 		min-width: 0;
 		padding-left: 2px;
 	}
-	.folder.on {
-		background: var(--surface2);
+	.folder-row:hover {
+		background: none;
+	}
+	.folder.stale .folder-name {
+		color: var(--dim2);
+	}
+	.folder-name {
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 	.caret {
 		flex: none;
@@ -1018,31 +1172,12 @@
 	.caret.open :global(svg) {
 		transform: rotate(90deg);
 	}
-	.folder-row:hover {
-		background: none;
-	}
-	.folder.stale .folder-name {
-		color: var(--dim2);
-	}
-	.folder-name {
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	.more {
-		min-height: 30px;
+	.tag {
+		flex-shrink: 0;
+		padding: 1px 7px;
+		border: 1px solid var(--border);
+		border-radius: var(--r);
 		color: var(--dim);
-		font-size: var(--fs-xs);
+		font-size: var(--fs-2xs);
 	}
-	.more-line.nested .more {
-		padding-left: 42px;
-	}
-	.chev {
-		display: inline-flex;
-		transition: transform var(--t-fast) var(--ease-out);
-	}
-	.chev.open {
-		transform: rotate(90deg);
-	}
-
 </style>

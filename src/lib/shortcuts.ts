@@ -23,7 +23,6 @@ export type ShortcutId =
 	| 'sessionN'
 	| 'terminal'
 	| 'approvalMode'
-	| 'captureRequirement'
 	| 'shortcuts'
 	| 'zoomIn'
 	| 'zoomOut'
@@ -48,7 +47,6 @@ export const SHORTCUTS: Record<ShortcutId, Shortcut> = {
 	settings: { key: ',', mod: true, group: 'general' },
 	terminal: { key: '`', ctrl: true, group: 'general' },
 	shortcuts: { key: '/', mod: true, group: 'general' },
-	captureRequirement: { key: 'n', mod: true, shift: true, group: 'general' },
 	zoomIn: { key: '=', mod: true, group: 'general' },
 	zoomOut: { key: '-', mod: true, group: 'general' },
 	zoomReset: { key: '0', mod: true, group: 'general' },

@@ -19,7 +19,7 @@ import { runState } from './agentTrace';
 import { costUsd } from './pricing';
 import { pendingCost, sumCosts, type BillingCost } from './sessionCost';
 import { CacheWatch } from './cacheMiss';
-import { parseToolOutput } from './toolSummary';
+import { editedPaths, isEdit, parseToolOutput } from './toolSummary';
 import { parseMcpServersEvent, type McpServerView } from './mcp';
 
 /** Where a sent message is before its reply starts: accepted locally, the
@@ -43,6 +43,8 @@ export interface TurnStats {
 	model: string;
 	/** Reply segments (assistant messages split by tool calls) in the turn. */
 	segments: number;
+	/** The user stopped the turn. */
+	stopped?: boolean;
 }
 
 /** A message sent while a reply runs that does not wait for the turn: it
@@ -70,7 +72,8 @@ export interface CallTiming {
 }
 
 export type Msg =
-	| { kind: 'user'; text: string; state?: SendState; images?: string[] }
+	/** `at`: when it was sent, ms (absent: not known, e.g. an old transcript). */
+	| { kind: 'user'; text: string; state?: SendState; images?: string[]; at?: number }
 	| {
 			kind: 'assistant';
 			text: string;
@@ -81,6 +84,8 @@ export type Msg =
 			segMs?: number;
 			uuid?: string;
 			turn?: TurnStats;
+			/** When it was written, ms. */
+			at?: number;
 	  }
 	| { kind: 'reasoning'; text: string; collapsed: boolean }
 	| {
@@ -461,9 +466,6 @@ export class ChatState {
 	 *  this placeholder. */
 	title = $state(UNTITLED);
 	pendingFill = $state<string | null>(null);
-	// Files to attach in the composer once its pane is up (a requirement's
-	// screenshots when a session starts on it).
-	pendingAttach = $state<string[]>([]);
 	trustPrompt = $state<{ cwd: string; repoRoot: string | null } | null>(null);
 	goal = $state<Goal | null>(null);
 	plan = $state<PlanStep[]>([]);
@@ -529,6 +531,9 @@ export class ChatState {
 	tasksOpen = $state(false);
 	/** The subagent the background tasks region shows (null: the task list). */
 	agentFocus = $state<string | null>(null);
+	/** The subagent shown as a page in place of the conversation (Desktop's
+	 *  SubagentPage; null: the conversation). */
+	agentPage = $state<string | null>(null);
 	/** Claude's permission rules (list_permission_rules), once asked for. */
 	permissionRules = $state<{
 		rules: { behavior: string; source: string; rule: string; editability: string }[];
@@ -644,6 +649,8 @@ export class ChatState {
 	#turnIn = 0;
 	#turnOut = 0;
 	#turnTools = 0;
+	/** The user asked this turn to stop (`stopping`, or the engine said so). */
+	#stopped = false;
 	#turnCostStart = 0;
 	#lastTurn: TurnStats | null = null;
 	// Fast lookup for the tool message backing a call_id, so tool_update/tool_output
@@ -683,9 +690,15 @@ export class ChatState {
 		}
 		this.lastTurnAuto = false;
 		this.lastError = null;
-		this.#trackSend({ kind: 'user', text: content, state: 'sending', ...(images?.length ? { images } : {}) });
+		this.#trackSend({ kind: 'user', text: content, state: 'sending', at: Date.now(), ...(images?.length ? { images } : {}) });
 		this.#pendingUserEcho = content;
 		this.#resetCurrent();
+	}
+
+	/** The user stops the running turn: it ends stopped (its work stays
+	 *  unfolded, as in t3code). */
+	stopping() {
+		if (this.busy) this.#stopped = true;
 	}
 
 	/** Sends an automatic "continue" without a bubble: its echo (and its turn
@@ -736,6 +749,8 @@ export class ChatState {
 
 	/** Stamp the turn's total elapsed onto its last assistant message. */
 	#endTurn() {
+		const stopped = this.#stopped;
+		this.#stopped = false;
 		if (this.#turnStart !== null) this.turnEndedAt = Date.now();
 		this.#collapseReasoning();
 		if (this.#sending?.state !== 'failed') this.#setSend(null);
@@ -756,7 +771,8 @@ export class ChatState {
 			billingTurns: [...this.#turnBillingIds],
 			billing: this.#turnBilling(this.#turnBillingIds),
 			model: this.model,
-			segments: this.#turnSegments
+			segments: this.#turnSegments,
+			...(stopped ? { stopped: true } : {})
 		};
 		this.#turnStart = null;
 		this.#firstOutput = null;
@@ -1197,7 +1213,7 @@ export class ChatState {
 				this.autoRetry = null;
 				// No send state: claude echoes after the reply, when it would stick.
 				const images = arr<string>(ev.images).filter((p) => typeof p === 'string');
-				this.messages.push({ kind: 'user', text, ...(images.length ? { images } : {}) });
+				this.messages.push({ kind: 'user', text, at: Date.now(), ...(images.length ? { images } : {}) });
 				this.#resetCurrent();
 				break;
 			}
@@ -1211,7 +1227,7 @@ export class ChatState {
 				this.#outputStarted();
 				if (this.#assistantIdx < 0) {
 					this.#collapseReasoning();
-					this.messages.push({ kind: 'assistant', text: '' });
+					this.messages.push({ kind: 'assistant', text: '', at: Date.now() });
 					this.#assistantIdx = this.messages.length - 1;
 				}
 				const m = this.messages[this.#assistantIdx];
@@ -1235,17 +1251,21 @@ export class ChatState {
 				break;
 			}
 			case 'tool_start':
-				this.#outputStarted();
-				this.#turnTools++;
-				// The request is done and its tools run untimed, except on claude,
-				// which announces a call as the model starts writing it: that
-				// request ends with its `usage`. Text after them is a new segment,
-				// below the tool cards.
-				if (this.backendId !== 'claude') this.call = null;
-				this.#closeSegment(Date.now());
-				// One reasoning block per round: collapse this round's reasoning once
-				// its tool call appears, so the next round starts a fresh block.
-				this.#collapseReasoning();
+				// A subagent's call (claude's `subagent`) is its work, not this
+				// reply's: it neither ends the reply's segment nor counts as its call.
+				if (!str(ev.subagent)) {
+					this.#outputStarted();
+					this.#turnTools++;
+					// The request is done and its tools run untimed, except on claude,
+					// which announces a call as the model starts writing it: that
+					// request ends with its `usage`. Text after them is a new segment,
+					// below the tool cards.
+					if (this.backendId !== 'claude') this.call = null;
+					this.#closeSegment(Date.now());
+					// One reasoning block per round: collapse this round's reasoning once
+					// its tool call appears, so the next round starts a fresh block.
+					this.#collapseReasoning();
+				}
 				{
 					const callId = str(ev.call_id);
 					const toolMsg: Extract<Msg, { kind: 'tool' }> = {
@@ -1297,17 +1317,13 @@ export class ChatState {
 					const started = parseToolOutput(str(ev.output));
 					if (started && typeof started.session === 'string') ChatState.onSessionStarted?.(this.cwd, started);
 				}
-				// Reload editor tabs of files a successful edit tool touched.
-				if (ev.is_error !== true && EDIT_TOOLS.includes(str(ev.name))) {
-					try {
-						const out = JSON.parse(str(ev.output)) as Record<string, unknown>;
-						const edited = [out.path, ...(Array.isArray(out.paths) ? out.paths : [])].filter(
-							(p): p is string => typeof p === 'string' && !!p
-						);
+				// Reload editor tabs of files a successful edit tool touched (an
+				// ACP agent's edit is known by its kind, not its name).
+				if (ev.is_error !== true) {
+					const out = parseToolOutput(str(ev.output));
+					if (EDIT_TOOLS.includes(str(ev.name)) || isEdit(str(ev.name), out)) {
+						const edited = editedPaths(out);
 						if (edited.length) ChatState.onFilesEdited?.(edited);
-					} catch (e) {
-						/* non-JSON output */
-						console.warn('tool_output JSON parse failed', e);
 					}
 				}
 				break;
@@ -1445,19 +1461,24 @@ export class ChatState {
 						const role = str(it.role);
 						if (role === 'user' && str(it.content) === AUTO_CONTINUE)
 							return { kind: 'system', text: t('chat.autoRetry.resumed') };
+						// When it was said, if the engine knows (`at`, ms).
+						const at = typeof it.at === 'number' ? { at: it.at } : {};
 						if (role === 'user') {
 							const images = arr<string>(it.images).filter((p) => typeof p === 'string');
-							return { kind: 'user', text: str(it.content), ...(images.length ? { images } : {}) };
+							return { kind: 'user', text: str(it.content), ...at, ...(images.length ? { images } : {}) };
 						}
-						if (role === 'assistant') return { kind: 'assistant', text: str(it.content) };
+						// Its uuid: where a Claude rewind or fork resumes the conversation.
+						if (role === 'assistant') return { kind: 'assistant', text: str(it.content), ...at, ...(str(it.uuid) ? { uuid: str(it.uuid) } : {}) };
+						if (role === 'reasoning') return { kind: 'reasoning', text: str(it.content), collapsed: true };
 						if (role === 'tool')
 							return {
 								kind: 'tool',
-								callId: '',
+								callId: str(it.call_id),
 								name: str(it.name),
 								output: boundedOutput(str(it.output)),
 								running: false,
-								isError: false
+								isError: it.is_error === true,
+								...(str(it.subagent) ? { subagent: str(it.subagent) } : {})
 							};
 						if (role === 'branch') return { kind: 'system', text: `branch: ${str(it.label)}` };
 						if (role === 'plan')
@@ -1585,7 +1606,16 @@ export class ChatState {
 			// leaves it and the next process's event replaces it.
 			case 'tool_provider': {
 				const p = ev.provider as Record<string, unknown> | null | undefined;
-				this.toolProvider = p && typeof p === 'object' && str(p.id) ? { id: str(p.id), name: str(p.name) || str(p.id), model: str(p.model) } : null;
+				this.toolProvider =
+					p && typeof p === 'object' && str(p.id)
+						? {
+								id: str(p.id),
+								name: str(p.name) || str(p.id),
+								model: str(p.model),
+								// An older daemon names only its one model.
+								models: Array.isArray(p.models) ? p.models.map(str).filter(Boolean) : [str(p.model)].filter(Boolean)
+							}
+						: null;
 				break;
 			}
 			case 'session_options':
@@ -1882,6 +1912,7 @@ export class ChatState {
 				break;
 			case 'status': {
 				const msg = str(ev.message);
+				if (msg === 'interrupted') this.#stopped = true;
 				const m = msg.match(/^(?:new|resumed) session (\S+)/);
 				if (m) this.sessionId = m[1];
 				this.engineState = msg;

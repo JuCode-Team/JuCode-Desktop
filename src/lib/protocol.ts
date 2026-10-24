@@ -44,8 +44,11 @@ export type Op =
 	| { op: 'command'; input: string }
 	/** A queued message into the running turn: `index`, negative from the last. */
 	| { op: 'steer'; index?: number }
-	/** A queued message taken back (answered by `unqueued`): `index`, negative from the last. */
-	| { op: 'unqueue'; index: number }
+	/** A queued message taken back (answered by `unqueued`), or dropped
+	 *  (`discard`): `index`, negative from the last. */
+	| { op: 'unqueue'; index: number; discard?: boolean }
+	/** A queued message to another place: `index` to `to`. */
+	| { op: 'queue_move'; index: number; to: number }
 	// JuCode: runs a failed turn again with no new message (SessionStore.retryTurn).
 	| { op: 'continue' }
 	/** Stops the turn; with `index` (negative from the last), that queued message goes next, at once. */
@@ -679,6 +682,10 @@ export function git(args: string[], cwd?: string): Promise<string> {
 	return invoke('git', { args, cwd });
 }
 // 并行任务 worktree 的容器目录（<repo-parent>/.jucode-worktrees/<repo-name>）。
+/** The terminals among `ids` whose shell runs a command. */
+export function ptyBusy(ids: string[]): Promise<string[]> {
+	return invoke('pty_busy', { ids });
+}
 export function worktreeBase(cwd: string): Promise<string> {
 	return invoke('worktree_base', { cwd });
 }
@@ -760,6 +767,34 @@ export function gitCheckpointRestore(cwd: string, checkpoint: string, session?: 
 	return invoke('git_checkpoint_restore', { cwd, checkpoint, session, turn });
 }
 
+/** A fork's worktree: `<container>/<slug>` (`path`) on a new `branch` at the
+ *  commit the checkpoint was taken on, its files as the checkpoint has them
+ *  and uncommitted as they were. The checkpoint: the sha given, else the one
+ *  kept for the session's turn. Returns the branch's base commit. */
+/** A session's new worktree (Rust `worktree_create`). */
+export interface NewWorktree {
+	path: string;
+	branch: string;
+	base: string;
+	slug: string;
+}
+/** A worktree of its own for a session: branch `jucode/<slug>` from `base`
+ *  (its remote's tip with `fromOrigin`), a free name if `slug` is taken. */
+export function worktreeCreate(repo: string, slug: string, base: string, fromOrigin: boolean): Promise<NewWorktree> {
+	return invoke('worktree_create', { repo, slug, base, fromOrigin });
+}
+/** A session's worktree deleted outside the app, checked out again. */
+export function worktreeRestore(repo: string, path: string, branch: string): Promise<void> {
+	return invoke('worktree_restore', { repo, path, branch });
+}
+/** The branch a worktree's branch was based on (worktreeCreate kept it). */
+export function worktreeBaseOf(repo: string, branch: string): Promise<string | null> {
+	return invoke('worktree_base_of', { repo, branch });
+}
+export function gitForkWorktree(repo: string, path: string, branch: string, checkpoint: string, session?: string, turn?: number): Promise<string> {
+	return invoke('git_fork_worktree', { repo, path, branch, checkpoint, session, turn });
+}
+
 /** One-shot LLM completion (no agent / no chat pollution) — powers AI commit
  *  messages and PR text. The key is read engine-side from auth.json by provider. */
 export function generateText(
@@ -801,7 +836,10 @@ export interface ToolApiProvider {
 	name: string;
 	base_url: string;
 	format: 'anthropic' | 'responses';
+	/** The default model: new sessions and Claude Code's background models. */
 	model: string;
+	/** The models offered in a session's model menu (the default among them). */
+	models: string[];
 	has_key: boolean;
 }
 /** One tool's providers and its default (`selected`, empty: the tool's own
@@ -820,7 +858,28 @@ export async function toolProviders(
 ): Promise<ToolProviderConfig> {
 	await daemon.connect();
 	const reply = await daemon.request({ op, tool, ...fields });
-	return reply.config as unknown as ToolProviderConfig;
+	const config = reply.config as unknown as ToolProviderConfig;
+	// A daemon older than `models` keeps one model per provider.
+	for (const p of config.providers ?? []) if (!Array.isArray(p.models) || !p.models.length) p.models = [p.model].filter(Boolean);
+	return config;
+}
+
+/** A model an API lists (`tool_provider_models`). */
+export interface ListedModel {
+	id: string;
+	name?: string | null;
+	context_window?: number | null;
+}
+/** The models the API at `base_url` lists that take the tool's protocol, and
+ *  how many others it lists. The key is `key`, else the saved one of
+ *  `provider_id`. */
+export async function toolProviderModels(
+	tool: 'claude' | 'codex',
+	fields: { base_url: string; key?: string; provider_id?: string }
+): Promise<{ models: ListedModel[]; hidden: number }> {
+	await daemon.connect();
+	const reply = await daemon.request({ op: 'tool_provider_models', tool, ...fields });
+	return { models: (reply.models as unknown as ListedModel[]) ?? [], hidden: Number(reply.hidden) || 0 };
 }
 
 /** `tool_provider` session state (Claude Code / Codex): the custom provider
@@ -830,4 +889,5 @@ export interface SessionToolProvider {
 	id: string;
 	name: string;
 	model: string;
+	models: string[];
 }

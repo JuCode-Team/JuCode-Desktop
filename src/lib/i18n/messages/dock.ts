@@ -1,5 +1,5 @@
 // Tool-panel area: GitPanel, FilesPanel, PlanPanel, GoalPanel,
-// TerminalPanel and the Mosaic chrome. Populated during the dock-area i18n
+// TerminalPanel and the tool panel chrome. Populated during the dock-area i18n
 // migration; the keys keep their historical names.
 const dock = {
 	zh: {
@@ -9,7 +9,8 @@ const dock = {
 			files: '文件',
 			git: 'Git',
 			term: '终端',
-			browser: '浏览器'
+			browser: '浏览器',
+			setup: '初始化'
 		},
 		agents: {
 			title: '后台任务',
@@ -37,10 +38,6 @@ const dock = {
 			result: '结果',
 			openAgent: '查看子智能体会话',
 			noTranscript: '这个引擎还不能读取子智能体的会话'
-		},
-		dock: {
-			empty: '没有打开的面板',
-			hint: '新建一个 Agent 会话，或打开工具面板'
 		},
 		mosaic: {
 			stackHere: '叠放到这里',
@@ -129,20 +126,23 @@ const dock = {
 			mergeBlockedDirty: '工作区有未提交改动，先提交或丢弃后才能合并',
 			mergeBlockedDetached: '当前不在任务分支上，无法合并',
 			mergeBlockedNoCommits: '尚无领先 {base} 的提交，无需合并',
-			mergeConflict: '合并产生冲突。请到主仓库项目中解决冲突并提交完成合并；或在主仓库执行 git merge --abort 放弃本次合并。',
+			mergeConflict: '合并产生冲突。可以在主仓库里解决冲突并提交，完成这次合并；也可以点「中止合并」恢复原状。',
+			mainDirty: '主仓库有未提交的改动，先提交或暂存后再合并。',
+			mainElsewhere: '主仓库当前在 {branch} 分支，不是任务的基础分支 {base}。先在主仓库切回 {base} 再合并。',
+			abortMerge: '中止合并',
 			merged: '已全部并入 {base}',
 			finish: '完成并清理',
 			finishBlocked: '先「合并回主仓库」（或确认无未合并提交）后才能清理',
-			finishConfirm: '删除 worktree「{slug}」与分支 {branch}，并从侧边栏关闭该项目？',
+			finishConfirm: '删除 worktree「{slug}」与分支 {branch}？在这里工作的会话会标为完成。',
 			finishTitle: '完成并清理',
 			abandon: '放弃任务',
 			abandonConfirm: '放弃任务「{slug}」？将强制删除 worktree 与分支 {branch}，未合并的改动会永久丢失。',
 			abandonTitle: '放弃任务',
 			open: '打开',
-			openTitle: '作为项目打开',
+			openTitle: '在这个 worktree 里开始新会话',
 			refresh: '刷新任务列表',
 			empty: '暂无并行任务',
-			emptyHint: '在侧边栏项目行或命令面板中「新建并行任务」',
+			emptyHint: '新建会话时在「在哪里工作」里选「新 worktree」',
 			prunable: '目录已丢失',
 			prune: '清理失效记录',
 			forceCleanupConfirm: '常规清理失败：\n{msg}\n\n强制删除该 worktree 与分支（丢弃未合并改动）？',
@@ -184,7 +184,8 @@ const dock = {
 			files: 'Files',
 			git: 'Git',
 			term: 'Terminal',
-			browser: 'Browser'
+			browser: 'Browser',
+			setup: 'Setup'
 		},
 		agents: {
 			title: 'Background tasks',
@@ -212,10 +213,6 @@ const dock = {
 			result: 'Result',
 			openAgent: 'View the subagent’s conversation',
 			noTranscript: "This engine can't read a subagent's conversation yet"
-		},
-		dock: {
-			empty: 'No open panels',
-			hint: 'Start an agent session, or open a tool panel'
 		},
 		mosaic: {
 			stackHere: 'Stack here',
@@ -304,20 +301,23 @@ const dock = {
 			mergeBlockedDirty: 'Commit or discard the uncommitted changes before merging',
 			mergeBlockedDetached: 'Not on the task branch — cannot merge',
 			mergeBlockedNoCommits: 'No commits ahead of {base} — nothing to merge',
-			mergeConflict: 'The merge produced conflicts. Resolve and commit them in the main repository project, or run git merge --abort there to cancel this merge.',
+			mergeConflict: 'The merge produced conflicts. Resolve and commit them in the main repository to finish it, or Abort merge to undo it.',
+			mainDirty: 'The main repository has uncommitted changes; commit or stash them before merging.',
+			mainElsewhere: 'The main repository is on {branch}, not the task’s base branch {base}. Switch it back to {base} before merging.',
+			abortMerge: 'Abort merge',
 			merged: 'Fully merged into {base}',
 			finish: 'Finish & clean up',
 			finishBlocked: 'Merge into the main repo first (or make sure no commits are unmerged)',
-			finishConfirm: 'Remove worktree "{slug}" and branch {branch}, and close the project from the sidebar?',
+			finishConfirm: 'Remove worktree "{slug}" and branch {branch}? Sessions working in it are settled.',
 			finishTitle: 'Finish & clean up',
 			abandon: 'Abandon task',
 			abandonConfirm: 'Abandon task "{slug}"? The worktree and branch {branch} are force-deleted; unmerged changes are lost forever.',
 			abandonTitle: 'Abandon task',
 			open: 'Open',
-			openTitle: 'Open as a project',
+			openTitle: 'Start a session in this worktree',
 			refresh: 'Refresh task list',
 			empty: 'No parallel tasks',
-			emptyHint: 'Use "New parallel task" on a project row or in the command palette',
+			emptyHint: 'Pick “New worktree” under “Where to work” when starting a session',
 			prunable: 'Directory missing',
 			prune: 'Prune stale records',
 			forceCleanupConfirm: 'Normal cleanup failed:\n{msg}\n\nForce-delete this worktree and branch (discarding unmerged changes)?',

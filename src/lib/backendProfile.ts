@@ -19,6 +19,8 @@ export interface BackendProfile {
 	commands?: CommandItem[];
 	/** An ACP agent's engine_caps (whether it has a model picker, say). */
 	caps?: Partial<BackendCaps>;
+	/** When an engine probe last filled it (engineProbe.ts), ms. */
+	probedAt?: number;
 }
 
 const KEY = 'jucode-backend-profiles';

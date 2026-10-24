@@ -106,7 +106,7 @@ export function turnSummary(turn: Msg[]): TurnSummary | null {
 			if (parsed && str(parsed.session)) children.push({ session: str(parsed.session), engine: str(parsed.engine), title: str(parsed.title) });
 		} else if (m.name === 'propose_schedule') {
 			if (parsed && str(parsed.id) && str(parsed.name)) proposals.push(parsed as unknown as Proposal);
-		} else if (isEdit(m.name) && !m.isError) {
+		} else if (isEdit(m.name, parsed) && !m.isError) {
 			for (const f of fileStats(parsed)) {
 				const seen = edited.get(f.path);
 				if (seen) {

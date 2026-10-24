@@ -230,6 +230,18 @@ describe('DaemonSync', () => {
 		expect(store.loose!.sessions).toHaveLength(0);
 	});
 
+	it('lists a scheduled run in its worktree under the project, with the worktree it works in', async () => {
+		const { sync, store } = await setup();
+		const tree = { repo: '/w/app', path: '/w/.jucode-worktrees/app/sch-1-1023', branch: 'jucode/sch-1-1023', base: 'main', slug: 'sch-1-1023' };
+		sync.reconcile([{ session: 's-run', cwd: tree.path, created_at: 0, open: false, engine: 'jucode', project: 'p1', schedule: 'sch-1', worktree: tree }]);
+		const [run] = store.projects[0].sessions;
+		expect(run.cwd).toBe(tree.path);
+		expect(run.worktree).toEqual({ isWorktree: true, mainRepoPath: '/w/app', branch: 'jucode/sch-1-1023', baseBranch: 'main', slug: 'sch-1-1023' });
+		// Removed by the daemon once the run was archived: forgotten here too.
+		sync.reconcile([{ session: 's-run', cwd: tree.path, created_at: 0, open: false, engine: 'jucode', project: 'p1', schedule: 'sch-1', archived: true, worktree: { ...tree, gone: true } }]);
+		expect(run.worktree).toBeUndefined();
+	});
+
 	it('with a daemon that names no project, sessions stay where they are and new ones go by folder', async () => {
 		const { sync, store } = await setup();
 		const p = store.projects[0];
@@ -331,7 +343,6 @@ describe('DaemonSync', () => {
 		const session = (id: string) => ({ session: id, cwd: '/w/app', created_at: 0, open: false, engine: 'jucode', title: id, project: 'p1' });
 		sync.reconcile([session('s-1'), session('s-2'), session('s-3')]);
 		const id = (sid: string) => p.sessions.find((s) => s.chat.sessionId === sid)!.id;
-		store.moveSession(id('s-3'), id('s-1'), false);
 		store.setPinned(id('s-2'), true);
 		sync.reconcile([session('s-1'), session('s-2'), session('s-3'), session('s-4')]);
 		expect(listedSessions(p).map((s) => s.chat.sessionId)).toEqual(['s-2', 's-4', 's-3', 's-1']);

@@ -586,6 +586,7 @@
 	}
 	function stop() {
 		stopping = true;
+		chat.stopping();
 		send({ op: 'interrupt' });
 	}
 
@@ -702,6 +703,8 @@
 	};
 	const allAgents = $derived(agentRows({ runs: chat.agentRuns, subagents: chat.subagents, lastTool }));
 	// The turn goes on while work it handed off runs (its work stays unfolded).
+	// The turn stays unfolded while work it handed off runs (which does not
+	// make the session working: sessionStatus).
 	const turnOpen = $derived(chat.busy || handedOffWork(allAgents, chat.bgTasks));
 	// The entry under the conversation: the plan's steps and the tasks that run.
 	const plan = $derived(planSummary(chat.plan));
@@ -907,6 +910,8 @@
 							onSteer={chat.busy && chat.pendingMessages.length ? (index) => send({ op: 'steer', index }) : undefined}
 							onInterrupt={chat.busy && chat.pendingMessages.length ? (index) => send(bcaps.steer ? { op: 'interrupt', index } : { op: 'steer', index }) : undefined}
 							onUnqueue={chat.pendingMessages.length ? (index) => send({ op: 'unqueue', index }) : undefined}
+							onDiscard={chat.pendingMessages.length ? (index) => send({ op: 'unqueue', index, discard: true }) : undefined}
+							onMove={chat.pendingMessages.length ? (index, to) => send({ op: 'queue_move', index, to }) : undefined}
 						/>
 					{/if}
 					<textarea
@@ -1050,6 +1055,7 @@
 						name: BACKEND_LABELS[engine as 'claude' | 'codex'],
 						onJucode: !!view?.gateway,
 						custom: chat.toolProvider?.name,
+						customModels: chat.toolProvider?.models,
 						group: view?.group ?? '',
 						catalog,
 						onSwitch: switchSide,

@@ -66,6 +66,7 @@ const SLEEP_DROPS = new Set<Op['op']>([
 	'approve',
 	'steer',
 	'unqueue',
+	'queue_move',
 	'stop_task',
 	'shutdown',
 	'context_usage',

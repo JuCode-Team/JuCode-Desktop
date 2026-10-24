@@ -31,6 +31,8 @@
 	import MentionMenu from '$lib/composer/MentionMenu.svelte';
 	import AttachmentChips from '$lib/composer/AttachmentChips.svelte';
 	import { PendingSaves, takeTransfer } from '$lib/composer/transfer';
+	import { attachmentToken, fmtSize, tokenIds, type Attachment } from '$lib/composer/attachments';
+	import { convertFileSrc } from '@tauri-apps/api/core';
 	import ContextIndicator from '$lib/composer/ContextIndicator.svelte';
 	import ModelMenu from '$lib/composer/ModelMenu.svelte';
 	import type { SessionSwitch } from '$lib/composer/SessionSwitches.svelte';
@@ -72,6 +74,8 @@
 		onSteer,
 		onInterrupt,
 		onUnqueue,
+		onDiscard,
+		onMove,
 		onPick,
 		onImage,
 		onModel,
@@ -91,7 +95,7 @@
 		onContextBreakdown?: () => void;
 		chat: ChatState;
 		input: string;
-		attachments: { path: string; image: boolean }[];
+		attachments: Attachment[];
 		videos?: { path: string; frames: string[]; duration: number }[];
 		el: HTMLElement | null;
 		pickerQuery?: string;
@@ -125,9 +129,14 @@
 		onInterrupt: (index: number) => void;
 		/** Takes queued message `index` back to the editor. */
 		onUnqueue: (index: number) => void;
+		/** Drops queued message `index`. */
+		onDiscard: (index: number) => void;
+		/** Moves queued message `index` to place `to`. */
+		onMove: (index: number, to: number) => void;
 		onPick: () => void;
 		/** A pasted image, saved to a temp file: the pane adds it. */
-		onImage: (path: string) => void;
+		/** A pasted or dropped image, saved; `size`: its bytes. */
+		onImage: (path: string, size: number) => void;
 		onModel: () => void;
 		onModelSelect?: (command: string) => void;
 		onModelClose?: () => void;
@@ -200,7 +209,7 @@
 	// programmatically (completion / refill / cleared on send) — never mid-typing.
 	let composing = $state(false);
 	let lastSync = '';
-	const TOKEN_RE = /\[网页元素#(\d+)(?::([^\]]*))?\]|\[引用#(\d+)(?::([^\]]*))?\]/g;
+	const TOKEN_RE = /\[网页元素#(\d+)(?::([^\]]*))?\]|\[引用#(\d+)(?::([^\]]*))?\]|\[附件#\d+\]/g;
 
 	const tokenLabel = (token: string) => {
 		const m = /^\[(?:网页元素|引用)#(\d+)(?::([^\]]*))?\]$/.exec(token);
@@ -211,9 +220,32 @@
 		span.className = 'refchip';
 		span.contentEditable = 'false';
 		span.dataset.token = token;
-		span.textContent = tokenLabel(token);
+		const att = /^\[附件#(\d+)\]$/.exec(token);
+		if (att) fillAttachmentChip(span, attachments.find((a) => a.id === Number(att[1])));
+		else span.textContent = tokenLabel(token);
 		if (token.startsWith('[引用#')) span.classList.add('quotechip');
 		return span;
+	}
+	// An attachment's placeholder: the image small (or a file mark), its name
+	// and, when known, its size.
+	function fillAttachmentChip(span: HTMLElement, a: Attachment | undefined) {
+		span.classList.add('attchip');
+		if (a?.image) {
+			const img = document.createElement('img');
+			img.src = convertFileSrc(a.path);
+			img.alt = '';
+			span.appendChild(img);
+		} else span.classList.add('attfile');
+		const name = document.createElement('span');
+		name.className = 'attchip-name';
+		name.textContent = a ? a.path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || a.path : t('chat.attachmentGone');
+		span.appendChild(name);
+		if (a?.size !== undefined) {
+			const size = document.createElement('span');
+			size.className = 'attchip-size';
+			size.textContent = fmtSize(a.size);
+			span.appendChild(size);
+		}
 	}
 	// DOM → plain text: chips become their token, <br> becomes a newline.
 	function serialize(root: Node): string {
@@ -280,6 +312,12 @@
 		if (s === '\n' && el.textContent === '') s = '';
 		if (s === '' && el.childNodes.length) el.textContent = '';
 		else syncTail(s);
+		// A deleted placeholder takes its attachment with it.
+		const kept = tokenIds(s);
+		for (const id of tokenIds(lastSync)) {
+			const i = kept.has(id) ? -1 : attachments.findIndex((a) => a.id === id);
+			if (i >= 0) attachments.splice(i, 1);
+		}
 		lastSync = s;
 		input = s;
 		// Typing dismisses the "+" tray so Enter sends instead of picking a row.
@@ -548,6 +586,11 @@
 		if (showAdd && !(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null)) showAdd = false;
 	}
 	const saves = new PendingSaves();
+	// Removed by its card: its placeholder goes too.
+	function removeAttachment(i: number) {
+		const [a] = attachments.splice(i, 1);
+		if (a) input = input.replace(attachmentToken(a.id), '');
+	}
 	// A pending question turns a typed message into its free-form answer.
 	function submit(now?: SendNow) {
 		if (!currentQ) return saves.send(() => onSubmit(now));
@@ -727,7 +770,7 @@
 		void saves.track(async () => {
 			for (const { file, ext } of images) {
 				try {
-					onImage(await saveTempImage(new Uint8Array(await file.arrayBuffer()), ext));
+					onImage(await saveTempImage(new Uint8Array(await file.arrayBuffer()), ext), file.size);
 				} catch (err) {
 					toast.error(String(err));
 				}
@@ -807,7 +850,7 @@
 		<AttachmentChips
 			{attachments}
 			{videos}
-			onRemove={(i) => attachments.splice(i, 1)}
+			onRemove={removeAttachment}
 			onRemoveVideo={(i) => videos.splice(i, 1)}
 		/>
 	{/if}
@@ -829,6 +872,8 @@
 				onSteer={chat.busy ? onSteer : undefined}
 				onInterrupt={chat.busy ? onInterrupt : undefined}
 				{onUnqueue}
+				{onDiscard}
+				{onMove}
 			/>
 		{/if}
 		{#if trayMode}
@@ -1084,7 +1129,7 @@
 		background: var(--dim2);
 		mask: var(--quote-mask) center / contain no-repeat;
 	}
-	.rich :global(.refchip:not(.quotechip))::before {
+	.rich :global(.refchip:not(.quotechip, .attchip))::before {
 		content: '';
 		display: inline-block;
 		width: 11px;
@@ -1093,6 +1138,36 @@
 		vertical-align: -1px;
 		background: var(--dim2);
 		mask: var(--globe-mask) center / contain no-repeat;
+	}
+	/* An attachment's placeholder, where it was added. */
+	.rich :global(.refchip.attchip) {
+		color: var(--text);
+		background: var(--surface2);
+		box-shadow: inset 0 0 0 1px var(--border);
+		padding: 1px 7px 1px 3px;
+	}
+	.rich :global(.refchip.attchip img) {
+		width: 16px;
+		height: 16px;
+		margin-right: 5px;
+		vertical-align: -3px;
+		border-radius: 3px;
+		object-fit: cover;
+	}
+	.rich :global(.refchip.attfile)::before {
+		content: '';
+		display: inline-block;
+		width: 11px;
+		height: 11px;
+		margin: 0 5px 0 3px;
+		vertical-align: -1px;
+		background: var(--dim2);
+		mask: var(--file-mask) center / contain no-repeat;
+	}
+	.rich :global(.attchip-size) {
+		margin-left: 6px;
+		color: var(--dim2);
+		font-size: var(--fs-xs);
 	}
 	.composer-bar {
 		display: flex;

@@ -66,6 +66,7 @@
 			aria-pressed={sidebarOpen}
 			onclick={onToggleSidebar}><PanelLeftIcon size={16} /></button
 		>
+		<span class="word" data-tauri-drag-region>JuCode</span>
 	</div>
 	<div class="title" data-tauri-drag-region>
 		{#if title}<span class="t">{title}</span>{/if}
@@ -137,6 +138,14 @@
 	}
 	:global(:root[data-os='macos']) .lead {
 		padding-left: 84px;
+	}
+	.word {
+		margin-left: 6px;
+		font-family: var(--font-sans);
+		font-size: var(--fs-md);
+		font-weight: 700;
+		letter-spacing: -0.005em;
+		color: var(--text);
 	}
 	:global(:root[data-os='windows']) .trail,
 	:global(:root[data-os='linux']) .trail {

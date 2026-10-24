@@ -14,7 +14,6 @@ import {
 	LEGACY_PROJECTS_KEY,
 	WORKSPACES_VERSION
 } from './workspaces';
-import { deserializeLayout, leavesOf } from './tiles';
 
 const proj = (id: string) => ({ id, name: id, path: `/tmp/${id}` });
 
@@ -154,10 +153,7 @@ describe('legacy migration', () => {
 		expect(ws.name).toBe('默认工作区');
 		expect(ws.isDefault).toBe(true);
 		expect(ws.projects).toEqual([proj('p1')]);
-		const layout = deserializeLayout(ws.layout);
-		const leaf = leavesOf(layout!.root)[0];
-		expect(leaf.tabs.map((t) => t.panel)).toEqual(['goal', 'term']);
-		expect(leaf.active).toBe('t2');
+		expect(ws.layout).toEqual({ v: 2, view: null, side: 'term' });
 	});
 
 	it('migrates the oldest dock format (bare panel strings)', () => {

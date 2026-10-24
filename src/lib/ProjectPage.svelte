@@ -1,44 +1,31 @@
 <script lang="ts">
-	// One project's page, a canvas tab: its
-	// directories (the main one and extra ones the user adds), its
-	// requirements (the workbench's list, this project's only; one opens in
-	// place).
+	// One project's page: its directories (the main one and extra ones the
+	// user adds), and the script its new worktrees run first.
 	import XIcon from '@lucide/svelte/icons/x';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import FolderIcon from '@lucide/svelte/icons/folder';
 	import { open } from '@tauri-apps/plugin-dialog';
 	import Button from '$lib/ui/Button.svelte';
-	import RequirementBoard from '$lib/requirements/RequirementBoard.svelte';
-	import RequirementDetail from '$lib/requirements/RequirementDetail.svelte';
-	import type { StartHow } from '$lib/requirements/StartButton.svelte';
-	import { useRequirements, type Requirement } from '$lib/requirements.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
 	import type { Project } from '$lib/types';
 	import { t } from '$lib/i18n';
 
 	let {
 		project,
-		projects,
-		currentStep,
 		onDirs,
-		onStartRequirement,
-		onOpenSession
+		onSetup
 	}: {
 		project: Project;
-		/** The open workspace's projects. */
-		projects: { id: string; path: string; name: string }[];
-		currentStep?: (session: string) => string | undefined;
 		/** The extra directories changed. */
 		onDirs: (dirs: string[]) => void;
-		onStartRequirement: (r: Requirement, how: StartHow) => void;
-		onOpenSession: (session: string) => void;
+		/** The worktree setup script changed ('' none). */
+		onSetup: (script: string) => void;
 	} = $props();
+	// svelte-ignore state_referenced_locally
+	let setup = $state(project.setup ?? '');
 
-	const reqs = useRequirements();
 	const dirs = $derived(project.dirs ?? []);
 	const norm = (p: string) => p.replace(/[\\/]+$/, '');
-	let requirementId = $state<string | null>(null);
-	const shownReq = $derived(requirementId ? reqs.get(requirementId) : undefined);
 
 	async function addDir() {
 		const path = await open({ directory: true, title: t('shell.projectPage.addDir') });
@@ -49,64 +36,60 @@
 </script>
 
 <div class="project-page">
-	{#if shownReq}
-		<div class="col wide">
-			{#key shownReq.id}
-				<RequirementDetail
-					requirement={shownReq}
-					{projects}
-					onBack={() => (requirementId = null)}
-					onStart={onStartRequirement}
-					{onOpenSession}
-				/>
-			{/key}
-		</div>
-	{:else}
-		<div class="col">
-			<h1>{project.name}</h1>
+	<div class="col">
+		<h1>{project.name}</h1>
 
-			<section>
-				<h3>{t('shell.projectPage.dirs')}</h3>
-				<p class="hint">{t('shell.projectPage.dirsHint')}</p>
-				<div class="dirs">
+		<section>
+			<h3>{t('shell.projectPage.dirs')}</h3>
+			<p class="hint">{t('shell.projectPage.dirsHint')}</p>
+			<div class="dirs">
+				<div class="dir">
+					<FolderIcon size={16} />
+					<span class="path">{project.path}</span>
+					<span class="tag">{t('shell.projectPage.main')}</span>
+				</div>
+				{#each dirs as dir (dir)}
 					<div class="dir">
 						<FolderIcon size={16} />
-						<span class="path">{project.path}</span>
-						<span class="tag">{t('shell.projectPage.main')}</span>
+						<span class="path">{dir}</span>
+						<button
+							class="icon"
+							aria-label={t('shell.projectPage.removeDir')}
+							title={t('shell.projectPage.removeDir')}
+							onclick={() => onDirs(dirs.filter((d) => d !== dir))}><XIcon size={14} /></button
+						>
 					</div>
-					{#each dirs as dir (dir)}
-						<div class="dir">
-							<FolderIcon size={16} />
-							<span class="path">{dir}</span>
-							<button
-								class="icon"
-								aria-label={t('shell.projectPage.removeDir')}
-								title={t('shell.projectPage.removeDir')}
-								onclick={() => onDirs(dirs.filter((d) => d !== dir))}><XIcon size={14} /></button
-							>
-						</div>
-					{/each}
-				</div>
-				<Button size="sm" onclick={addDir}><PlusIcon size={14} />{t('shell.projectPage.addDir')}</Button>
-			</section>
+				{/each}
+			</div>
+			<Button size="sm" onclick={addDir}><PlusIcon size={14} />{t('shell.projectPage.addDir')}</Button>
+		</section>
 
-			<section>
-				<h3>{t('shell.requirement.title')}</h3>
-				<RequirementBoard
-					list={reqs.list}
-					{projects}
-					project={project.id}
-					{currentStep}
-					onOpen={(id) => (requirementId = id)}
-					onStart={onStartRequirement}
-				/>
-			</section>
-
-		</div>
-	{/if}
+		<section>
+			<h3>{t('shell.projectPage.setup')}</h3>
+			<p class="hint">{t('shell.projectPage.setupHint')}</p>
+			<textarea class="script" rows="4" spellcheck="false" placeholder={t('shell.projectPage.setupPlaceholder')} bind:value={setup} onblur={() => setup.trim() !== (project.setup ?? '') && onSetup(setup.trim())}></textarea>
+		</section>
+	</div>
 </div>
 
 <style>
+	.script {
+		width: 100%;
+		min-height: 88px;
+		padding: 10px 12px;
+		border: 1px solid var(--border);
+		border-radius: var(--r);
+		background: var(--surface2);
+		color: var(--text);
+		font-family: var(--font-mono);
+		font-size: var(--fs-sm);
+		line-height: 1.5;
+		resize: vertical;
+		outline: none;
+	}
+	.script:focus {
+		border-color: var(--border-strong);
+	}
 	.project-page {
 		height: 100%;
 		overflow-y: auto;
@@ -116,10 +99,6 @@
 		max-width: 760px;
 		margin: 0 auto;
 		padding: 48px 32px 80px;
-	}
-	.col.wide {
-		max-width: 1120px;
-		padding-top: 40px;
 	}
 	h1 {
 		margin: 0;

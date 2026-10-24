@@ -17,7 +17,7 @@ describe('turnFolds', () => {
 		const [fold] = turnFolds([q, ...work, answer], all, false);
 		expect(fold!.key).toBe(q);
 		expect(fold!.members).toEqual(work);
-		expect(fold).toMatchObject({ elapsed: 4200, calls: 3, files: 1, commands: 1 });
+		expect(fold!.elapsed).toBe(4200);
 	});
 
 	it('leaves the running turn, and a turn without tools or thinking, alone', () => {
@@ -36,12 +36,25 @@ describe('turnFolds', () => {
 		expect(fold!.elapsed).toBe(900);
 	});
 
-	it('keeps plans and errors in view, and folds a turn that ended without a reply', () => {
-		const err: Msg = { kind: 'error', text: 'boom' };
+	it('keeps plans in view, and folds a turn that ended without a reply', () => {
 		const plan: Msg = { kind: 'plan', id: 'p', title: 't', text: '', status: 'pending' };
-		const [fold] = turnFolds([user('go'), tool('bash'), plan, tool('read'), err], all, false);
+		const [fold] = turnFolds([user('go'), tool('bash'), plan, tool('read')], all, false);
 		expect(fold!.members.map((m) => m.kind)).toEqual(['tool', 'tool']);
 		expect(fold!.elapsed).toBeNull();
+	});
+
+	it('leaves a turn that failed or was stopped unfolded', () => {
+		const err: Msg = { kind: 'error', text: 'boom' };
+		expect(turnFolds([user('go'), tool('bash'), err], all, false)).toEqual([]);
+		const stopped = { ...reply('half', 900), turn: { elapsed: 900, inTokens: 0, outTokens: 0, tools: 0, cost: 0, model: '', segments: 1, stopped: true } } as Msg;
+		expect(turnFolds([user('go'), tool('bash'), stopped], all, false)).toEqual([]);
+	});
+
+	it('times a replayed turn from when its question and reply were written', () => {
+		const q: Msg = { kind: 'user', text: 'go', at: 1000 };
+		const answer: Msg = { kind: 'assistant', text: 'done', at: 52_000 };
+		const [fold] = turnFolds([q, tool('bash'), answer], all, false);
+		expect(fold!.elapsed).toBe(51_000);
 	});
 
 	it('counts subagent deliveries as part of the turn, not a new one', () => {

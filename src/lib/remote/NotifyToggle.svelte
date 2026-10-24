@@ -1,7 +1,6 @@
 <script lang="ts">
 	// Turns on this phone's notifications (Web Push) for every paired
-	// computer: approvals that wait, scheduled runs that fail or wait,
-	// requirements on the user's turn.
+	// computer: approvals that wait, scheduled runs that fail or wait.
 	import BellIcon from '@lucide/svelte/icons/bell';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import { t } from '$lib/i18n';

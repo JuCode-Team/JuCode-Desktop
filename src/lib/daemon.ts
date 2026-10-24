@@ -50,7 +50,6 @@ const DAEMON_EVENTS = new Set([
 	// Carries the run's `session`, but is about the scheduled task.
 	'schedule_event',
 	'workspaces',
-	'requirements',
 	'dev_servers',
 	'session_reopened'
 ]);

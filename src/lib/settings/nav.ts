@@ -4,6 +4,7 @@
 
 export type SectionKey =
 	| 'general'
+	| 'appearance'
 	| 'account'
 	| 'usage'
 	| 'voice'
@@ -21,7 +22,7 @@ export type SectionKey =
 // Grouped by what a setting applies to: the app itself, every coding agent,
 // or only sessions run by the JuCode CLI engine (its ~/.jucode/config.json).
 export const GROUPS: { key: string; sections: SectionKey[] }[] = [
-	{ key: 'app', sections: ['general', 'account', 'usage', 'voice'] },
+	{ key: 'app', sections: ['general', 'appearance', 'account', 'usage', 'voice'] },
 	{ key: 'agents', sections: ['agents', 'acp', 'daemon', 'market', 'import'] },
 	{ key: 'jucode', sections: ['providers', 'models', 'mcp', 'network'] },
 	{ key: 'about', sections: ['updates'] }
@@ -48,17 +49,18 @@ export interface SearchRow {
 
 export const ROWS: SearchRow[] = [
 	{ section: 'general', id: 'language', titleKey: 'settings.language' },
-	{ section: 'general', id: 'theme', titleKey: 'settings.theme' },
-	{ section: 'general', id: 'custom-themes', titleKey: 'settings.themes.custom', descKey: 'settings.themes.customHint' },
-	{ section: 'general', id: 'vibrancy', titleKey: 'settings.behavior.vibrancy', descKey: 'settings.behavior.vibrancyHint' },
-	{ section: 'general', id: 'session-agent-icon', titleKey: 'settings.behavior.sessionAgentIcon', descKey: 'settings.behavior.sessionAgentIconHint' },
+	{ section: 'appearance', id: 'theme', titleKey: 'settings.themes.scheme' },
+	{ section: 'appearance', id: 'custom-themes', titleKey: 'settings.themes.gallery', descKey: 'settings.themes.customHint' },
+	{ section: 'appearance', id: 'vibrancy', titleKey: 'settings.behavior.vibrancy', descKey: 'settings.behavior.vibrancyHint' },
+	{ section: 'appearance', id: 'session-agent-icon', titleKey: 'settings.behavior.sessionAgentIcon', descKey: 'settings.behavior.sessionAgentIconHint' },
 	{ section: 'general', id: 'default-surface', titleKey: 'settings.behavior.defaultSurface', descKey: 'settings.behavior.defaultSurfaceHint' },
-	{ section: 'general', id: 'open-elsewhere', titleKey: 'settings.behavior.openElsewhere', descKey: 'settings.behavior.openElsewhereHint' },
-	{ section: 'general', id: 'ui-font', titleKey: 'settings.behavior.uiFont', descKey: 'settings.behavior.uiFontHint' },
-	{ section: 'general', id: 'chat-font', titleKey: 'settings.behavior.chatFont', descKey: 'settings.behavior.chatFontHint' },
-	{ section: 'general', id: 'code-font', titleKey: 'settings.behavior.codeFont', descKey: 'settings.behavior.codeFontHint' },
-	{ section: 'general', id: 'terminal-font', titleKey: 'settings.behavior.terminalFont', descKey: 'settings.behavior.terminalFontHint' },
-	{ section: 'general', id: 'terminal-font-size', titleKey: 'settings.behavior.terminalFontSize' },
+	{ section: 'general', id: 'worktree-origin', titleKey: 'settings.behavior.worktreeFromOrigin', descKey: 'settings.behavior.worktreeFromOriginHint' },
+	{ section: 'general', id: 'auto-archive', titleKey: 'settings.behavior.autoArchive', descKey: 'settings.behavior.autoArchiveHint' },
+	{ section: 'appearance', id: 'ui-font', titleKey: 'settings.behavior.uiFont', descKey: 'settings.behavior.uiFontHint' },
+	{ section: 'appearance', id: 'chat-font', titleKey: 'settings.behavior.chatFont', descKey: 'settings.behavior.chatFontHint' },
+	{ section: 'appearance', id: 'code-font', titleKey: 'settings.behavior.codeFont', descKey: 'settings.behavior.codeFontHint' },
+	{ section: 'appearance', id: 'terminal-font', titleKey: 'settings.behavior.terminalFont', descKey: 'settings.behavior.terminalFontHint' },
+	{ section: 'appearance', id: 'terminal-font-size', titleKey: 'settings.behavior.terminalFontSize' },
 	{ section: 'general', id: 'turn-stats', titleKey: 'settings.behavior.turnStats', descKey: 'settings.behavior.turnStatsHint' },
 	{ section: 'general', id: 'scroll-on-send', titleKey: 'settings.behavior.scrollOnSend', descKey: 'settings.behavior.scrollOnSendHint' },
 	{ section: 'general', id: 'fold-turns', titleKey: 'settings.behavior.foldTurns', descKey: 'settings.behavior.foldTurnsHint' },

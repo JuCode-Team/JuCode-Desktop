@@ -130,10 +130,12 @@ export type TaskWorktree = WorktreeEntry & { slug: string };
 
 /** 过滤出容器目录（`…/.jucode-worktrees/<repo>`）下的并行任务 worktree，并附上 slug。 */
 export function taskWorktrees(entries: WorktreeEntry[], baseDir: string): TaskWorktree[] {
-	const prefix = baseDir.replace(/\/+$/, '') + '/';
+	// git lists paths with `/` on Windows too, the container comes with `\`.
+	const slashes = (p: string) => p.replace(/\\/g, '/');
+	const prefix = slashes(baseDir).replace(/\/+$/, '') + '/';
 	return entries
-		.filter((e) => !e.bare && e.path.startsWith(prefix))
-		.map((e) => ({ ...e, slug: e.path.slice(prefix.length) }))
+		.filter((e) => !e.bare && slashes(e.path).startsWith(prefix))
+		.map((e) => ({ ...e, slug: slashes(e.path).slice(prefix.length) }))
 		.filter((e) => /^[a-z0-9][a-z0-9-]*$/.test(e.slug) && !e.slug.endsWith('-'));
 }
 
