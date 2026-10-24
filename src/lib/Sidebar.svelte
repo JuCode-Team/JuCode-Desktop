@@ -840,9 +840,9 @@
 	.card {
 		display: flex;
 		flex-direction: column;
-		gap: 5px;
+		gap: 7px;
 		width: 100%;
-		padding: 10px 12px;
+		padding: 13px 14px;
 		border: none;
 		border-radius: var(--r);
 		background: none;
@@ -871,8 +871,9 @@
 		font-size: var(--fs-xs);
 		color: var(--dim);
 	}
+	/* As tall as the actions that replace the time on hover: no jump. */
 	.line.top {
-		min-height: 20px;
+		height: 22px;
 	}
 	.proj {
 		min-width: 0;
@@ -899,22 +900,83 @@
 		font-size: var(--fs-xs);
 		font-variant-numeric: tabular-nums;
 	}
-	/* On hover the time gives way to the actions. */
+	/* Room for the actions, kept while they are hidden, so the hover changes
+	   no size and they cover nothing but the time. */
+	.card .right {
+		min-width: 72px;
+	}
+	.sess .right {
+		min-width: 48px;
+	}
+	/* On hover the time gives way to the actions: they fade in over it from
+	   the right, one after another. */
 	.acts {
-		display: none;
+		position: absolute;
+		top: 50%;
+		right: 0;
+		display: inline-flex;
 		align-items: center;
+		opacity: 0;
+		visibility: hidden;
+		transform: translate(6px, -50%);
+		transition:
+			opacity var(--t-fast) var(--ease-out),
+			transform var(--t-fast) var(--ease-out),
+			visibility 0s linear var(--t-fast);
+	}
+	.acts > :global(.act) {
+		opacity: 0;
+		transform: translateX(4px);
+		transition:
+			opacity var(--t-fast) var(--ease-out),
+			transform var(--t-fast) var(--ease-out),
+			background var(--t-fast) var(--ease-out),
+			color var(--t-fast) var(--ease-out);
+	}
+	.idle {
+		transition: opacity var(--t-fast) var(--ease-out);
 	}
 	.card:hover .acts,
 	.card:focus-within .acts,
 	.sess:hover .acts,
 	.sess:focus-within .acts {
-		display: inline-flex;
+		opacity: 1;
+		visibility: visible;
+		transform: translate(0, -50%);
+		transition:
+			opacity var(--t-fast) var(--ease-out),
+			transform var(--t-fast) var(--ease-out),
+			visibility 0s;
+	}
+	.card:hover .acts > :global(.act),
+	.card:focus-within .acts > :global(.act),
+	.sess:hover .acts > :global(.act),
+	.sess:focus-within .acts > :global(.act) {
+		opacity: 1;
+		transform: none;
+	}
+	.card:hover .acts > :global(.act:nth-child(2)),
+	.sess:hover .acts > :global(.act:nth-child(2)) {
+		transition-delay: 30ms;
+	}
+	.card:hover .acts > :global(.act:nth-child(3)),
+	.sess:hover .acts > :global(.act:nth-child(3)) {
+		transition-delay: 60ms;
 	}
 	.card:hover .idle,
 	.card:focus-within .idle,
 	.sess:hover .idle,
 	.sess:focus-within .idle {
-		display: none;
+		opacity: 0;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.acts,
+		.acts > :global(.act) {
+			transform: translate(0, -50%);
+		}
+		.acts > :global(.act) {
+			transform: none;
+		}
 	}
 	.act {
 		display: inline-flex;
@@ -941,6 +1003,30 @@
 	.folder:hover .act,
 	.folder .act.always {
 		display: inline-flex;
+	}
+	/* A folder's actions fade in one after another as they appear. */
+	.folder:hover .act:not(.always) {
+		animation: act-in var(--t-fast) var(--ease-out) both;
+	}
+	.folder:hover .act:nth-of-type(2) {
+		animation-delay: 25ms;
+	}
+	.folder:hover .act:nth-of-type(3) {
+		animation-delay: 50ms;
+	}
+	.folder:hover .act:nth-of-type(4) {
+		animation-delay: 75ms;
+	}
+	@keyframes act-in {
+		from {
+			opacity: 0;
+			transform: translateX(4px);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.folder:hover .act:not(.always) {
+			animation: none;
+		}
 	}
 	.mark {
 		display: inline-flex;

@@ -30,6 +30,25 @@ describe('refreshJucodeModels', () => {
 		expect(patch.models).toBe(patch.jucode_models);
 	});
 
+	it('keeps a saved model the gateway hid from pickers, flagged, and never recommends one', async () => {
+		readConfig.mockResolvedValue({ provider: 'jucode', model: 'gone', jucode_models: [savedModel({ id: 'img' }), savedModel({ id: 'b' })] });
+		fetchJucodeModels.mockResolvedValue([{ id: 'img', hidden: true }, { id: 'b' }]);
+		expect(await refreshJucodeModels()).toBe(true);
+		const patch = writeConfig.mock.calls[0][0] as { jucode_models: { name: string; hidden?: boolean }[]; model: string };
+		expect(patch.jucode_models.map((m) => [m.name, m.hidden])).toEqual([
+			['img', true],
+			['b', undefined]
+		]);
+		// The model it falls back to is one a picker offers.
+		expect(patch.model).toBe('b');
+
+		vi.clearAllMocks();
+		readConfig.mockResolvedValue({ provider: 'jucode', model: 'x', jucode_models: [] });
+		fetchJucodeModels.mockResolvedValue([{ id: 'gpt-6.1-sol', hidden: true }, { id: 'claude-sonnet-5-5' }]);
+		expect(await refreshJucodeModels()).toBe(true);
+		expect((writeConfig.mock.calls[0][0] as { jucode_models: { name: string }[] }).jucode_models.map((m) => m.name)).toEqual(['claude-sonnet-5-5']);
+	});
+
 	it('writes nothing when the gateway says the same', async () => {
 		readConfig.mockResolvedValue({ provider: 'deepseek', jucode_models: [savedModel({ id: 'b', context_window: 200 })] });
 		fetchJucodeModels.mockResolvedValue([{ id: 'b', context_window: 200 }]);

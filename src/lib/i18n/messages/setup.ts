@@ -116,7 +116,7 @@ const setup = {
 			notDetectedAfterInstall: '安装程序已退出，但仍未检测到此工具。请查看输出或手动安装后重新检测。',
 			tools: {
 				node: { name: 'Node.js / npm', desc: 'codex、jucode 等 CLI 的运行时' },
-				ffmpeg: { name: 'FFmpeg', desc: '录屏与视频关键帧提取' },
+				ffmpeg: { name: 'FFmpeg', desc: '录屏' },
 				git: { name: 'Git', desc: 'Git 面板、并行任务与引擎的代码仓库操作' },
 				gh: { name: 'GitHub CLI', desc: '在 Git 面板查看和创建 Pull Request' },
 				claude: { name: 'Claude Code', desc: 'Anthropic Claude Code 引擎' },
@@ -258,7 +258,7 @@ const setup = {
 			notDetectedAfterInstall: 'The installer exited, but the tool was not detected. Check its output or install manually, then re-check.',
 			tools: {
 				node: { name: 'Node.js / npm', desc: 'Runtime for the codex / jucode CLIs' },
-				ffmpeg: { name: 'FFmpeg', desc: 'Screen recording and video keyframes' },
+				ffmpeg: { name: 'FFmpeg', desc: 'Screen recording' },
 				git: { name: 'Git', desc: 'The Git panel, parallel tasks and the engines’ repository work' },
 				gh: { name: 'GitHub CLI', desc: 'View and create pull requests in the Git panel' },
 				claude: { name: 'Claude Code', desc: 'Anthropic Claude Code engine' },

@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { buildModelRows, providerModels } from './modelRows';
+import { buildModelRows, foldLegacy, modelFamily, providerModels, type ModelRow } from './modelRows';
 
-const groups = { codex: 'Codex', claude: 'Claude', jucode: 'JuCode', byok: 'BYOK', system: 'System' };
+// Stands in for brandIcons' modelVendor.
+const vendorOf = (m: string) => (/claude/.test(m) ? 'Anthropic' : /gpt/.test(m) ? 'OpenAI' : /glm/.test(m) ? 'Zhipu' : '');
 
 const base = {
 	provider: 'jucode',
 	providersList: [],
-	configured: ['jucode'],
-	groups
+	vendorOf
 };
 
 describe('buildModelRows', () => {
@@ -21,11 +21,7 @@ describe('buildModelRows', () => {
 			]
 		});
 		expect(rows.map((r) => r.command)).toEqual(['/model gpt-5.5', '/model claude-x']);
-		expect(rows[0]).toMatchObject({
-			active: true,
-			group: 'JuCode',
-			detail: '200K'
-		});
+		expect(rows[0]).toMatchObject({ active: true, group: 'OpenAI', detail: '200K' });
 	});
 
 	it('lists an ACP agent\'s models with /model and their provider as the detail', () => {
@@ -39,195 +35,165 @@ describe('buildModelRows', () => {
 				{ model: 'plain', label: 'Plain', active: false, context_window: 0 }
 			]
 		});
-		expect(rows.map((r) => [r.command, r.detail])).toEqual([
-			['/model anthropic/claude-x', 'anthropic'],
-			['/model openai/gpt-y', 'openai'],
-			['/model plain', '']
+		expect(rows.map((r) => [r.command, r.detail, r.group])).toEqual([
+			['/model anthropic/claude-x', 'anthropic', undefined],
+			['/model openai/gpt-y', 'openai', undefined],
+			['/model plain', '', undefined]
 		]);
 	});
 
-	it('shows the gateway display name, keeping the id for the command and the icon', () => {
+	it('lists only the provider the session runs on', () => {
 		const rows = buildModelRows({
 			...base,
 			backendId: 'jucode',
 			provider: 'deepseek',
-			configured: ['jucode', 'deepseek'],
-			providersList: [{ id: 'jucode', models: [{ name: 'gpt-6.1-sol', display_name: 'GPT-6.1 Sol' }, { name: 'glm-5' }] }],
-			models: [{ model: 'deepseek-v4', label: 'DeepSeek V4', active: true }]
+			providersList: [{ id: 'jucode', models: [{ name: 'gpt-6.1-sol' }] }],
+			models: [{ model: 'deepseek-v4', label: 'DeepSeek V4', active: true, context_window: 128_000 }]
 		});
-		expect(rows.map((r) => [r.label, r.vendor, r.command])).toEqual([
-			['GPT-6.1 Sol', 'gpt-6.1-sol', '@switch jucode gpt-6.1-sol'],
-			['glm-5', 'glm-5', '@switch jucode glm-5'],
-			['DeepSeek V4', 'deepseek-v4', '/model deepseek-v4']
-		]);
+		// A key's own provider: no company groups, the window as the detail.
+		expect(rows.map((r) => [r.label, r.command, r.detail, r.group])).toEqual([['DeepSeek V4', '/model deepseek-v4', '128K', undefined]]);
 	});
 
-	it('marks JuCode models whose window nobody configured', () => {
+	it('groups the gateway\'s models by company, unknown ones last', () => {
 		const rows = buildModelRows({
 			...base,
 			backendId: 'jucode',
-			provider: 'byo',
-			configured: ['byo', 'jucode'],
 			unsetWindow: 'unset',
-			models: [{ model: 'my-model', active: true }],
-			providersList: [{ id: 'jucode', models: [{ name: 'gpt-6-sol' }, { name: 'gpt-5.5', context_window: 272_000 }] }]
-		});
-		expect(rows.find((r) => r.id === 'jucode::gpt-6-sol')?.detail).toBe('unset');
-		expect(rows.find((r) => r.id === 'jucode::gpt-5.5')?.detail).toBe('272K');
-		// BYOK rows keep their provider label and show nothing for an unknown window.
-		expect(rows.find((r) => r.id === 'byo::my-model')?.detail).toBe('byo');
-	});
-
-	it('appends other providers as @switch rows (jucode only)', () => {
-		const providersList = [
-			{ id: 'jucode', models: [{ name: 'gpt-5.5', context_window: 1000 }] },
-			{ id: 'byo', models: [{ name: 'my-model' }] }
-		];
-		const rows = buildModelRows({
-			...base,
-			backendId: 'jucode',
-			provider: 'byo2',
-			configured: ['byo2', 'byo', 'jucode'],
-			models: [{ model: 'active-model', active: true }],
-			providersList
-		});
-		const byo = rows.find((r) => r.id === 'byo::my-model');
-		expect(byo).toMatchObject({
-			command: '@switch byo my-model',
-			detail: 'byo'
-		});
-		expect(rows.find((r) => r.id === 'jucode::gpt-5.5')?.command).toBe('@switch jucode gpt-5.5');
-	});
-
-	it('lists every jucode model the user chose to show', () => {
-		const rows = buildModelRows({
-			...base,
-			backendId: 'jucode',
-			provider: 'byo',
-			configured: ['jucode'],
-			models: [],
-			providersList: [
-				{
-					id: 'jucode',
-					models: [{ name: 'gpt-5.5' }, { name: 'claude-sonnet' }, { name: 'gemini-3-pro' }]
-				}
+			models: [
+				{ model: 'mystery', active: false },
+				{ model: 'gpt-5.5', active: true, context_window: 272_000 },
+				{ model: 'claude-sonnet', active: false },
+				{ model: 'gpt-6', active: false }
 			]
 		});
-		expect(rows.map((r) => r.label)).toEqual(['gpt-5.5', 'claude-sonnet', 'gemini-3-pro']);
+		expect(rows.map((r) => [r.label, r.group, r.detail])).toEqual([
+			['gpt-5.5', 'OpenAI', '272K'],
+			['gpt-6', 'OpenAI', 'unset'],
+			['claude-sonnet', 'Anthropic', 'unset'],
+			['mystery', '', 'unset']
+		]);
 	});
 
-	it('lists only providers with credentials', () => {
-		const rows = buildModelRows({
-			...base,
-			backendId: 'jucode',
-			provider: 'deepseek',
-			// deepseek is the running provider (possibly env-keyed): its engine
-			// rows stay even though it has no stored key.
-			configured: ['openrouter'],
-			models: [{ model: 'deepseek-chat', active: true }],
-			providersList: [
-				{ id: 'jucode', models: [{ name: 'gpt-5.5' }] },
-				{ id: 'openrouter', models: [{ name: 'or-model' }] },
-				{ id: 'anthropic', models: [{ name: 'claude-opus' }] },
-				{ id: 'deepseek', models: [{ name: 'deepseek-chat' }] }
-			]
-		});
-		expect(rows.map((r) => r.id)).toEqual(['deepseek::deepseek-chat', 'openrouter::or-model']);
-	});
-
-	it('drops jucode catalog rows when not logged in', () => {
-		const rows = buildModelRows({
-			...base,
-			backendId: 'jucode',
-			provider: 'byo',
-			configured: ['byo'],
-			models: [{ model: 'm', active: true }],
-			providersList: [{ id: 'jucode', models: [{ name: 'gpt-5.5' }] }]
-		});
-		expect(rows.every((r) => !r.command.startsWith('@switch jucode'))).toBe(true);
-	});
-
-	it('sorts rows into the fixed group order', () => {
-		const rows = buildModelRows({
-			...base,
-			backendId: 'jucode',
-			provider: 'custom',
-			configured: ['custom', 'jucode'],
-			models: [{ model: 'byok-model', active: true }],
-			providersList: [{ id: 'jucode', models: [{ name: 'gpt-5.5' }] }]
-		});
-		// JuCode built-in group comes before Custom/BYOK.
-		expect(rows.map((r) => r.group)).toEqual(['JuCode', 'BYOK']);
-	});
-
-	// Claude Code / Codex: one list of this machine's catalog and the gateway's.
+	// Claude Code / Codex: the side the session is on, this machine or the gateway.
 	const claude = {
 		...base,
 		backendId: 'claude',
 		provider: 'anthropic',
-		localLabel: 'Local',
 		models: [
 			{ model: 'opus', label: 'Opus 5.5', vendor: 'claude-opus-5-5', active: true },
-			{ model: 'claude-fable-5[1m]', label: 'Fable 5 (1M)', vendor: 'claude-fable-5[1m]', active: false }
+			{ model: 'claude-opus-5-5', label: 'Opus 5.5', vendor: 'claude-opus-5-5', active: false },
+			{ model: 'claude-fable-5[1m]', label: 'Fable 5 (1M)', vendor: 'claude-fable-5[1m]', active: false, context_window: 1_000_000 }
 		],
-		providersList: [{ id: 'jucode', models: [{ name: 'claude-opus-5-5', context_window: 200_000 }, { name: 'claude-fable-5-1' }] }]
+		providersList: [
+			{
+				id: 'jucode',
+				models: [
+					{ name: 'gpt-6.1-sol', display_name: 'GPT-6.1 Sol' },
+					{ name: 'claude-opus-5-5', context_window: 200_000 },
+					{ name: 'codex-auto-review', hidden: true },
+					{ name: 'claude-fable-5-1' }
+				]
+			}
+		]
 	};
 
-	it('lists a model both sides run once, and says where each runs', () => {
+	it('on this machine lists its catalog once per model, no source tags', () => {
 		const rows = buildModelRows({ ...claude, toolMode: 'system' });
-		expect(rows.map((r) => [r.label, r.detail, r.active])).toEqual([
-			['Opus 5.5', '200K · Local · JuCode', true],
-			['Fable 5 (1M)', 'Local', false],
-			['Fable 5.1', 'JuCode', false]
+		expect(rows.map((r) => [r.label, r.command, r.detail, r.active])).toEqual([
+			['Opus 5.5', '/model opus', '', true],
+			['Fable 5 (1M)', '/model claude-fable-5[1m]', '1M', false]
 		]);
-		expect(rows.every((r) => r.group === undefined)).toBe(true);
 	});
 
-	it('picks on the current side, and switches sides for a model only the other has', () => {
-		const local = buildModelRows({ ...claude, toolMode: 'system' });
-		expect(local.map((r) => r.command)).toEqual(['/model opus', '/model claude-fable-5[1m]', '@tool jucode claude-fable-5-1']);
-		const gateway = buildModelRows({
-			...claude,
-			toolMode: 'jucode',
-			models: [{ model: 'claude-opus-5-5', active: true, listed: false }, ...claude.models.map((m) => ({ ...m, active: false }))]
-		});
-		expect(gateway.map((r) => r.command)).toEqual([
-			'/model claude-opus-5-5',
-			'@tool system claude-fable-5[1m]',
-			'/model claude-fable-5-1'
-		]);
-		expect(gateway[0].active).toBe(true);
-	});
-
-	it('a model the engine only marks as running is the gateway\'s while on it', () => {
+	it('on the gateway lists its models, the tool\'s own company first, hidden ones left out', () => {
 		const rows = buildModelRows({
 			...claude,
 			toolMode: 'jucode',
-			models: [{ model: 'glm-5.3', active: true, listed: false }, ...claude.models.map((m) => ({ ...m, active: false }))],
-			providersList: [{ id: 'jucode', models: [{ name: 'glm-5.3' }] }]
+			unsetWindow: 'unset',
+			models: [{ model: 'claude-opus-5-5', active: true, listed: false }, ...claude.models.map((m) => ({ ...m, active: false }))]
 		});
-		expect(rows.find((r) => r.active)).toMatchObject({ command: '/model glm-5.3', detail: 'JuCode' });
+		expect(rows.map((r) => [r.label, r.command, r.group, r.detail, r.active])).toEqual([
+			['Opus 5.5', '/model claude-opus-5-5', 'Anthropic', '200K', true],
+			['Fable 5.1', '/model claude-fable-5-1', 'Anthropic', 'unset', false],
+			['GPT-6.1 Sol', '/model gpt-6.1-sol', 'OpenAI', 'unset', false]
+		]);
 	});
 
-	it('lists only this machine when not logged in to JuCode', () => {
-		const rows = buildModelRows({ ...claude, configured: [], toolMode: 'system' });
-		expect(rows.map((r) => r.command)).toEqual(['/model opus', '/model claude-fable-5[1m]']);
+	it('keeps a running model the gateway list lacks, marked', () => {
+		const rows = buildModelRows({
+			...claude,
+			toolMode: 'jucode',
+			models: [{ model: 'glm-5.3', active: true, listed: false }],
+			providersList: [{ id: 'jucode', models: [{ name: 'claude-opus-5-5' }] }]
+		});
+		expect(rows.find((r) => r.active)).toMatchObject({ command: '/model glm-5.3', group: 'Zhipu' });
 	});
 
 	it('lists a provider catalog for a draft that never had a model list, its model marked', () => {
 		const models = providerModels(
-			{ id: 'jucode', models: [{ name: 'gpt-6.1-sol', display_name: 'GPT-6.1 Sol', context_window: 1_050_000, reasoning_efforts: ['low', 'high'] }, { name: 'glm-5' }] },
+			{
+				id: 'jucode',
+				models: [
+					{ name: 'gpt-6.1-sol', display_name: 'GPT-6.1 Sol', context_window: 1_050_000, reasoning_efforts: ['low', 'high'] },
+					{ name: 'codex-auto-review', hidden: true },
+					{ name: 'glm-5' }
+				]
+			},
 			'glm-5'
 		);
 		expect(models.map((m) => [m.model, m.label, m.active, m.reasoning_efforts])).toEqual([
 			['gpt-6.1-sol', 'GPT-6.1 Sol', false, ['low', 'high']],
 			['glm-5', '', true, []]
 		]);
-		const rows = buildModelRows({ ...base, backendId: 'jucode', provider: 'jucode', configured: ['jucode'], models });
+		const rows = buildModelRows({ ...base, backendId: 'jucode', provider: 'jucode', models });
 		expect(rows.map((r) => [r.label, r.command, r.active])).toEqual([
 			['GPT-6.1 Sol', '/model gpt-6.1-sol', false],
 			['glm-5', '/model glm-5', true]
 		]);
 		expect(providerModels(undefined, 'x')).toEqual([]);
+	});
+
+	it('folds the older versions of a family away, the running one kept', () => {
+		const rows = buildModelRows({
+			...claude,
+			toolMode: 'system',
+			models: ['claude-opus-5-5', 'claude-fable-5-1', 'claude-opus-5', 'claude-opus-4-8', 'claude-haiku-4-5-20251001', 'claude-haiku-5-5', 'claude-sonnet-4-6', 'claude-fable-5'].map(
+				(id) => ({ model: id, vendor: id, active: id === 'claude-opus-4-8' })
+			)
+		});
+		expect(rows.map((r) => [r.id, !!r.legacy])).toEqual([
+			['claude-opus-5-5', false],
+			['claude-fable-5-1', false],
+			['claude-opus-4-8', false],
+			['claude-haiku-5-5', false],
+			['claude-sonnet-4-6', false],
+			['claude-opus-5', true],
+			['claude-haiku-4-5-20251001', true],
+			['claude-fable-5', true]
+		]);
+	});
+});
+
+describe('modelFamily', () => {
+	it('reads family and version from the common id shapes', () => {
+		expect(modelFamily('claude-opus-5-5')).toEqual({ family: 'claude-opus-#', version: [5, 5] });
+		expect(modelFamily('claude-opus-5')).toEqual({ family: 'claude-opus-#', version: [5] });
+		expect(modelFamily('claude-haiku-4-5-20251001')).toEqual({ family: 'claude-haiku-#', version: [4, 5] });
+		expect(modelFamily('claude-fable-5-1[1m]')).toEqual({ family: 'claude-fable-#', version: [5, 1] });
+		expect(modelFamily('gpt-6.1-sol')).toEqual({ family: 'gpt-#-sol', version: [6, 1] });
+		expect(modelFamily('deepseek-v4.1-flash')).toEqual({ family: 'deepseek-v#-flash', version: [4, 1] });
+		expect(modelFamily('default')).toEqual({ family: 'default', version: [] });
+	});
+});
+
+describe('foldLegacy', () => {
+	const row = (id: string): ModelRow => ({ id, label: id, vendor: id, detail: '', active: false, command: '', depth: undefined });
+	it('folds nothing when only a couple are older', () => {
+		const rows = foldLegacy(['gpt-6.1-sol', 'gpt-6-sol', 'gpt-6-astra'].map(row));
+		expect(rows.some((r) => r.legacy)).toBe(false);
+	});
+	it('keeps every variant of the newest version', () => {
+		const rows = foldLegacy(['claude-fable-5-1', 'claude-fable-5-1[1m]', 'claude-fable-5', 'claude-fable-4', 'claude-fable-3'].map(row));
+		expect(rows.filter((r) => !r.legacy).map((r) => r.id)).toEqual(['claude-fable-5-1', 'claude-fable-5-1[1m]']);
 	});
 });

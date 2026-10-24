@@ -24,6 +24,7 @@
 	let { onClose }: { onClose: () => void } = $props();
 
 	let models = $state<JucodeModel[]>([]);
+	let hiddenSaved: JucodeModel[] = [];
 	let picked = $state<string[]>([]);
 	let query = $state('');
 	let loading = $state(true);
@@ -89,7 +90,9 @@
 		try {
 			const [list, config] = await Promise.all([fetchJucodeModels(), readConfig()]);
 			cfg = config;
-			models = list;
+			// The gateway keeps some models callable but out of pickers: not
+			// offered here, and saved ones stay saved (see refreshJucodeModels).
+			models = list.filter((m) => !m.hidden);
 			const names = (v: unknown) =>
 				Array.isArray(v) ? v.map((m) => (m as { name?: string }).name).filter((n): n is string => !!n) : [];
 			const overrides = (config.context_window_overrides ?? {}) as Record<string, unknown>;
@@ -100,7 +103,8 @@
 			);
 			const prev = names(config.jucode_models);
 			const current = prev.length ? prev : DEFAULT_MODELS;
-			picked = current.filter((n) => list.some((m) => m.id === n));
+			picked = current.filter((n) => models.some((m) => m.id === n));
+			hiddenSaved = list.filter((m) => m.hidden && prev.includes(m.id));
 		} catch (e) {
 			error = String(e);
 		} finally {
@@ -122,9 +126,7 @@
 		saving = true;
 		// Saved grouped by vendor, as shown, so the model menu reads the same way.
 		const order = groups.length && !query ? groups.flatMap(([, list]) => list) : models;
-		const chosen = order
-			.filter((m) => picked.includes(m.id))
-			.map(savedModel);
+		const chosen = [...order.filter((m) => picked.includes(m.id)), ...hiddenSaved].map(savedModel);
 		// Windows for models outside this account's list (another login) stay.
 		const overrides: Record<string, number> = {};
 		for (const [k, v] of Object.entries((cfg.context_window_overrides ?? {}) as Record<string, unknown>)) {

@@ -3,8 +3,8 @@
 // (Composer). Deleting the chip drops the attachment, and removing the
 // attachment drops its chip. On send a placeholder becomes the image's
 // [图片 #n] (n: its place among the sent images, which MessageList shows as
-// a chip) or the file's mention; a file whose chip is gone is mentioned at
-// the end, as before chips.
+// a chip) or the file's name; the files themselves go with the message as
+// attachments (`files`), not as text.
 
 export interface Attachment {
 	id: number;
@@ -22,18 +22,16 @@ export function tokenIds(text: string): Set<number> {
 	return new Set([...text.matchAll(ATTACHMENT_TOKEN)].map((m) => Number(m[1])));
 }
 
-/** `text` with its placeholders expanded; `files`: the files no placeholder
- *  placed, to mention after the text. */
-export function expandAttachments(text: string, attachments: Attachment[], mention: (path: string) => string): { content: string; files: string[] } {
+const fileName = (path: string) => path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || path;
+
+/** `text` with its placeholders expanded: an image's [图片 #n], a file's name. */
+export function expandAttachments(text: string, attachments: Attachment[]): string {
 	const images = attachments.filter((a) => a.image);
-	const placed = new Set<number>();
-	const content = text.replace(ATTACHMENT_TOKEN, (_, id: string) => {
+	return text.replace(ATTACHMENT_TOKEN, (_, id: string) => {
 		const a = attachments.find((x) => x.id === Number(id));
 		if (!a) return '';
-		placed.add(a.id);
-		return a.image ? `[图片 #${images.indexOf(a) + 1}]` : mention(a.path);
+		return a.image ? `[图片 #${images.indexOf(a) + 1}]` : fileName(a.path);
 	});
-	return { content, files: attachments.filter((a) => !a.image && !placed.has(a.id)).map((a) => a.path) };
 }
 
 export function fmtSize(bytes: number): string {

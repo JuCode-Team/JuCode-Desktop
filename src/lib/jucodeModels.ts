@@ -1,7 +1,9 @@
 // The JuCode models the user chose to show, as config.json keeps them
 // (`jucode_models`, read by the engines). The gateway's metadata for them
 // (display names, windows, per-group windows) can change after the pick, so
-// the saved entries are refreshed from /v1/models at startup.
+// the saved entries are refreshed from /v1/models at startup. A model the
+// gateway hides from pickers stays saved, flagged (the engine still resolves
+// helper and subagent models from this list); pickers leave it out.
 
 import { fetchJucodeModels, readConfig, writeConfig, type JucodeModel } from './protocol';
 import { DEFAULT_MODELS } from './defaultModels';
@@ -16,6 +18,7 @@ export function savedModel(m: JucodeModel): Record<string, unknown> {
 		max_output_tokens: m.max_output_tokens ?? 0,
 		reasoning_efforts: m.reasoning_efforts ?? ['none'],
 		...(m.display_name ? { display_name: m.display_name } : {}),
+		...(m.hidden ? { hidden: true } : {}),
 		...(m.group_context_windows ? { group_context_windows: m.group_context_windows } : {})
 	};
 }
@@ -25,23 +28,25 @@ export function savedModel(m: JucodeModel): Record<string, unknown> {
 export async function refreshJucodeModels(): Promise<boolean> {
 	const [live, cfg] = await Promise.all([fetchJucodeModels(), readConfig()]);
 	const saved = Array.isArray(cfg.jucode_models) ? (cfg.jucode_models as Record<string, unknown>[]) : [];
-	if (!live.length) return false;
+	const shown = live.filter((m) => !m.hidden);
+	if (!shown.length) return false;
 	const byId = new Map(live.map((m) => [m.id, m]));
 	const recommended = DEFAULT_MODELS.flatMap((id) => {
 		const model = byId.get(id);
-		return model ? [savedModel(model)] : [];
+		return model && !model.hidden ? [savedModel(model)] : [];
 	});
 	const next = saved.length ? saved.map((entry) => {
 		const model = byId.get(String(entry.name));
 		return model ? savedModel(model) : entry;
-	}) : recommended.length ? recommended : live.slice(0, 6).map(savedModel);
+	}) : recommended.length ? recommended : shown.slice(0, 6).map(savedModel);
 	const patch: Record<string, unknown> = {};
 	if (JSON.stringify(next) !== JSON.stringify(saved)) patch.jucode_models = next;
 	if (cfg.provider === 'jucode') {
 		if (JSON.stringify(cfg.models) !== JSON.stringify(next)) patch.models = next;
 		if (!next.some((model) => model.name === cfg.model)) {
-			patch.model = next[0].name;
-			const efforts = next[0].reasoning_efforts as string[];
+			const first = next.find((model) => !model.hidden) ?? next[0];
+			patch.model = first.name;
+			const efforts = first.reasoning_efforts as string[];
 			if (!efforts.includes(String(cfg.reasoning_effort))) {
 				patch.reasoning_effort = efforts.includes('medium') ? 'medium' : efforts[0];
 			}

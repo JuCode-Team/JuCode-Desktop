@@ -10,7 +10,7 @@
 		name?: string;
 		base_url: string;
 		format: string;
-		models: { name: string; context_window?: number; reasoning_efforts?: string[] }[];
+		models: { name: string; context_window?: number; reasoning_efforts?: string[]; hidden?: boolean }[];
 	}
 
 	/** Imperative surface the page reaches through its pane registry: global
@@ -41,7 +41,7 @@
 	import XIcon from '@lucide/svelte/icons/x';
 	import ClipboardListIcon from '@lucide/svelte/icons/clipboard-list';
 	import {
-		processVideo,
+		daemon,
 		sessionHistory,
 		nativeSessions,
 		importNativeSession,
@@ -53,7 +53,10 @@
 		type FileTarget,
 		type Op
 	} from '$lib/protocol';
-	import { buildModelRows, providerModels, toolModels, type ToolModel } from '$lib/composer/modelRows';
+	import { buildModelRows, pickable, providerModels, toolModels, type ToolModel } from '$lib/composer/modelRows';
+	import { modelVendor } from '$lib/brandIcons';
+	import { fileMention } from '$lib/fileMention';
+	import type { ProviderChoice } from '$lib/composer/ModelMenu.svelte';
 	import { draftProvider, loadToolProviders, toolProviderConfigs } from '$lib/toolProviders.svelte';
 	import { confirm } from '$lib/ui/confirm.svelte';
 	import { BACKEND_LABELS, caps } from '$lib/backends';
@@ -61,7 +64,6 @@
 	import { dispatch } from '$lib/backends/router';
 	import { browser } from '$lib/browser.svelte';
 	import { prefs } from '$lib/prefs.svelte';
-	import { fileMention } from '$lib/fileMention';
 	import { attachmentToken, expandAttachments, type Attachment } from '$lib/composer/attachments';
 	import { followAfterScroll, fromEnd, followTop, shortOfEnd } from '$lib/chatFollow';
 	import { clickAnchor, type ClickAnchor } from '$lib/chatAnchor';
@@ -156,7 +158,6 @@
 	// What else is not sent yet comes back with the pane (see the effect below).
 	type Extras = {
 		attachments: Attachment[];
-		videos: { path: string; frames: string[]; duration: number }[];
 		webRefs: PickedRef[];
 		refSeq: number;
 		quotes: { id: number; text: string }[];
@@ -166,9 +167,6 @@
 	const kept = loadComposerExtras<Extras>(session.id);
 	let attachments = $state<Attachment[]>(kept?.attachments ?? []);
 	let attachSeq = Math.max(0, ...(kept?.attachments ?? []).map((a) => a.id));
-	// Videos attach as extracted keyframes (images) + a text description — the
-	// engine protocol only understands image paths.
-	let videos = $state<{ path: string; frames: string[]; duration: number }[]>(kept?.videos ?? []);
 	// Page elements picked in the embedded browser. Each pick inserts an inline
 	// token ([网页元素#N:…]) into the composer text at the cursor, so the user can
 	// position/reorder/delete it inline; on submit the token expands in place into
@@ -183,8 +181,8 @@
 	$effect(() => {
 		const id = session.id;
 		return () => {
-			const extras = { attachments: $state.snapshot(attachments), videos: $state.snapshot(videos), webRefs: $state.snapshot(webRefs), refSeq, quotes, quoteSeq };
-			saveComposerExtras(id, attachments.length || videos.length || webRefs.length || quotes.length ? extras : undefined);
+			const extras = { attachments: $state.snapshot(attachments), webRefs: $state.snapshot(webRefs), refSeq, quotes, quoteSeq };
+			saveComposerExtras(id, attachments.length || webRefs.length || quotes.length ? extras : undefined);
 		};
 	});
 	let scroller = $state<HTMLElement | null>(null);
@@ -446,7 +444,6 @@
 	});
 
 	const isImage = (p: string) => /\.(png|jpe?g|gif|webp|bmp)$/i.test(p);
-	const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
 	// The session's background tasks (TaskPanel), a region beside the
 	// conversation; a subagent opens there on its own conversation where the
 	// engine can read it back.
@@ -550,22 +547,17 @@
 				command: `/model ${id}`,
 				depth: nil
 			}));
-		// Model picker rows (pure packing in $lib/composer/modelRows): the active
-		// provider's models from the engine's model_view plus, for jucode
-		// sessions, the catalog of every other provider with credentials.
+		// Model picker rows (pure packing in $lib/composer/modelRows): the
+		// models of the provider the session runs on; another provider is
+		// picked in the menu's provider row.
 		return buildModelRows({
 			models: p.models,
 			backendId: chat.backendId,
 			provider: chat.provider ?? '',
 			providersList,
-			configured: providers,
-			groups: {
-				jucode: t('shell.modelGroup.jucode'),
-				byok: t('shell.modelGroup.byok')
-			},
 			toolMode,
-			localLabel: t('chat.providerLocal'),
-			unsetWindow: t('chat.windowUnset')
+			unsetWindow: t('chat.windowUnset'),
+			vendorOf: modelVendor
 		});
 	});
 
@@ -631,6 +623,21 @@
 		return true;
 	}
 
+	// What a side runs when the current model is not there: on the gateway,
+	// its first model of the tool's own company (else its first); on this
+	// machine, the first of the engine's catalog.
+	function gatewayModel(m: ToolModel): string | undefined {
+		if (m.jucode) return m.jucode;
+		const served = providers.includes('jucode') ? pickable(providersList.find((p) => p.id === 'jucode')?.models ?? []) : [];
+		// Claude Code names a long-context model `name[1m]`.
+		const base = m.key.replace(/\[[^\]]*\]$/, '');
+		const own = modelVendor(chat.backendId === 'claude' ? 'claude' : 'gpt');
+		return (served.find((g) => g.name === base) ?? served.find((g) => modelVendor(g.name) === own) ?? served[0])?.name;
+	}
+	// A session on a custom provider goes back to that provider's default.
+	const localModel = (m: ToolModel) =>
+		m.local ?? customProvider?.model ?? chat.modelCatalog.find((x) => x.listed !== false)?.model;
+
 	async function pickProvider(m: ToolModel, choice: { local: true } | { group: string } | { custom: string }) {
 		if ('custom' in choice) {
 			chat.closePicker();
@@ -648,10 +655,8 @@
 				store.setDraftToolProvider(session.id, '', own);
 				return;
 			}
-			const served = providers.includes('jucode') ? (providersList.find((p) => p.id === 'jucode')?.models ?? []) : [];
-			const model = m.jucode ?? served.find((g) => g.name === chat.model)?.name ?? served[0]?.name;
 			store.setDraftToolProvider(session.id, '');
-			await store.applyToolProfile(session.id, 'jucode', model);
+			await store.applyToolProfile(session.id, 'jucode', gatewayModel(m));
 			store.setSessionGroup(session.id, choice.group);
 			return;
 		}
@@ -661,27 +666,53 @@
 		}
 		chat.closePicker();
 		if ('local' in choice) {
-			if (toolMode === 'jucode' && m.local) await switchTool('system', m.local);
+			if (toolMode === 'jucode') await switchTool('system', localModel(m));
 			// A draft names it: not the tool's default custom provider.
 			if (session.draft) store.setDraftToolProvider(session.id, '');
 			return;
 		}
 		// Set once the switch is confirmed; the gateway reads it per request.
-		if (m.jucode && (await switchTool('jucode', m.jucode))) store.setSessionGroup(session.id, choice.group);
+		const model = gatewayModel(m);
+		if (model && (await switchTool('jucode', model))) store.setSessionGroup(session.id, choice.group);
 	}
+
+	// The jucode engine's providers, picked above its model list: JuCode and
+	// each with a stored key and models to pick. A pick moves to the same model
+	// there when it has one, else to its first (the menu sends the command).
+	const providerChoice = $derived.by((): ProviderChoice | undefined => {
+		if (chat.backendId !== 'jucode') return undefined;
+		const cur = chat.provider ?? '';
+		const options = providersList.filter((p) => p.id === cur || (providers.includes(p.id) && pickable(p.models).length));
+		if (options.length < 2) return undefined;
+		return {
+			value: cur,
+			options: options.map((p) => ({ value: p.id, label: p.id === 'jucode' ? 'JuCode' : p.id })),
+			commandFor: (id: string) => {
+				if (id === cur) return undefined;
+				const models = pickable(options.find((p) => p.id === id)?.models ?? []);
+				const model = (models.find((m) => m.name === chat.model) ?? models[0])?.name;
+				return model ? `@switch ${id} ${model}` : undefined;
+			}
+		};
+	});
 
 	// Whether to offer a filter box (history and other long lists).
 	const showPickerSearch = $derived(
 		pickerRows.length > 8 || chat.picker?.kind === 'resume' || chat.picker?.kind === 'checkpoint'
 	);
+	// Older model versions stay folded until asked for; a search looks
+	// through every row.
+	let showLegacy = $state(false);
+	const legacyCount = $derived(pickerRows.filter((r) => (r as { legacy?: boolean }).legacy).length);
 	const filteredRows = $derived.by(() => {
 		const q = pickerQuery.trim().toLowerCase();
-		if (!q) return pickerRows;
-		return pickerRows.filter((r) => `${r.label} ${r.detail}`.toLowerCase().includes(q));
+		if (!q) return showLegacy ? pickerRows : pickerRows.filter((r) => !(r as { legacy?: boolean }).legacy);
+		return pickerRows.filter((r) => `${r.label} ${r.detail} ${r.id} ${(r as { group?: string }).group ?? ''}`.toLowerCase().includes(q));
 	});
 	$effect(() => {
 		chat.picker;
 		pickerQuery = '';
+		showLegacy = false;
 	});
 	$effect(() => {
 		if (pendingModel && chat.model === pendingModel) pendingModel = '';
@@ -694,6 +725,11 @@
 		if (chat.pendingFill != null) {
 			input = chat.pendingFill;
 			chat.pendingFill = null;
+			const files = chat.pendingFillFiles;
+			chat.pendingFillFiles = [];
+			untrack(() => {
+				for (const path of files) attach({ path, image: false }, false);
+			});
 		}
 	});
 	// A queued message taken back: its text before what is typed now, its
@@ -703,8 +739,10 @@
 		if (!back) return;
 		chat.unqueued = null;
 		untrack(() => {
-			// Its images' [图片 #n] become their placeholders again.
+			// Its images' [图片 #n] become their placeholders again; its files
+			// are attached again.
 			const ids = back.images.map((path) => addImage(path, undefined, false));
+			for (const path of back.files) attach({ path, image: false }, false);
 			const content = back.content.replace(/\[图片 #(\d+)\]/g, (m, n: string) => (ids[Number(n) - 1] ? attachmentToken(ids[Number(n) - 1]) : m));
 			input = input.trim() ? `${content}\n${input}` : content;
 		});
@@ -715,14 +753,9 @@
 		if (isActive) untrack(() => (chat.unseen = false));
 	});
 
-	const isVideo = (p: string) => /\.(mp4|mov|webm|mkv|avi|m4v)$/i.test(p);
-
+	// A video, like any file but an image, goes as it is.
 	function addAttachment(path: string) {
 		if (!path) return;
-		if (isVideo(path)) {
-			attachVideo(path);
-			return;
-		}
 		if (isImage(path)) addImage(path);
 		else attach({ path, image: false });
 	}
@@ -743,18 +776,6 @@
 		const sel = await open({ multiple: true, title: t('shell.attachTitle') });
 		if (!sel) return;
 		for (const p of Array.isArray(sel) ? sel : [sel]) addAttachment(p);
-	}
-
-	// Video → keyframes: extraction happens on attach (not send) so the chip can
-	// show the result and errors surface immediately.
-	async function attachVideo(path: string) {
-		if (videos.some((v) => v.path === path)) return;
-		try {
-			const info = await processVideo(path);
-			videos.push({ path: info.path, frames: info.frames, duration: info.duration });
-		} catch (e) {
-			toast.error(String(e));
-		}
 	}
 
 	// Serialize a picked element into model-readable context. Inserted in place of
@@ -791,18 +812,22 @@
 	 *  to end: it joins the reply (`steer`) or stops it and goes (`interrupt`). */
 	function submit(now?: SendNow) {
 		const text = input.trim();
-		if (!text && attachments.length === 0 && videos.length === 0) return;
+		if (!text && attachments.length === 0) return;
 		if (text.startsWith('/')) {
 			const btw = caps(chat).sideQuestions ? text.match(/^\/btw\s+([\s\S]+)/) : null;
 			if (btw) chat.sideAnswers.push({ question: btw[1].trim(), answer: '', error: '', pending: true });
 			send({ op: 'command', input: text });
 		} else {
-			const sent = attachments.filter((a) => a.image).map((a) => a.path);
-			const imagePaths = [...sent];
-			const hasFiles = attachments.some((a) => !a.image);
-			const expanded = expandAttachments(text, attachments, fileMention);
-			const files = expanded.files;
-			let content = expanded.content;
+			const imagePaths = attachments.filter((a) => a.image).map((a) => a.path);
+			// Files go with the message as attachments, each engine's own way
+			// (the daemon): the text only names them where they were placed. A
+			// daemon from before them would drop them: there they are mentioned
+			// in the text, as before.
+			const attached = attachments.filter((a) => !a.image).map((a) => a.path);
+			const native = daemon.features.has('files');
+			const files = native ? attached : [];
+			let content = expandAttachments(text, attachments);
+			if (!native && attached.length) content += `${content ? '\n\n' : ''}${attached.map(fileMention).join(' ')}`;
 			// Expand each web-element token in place (order = its position in the
 			// text). Match by id so an edited descriptor still resolves; refs whose
 			// token was deleted are simply never expanded.
@@ -822,7 +847,7 @@
 			content = content.replace(/\n{3,}/g, '\n\n').trim();
 			// Revising a proposed plan: the message is the user's feedback on it.
 			const revising = chat.planRevising;
-			if (revising && !hasFiles && !videos.length && !imagePaths.length) {
+			if (revising && !files.length && !imagePaths.length) {
 				const plan = chat.messages.find((m) => m.kind === 'plan' && m.id === revising);
 				if (plan?.kind === 'plan') plan.status = 'revising';
 				chat.planRevising = null;
@@ -833,11 +858,6 @@
 				quotes = [];
 				return;
 			}
-			if (files.length) content += `${content ? '\n\n' : ''}${files.map(fileMention).join(' ')}`;
-			for (const v of videos) {
-				imagePaths.push(...v.frames);
-				content += `${content ? '\n\n' : ''}[视频附件] ${base(v.path)}（时长 ${v.duration.toFixed(1)} 秒）：已按时间等间隔抽取 ${v.frames.length} 个关键帧，随消息以图片附上（按时间先后排序），请结合这些关键帧理解视频内容。`;
-			}
 			// Echo the message instantly when it starts a turn now (a busy session
 			// queues it instead, shown in the composer's queue strip).
 			// A restarting engine holds the message and starts the turn once up.
@@ -845,15 +865,14 @@
 			limitResume.cancel(chat);
 			if (!chat.busy || chat.restarting) {
 				captureCheckpoint(); // snapshot files before this turn (for rewind)
-				chat.optimisticUser(content, sent);
+				chat.optimisticUser(content, imagePaths, false, files);
 			}
-			send({ op: 'user_message', content, images: imagePaths.length ? imagePaths : undefined });
+			send({ op: 'user_message', content, images: imagePaths.length ? imagePaths : undefined, files: files.length ? files : undefined });
 			// The engine queues it last: that one goes now.
 			if (now && chat.busy && !chat.restarting) send(now === 'steer' ? { op: 'steer', index: -1 } : interruptFor(-1));
 		}
 		input = '';
 		attachments = [];
-		videos = [];
 		webRefs = [];
 		quotes = [];
 		if (prefs.scrollOnSend) jumpToBottom();
@@ -935,12 +954,6 @@
 			const pv = providersList.find((x) => x.id === pid);
 			chat.closePicker();
 			if (pv && name) store.switchProvider(session.id, pv, name, effort);
-			return;
-		}
-		if (command.startsWith('@tool ')) {
-			const [mode, name] = command.slice('@tool '.length).trim().split(/\s+/);
-			chat.closePicker();
-			if (mode === 'system' || mode === 'jucode') void switchTool(mode, name);
 			return;
 		}
 		// Resuming a history item opens it in a fresh session so the current chat
@@ -1100,8 +1113,9 @@
 		atBottom = true;
 		scrollToEnd(true);
 	}
-	function editMessage(text: string) {
+	function editMessage(text: string, files?: string[]) {
 		input = text;
+		for (const path of files ?? []) attach({ path, image: false }, false);
 		composerEl?.focus();
 	}
 	// A quoted passage drops in at the caret as a chip naming its opening words.
@@ -1361,7 +1375,10 @@
 			bringing = false;
 		}
 	}
-	function rewindToMessage(text: string, userIndex: number) {
+	/** The files of the message a rewind takes back, attached again with its text. */
+	let rewindFiles: string[] = [];
+	function rewindToMessage(text: string, userIndex: number, files?: string[]) {
+		rewindFiles = files ?? [];
 		// codex (thread/rollback) and claude (resume-at-uuid respawn) rewind without
 		// the jucode checkpoint_view round-trip — confirm directly from the index.
 		if (chat.backendId === 'codex' || chat.backendId === 'claude') {
@@ -1390,6 +1407,8 @@
 			send({ op: 'command', input: `/rewind ${pr.id}` });
 		}
 		input = pr.text;
+		for (const path of rewindFiles) attach({ path, image: false }, false);
+		rewindFiles = [];
 		chat.pendingRewind = null;
 		composerEl?.focus();
 	}
@@ -1427,14 +1446,6 @@
 
 <svelte:window onkeydown={onWindowKey} onfocus={() => isActive && refreshGitBranch()} />
 
-{#snippet tasksEntryButton()}
-	{#if entry.plan || entry.running}
-		<button class="tasks-entry" class:on={chat.tasksOpen} onclick={() => (chat.tasksOpen ? (chat.tasksOpen = false) : openTasks(null))} aria-expanded={chat.tasksOpen}>
-			{#if entry.running}<LoaderCircleIcon size={12} class="spin" />{/if}
-			{[entry.plan ? t('dock.agents.pillPlan', { done: plan.done, total: plan.total }) : '', entry.running ? t('dock.agents.pill', { n: entry.running }) : ''].filter(Boolean).join(' · ')}
-		</button>
-	{/if}
-{/snippet}
 
 <div class="chatpane">
 	<div class="chatcol" style:--chat-w="{chatW}px" style:--chat-pad="{chatPad}px">
@@ -1472,7 +1483,7 @@
 		<main bind:this={scroller} onscroll={onScroll} onwheel={onWheel}>
 			<!-- Pressing inside the conversation (opening a card, selecting text) stops following the end: what was pressed stays under the pointer instead of being pushed up as the reply grows. -->
 			<div bind:this={contentEl} onpointerdowncapture={() => (atBottom = false)} oncontextmenu={onFileMenu} role="presentation">
-				<MessageList bind:this={messageList} bind:mark messages={chat.messages} follow={() => atBottom} busy={turnOpen} foldTurns={prefs.foldTurns} {streamingMsg} {streamingReasoning} phase={chat.phase} call={chat.call} compactionTokens={chat.compactionTokens} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} traceOf={traceOf} agents={allAgents} onOpenAgent={openAgent} tail={tasksEntryButton} onPlan={planAction} {planMode} onOpenPlan={(id) => planPages.open(session.id, id)} root={workDir || ''} onReveal={revealFile} onSchedule={scheduleFrom} scheduleCreated={(id) => daemonState.schedules.some((s) => s.origin === id)} onOpenSession={openChild} onOpenEdited={openEdited} onFork={canFork ? (keep) => (forkAt = keep) : undefined} />
+				<MessageList bind:this={messageList} bind:mark messages={chat.messages} follow={() => atBottom} busy={turnOpen} foldTurns={prefs.foldTurns} {streamingMsg} {streamingReasoning} call={chat.call} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} traceOf={traceOf} agents={allAgents} onOpenAgent={openAgent} onPlan={planAction} {planMode} onOpenPlan={(id) => planPages.open(session.id, id)} root={workDir || ''} onReveal={revealFile} onSchedule={scheduleFrom} scheduleCreated={(id) => daemonState.schedules.some((s) => s.origin === id)} onOpenSession={openChild} onOpenEdited={openEdited} onFork={canFork ? (keep) => (forkAt = keep) : undefined} />
 			</div>
 			{#if proposing}
 				<ScheduleDialog preset={proposing} projects={store.workspaceProjects} onClose={() => (proposing = null)} />
@@ -1570,7 +1581,6 @@
 				bind:input
 				bind:attachments
 				onImage={addImage}
-				bind:videos
 				bind:el={composerEl}
 				onSubmit={submit}
 				onStop={stop}
@@ -1585,14 +1595,19 @@
 				onModelClose={() => chat.closePicker()}
 				modelRows={filteredRows}
 				modelSearch={showPickerSearch}
+				runTasks={[entry.plan ? t('dock.agents.pillPlan', { done: plan.done, total: plan.total }) : '', entry.running ? t('dock.agents.pill', { n: entry.running }) : ''].filter(Boolean).join(' · ')}
+				onTasks={() => (chat.tasksOpen ? (chat.tasksOpen = false) : openTasks(null))}
+				modelLegacy={legacyCount && !pickerQuery.trim() ? { count: legacyCount, shown: showLegacy, onToggle: () => (showLegacy = !showLegacy) } : undefined}
 				{backendLocked}
+				{providerChoice}
 				toolProvider={toolModel
 					? {
 							model: toolModel.jucode ?? toolModel.key,
 							name: BACKEND_LABELS[chat.backendId],
-							local: toolModel.local !== undefined,
-							// A draft may leave its custom provider for the gateway.
-							jucode: toolModel.jucode !== undefined || (!!customProvider && !!session.draft && providers.includes('jucode')),
+							// Each side is offered whatever the current model: one
+							// without it starts on its own (gatewayModel, localModel).
+							local: toolModel.local !== undefined || chat.modelCatalog.some((x) => x.listed !== false),
+							jucode: toolModel.jucode !== undefined || providers.includes('jucode'),
 							onJucode: toolMode === 'jucode',
 							custom: customProvider?.name,
 							customs:
@@ -1764,25 +1779,6 @@
 			width: auto;
 			border-left: none;
 		}
-	}
-	.tasks-entry {
-		align-self: flex-start;
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		padding: 3px 10px;
-		border: none;
-		border-radius: 8px;
-		background: var(--surface2);
-		color: var(--text);
-		font: inherit;
-		font-size: var(--fs-xs);
-		font-variant-numeric: tabular-nums;
-		cursor: pointer;
-	}
-	.tasks-entry:hover,
-	.tasks-entry.on {
-		box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--text) 22%, transparent);
 	}
 	.jump {
 		position: absolute;

@@ -72,11 +72,14 @@
 	import WorkspaceDialog from '$lib/workbench/WorkspaceDialog.svelte';
 	import { tuiBackendOf, tuiTabTitle } from '$lib/workbench/tuiTab';
 	import { canHandOffToTui, isValidResumeSessionId, presetOf } from '$lib/tuiHandoff';
-	import { inWorkspace, workspaceAlerts, type WorkspaceEntry } from '$lib/workbench/workspaces';
+	import { activityOf, inWorkspace, workspaceSessions, type ActivityKind, type WorkspaceEntry } from '$lib/workbench/workspaces';
 	import WorkspaceRail from '$lib/workbench/WorkspaceRail.svelte';
 	import TitleBar from '$lib/shell/TitleBar.svelte';
 	import ProjectMenu from '$lib/shell/ProjectMenu.svelte';
 	import { fade } from 'svelte/transition';
+	import LayersIcon from '@lucide/svelte/icons/layers';
+	import FileUpIcon from '@lucide/svelte/icons/file-up';
+	import TabGlyph from '$lib/workbench/TabGlyph.svelte';
 	import TabChromePopover from '$lib/workbench/TabChromePopover.svelte';
 	import ChatPane, { type ChatPaneApi, type ProviderOption } from '$lib/ChatPane.svelte';
 	import { llmTarget as llmTargetOf } from '$lib/llmTarget';
@@ -282,7 +285,7 @@
 	// Target endpoint for one-shot AI text (commit / PR), on the active session's provider.
 	const llmTarget = $derived(llmTargetOf(providersList, chat));
 
-	let sidebarWidth = $state(292);
+	let sidebarWidth = $state(320);
 	let showSidebar = $state(true);
 	let sbResizing = $state(false);
 
@@ -780,21 +783,70 @@
 		const back = workspaces.workspaces.some((w) => w.id !== workspaces.activeId && inWorkspace(w, sid));
 		if (back && !finishedInBack.includes(sid)) finishedInBack = [...finishedInBack, sid];
 	};
-	const wsAlerts = $derived(
-		workspaceAlerts(
-			workspaces.workspaces,
-			workspaces.activeId,
-			new Set(daemonState.actions.map((a) => a.session_id)),
-			new Set(finishedInBack)
-		)
-	);
+	// What each workspace's sessions are doing, for the rail: the one in
+	// front from its live sessions, the others from the daemon (waiting,
+	// failed, running) and the replies they finished since they were left.
+	const wsActivity = $derived.by(() => {
+		const waiting = new Set(daemonState.actions.map((a) => a.session_id));
+		const view = new Map(daemonState.sessions.map((d) => [d.session, d]));
+		const done = new Set(finishedInBack);
+		const back = (sid: string): ActivityKind | null => {
+			const d = view.get(sid);
+			if (waiting.has(sid)) return 'input';
+			if (d?.failed) return 'failed';
+			if (d?.busy || d?.background) return 'running';
+			return done.has(sid) ? 'done' : null;
+		};
+		const live = store.allSessions.filter((s) => !s.archived && s.chat.sessionId);
+		const liveKind = new Map(
+			live.map((s): [string, ActivityKind | null] => {
+				const status = sessionStatus(s.chat);
+				const kind = status?.kind;
+				return [
+					s.chat.sessionId,
+					kind === 'input' || kind === 'failed' ? kind : kind === 'running' || kind === 'background' ? 'running' : kind === 'unread' ? 'done' : null
+				];
+			})
+		);
+		const front = live.map((s) => ({ sid: s.chat.sessionId, title: s.chat.title }));
+		return Object.fromEntries(
+			workspaces.workspaces.map((w) => [
+				w.id,
+				w.id === workspaces.activeId ? activityOf(front, (sid) => liveKind.get(sid) ?? null) : activityOf(workspaceSessions(w), back)
+			])
+		);
+	});
+
+	// Switching workspace: a plain mask with the target's name covers the
+	// panel, the sessions swap under it, and it lifts. A beat heavier than
+	// switching a session, on purpose: what belongs together goes in one
+	// workspace.
+	// About a second in all: in, the name held to be read, out.
+	const WS_MASK_IN_MS = 300;
+	/** Files being dragged over the window, for a chat to take (0: none). */
+	let dragFiles = $state(0);
+	const WS_MASK_HOLD_MS = 400;
+	const WS_MASK_OUT_MS = 300;
+	let wsMask = $state<WorkspaceEntry | null>(null);
 
 	async function switchWorkspace(id: string) {
 		if (id === workspaces.activeId || wsBusy) return;
 		workspaces.updateProjects(store.serialize(), store.serializeLoose());
 		const entry = workspaces.setActive(id);
 		if (!entry) return;
-		await swapToWorkspace(entry);
+		wsBusy = true; // the mask is coming down: no second switch meanwhile
+		wsMask = entry;
+		const covered = Date.now() + WS_MASK_IN_MS;
+		await new Promise((done) => setTimeout(done, WS_MASK_IN_MS));
+		try {
+			await swapToWorkspace(entry);
+			// The swap is quick: the name stays long enough to be read.
+			const left = covered + WS_MASK_HOLD_MS - Date.now();
+			if (left > 0) await new Promise((done) => setTimeout(done, left));
+		} finally {
+			// Lifts whatever the swap did: the panel is never left covered.
+			wsMask = null;
+		}
 		const done = finishedInBack.filter((sid) => inWorkspace(entry, sid));
 		for (const s of store.allSessions)
 			if (s.chat.sessionId && done.includes(s.chat.sessionId) && s.id !== store.activeId) s.chat.unseen = true;
@@ -1247,9 +1299,18 @@
 			// this page's tabs when the page goes (see detachAll).
 			cleanups.push(() => daemon.detachAll());
 			daemonState.start();
+			// Files dragged over the window: the whole window takes them (the
+			// overlay), for the chat in front.
 			const undrop = await getCurrentWebview().onDragDropEvent((e) => {
-				if (e.payload.type === 'drop')
-					for (const p of e.payload.paths) panes.get(store.activeId)?.addAttachment(p);
+				const p = e.payload;
+				// Settings or the desk over the chats: no chat in front to take them.
+				const pane = showSettings || showDesk ? undefined : panes.get(store.activeId);
+				if (p.type === 'enter') dragFiles = pane ? p.paths.length : 0;
+				else if (p.type === 'leave') dragFiles = 0;
+				else if (p.type === 'drop') {
+					dragFiles = 0;
+					for (const path of p.paths) pane?.addAttachment(path);
+				}
 			});
 			// Embedded-browser events: element picks become composer chips in the
 			// active chat pane; nav/state updates flow into the browser store.
@@ -1427,7 +1488,7 @@
 			workspaces={workspaces.workspaces}
 			activeId={workspaces.activeId}
 			busy={wsBusy}
-			alerts={wsAlerts}
+			activity={wsActivity}
 			onSwitch={switchWorkspace}
 			onOpenAlert={openWorkspaceAlert}
 			onNew={newWorkspace}
@@ -1446,7 +1507,10 @@
 		     with a rounded top-left corner. Settings covers it as a page; the
 		     session list and canvas stay mounted (hidden) underneath so chats,
 		     terminals and TUI tiles keep their state. -->
-		<div class="panel" class:covered={showSettings || showDesk}>
+		<div
+			class="panel"
+			class:covered={showSettings || showDesk}
+		>
 			<!-- LEFT: the navigator — workspace / projects / sessions. Clicking a session
 			     opens or focuses its chat tile on the canvas. -->
 			<Sidebar
@@ -1621,6 +1685,31 @@
 				/>
 			{/if}
 		</div>
+		<!-- Files dragged over the window: drop anywhere to attach them. -->
+		{#if dragFiles}
+			<div class="drop-layer" aria-hidden="true" in:fade={{ duration: 160 }} out:fade={{ duration: 140 }}>
+				<div class="drop-frame">
+					<span class="drop-icon"><FileUpIcon size={28} /></span>
+					<span class="drop-title">{t('shell.drop.title')}</span>
+					<span class="drop-meta">{t('shell.drop.count', { n: dragFiles })}</span>
+				</div>
+			</div>
+		{/if}
+		<!-- The mask over the panel while a workspace swaps in, naming it. -->
+		{#if wsMask}
+			{@const w = wsMask}
+			<div class="ws-mask" aria-hidden="true" in:fade={{ duration: WS_MASK_IN_MS }} out:fade={{ duration: WS_MASK_OUT_MS }}>
+				<div class="ws-name" in:fade={{ duration: 200, delay: 120 }}>
+					{#if w.icon || w.isDefault}
+						<TabGlyph icon={w.icon ?? { kind: 'builtin', id: 'home' }} color={w.color} active size={18} />
+					{:else}
+						<LayersIcon size={18} />
+					{/if}
+					<span class="ws-name-text">{w.name}</span>
+					<span class="ws-name-meta">{t('shell.workspace.projects', { n: w.projects.length })}</span>
+				</div>
+			</div>
+		{/if}
 	</div>
 
 	{#if showMarket}
@@ -1685,7 +1774,6 @@
 
 	{#if creatingWorkspace}
 		<WorkspaceDialog
-			count={workspaces.workspaces.length}
 			projects={store.workspaceProjects.filter((p) => !p.loose && !p.chats && !p.worktree)}
 			onCreate={createWorkspace}
 			onClose={() => (creatingWorkspace = false)}
@@ -1831,9 +1919,93 @@
 		background: var(--vibrancy-chrome);
 	}
 	.body {
+		position: relative;
 		flex: 1;
 		display: flex;
 		min-height: 0;
+	}
+	/* Switching workspace (switchWorkspace): over the panel (the rail is
+	   68px wide), its corner rounded as the panel's. */
+	.ws-mask {
+		position: absolute;
+		top: 0;
+		right: 0;
+		bottom: 0;
+		left: 68px;
+		display: grid;
+		place-items: center;
+		border-top-left-radius: var(--r);
+		background: var(--bg);
+		z-index: 30;
+	}
+	/* Dropping files: the window dims behind a frame that takes them. */
+	.drop-layer {
+		position: fixed;
+		inset: 0;
+		z-index: 200;
+		display: grid;
+		padding: 14px;
+		background: color-mix(in oklab, var(--bg) 72%, transparent);
+		backdrop-filter: blur(2px);
+		pointer-events: none;
+	}
+	.drop-frame {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 10px;
+		border: 1.5px dashed color-mix(in oklab, var(--text) 35%, transparent);
+		border-radius: calc(var(--r) * 1.6);
+		color: var(--dim);
+		animation: drop-in 220ms var(--ease-out) both;
+	}
+	.drop-icon {
+		display: inline-flex;
+		color: var(--text);
+		animation: drop-float 1.6s ease-in-out infinite;
+	}
+	.drop-title {
+		color: var(--text);
+		font-size: var(--fs-lg);
+		font-weight: 600;
+	}
+	.drop-meta {
+		font-size: var(--fs-xs);
+		font-variant-numeric: tabular-nums;
+	}
+	@keyframes drop-in {
+		from {
+			opacity: 0;
+			transform: scale(0.97);
+		}
+	}
+	@keyframes drop-float {
+		50% {
+			transform: translateY(-5px);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.drop-frame,
+		.drop-icon {
+			animation: none;
+		}
+	}
+	.ws-name {
+		display: inline-flex;
+		align-items: center;
+		gap: 10px;
+		color: var(--dim);
+	}
+	.ws-name-text {
+		color: var(--text);
+		font-size: var(--fs-md);
+		font-weight: 600;
+	}
+	.ws-name-meta {
+		color: var(--dim2);
+		font-size: var(--fs-xs);
+		font-variant-numeric: tabular-nums;
 	}
 	.panel {
 		flex: 1;

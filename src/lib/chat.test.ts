@@ -6,6 +6,37 @@ const userTexts = (c: ChatState) =>
 	c.messages.filter((m) => m.kind === 'user').map((m) => (m.kind === 'user' ? m.text : ''));
 
 describe('ChatState.handle', () => {
+	it('gives the last user turn with its files, for a retry to send them again', () => {
+		const c = new ChatState();
+		c.optimisticUser('fix it', undefined, false, ['/tmp/a.pdf']);
+		expect(c.lastUserTurn()).toEqual({ index: 0, text: 'fix it', files: ['/tmp/a.pdf'] });
+	});
+
+	it('keeps timing a running turn it comes back to (switching workspaces)', () => {
+		vi.useFakeTimers();
+		try {
+			vi.setSystemTime(1_000_000);
+			const c = new ChatState();
+			c.handle({ type: 'user_message', content: 'go' });
+			c.handle({ type: 'connecting' });
+			const started = c.turnStartedAt;
+			const call = c.call;
+			expect(call?.since).toBe(1_000_000);
+			// Away for a while, then back: the snapshot replays and says it runs.
+			vi.setSystemTime(1_030_000);
+			c.rejoining = true;
+			c.handle({ type: 'transcript', items: [{ role: 'user', content: 'go' }] });
+			c.handle({ type: 'connecting' });
+			expect(c.turnStartedAt).toBe(started);
+			expect(c.call).toEqual(call);
+			// A later request of the turn is timed afresh.
+			c.handle({ type: 'connecting' });
+			expect(c.call?.since).toBe(1_030_000);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	it('keeps a just-sent message that the arriving snapshot does not have yet', () => {
 		const c = new ChatState();
 		c.optimisticUser('first');
@@ -178,7 +209,7 @@ describe('ChatState.handle', () => {
 		c.handle({ type: 'pending_messages', messages: ['a'] });
 		expect(c.pendingFixed).toBe(0);
 		c.handle({ type: 'unqueued', content: 'b', images: ['/tmp/x.png'] });
-		expect(c.unqueued).toEqual({ content: 'b', images: ['/tmp/x.png'] });
+		expect(c.unqueued).toEqual({ content: 'b', images: ['/tmp/x.png'], files: [] });
 	});
 
 	it('resolves a pencil rewind intent from checkpoint_view by position', () => {

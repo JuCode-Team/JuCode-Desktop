@@ -8,7 +8,9 @@ import {
 	parseWorkspacesFile,
 	sanitizeProjects,
 	serializeWorkspaces,
-	workspaceAlerts,
+	workspaceSessions,
+	activityOf,
+	type ActivityKind,
 	LEGACY_DOCK_ACTIVE_KEY,
 	LEGACY_DOCK_TABS_KEY,
 	LEGACY_PROJECTS_KEY,
@@ -172,27 +174,25 @@ describe('legacy migration', () => {
 	});
 });
 
-describe('workspaceAlerts', () => {
+describe('workspace activity', () => {
 	const tabs = (...t: { sid?: string; title: string; archived?: boolean }[]) => [{ ...proj('p'), tabs: t }];
-	const a = createWorkspace('a', tabs({ sid: 's1', title: 'one' }));
 	const b = createWorkspace('b', tabs({ sid: 's2', title: 'two' }, { sid: 's3', title: 'three' }, { sid: 's4', title: 'old', archived: true }, { title: 'draft' }));
 
-	it('lists the waiting and finished sessions of the workspaces in the back, waiting first', () => {
-		const alerts = workspaceAlerts([a, b], a.id, new Set(['s3', 's1']), new Set(['s2', 's4', 's1']));
-		expect(alerts).toEqual({
-			[b.id]: [
-				{ sid: 's3', title: 'three', kind: 'input' },
-				{ sid: 's2', title: 'two', kind: 'done' }
-			]
-		});
+	it('lists the saved sessions of a workspace, archived ones and drafts left out', () => {
+		const c = { ...b, loose: [{ sid: 's9', title: 'loose' }] };
+		expect(workspaceSessions(c).map((s) => s.sid)).toEqual(['s2', 's3', 's9']);
 	});
 
-	it('counts the sessions of no project saved in a workspace', () => {
-		const c = { ...createWorkspace('c'), loose: [{ sid: 's9', title: 'loose' }] };
-		expect(workspaceAlerts([a, c], a.id, new Set(['s9']), new Set())).toEqual({ [c.id]: [{ sid: 's9', title: 'loose', kind: 'input' }] });
-	});
-
-	it('has nothing for a workspace without alerts', () => {
-		expect(workspaceAlerts([a, b], b.id, new Set(), new Set(['s2']))).toEqual({});
+	it('puts what wants the user first, then failures, unseen replies and work going', () => {
+		const kinds: Record<string, ActivityKind> = { a: 'running', b: 'done', c: 'input', d: 'failed' };
+		const all = ['a', 'b', 'c', 'd', 'e'].map((sid) => ({ sid, title: sid }));
+		const activity = activityOf(all, (sid) => kinds[sid] ?? null);
+		expect(activity.sessions).toBe(5);
+		expect(activity.items.map((i) => [i.sid, i.kind])).toEqual([
+			['c', 'input'],
+			['d', 'failed'],
+			['b', 'done'],
+			['a', 'running']
+		]);
 	});
 });

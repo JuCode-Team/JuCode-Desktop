@@ -73,7 +73,7 @@ export interface CallTiming {
 
 export type Msg =
 	/** `at`: when it was sent, ms (absent: not known, e.g. an old transcript). */
-	| { kind: 'user'; text: string; state?: SendState; images?: string[]; at?: number }
+	| { kind: 'user'; text: string; state?: SendState; images?: string[]; files?: string[]; at?: number }
 	| {
 			kind: 'assistant';
 			text: string;
@@ -460,12 +460,14 @@ export class ChatState {
 	pendingFixed = $state(0);
 	/** A queued message taken back (`unqueued`): the composer takes it in to
 	 *  edit again. */
-	unqueued = $state<{ content: string; images: string[] } | null>(null);
+	unqueued = $state<{ content: string; images: string[]; files: string[] } | null>(null);
 	picker = $state<Picker>(null);
 	/** The daemon names the conversation (and keeps a rename); until then
 	 *  this placeholder. */
 	title = $state(UNTITLED);
 	pendingFill = $state<string | null>(null);
+	/** The files of the message `pendingFill` puts back (`fill_input`). */
+	pendingFillFiles: string[] = [];
 	trustPrompt = $state<{ cwd: string; repoRoot: string | null } | null>(null);
 	goal = $state<Goal | null>(null);
 	plan = $state<PlanStep[]>([]);
@@ -614,6 +616,10 @@ export class ChatState {
 	/** This chat is coming back to a session it stopped watching (switching
 	 *  workspaces): the next replay keeps what it knew of the messages. */
 	rejoining = false;
+	/** Back watching a turn this chat was timing: the `connecting` right after
+	 *  the snapshot's replay is that turn's request, not a new one (next event
+	 *  only). */
+	#rejoinedTurn = false;
 	/** A request of the running turn that missed the prompt cache. One-shot —
 	 *  consumed by the page, which offers to stop the turn. */
 	cacheMiss: { input: number; cached: number } | null = null;
@@ -683,14 +689,14 @@ export class ChatState {
 
 	/** Show a just-sent user message immediately, before the engine echoes it.
 	 *  The echo is de-duplicated in the `user_message` handler. */
-	optimisticUser(content: string, images?: string[], auto = false) {
+	optimisticUser(content: string, images?: string[], auto = false, files?: string[]) {
 		if (!auto) {
 			this.autoRetries = 0;
 			this.autoRetry = null;
 		}
 		this.lastTurnAuto = false;
 		this.lastError = null;
-		this.#trackSend({ kind: 'user', text: content, state: 'sending', at: Date.now(), ...(images?.length ? { images } : {}) });
+		this.#trackSend({ kind: 'user', text: content, state: 'sending', at: Date.now(), ...(images?.length ? { images } : {}), ...(files?.length ? { files } : {}) });
 		this.#pendingUserEcho = content;
 		this.#resetCurrent();
 	}
@@ -712,7 +718,7 @@ export class ChatState {
 	}
 
 	/** The last user bubble: its index among user turns, and what it said. */
-	lastUserTurn(): { index: number; text: string; images?: string[] } | null {
+	lastUserTurn(): { index: number; text: string; images?: string[]; files?: string[] } | null {
 		let index = -1;
 		let last: Extract<Msg, { kind: 'user' }> | null = null;
 		for (const m of this.messages)
@@ -720,7 +726,9 @@ export class ChatState {
 				index++;
 				last = m;
 			}
-		return last ? { index, text: last.text, ...(last.images?.length ? { images: last.images } : {}) } : null;
+		return last
+			? { index, text: last.text, ...(last.images?.length ? { images: last.images } : {}), ...(last.files?.length ? { files: last.files } : {}) }
+			: null;
 	}
 
 	/** The engine's last turn produced something worth keeping: text or a tool
@@ -1112,6 +1120,8 @@ export class ChatState {
 	handle(ev: AgentEvent) {
 		// The engine has spoken — the child is up, so the boot animation ends.
 		this.booting = false;
+		const rejoinedTurn = this.#rejoinedTurn;
+		this.#rejoinedTurn = false;
 		switch (ev.type) {
 			case 'startup':
 				// An engine that recovered from a failed resume in-process (codex
@@ -1213,7 +1223,8 @@ export class ChatState {
 				this.autoRetry = null;
 				// No send state: claude echoes after the reply, when it would stick.
 				const images = arr<string>(ev.images).filter((p) => typeof p === 'string');
-				this.messages.push({ kind: 'user', text, at: Date.now(), ...(images.length ? { images } : {}) });
+				const files = arr<string>(ev.files).filter((p) => typeof p === 'string');
+				this.messages.push({ kind: 'user', text, at: Date.now(), ...(images.length ? { images } : {}), ...(files.length ? { files } : {}) });
 				this.#resetCurrent();
 				break;
 			}
@@ -1393,7 +1404,11 @@ export class ChatState {
 				this.pendingFixed = typeof ev.fixed === 'number' ? ev.fixed : 0;
 				break;
 			case 'unqueued':
-				this.unqueued = { content: str(ev.content), images: arr<string>(ev.images).filter((p) => typeof p === 'string') };
+				this.unqueued = {
+					content: str(ev.content),
+					images: arr<string>(ev.images).filter((p) => typeof p === 'string'),
+					files: arr<string>(ev.files).filter((p) => typeof p === 'string')
+				};
 				break;
 			case 'tree_view':
 				this.picker = { kind: 'tree', nodes: arr<TreeNode>(ev.nodes) };
@@ -1465,7 +1480,8 @@ export class ChatState {
 						const at = typeof it.at === 'number' ? { at: it.at } : {};
 						if (role === 'user') {
 							const images = arr<string>(it.images).filter((p) => typeof p === 'string');
-							return { kind: 'user', text: str(it.content), ...at, ...(images.length ? { images } : {}) };
+							const files = arr<string>(it.files).filter((p) => typeof p === 'string');
+							return { kind: 'user', text: str(it.content), ...at, ...(images.length ? { images } : {}), ...(files.length ? { files } : {}) };
 						}
 						// Its uuid: where a Claude rewind or fork resumes the conversation.
 						if (role === 'assistant') return { kind: 'assistant', text: str(it.content), ...at, ...(str(it.uuid) ? { uuid: str(it.uuid) } : {}) };
@@ -1491,13 +1507,16 @@ export class ChatState {
 					// message of images alone is not this one.
 					const last = this.messages.findLast((m) => m.kind === 'user');
 					const same = (a?: string[], b?: string[]) => (a ?? []).join('\n') === (b ?? []).join('\n');
-					if (last?.kind === 'user' && last.text === pending && (pending !== '' || same(last.images, sent?.kind === 'user' ? sent.images : undefined)))
+					const mine = sent?.kind === 'user' ? sent : undefined;
+					if (last?.kind === 'user' && last.text === pending && (pending !== '' || (same(last.images, mine?.images) && same(last.files, mine?.files))))
 						this.#pendingUserEcho = null;
 					else if (sent) this.messages.push(sent);
 				}
 				if (this.rejoining) {
 					this.rejoining = false;
 					carryStats(before, this.messages);
+					// Still running: the timers go on from when they began.
+					this.#rejoinedTurn = this.#turnStart !== null && this.busy;
 					// The turn ended while this chat was not watching: when is unknown.
 					if (!this.busy && this.#turnStart !== null) {
 						this.#turnStart = null;
@@ -1510,6 +1529,7 @@ export class ChatState {
 				break;
 			}
 			case 'fill_input':
+				this.pendingFillFiles = arr<string>(ev.files).filter((p) => typeof p === 'string');
 				this.pendingFill = str(ev.content);
 				break;
 			case 'trust_prompt':
@@ -1902,7 +1922,9 @@ export class ChatState {
 				this.engineState = 'connecting';
 				this.suggestion = '';
 				this.#startTurn();
-				this.#requestStarted();
+				// A snapshot's, of the turn this chat was timing: its request
+				// goes on, timed from when it began.
+				if (!(rejoinedTurn && this.call)) this.#requestStarted();
 				// Without the model's answer reported, the wait is for the first token.
 				if (this.#sending?.state === 'sending') this.#setSend(ANSWER_REPORTED.has(this.backendId) ? 'connecting' : 'waiting');
 				break;

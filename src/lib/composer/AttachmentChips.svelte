@@ -12,21 +12,18 @@
 
 	let {
 		attachments,
-		videos = [],
 		webRefs = [],
 		onRemove,
-		onRemoveVideo,
 		onRemoveRef
 	}: {
 		attachments: { path: string; image: boolean }[];
-		videos?: { path: string; frames: string[]; duration: number }[];
 		webRefs?: WebRef[];
 		onRemove: (i: number) => void;
-		onRemoveVideo?: (i: number) => void;
 		onRemoveRef?: (i: number) => void;
 	} = $props();
 
 	const base = (p: string) => p.replace(/\/+$/, '').split('/').pop() || p;
+	const isVideo = (p: string) => /\.(mp4|mov|webm|mkv|avi|m4v)$/i.test(p);
 	const refLabel = (r: WebRef) => r.title || r.selector || r.url;
 	/** The attached images full size, from the clicked one. */
 	function view(path: string) {
@@ -45,19 +42,11 @@
 			</span>
 		{:else}
 			<span class="chip" out:fadeOut>
-				<FileTextIcon size={12} />
+				{#if isVideo(a.path)}<FilmIcon size={12} />{:else}<FileTextIcon size={12} />{/if}
 				<span class="chip-name">{base(a.path)}</span>
 				<IconButton size="xs" onclick={() => onRemove(i)} label="remove"><XIcon size={12} /></IconButton>
 			</span>
 		{/if}
-	{/each}
-	{#each videos as v, i (v.path)}
-		<span class="chip videochip" out:fadeOut>
-			{#if v.frames.length}<img class="chip-thumb" src={convertFileSrc(v.frames[0])} alt="" />{:else}<FilmIcon size={12} />{/if}
-			<span class="chip-name">{base(v.path)}</span>
-			<span class="chip-meta">{t('chat.videoMeta', { s: v.duration.toFixed(0), n: v.frames.length })}</span>
-			<IconButton size="xs" onclick={() => onRemoveVideo?.(i)} label="remove"><XIcon size={12} /></IconButton>
-		</span>
 	{/each}
 	{#each webRefs as r, i (r.url + r.selector + i)}
 		<span class="chip refchip" out:fadeOut title={`${r.url}\n${r.selector}`}>
@@ -135,20 +124,10 @@
 	.img-x:hover {
 		color: var(--text);
 	}
-	.chip.videochip {
-		padding: 3px 5px 3px 3px;
-	}
 	.chip.refchip {
 		max-width: 260px;
 		border-color: color-mix(in oklab, var(--accent) 35%, var(--border));
 		color: var(--accent-bright);
-	}
-	.chip-thumb {
-		width: 26px;
-		height: 26px;
-		border-radius: var(--r);
-		object-fit: cover;
-		flex-shrink: 0;
 	}
 	.thumb-btn {
 		display: inline-flex;

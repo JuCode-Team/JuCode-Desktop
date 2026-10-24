@@ -83,12 +83,13 @@
 				if (account) await refreshJucodeModels();
 				const cfg = (await readConfig()) ?? {};
 				provider = typeof cfg.provider === 'string' ? cfg.provider : '';
-				list = Array.isArray(cfg.models) ? (cfg.models as ModelCfg[]).filter((m) => typeof m?.name === 'string' && !!m.name) : [];
+				// A model the gateway hides from pickers stays saved, never offered.
+				list = Array.isArray(cfg.models) ? (cfg.models as (ModelCfg & { hidden?: boolean })[]).filter((m) => typeof m?.name === 'string' && !!m.name && !m.hidden) : [];
 				currentEffort = typeof cfg.reasoning_effort === 'string' ? cfg.reasoning_effort : '';
 				configuredModel = cfg.model;
 			} else if (account && (id === 'claude' || id === 'codex')) {
 				const family = id === 'claude' ? /^claude/i : /^gpt/i;
-				list = (await fetchJucodeModels()).filter((m) => family.test(m.id)).map((m) => ({
+				list = (await fetchJucodeModels()).filter((m) => family.test(m.id) && !m.hidden).map((m) => ({
 					name: m.id,
 					label: m.display_name,
 					context_window: m.context_window,

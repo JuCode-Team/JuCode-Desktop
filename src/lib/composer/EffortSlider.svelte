@@ -112,7 +112,8 @@
 </div>
 <div class="ticks">
 	{#each efforts as e, i (e)}
-		<span class="tick" class:on={i === shown} style:left="{pct(i)}%">{effortLabel(e)}</span>
+		<!-- Ultracode, the stop past the top effort, is too long a tick beside "Max". -->
+		<span class="tick" class:on={i === shown} style:left="{pct(i)}%">{e === 'ultracode' ? 'Ultra' : effortLabel(e)}</span>
 	{/each}
 </div>
 

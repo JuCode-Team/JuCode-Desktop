@@ -1,7 +1,8 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { prefs } from '$lib/prefs.svelte';
-	import { costText } from '$lib/sessionCost';
+	import { costShort, costText } from '$lib/sessionCost';
+	import RunStatus from '$lib/composer/RunStatus.svelte';
 	import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
 	import SquareIcon from '@lucide/svelte/icons/square';
 	import PlusIcon from '@lucide/svelte/icons/plus';
@@ -34,7 +35,7 @@
 	import { attachmentToken, fmtSize, tokenIds, type Attachment } from '$lib/composer/attachments';
 	import { convertFileSrc } from '@tauri-apps/api/core';
 	import ContextIndicator from '$lib/composer/ContextIndicator.svelte';
-	import ModelMenu from '$lib/composer/ModelMenu.svelte';
+	import ModelMenu, { type LegacyFold, type ProviderChoice } from '$lib/composer/ModelMenu.svelte';
 	import type { SessionSwitch } from '$lib/composer/SessionSwitches.svelte';
 	import type { ToolProvider } from '$lib/composer/GroupPicker.svelte';
 	import Vendor from '$lib/Vendor.svelte';
@@ -54,14 +55,17 @@
 		chat,
 		input = $bindable(),
 		attachments = $bindable(),
-		videos = $bindable([]),
 		el = $bindable(),
 		pickerQuery = $bindable(''),
 		pickerSelIdx = $bindable(0),
 		modelRows = [],
 		modelSearch = false,
+		modelLegacy,
+		runTasks = '',
+		onTasks,
 		backendLocked = true,
 		toolProvider,
+		providerChoice,
 		gitBranch = '',
 		gitCwd = '',
 		repoName = '',
@@ -96,17 +100,24 @@
 		chat: ChatState;
 		input: string;
 		attachments: Attachment[];
-		videos?: { path: string; frames: string[]; duration: number }[];
 		el: HTMLElement | null;
 		pickerQuery?: string;
 		pickerSelIdx?: number;
 		modelRows?: ModelRow[];
 		modelSearch?: boolean;
+		/** The model list's folded older versions (see ModelMenu). */
+		modelLegacy?: LegacyFold;
+		/** Background work left going, as the run strip names it ('' none). */
+		runTasks?: string;
+		/** Opens or closes the background tasks' panel. */
+		onTasks?: () => void;
 		/** False only while the session is still virgin (no user turn) — the
 		 *  agent rail in the model popover shows then and disappears afterwards. */
 		backendLocked?: boolean;
 		/** A gateway session's group (see ModelMenu). */
 		toolProvider?: ToolProvider & { model: string };
+		/** The jucode engine's provider row (see ModelMenu). */
+		providerChoice?: ProviderChoice;
 		/** Current git branch for the footer strip ('' hides the chip). */
 		gitBranch?: string;
 		/** Where the branch chip's picker runs git; '' leaves the chip read-only. */
@@ -395,7 +406,7 @@
 	const approvalCurrent = $derived(APPROVAL.find((a) => a.checked) ?? APPROVAL_MODES.ask);
 
 	// "+" menu: only capabilities the session already has. Files go through the
-	// page's picker (images / videos are detected from the picked paths); goal
+	// page's picker (images are told from the picked paths); goal
 	// seeds the engine's /goal command; plan toggles claude's plan approval mode.
 	const addSections = $derived.by(() => {
 		const add: TraySection = {
@@ -846,12 +857,10 @@
 	{#if atQuery !== null}
 		<MentionMenu matches={atMatches} query={atQuery} selected={atIdx} onSelect={applyAt} onHover={(i) => (atIdx = i)} />
 	{/if}
-	{#if attachments.length || videos.length}
+	{#if attachments.length}
 		<AttachmentChips
 			{attachments}
-			{videos}
 			onRemove={removeAttachment}
-			onRemoveVideo={(i) => videos.splice(i, 1)}
 		/>
 	{/if}
 	{#if chat.approvalPending && chat.busy}
@@ -861,7 +870,14 @@
 			<button class="qsteer" onclick={onStop}>{t('chat.modeApplyNow')}</button>
 		</div>
 	{/if}
+	<!-- What runs, on top of the box it can be stopped from. -->
+	{#if chat.busy || runTasks}
+		<RunStatus {chat} tasks={runTasks} tasksOpen={chat.tasksOpen} {onTasks} {onStop} />
+	{/if}
 	<div class="composer" onfocusout={onComposerFocusOut}>
+		{#if input === '' && !chat.busy && !currentQ && !chat.suggestion && !trayMode && !chat.pendingMessages.length}
+			<span class="in-hint" aria-hidden="true"><kbd>/</kbd>{t('chat.hintCommand')}<kbd>@</kbd>{t('chat.hintFile')}</span>
+		{/if}
 		{#if chat.pendingMessages.length}
 			<QueueTray
 				messages={chat.pendingMessages}
@@ -897,7 +913,7 @@
 			tabindex="0"
 			data-placeholder={chat.suggestion && !currentQ
 				? t('chat.suggestionPlaceholder', { text: chat.suggestion })
-				: t(currentQ ? 'chat.questionPlaceholder' : chat.isChatMode ? 'chat.chatPlaceholder' : 'chat.composerPlaceholder')}
+				: t(currentQ ? 'chat.questionPlaceholder' : chat.busy ? 'chat.busyPlaceholder' : chat.isChatMode ? 'chat.chatPlaceholder' : 'chat.composerPlaceholder')}
 			oninput={syncFromDom}
 			onkeydown={onKey}
 			onpaste={onPaste}
@@ -962,12 +978,13 @@
 							<span class="m">{chat.modelLabel || chat.model || backendLabel}</span>
 						</span>
 					{/key}
-					{#if chat.efforts.length}{#key chat.effort}<span
+					<!-- Ultracode is the top effort (ModelMenu). -->
+					{#if chat.ultracode}<span class="e effort-max" style:--effort-accent={modelColor(chat.model) || 'var(--text)'}>Ultracode</span
+						>{:else if chat.efforts.length}{#key chat.effort}<span
 								class="e"
-								class:effort-max={isTopEffort(chat.effort, chat.efforts)}
+								class:effort-max={!chat.ultracodeAvailable && isTopEffort(chat.effort, chat.efforts)}
 								style:--effort-accent={modelColor(chat.model) || 'var(--text)'}>{effortLabel(chat.effort) || t('chat.effortTitle')}</span
 							>{/key}{/if}
-					{#if chat.ultracode}<span class="e">· Ultracode</span>{/if}
 				</button>
 			{:else if chat.model}
 				<span class="flatbtn model static"><BackendIcon backend={chat.backendId} agent={chat.acpAgentId} size={15} mono /><span>{chat.modelLabel || chat.model}</span></span>
@@ -978,8 +995,10 @@
 					canPickModel={bcaps.modelPicker}
 					rows={bcaps.modelPicker ? modelRows : []}
 					showSearch={modelSearch}
+					legacy={modelLegacy}
 					{backendLocked}
 					{toolProvider}
+					{providerChoice}
 					{effortDisabled}
 					anchor={modelButton}
 					bind:query={pickerQuery}
@@ -1007,9 +1026,9 @@
 				{#if voice === 'busy'}<LoaderCircleIcon size={16} class="spin" />{:else if voice === 'rec'}<CircleStopIcon size={16} />{:else}<MicIcon size={16} />{/if}
 			</button>
 			{#if chat.busy && !currentQ}
-				<button class="cact stop" onclick={onStop} aria-label="stop" title={withShortcut(t('chat.stopTitle'), 'stop')}><SquareIcon size={14} /></button>
+				<button class="cact stop" onclick={onStop} aria-label="stop" title={withShortcut(t('chat.stopTitle'), 'stop')}><SquareIcon size={11} fill="currentColor" /></button>
 			{:else}
-				<button class="cact send" onclick={() => submit()} disabled={!input.trim() && !attachments.length && !videos.length} aria-label="send" title={t('chat.sendTitle')}><ArrowUpIcon size={16} /></button>
+				<button class="cact send" onclick={() => submit()} disabled={!input.trim() && !attachments.length} aria-label="send" title={t('chat.sendTitle')}><ArrowUpIcon size={16} /></button>
 			{/if}
 		</div>
 	</div>
@@ -1037,7 +1056,7 @@
 		{/if}
 		<div class="fspace"></div>
 		{#if foot}{@render foot()}{/if}
-		{#if showCost}<span class="foot-cost" title={t('chat.cost')}>{t('chat.sessionCost', { cost: costText(chat.cost, chat.billing) })}</span>{/if}
+		{#if showCost}<span class="foot-cost" title={`${t('chat.cost')} · ${costText(chat.cost, chat.billing)}`}>{costShort(chat.cost, chat.billing)}</span>{/if}
 		{#if showCtx}
 			<div class="foot-ctx">
 				<ContextIndicator pct={ctxPct} atThreshold={ctxAtThreshold} contextTokens={chat.contextTokens} contextLimit={ctxLimit} totalIn={chat.totalIn} totalOut={chat.totalOut} cost={chat.cost} billing={chat.billing} billingError={chat.billingError} runMs={chat.runMs} breakdown={chat.contextBreakdown} onBreakdown={bcaps.contextBreakdown ? onContextBreakdown : undefined} />
@@ -1063,6 +1082,38 @@
 	}
 	.composer:focus-within {
 		box-shadow: var(--shadow-float-strong);
+	}
+	/* Over the run strip tucked under its top edge. */
+	.composer {
+		position: relative;
+		z-index: 1;
+	}
+	/* What / and @ do, while the box is empty (the placeholder leaves it room). */
+	.in-hint {
+		position: absolute;
+		top: 17px;
+		right: 16px;
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		color: var(--dim2);
+		font-size: var(--fs-2xs);
+		pointer-events: none;
+	}
+	.in-hint kbd {
+		margin-left: 6px;
+		padding: 0 4px;
+		border: 1px solid var(--border-strong);
+		border-radius: 4px;
+		color: var(--dim);
+		font-family: var(--font-mono);
+		font-size: 11px;
+	}
+	.in-hint kbd:first-child {
+		margin-left: 0;
+	}
+	.composer:has(.in-hint) .rich.empty::before {
+		right: 120px;
 	}
 	.rich {
 		position: relative;
@@ -1228,17 +1279,17 @@
 	.flatbtn.model.pending {
 		opacity: 0.6;
 	}
-	/* Circular "+" opening the add menu. */
+	/* "+" opening the add menu: a quiet button like the others. */
 	.addbtn {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 28px;
-		height: 28px;
-		margin-left: -2px;
+		width: 30px;
+		height: 30px;
+		margin-left: -6px;
 		flex-shrink: 0;
-		border: 1px solid var(--hairline);
-		border-radius: var(--r);
+		border: none;
+		border-radius: 8px;
 		background: none;
 		color: var(--dim);
 		cursor: pointer;
@@ -1293,9 +1344,12 @@
 	.cact:active:not(:disabled) {
 		transform: scale(0.9);
 	}
-	/* Flat send: white (text color) when ready, quiet gray when there's nothing
-	   to send. No gradients, no borders, no glow. */
-	.cact.send {
+	/* The one filled button: send, or stop while a turn runs. Round, the
+	   text colour; quiet gray when there is nothing to send. */
+	.cact.send,
+	.cact.stop {
+		margin-left: 2px;
+		border-radius: 50%;
 		background: var(--accent);
 		color: var(--on-accent);
 	}
@@ -1306,23 +1360,21 @@
 		transform: scale(0.9);
 	}
 	.cact.send:disabled {
-		background: color-mix(in oklab, var(--text) 32%, var(--panel));
-		color: var(--on-accent);
+		background: var(--surface2);
+		color: var(--dim2);
 		cursor: default;
 	}
-	.cact.stop {
-		background: color-mix(in oklab, var(--err) 14%, transparent);
-		color: var(--err);
-	}
 	.cact.stop:hover {
-		background: color-mix(in oklab, var(--err) 22%, transparent);
+		opacity: 0.85;
 	}
-	/* Small circular voice button, quiet until it records. */
+	/* Voice: a quiet button until it records. */
 	.cact.voice {
-		background: var(--surface2);
+		border-radius: 8px;
+		background: none;
 		color: var(--dim);
 	}
 	.cact.voice:hover:not(:disabled) {
+		background: var(--surface2);
 		color: var(--text);
 	}
 	.cact.voice.on {
@@ -1412,7 +1464,8 @@
 	.foot-chip.auto {
 		color: var(--text);
 	}
-	.foot-chip.warn {
+	/* A risky mode says so with its icon only. */
+	.foot-chip.warn :global(svg) {
 		color: var(--warn);
 	}
 	.fspace {

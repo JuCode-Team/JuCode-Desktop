@@ -1,22 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { attachmentToken, expandAttachments, fmtSize, tokenIds, type Attachment } from './attachments';
 
-const mention = (p: string) => `@${p}`;
 const img = (id: number): Attachment => ({ id, path: `/tmp/${id}.png`, image: true });
 const file = (id: number): Attachment => ({ id, path: `/src/${id}.ts`, image: false });
 
 describe('attachments', () => {
 	it('numbers images by their order among the sent images', () => {
 		const list = [img(3), file(4), img(7)];
-		const { content, files } = expandAttachments(`see ${attachmentToken(7)} and ${attachmentToken(3)}`, list, mention);
-		expect(content).toBe('see [图片 #2] and [图片 #1]');
-		expect(files).toEqual(['/src/4.ts']);
+		expect(expandAttachments(`see ${attachmentToken(7)} and ${attachmentToken(3)}`, list)).toBe('see [图片 #2] and [图片 #1]');
 	});
 
-	it('mentions a file in place and drops placeholders of removed attachments', () => {
-		const { content, files } = expandAttachments(`${attachmentToken(4)} ${attachmentToken(9)}fix`, [file(4)], mention);
-		expect(content).toBe('@/src/4.ts fix');
-		expect(files).toEqual([]);
+	it('names a file in place (the file goes as an attachment) and drops placeholders of removed ones', () => {
+		expect(expandAttachments(`${attachmentToken(4)} ${attachmentToken(9)}fix`, [file(4)])).toBe('4.ts fix');
 	});
 
 	it('finds the placeholders in a text', () => {

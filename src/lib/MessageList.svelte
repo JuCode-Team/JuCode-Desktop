@@ -46,7 +46,7 @@
 		messages,
 		streamingMsg,
 		streamingReasoning,
-		phase,
+		phase = null,
 		call = null,
 		compactionTokens = 0,
 		retry = null,
@@ -85,7 +85,9 @@
 		messages: Msg[];
 		streamingMsg: Msg | null;
 		streamingReasoning: Msg | null;
-		phase: string | null;
+		/** Shown under the list where no composer shows it (a remote session's
+		 *  view, a subagent's transcript); a chat's own composer does. */
+		phase?: string | null;
 		/** The model request in flight, timed live (see CallTiming). */
 		call?: CallTiming | null;
 		compactionTokens?: number;
@@ -99,10 +101,11 @@
 		// The scroll viewport (owned by the pane). When provided, a long
 		// history renders its older rows as the reader nears them.
 		scroller?: HTMLElement | null;
-		onEdit: (text: string) => void;
+		/** `files`: the message's attachments other than images. */
+		onEdit: (text: string, files?: string[]) => void;
 		/** Quote text selected in a reply into the composer. */
 		onCite?: (text: string) => void;
-		onRewind: (text: string, userIndex: number) => void;
+		onRewind: (text: string, userIndex: number, files?: string[]) => void;
 		/** Open a workspace file referenced by a chat link (editor / browser). */
 		onFile?: (href: string) => void;
 		/** Remove a message the user closed (error notices). */
@@ -531,13 +534,13 @@
 			<DeliveryNotice {delivery} />
 		{:else}
 		<div class="row user mhover">
-			<button class="uedit rewind" onclick={() => onRewind(m.text, userOrdinal.get(m) ?? 0)} aria-label="rewind" title={t('chat.rewindTitleN', { n: drop })}>
+			<button class="uedit rewind" onclick={() => onRewind(m.text, userOrdinal.get(m) ?? 0, m.files)} aria-label="rewind" title={t('chat.rewindTitleN', { n: drop })}>
 				<RotateCcwIcon size={12} />{#if drop > 1}<span class="rwn">{drop}</span>{/if}
 			</button>
-			<button class="uedit" onclick={() => onEdit(m.text)} aria-label="quote" title={t('chat.quoteTitle')}><PencilIcon size={12} /></button>
+			<button class="uedit" onclick={() => onEdit(m.text, m.files)} aria-label="quote" title={t('chat.quoteTitle')}><PencilIcon size={12} /></button>
 			<div class="ucol">
 				<!-- One line: the bubble is pre-wrap, so template whitespace would show. -->
-				<div class="bubble" class:pending={m.state === 'sending'}>{#if m.images?.length}<div class="uimgs">{#each m.images as p (p)}<UserImage path={p} load={loadImage} group={m.images} />{/each}</div>{/if}{#each userBlocks(m.text) as block, b (b)}{#if block.quote}<span class="uquote">{block.text}</span>{:else}<span class="utext">{#each userSegments(block.text) as seg, j (j)}{#if seg.image}<span class="utoken">{t('chat.imageToken', { n: seg.image })}</span>{:else if seg.file}<button class="utoken ufile" title={seg.file} data-file={seg.file} onclick={() => onFile?.(seg.file!)}><FileTextIcon size={12} />{fileName(seg.file)}</button>{:else}{seg.text}{/if}{/each}</span>{/if}{/each}</div>
+				<div class="bubble" class:pending={m.state === 'sending'}>{#if m.images?.length}<div class="uimgs">{#each m.images as p (p)}<UserImage path={p} load={loadImage} group={m.images} />{/each}</div>{/if}{#if m.files?.length}<div class="ufiles">{#each m.files as f (f)}<button class="utoken ufile" title={f} data-file={f} onclick={() => onFile?.(f)}><FileTextIcon size={12} />{fileName(f)}</button>{/each}</div>{/if}{#each userBlocks(m.text) as block, b (b)}{#if block.quote}<span class="uquote">{block.text}</span>{:else}<span class="utext">{#each userSegments(block.text) as seg, j (j)}{#if seg.image}<span class="utoken">{t('chat.imageToken', { n: seg.image })}</span>{:else if seg.file}<button class="utoken ufile" title={seg.file} data-file={seg.file} onclick={() => onFile?.(seg.file!)}><FileTextIcon size={12} />{fileName(seg.file)}</button>{:else}{seg.text}{/if}{/each}</span>{/if}{/each}</div>
 				{#if m.state}
 					{#key m.state}
 						<div class="sendstate {m.state}" in:fade={{ duration: 160 }}>
@@ -862,6 +865,14 @@
 		flex-wrap: wrap;
 		gap: 6px;
 		margin-bottom: 8px;
+	}
+	/* The files sent with the message: chips that open them. */
+	.ufiles {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+		margin-bottom: 6px;
+		white-space: normal;
 	}
 	.uquote,
 	.utext {

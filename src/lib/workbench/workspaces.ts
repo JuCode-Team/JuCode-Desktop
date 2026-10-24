@@ -213,31 +213,44 @@ export function migrateLegacy(read: (key: string) => string | null, name: string
 
 /** A session of a workspace in the back that wants the user: it waits on
  *  them (`input`), or finished a reply since the workspace was left (`done`). */
-export interface WorkspaceAlert {
+/** What a session is doing that the rail shows: waiting on the user (an
+ *  approval or an answer), its turn failed, it finished a reply not seen
+ *  yet, or it runs. */
+export type ActivityKind = 'input' | 'failed' | 'done' | 'running';
+
+export interface WorkspaceItem {
 	sid: string;
 	title: string;
-	kind: 'input' | 'done';
+	kind: ActivityKind;
 }
 
-/** The alerts of every workspace but the active one, keyed by workspace id
- *  and waiting ones first. `waiting`: daemon sessions with a pending action;
- *  `finished`: those that finished a reply while their workspace was left. */
-export function workspaceAlerts(
-	workspaces: WorkspaceEntry[],
-	activeId: string,
-	waiting: ReadonlySet<string>,
-	finished: ReadonlySet<string>
-): Record<string, WorkspaceAlert[]> {
-	const out: Record<string, WorkspaceAlert[]> = {};
-	for (const w of workspaces) {
-		if (w.id === activeId) continue;
-		const alerts: WorkspaceAlert[] = [];
-		for (const tab of [...w.projects.flatMap((p) => p.tabs ?? []), ...(w.loose ?? [])]) {
-			if (!tab.sid || tab.archived) continue;
-			const kind = waiting.has(tab.sid) ? 'input' : finished.has(tab.sid) ? 'done' : null;
-			if (kind) alerts.push({ sid: tab.sid, title: tab.title, kind });
-		}
-		if (alerts.length) out[w.id] = alerts.sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'input' ? -1 : 1));
+/** A workspace at a glance: its open sessions, and those doing or wanting
+ *  something, the ones wanting the user first. */
+export interface WorkspaceActivity {
+	sessions: number;
+	items: WorkspaceItem[];
+}
+
+/** Most wanted first: the user's turn, failures, unseen replies, work going. */
+export const ACTIVITY_ORDER: ActivityKind[] = ['input', 'failed', 'done', 'running'];
+
+/** A workspace's saved sessions (not archived), as the rail lists them. */
+export function workspaceSessions(w: WorkspaceEntry): { sid: string; title: string }[] {
+	return [...w.projects.flatMap((p) => p.tabs ?? []), ...(w.loose ?? [])]
+		.filter((tab) => tab.sid && !tab.archived)
+		.map((tab) => ({ sid: tab.sid!, title: tab.title }));
+}
+
+/** `sessions` with what each is doing (`kindOf`, null: nothing to show). */
+export function activityOf(
+	sessions: { sid: string; title: string }[],
+	kindOf: (sid: string) => ActivityKind | null
+): WorkspaceActivity {
+	const items: WorkspaceItem[] = [];
+	for (const s of sessions) {
+		const kind = kindOf(s.sid);
+		if (kind) items.push({ ...s, kind });
 	}
-	return out;
+	items.sort((a, b) => ACTIVITY_ORDER.indexOf(a.kind) - ACTIVITY_ORDER.indexOf(b.kind));
+	return { sessions: sessions.length, items };
 }

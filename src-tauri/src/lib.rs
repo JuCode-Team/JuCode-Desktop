@@ -3773,7 +3773,6 @@ pub fn run() {
             capture::capture_screenshot,
             capture::start_screen_recording,
             capture::stop_screen_recording,
-            capture::process_video
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

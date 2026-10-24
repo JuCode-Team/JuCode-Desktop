@@ -1443,11 +1443,13 @@ export class SessionStore {
 		const output = c.turnHadOutput();
 		const auto = c.lastTurnAuto;
 		// The note goes in after any undo, which drops what follows the turn.
-		const send = (text: string, hidden: boolean) => {
+		// A message sent again goes with its files (an image message is not
+		// sent again: `plain`).
+		const send = (text: string, hidden: boolean, files?: string[]) => {
 			c.messages.push({ kind: 'system', text: note });
 			if (hidden) c.autoContinue(text);
-			else c.optimisticUser(text, undefined, true);
-			dispatch(id, { op: 'user_message', content: text });
+			else c.optimisticUser(text, undefined, true, files);
+			dispatch(id, { op: 'user_message', content: text, ...(files?.length ? { files } : {}) });
 		};
 		if (s.backendId === 'jucode') {
 			c.messages.push({ kind: 'system', text: note });
@@ -1458,14 +1460,14 @@ export class SessionStore {
 		// The message never reached the engine: send it again as it was.
 		if (!started && plain) {
 			c.truncateToUserTurn(plain.index);
-			send(plain.text, false);
+			send(plain.text, false, plain.files);
 			return;
 		}
 		if (!output && (auto || plain) && s.backendId === 'codex') {
 			// The daemon holds the message until the rollback is done.
 			dispatch(id, { op: 'command', input: '/rewind 1' });
 			if (plain) c.truncateToUserTurn(plain.index);
-			send(plain ? plain.text : AUTO_CONTINUE, !plain);
+			send(plain ? plain.text : AUTO_CONTINUE, !plain, plain?.files);
 			return;
 		}
 		// Claude Code: a "continue" is not undone. The reply before it may end
@@ -1474,7 +1476,7 @@ export class SessionStore {
 			// Resumed at the reply before the failed turn (a respawn).
 			await this.rewindClaudeSession(id, c.claudeRewindTarget(plain.index), plain.index);
 			if (this.#gone(s)) return;
-			send(plain.text, false);
+			send(plain.text, false, plain.files);
 			return;
 		}
 		send(AUTO_CONTINUE, true);

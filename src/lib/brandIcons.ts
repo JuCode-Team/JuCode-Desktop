@@ -302,3 +302,31 @@ const find = (rules: [RegExp, string][], s: string, mono: boolean) => {
 /** `mono` for marks inside controls (buttons, triggers); lists keep the colour. */
 export const modelBrand = (model: string, mono = false) => find(MODEL_RULES, model, mono);
 export const providerBrand = (id: string, mono = false) => find(PROVIDER_RULES, id.toLowerCase(), mono);
+
+/** Brand → the company's name, for grouping models by who makes them. */
+const VENDOR_NAMES: Record<string, string> = {
+	openai: 'OpenAI',
+	claude: 'Anthropic',
+	gemini: 'Google',
+	mistral: 'Mistral',
+	meta: 'Meta',
+	deepseek: 'DeepSeek',
+	qwen: 'Qwen',
+	grok: 'xAI',
+	zhipu: 'Zhipu',
+	kimi: 'Moonshot',
+	doubao: 'Doubao',
+	minimax: 'MiniMax',
+	hunyuan: 'Hunyuan',
+	wenxin: 'ERNIE',
+	spark: 'Spark',
+	yi: '01.AI',
+	baichuan: 'Baichuan',
+	stepfun: 'StepFun',
+	longcat: 'LongCat',
+	cohere: 'Cohere',
+	kling: 'Kling',
+	xiaomimimo: 'Xiaomi'
+};
+/** The company behind a model, by name ('' when unknown). */
+export const modelVendor = (model: string) => VENDOR_NAMES[MODEL_RULES.find(([re]) => re.test(model))?.[1] ?? ''] ?? '';

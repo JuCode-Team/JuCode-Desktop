@@ -1,8 +1,7 @@
-// Pure packing of the in-chat model picker rows: the current engine's
-// model_view catalog plus (for jucode sessions) the models of every other
-// provider that has credentials, grouped for display; for Claude Code / Codex,
-// one list of what runs on this machine and on the JuCode gateway. Kept
-// free of Svelte so the row shape stays unit-testable.
+// Pure packing of the in-chat model picker rows: the models of the provider
+// the session runs on (picked above the list, in the menu's provider row),
+// the gateway's grouped by the company behind them. Kept free of Svelte so
+// the row shape stays unit-testable.
 
 export interface ModelRow {
 	id: string;
@@ -13,6 +12,8 @@ export interface ModelRow {
 	command: string;
 	depth: number | undefined;
 	group?: string;
+	/** An older version of a family the list also has newer: folded away. */
+	legacy?: boolean;
 }
 
 export interface EngineModel {
@@ -27,20 +28,22 @@ export interface EngineModel {
 
 export interface CatalogProvider {
 	id: string;
-	models: { name: string; display_name?: string | null; context_window?: number; reasoning_efforts?: string[] }[];
+	models: {
+		name: string;
+		display_name?: string | null;
+		context_window?: number;
+		reasoning_efforts?: string[];
+		/** The gateway keeps it callable but out of model pickers. */
+		hidden?: boolean;
+	}[];
 }
 
-export interface ModelGroupLabels {
-	jucode: string;
-	byok: string;
-}
+/** A provider's models as a picker offers them. */
+export const pickable = <M extends { hidden?: boolean }>(models: M[]) => models.filter((m) => !m.hidden);
 
 /** Context window as shown beside a model: 272K, 1M; empty when unknown. */
 export const fmtContext = (n?: number) =>
 	!n ? '' : n >= 1_000_000 ? `${+(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}K` : `${n}`;
-/** The group header already names jucode and the agent's own catalog; BYOK rows
- *  from several providers share one group, so they keep the provider id. */
-const detailOf = (provider: string | null, ctx?: number) => [provider, fmtContext(ctx)].filter(Boolean).join(' · ');
 /** A JuCode gateway model whose window nobody configured says so (the user can
  *  set one in the model settings) instead of showing nothing. */
 const jucodeDetail = (ctx: number | undefined, unsetWindow: string) => fmtContext(ctx) || unsetWindow;
@@ -140,7 +143,7 @@ export function providerModels(
 	provider: CatalogProvider | undefined,
 	current: string
 ): (EngineModel & { label: string; max_output_tokens: number; reasoning_efforts: string[]; context_window: number })[] {
-	return (provider?.models ?? []).map((m) => ({
+	return pickable(provider?.models ?? []).map((m) => ({
 		model: m.name,
 		label: m.display_name || '',
 		active: m.name === current,
@@ -150,71 +153,129 @@ export function providerModels(
 	}));
 }
 
+/** A model id's family and version: `claude-opus-5-5` → `claude-opus-#`,
+ *  [5, 5]; `gpt-6.1-sol` → `gpt-#-sol`, [6, 1]. A date suffix and a variant
+ *  tag (`[1m]`) are no part of either. */
+export function modelFamily(id: string): { family: string; version: number[] } {
+	const bare = id
+		.toLowerCase()
+		.replace(/\[[^\]]*\]$/, '')
+		.replace(/-\d{8}$/, '')
+		// Claude writes versions with dashes: claude-opus-4-8.
+		.replace(/(\d)-(?=\d)/g, '$1.');
+	const version = (bare.match(/\d+(?:\.\d+)*/)?.[0] ?? '').split('.').filter(Boolean).map(Number);
+	return { family: bare.replace(/\d+(?:\.\d+)*/, '#'), version };
+}
+
+const newer = (a: number[], b: number[]) => {
+	for (let i = 0; i < Math.max(a.length, b.length); i++) {
+		if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) > (b[i] ?? 0);
+	}
+	return false;
+};
+
+/** Marks the older versions of each family (by the row's id, `vendor`) as
+ *  legacy and moves them last, when there are enough to be worth folding.
+ *  The running model is never folded. */
+export function foldLegacy(rows: ModelRow[], min = 3): ModelRow[] {
+	const newest = new Map<string, number[]>();
+	const parsed = rows.map((r) => modelFamily(r.vendor ?? r.label));
+	for (const { family, version } of parsed) {
+		const best = newest.get(family);
+		if (!best || newer(version, best)) newest.set(family, version);
+	}
+	const old = rows.filter((r, i) => !r.active && newer(newest.get(parsed[i].family)!, parsed[i].version));
+	if (old.length < min) return rows;
+	for (const r of old) r.legacy = true;
+	return [...rows.filter((r) => !r.legacy), ...old];
+}
+
+/** Rows grouped by the company behind each model, in the order the list
+ *  names them (the gateway's sort order), `first` ahead; unknown companies
+ *  ('') last. */
+function byVendor(rows: ModelRow[], vendorOf: (model: string) => string, first = ''): ModelRow[] {
+	const groups = new Map<string, ModelRow[]>(first ? [[first, []]] : []);
+	for (const row of rows) {
+		row.group = vendorOf(row.vendor ?? row.label);
+		if (!groups.has(row.group)) groups.set(row.group, []);
+		groups.get(row.group)!.push(row);
+	}
+	const other = groups.get('') ?? [];
+	groups.delete('');
+	return [...[...groups.values()].flat(), ...other];
+}
+
 /**
- * The active provider's rows come from the engine's model_view (already
- * filtered and flagged with the active model — the running engine resolved
- * its credentials, possibly from an env var); other providers come from the
- * client-side catalog, limited to the ones with credentials, so a jucode
- * session can switch to any of them.
- * Same-provider picks use /model (instant); cross-provider picks switch via
- * @switch (config rewrite + engine restart). Claude Code / Codex list
- * toolModels: a model the current side lacks switches sides (@tool, an
- * engine restart).
+ * The rows of the provider the session runs on. The jucode engine lists its
+ * engine's model_view (already filtered and flagged with the active model —
+ * the running engine resolved its credentials, possibly from an env var); a
+ * pick is /model. Claude Code / Codex list this machine's catalog or the
+ * gateway's, whichever side the session is on; another provider is picked in
+ * the menu's provider row, not here.
  */
 export function buildModelRows(input: {
 	models: EngineModel[];
 	backendId: string;
 	provider: string;
 	providersList: CatalogProvider[];
-	/** Provider ids with credentials (read_auth_providers: a stored API key
-	 *  under auth.json `providers`, or `jucode` when logged in). Cross-provider
-	 *  rows for any other provider are dropped — the engine can't run them. */
-	configured: string[];
-	groups: ModelGroupLabels;
 	/** Claude/Codex: on this machine's config or the JuCode gateway. */
 	toolMode?: 'system' | 'jucode';
-	/** Claude/Codex: what "this machine" is called beside a model. */
-	localLabel?: string;
 	/** Shown beside a JuCode model with no context window configured. */
 	unsetWindow?: string;
+	/** The company behind a model, the gateway list's group header ('' unknown). */
+	vendorOf?: (model: string) => string;
 }): ModelRow[] {
-	const {
-		models,
-		backendId,
-		provider: cur,
-		providersList,
-		configured,
-		groups,
-		toolMode,
-		localLabel = '',
-		unsetWindow = ''
-	} = input;
+	const { models, backendId, provider: cur, providersList, toolMode, unsetWindow = '', vendorOf = () => '' } = input;
 	if (backendId === 'claude' || backendId === 'codex') {
-		const onJucode = toolMode === 'jucode';
-		const served = configured.includes('jucode')
-			? (providersList.find((p) => p.id === 'jucode')?.models ?? [])
-			: [];
-		return toolModels(models, served, onJucode).map((m) => ({
-			id: m.key,
-			label: m.label,
-			vendor: m.vendor,
-			// The window first: a narrow menu truncates the detail from the end.
-			detail: [fmtContext(m.context_window), m.local !== undefined && localLabel, m.jucode !== undefined && 'JuCode']
-				.filter(Boolean)
-				.join(' · '),
-			active: m.active,
-			command: onJucode
-				? m.jucode !== undefined
-					? `/model ${m.jucode}`
-					: `@tool system ${m.local}`
-				: m.local !== undefined
-					? `/model ${m.local}`
-					: `@tool jucode ${m.jucode}`,
-			depth: undefined
-		}));
+		const running = models.find((m) => m.active);
+		const own = vendorOf(backendId === 'claude' ? 'claude' : 'gpt');
+		if (toolMode === 'jucode') {
+			const served = pickable(providersList.find((p) => p.id === 'jucode')?.models ?? []);
+			const rows: ModelRow[] = served.map((g) => ({
+				id: g.name,
+				label: g.display_name || (g.name.startsWith('claude-') ? claudeLabel(g.name) : g.name),
+				vendor: g.name,
+				detail: jucodeDetail(g.context_window, unsetWindow),
+				active: !!running && (running.model === g.name || running.vendor === g.name),
+				command: `/model ${g.name}`,
+				depth: undefined
+			}));
+			if (running && !rows.some((r) => r.active))
+				rows.unshift({
+					id: running.model,
+					label: running.label || running.model,
+					vendor: running.vendor || running.model,
+					detail: fmtContext(running.context_window),
+					active: true,
+					command: `/model ${running.model}`,
+					depth: undefined
+				});
+			return foldLegacy(byVendor(rows, vendorOf, own));
+		}
+		// This machine: the engine's catalog, one row per model (the catalog
+		// resolves aliases: "opus" is `claude-opus-5-5`).
+		const byKey = new Map<string, ModelRow>();
+		for (const m of models) {
+			if (m.listed === false && !m.active) continue;
+			const key = m.vendor || m.model;
+			const known = byKey.get(key);
+			if (known) {
+				known.active ||= m.active;
+				continue;
+			}
+			byKey.set(key, {
+				id: key,
+				label: m.label || m.model,
+				vendor: key,
+				detail: fmtContext(m.context_window),
+				active: m.active,
+				command: `/model ${m.model}`,
+				depth: undefined
+			});
+		}
+		return foldLegacy([...byKey.values()]);
 	}
-	const activeGroup = cur === 'jucode' ? groups.jucode : groups.byok;
-	const activeRows: ModelRow[] = models.map((m) => ({
+	const rows: ModelRow[] = models.map((m) => ({
 		id: `${cur}::${m.model}`,
 		label: m.label || m.model,
 		vendor: m.vendor || m.model,
@@ -226,28 +287,10 @@ export function buildModelRows(input: {
 				? jucodeDetail(m.context_window, unsetWindow)
 				: cur === 'acp'
 					? m.model.slice(0, Math.max(0, m.model.indexOf('/')))
-					: detailOf(activeGroup === groups.byok ? cur : null, m.context_window),
+					: fmtContext(m.context_window),
 		active: m.active,
 		command: `/model ${m.model}`,
-		depth: undefined,
-		group: activeGroup
+		depth: undefined
 	}));
-	const otherRows: ModelRow[] = (backendId !== 'jucode' ? [] : providersList)
-		.filter((pv) => pv.id !== cur && configured.includes(pv.id))
-		.flatMap((pv) =>
-			pv.models.map((m) => ({
-				id: `${pv.id}::${m.name}`,
-				label: m.display_name || m.name,
-				vendor: m.name,
-				detail: pv.id === 'jucode' ? jucodeDetail(m.context_window, unsetWindow) : detailOf(pv.id, m.context_window),
-				active: false,
-				command: `@switch ${pv.id} ${m.name}`,
-				depth: undefined,
-				group: pv.id === 'jucode' ? groups.jucode : groups.byok
-			}))
-		);
-	const order = [groups.jucode, groups.byok];
-	return [...activeRows, ...otherRows].sort(
-		(a, b) => order.indexOf(a.group ?? '') - order.indexOf(b.group ?? '')
-	);
+	return foldLegacy(cur === 'jucode' ? byVendor(rows, vendorOf) : rows);
 }

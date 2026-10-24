@@ -33,6 +33,8 @@ export interface DaemonSessionView {
 	busy?: boolean;
 	/** Background work its turn left going runs: not a turn (newer daemons). */
 	background?: boolean;
+	/** Its latest turn ended in an error, until the next starts (newer daemons). */
+	failed?: boolean;
 	/** The session that started it (`start_session`), if one did. */
 	parent?: string | null;
 	/** The git worktree the daemon made for it (a scheduled run's). */

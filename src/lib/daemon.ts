@@ -80,6 +80,9 @@ export class DaemonClient {
 	onEvent: (frame: Record<string, unknown>) => void = () => {};
 	/** Called with the daemon's version each time a connection opens. */
 	onHello: (version: string) => void = () => {};
+	/** What the daemon said it takes beyond the protocol (`files`: a message's
+	 *  attachments other than images); empty for a daemon from before. */
+	features = new Set<string>();
 	/** Called when an established connection is lost. */
 	onDisconnect: () => void = () => {};
 
@@ -212,6 +215,7 @@ export class DaemonClient {
 								greeted = true;
 								if (frame.protocol === DAEMON_PROTOCOL) {
 									this.#socket = socket;
+									this.features = new Set(Array.isArray(frame.features) ? frame.features.map(String) : []);
 									resolve();
 									this.onHello(String(frame.version ?? ''));
 								} else {

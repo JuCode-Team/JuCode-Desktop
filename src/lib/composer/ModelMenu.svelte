@@ -1,3 +1,15 @@
+<script lang="ts" module>
+	/** The jucode engine's provider row: JuCode and each provider with a key. */
+	export type ProviderChoice = {
+		value: string;
+		options: { value: string; label: string }[];
+		/** The command a pick sends (as a model row's); none for the current one. */
+		commandFor: (id: string) => string | undefined;
+	};
+	/** Older model versions folded below the list (modelRows foldLegacy). */
+	export type LegacyFold = { count: number; shown: boolean; onToggle: () => void };
+</script>
+
 <script lang="ts">
 	import { overBrowser } from '$lib/browser.svelte';
 	import { onMount, tick } from 'svelte';
@@ -6,6 +18,8 @@
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+	import ZapIcon from '@lucide/svelte/icons/zap';
 	import IconButton from '$lib/ui/IconButton.svelte';
 	import SessionSwitches, { type SessionSwitch } from '$lib/composer/SessionSwitches.svelte';
 	import Vendor from '$lib/Vendor.svelte';
@@ -30,17 +44,21 @@
 	import { popOut } from '$lib/ui/motion';
 
 	// The composer's model menu, opened from the model button: everything about
-	// "who answers and how hard it thinks" in one place. The first page shows
-	// the current model (a row that opens the model list), the thinking effort,
-	// the provider (gateway group or this machine) and, while the session can still switch, the coding
-	// agent. The second page is the model list, searchable when it is long.
+	// "who answers and how hard it thinks" in one place. The first page goes
+	// provider (this machine, a custom provider or the gateway and its group),
+	// then the current model (a row that opens the model list, the provider's
+	// models only), then the thinking effort (Ultracode its top stop, fast mode
+	// beside it) and, while the session can still switch, the coding agent.
+	// The second page is the model list, searchable when it is long.
 	let {
 		chat,
 		canPickModel = false,
 		rows = [],
 		showSearch = false,
+		legacy,
 		backendLocked = true,
 		toolProvider,
+		providerChoice,
 		effortDisabled = false,
 		anchor,
 		query = $bindable(''),
@@ -59,11 +77,14 @@
 		canPickModel?: boolean;
 		rows?: ModelRow[];
 		showSearch?: boolean;
+		legacy?: LegacyFold;
 		/** Locked sessions (restored / first user turn sent) can't change agent. */
 		backendLocked?: boolean;
 		/** A Claude Code / Codex session: where its model runs (`model` is the
 		 *  gateway's name for it) and how to change that. */
 		toolProvider?: ToolProvider & { model: string };
+		/** The jucode engine: the providers it can switch to (two or more). */
+		providerChoice?: ProviderChoice;
 		effortDisabled?: boolean;
 		anchor?: HTMLElement;
 		query?: string;
@@ -162,18 +183,56 @@
 		}
 	}
 
+	// Ultracode (Claude Code's standing Workflow orchestration) is the stop
+	// past the highest effort; the engine keeps it as a switch beside the
+	// effort, so leaving it for a stop turns it off.
+	const efforts = $derived(chat.ultracodeAvailable || chat.ultracode ? [...chat.efforts, 'ultracode'] : chat.efforts);
+	const effortNow = $derived(chat.ultracode ? 'ultracode' : chat.effort);
+	function pickEffort(effort: string) {
+		if (effort === 'ultracode') return onSwitch('ultracode', true);
+		if (chat.ultracode) onSwitch('ultracode', false);
+		if (effort !== chat.effort) onEffort(effort);
+	}
 	let shownEffort = $state('');
 	const accent = $derived(modelColor(chat.model));
-	const top = $derived(isTopEffort(shownEffort, chat.efforts));
+	const top = $derived(isTopEffort(shownEffort, efforts));
 	const def = $derived(defaultEffort(chat.efforts, chat.effortDefault));
-	// Group headers only help when the list spans more than one source.
+	// Group headers only help when the list spans more than one company.
 	const grouped = $derived(new Set(rows.map((r) => r.group)).size > 1);
+	// A row's second line: the model's id where the name differs, and its
+	// detail (the context window; an ACP agent's provider, which its id
+	// already starts with).
+	function idOf(r: ModelRow) {
+		return r.vendor && r.vendor !== r.label ? r.vendor : '';
+	}
+	function detailOf(r: ModelRow) {
+		return r.detail && !idOf(r).startsWith(`${r.detail}/`) ? r.detail : '';
+	}
 </script>
 
 <svelte:window onkeydowncapture={onKeyCapture} />
 <button class="mm-backdrop" aria-label="close" tabindex="-1" onclick={onClose}></button>
 <div use:overBrowser class="pop mm" out:popOut={{ y: 3 }} role="dialog" aria-label={t('chat.switchModel')} bind:this={popEl} style:left="{popLeft}px" style:top="{popTop}px">
 	{#if page === 'main'}
+		<!-- Provider first: the model list below holds its models only. -->
+		{#if toolProvider}
+			{#key toolProvider.model}<GroupPicker model={toolProvider.model} tool={toolProvider} />{/key}
+		{:else if providerChoice}
+			<section class="options">
+				<div class="opt provider">
+					<span class="olabel">{t('chat.provider')}</span>
+					<Select
+						value={providerChoice.value}
+						options={providerChoice.options}
+						onChange={(id) => {
+							const command = providerChoice.commandFor(id);
+							if (command) onSelect(command);
+						}}
+					/>
+				</div>
+			</section>
+		{/if}
+
 		<section class="current">
 			{#if canPickModel}
 				<button class="pop-row" onclick={() => (page = 'models')} title={t('chat.pickModel')}>
@@ -190,32 +249,42 @@
 			{/if}
 		</section>
 
+		{#if chat.backendId === 'jucode' && chat.provider === 'jucode' && chat.model}
+			{#key chat.model}<GroupPicker model={chat.model} />{/key}
+		{/if}
+
 		{#if chat.efforts.length}
 			<section class="effort">
 				<div class="ehead">
 					<span class="elabel">{t('chat.effortTitle')}</span>
 					{#key shownEffort}<span class="evalue" class:effort-max={top} style:--effort-accent={accent || 'var(--text)'}>{effortLabel(shownEffort)}</span>{/key}
 					<span class="grow"></span>
+					{#if chat.fastAvailable || chat.fast}
+						<!-- Fast mode is output speed, not thinking: any effort takes it. -->
+						<button
+							class="fast"
+							class:on={chat.fast}
+							aria-pressed={chat.fast}
+							title={t('chat.fastDesc')}
+							onclick={() => onSwitch('fast', !chat.fast)}
+						>
+							<ZapIcon size={12} />{t('chat.fastLabel')}
+						</button>
+					{/if}
 					<IconButton
 						size="sm"
 						label={t('chat.effortReset')}
 						title={t('chat.effortReset')}
 						disabled={effortDisabled || !def || shownEffort === def}
-						onclick={() => onEffort(def)}
+						onclick={() => pickEffort(def)}
 					>
 						<RotateCcwIcon size={14} />
 					</IconButton>
 				</div>
-				<EffortSlider efforts={chat.efforts} effort={chat.effort} disabled={effortDisabled} {onEffort} {accent} bind:current={shownEffort} />
+				<EffortSlider {efforts} effort={effortNow} disabled={effortDisabled} onEffort={pickEffort} {accent} bind:current={shownEffort} />
 			</section>
-		{/if}
-
-		<SessionSwitches {chat} {onSwitch} thinking={false} />
-
-		{#if chat.backendId === 'jucode' && chat.provider === 'jucode' && chat.model}
-			{#key chat.model}<GroupPicker model={chat.model} />{/key}
-		{:else if toolProvider}
-			{#key toolProvider.model}<GroupPicker model={toolProvider.model} tool={toolProvider} />{/key}
+		{:else}
+			<SessionSwitches {chat} {onSwitch} thinking={false} />
 		{/if}
 
 		{#if chat.planUsage}<PlanQuota usage={chat.planUsage} />{/if}
@@ -319,23 +388,34 @@
 			{/if}
 			<div class="list" role="listbox" aria-label={t('chat.switchModel')}>
 				{#each rows as row, i (row.id)}
-					{#if grouped && row.group && (i === 0 || rows[i - 1]?.group !== row.group)}
-						<div class="group">{row.group}</div>
+					{#if row.legacy}
+						{#if legacy && !rows[i - 1]?.legacy}{@render fold(legacy)}{/if}
+					{:else if grouped && (i === 0 || rows[i - 1]?.group !== row.group)}
+						<div class="group">{row.group || t('shell.modelGroup.other')}</div>
 					{/if}
+					{@const id = idOf(row)}
+					{@const detail = detailOf(row)}
 					<button
-						class="pop-row"
+						class="pop-row mrow"
 						class:sel={i === selIdx}
 						role="option"
 						aria-selected={row.active}
 						onclick={() => onSelect(row.command)}
 						onmouseenter={() => (selIdx = i)}
 					>
-						<span class="pop-ico"><Vendor model={row.vendor ?? row.label} size={16} /></span>
-						<span class="pop-txt"><span class="pop-label">{row.label || t('shell.empty')}</span></span>
-						{#if row.detail}<span class="ctx" title={row.detail}>{row.detail}</span>{/if}
+						<span class="pop-ico"><Vendor model={row.vendor ?? row.label} size={18} /></span>
+						<span class="pop-txt">
+							<span class="pop-label">{row.label || t('shell.empty')}</span>
+							{#if id || detail}
+								<span class="pop-desc" title={[id, detail].filter(Boolean).join(' · ')}
+									>{#if id}<span class="mid">{id}</span>{/if}{#if id && detail}<span class="dot">·</span>{/if}{detail}</span
+								>
+							{/if}
+						</span>
 						<span class="pop-check" class:off={!row.active}><CheckIcon size={16} /></span>
 					</button>
 				{/each}
+				{#if legacy && !legacy.shown}{@render fold(legacy)}{/if}
 				{#if rows.length === 0}
 					<div class="empty">{query.trim() ? t('shell.noMatch') : t('shell.noOptions')}</div>
 				{/if}
@@ -343,6 +423,14 @@
 		</section>
 	{/if}
 </div>
+
+{#snippet fold(l: LegacyFold)}
+	<button class="fold" aria-expanded={l.shown} onclick={l.onToggle}>
+		<span>{t('chat.olderModels')}</span>
+		<span class="fold-n">{l.count}</span>
+		<span class="fold-caret" class:open={l.shown}><ChevronDownIcon size={14} /></span>
+	</button>
+{/snippet}
 
 <style>
 	.mm-backdrop {
@@ -479,6 +567,16 @@
 		color: var(--dim);
 		font-size: var(--fs-xs);
 	}
+	/* Provider names are short: the label keeps its width, the select its own. */
+	.provider .olabel {
+		flex-shrink: 0;
+		color: var(--dim2);
+		font-size: var(--fs-sm);
+	}
+	.provider :global(.select) {
+		width: auto;
+		min-width: 0;
+	}
 	.effort {
 		padding: 2px 8px 4px;
 	}
@@ -500,6 +598,31 @@
 	}
 	.grow {
 		flex: 1;
+	}
+	/* Fast mode: a toggle beside the effort, outlined when on. */
+	.fast {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		height: 22px;
+		padding: 0 8px;
+		border: 1px solid var(--border);
+		border-radius: 999px;
+		background: none;
+		color: var(--dim2);
+		font: inherit;
+		font-size: var(--fs-2xs);
+		cursor: pointer;
+		transition:
+			border-color var(--t-fast) var(--ease-out),
+			color var(--t-fast) var(--ease-out);
+	}
+	.fast:hover {
+		color: var(--text);
+	}
+	.fast.on {
+		border-color: var(--text);
+		color: var(--text);
 	}
 	.models {
 		display: flex;
@@ -540,7 +663,7 @@
 		font-size: var(--fs-2xs);
 		font-weight: 500;
 	}
-	/* Name and detail ("This machine · JuCode · 258K") share one line. WebKit
+	/* Name and detail (the context window) share one line. WebKit
 	   (the macOS app) does not wrap text inside the row button, so both
 	   truncate instead of overlapping; the detail gives way before the name. */
 	.mm .pop-txt {
@@ -560,6 +683,52 @@
 		color: var(--dim2);
 		font-size: var(--fs-xs);
 		font-variant-numeric: tabular-nums;
+	}
+	/* Two lines a model: its name, then its id and context window. */
+	.mrow .pop-desc {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-variant-numeric: tabular-nums;
+	}
+	.mid {
+		font-family: var(--font-mono);
+		font-size: 0.95em;
+	}
+	.dot {
+		margin: 0 5px;
+	}
+	/* Older versions: a quiet row that opens them below. */
+	.fold {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		margin-top: 4px;
+		padding: 8px 12px;
+		border: none;
+		border-top: 1px solid var(--hairline);
+		background: none;
+		color: var(--dim);
+		font: inherit;
+		font-size: var(--fs-xs);
+		text-align: left;
+		cursor: pointer;
+	}
+	.fold:hover {
+		color: var(--text);
+	}
+	.fold-n {
+		color: var(--dim2);
+		font-variant-numeric: tabular-nums;
+	}
+	.fold-caret {
+		display: inline-flex;
+		margin-left: auto;
+		color: var(--dim2);
+		transition: transform var(--t-fast) var(--ease-out);
+	}
+	.fold-caret.open {
+		transform: rotate(180deg);
 	}
 	/* Keep the check's column so names and context line up on every row. */
 	.pop-check.off {

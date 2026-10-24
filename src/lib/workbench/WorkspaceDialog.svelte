@@ -7,23 +7,16 @@
 	import Button from '$lib/ui/Button.svelte';
 	import Checkbox from '$lib/ui/Checkbox.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
-	import Notice from '$lib/ui/Notice.svelte';
 	import TextField from '$lib/ui/TextField.svelte';
 	import ProjectBadge from '$lib/sidebar/ProjectBadge.svelte';
 	import { t } from '$lib/i18n';
 	import type { Project } from '$lib/types';
 
-	/** Workspaces past which the dialog reminds before making another. */
-	const MANY = 3;
-
 	let {
-		count,
 		projects,
 		onCreate,
 		onClose
 	}: {
-		/** Workspaces there are already. */
-		count: number;
 		/** The current workspace's projects, which may move into the new one. */
 		projects: Project[];
 		onCreate: (name: string, move: Project[]) => void;
@@ -45,9 +38,6 @@
 <Modal title={t('shell.workspace.create.title')} width={500} {onClose}>
 	{#snippet icon()}<LayersIcon size={16} />{/snippet}
 	<p class="hint">{t('shell.workspace.create.hint')}</p>
-	{#if count >= MANY}
-		<Notice>{t('shell.workspace.create.many', { n: count })}</Notice>
-	{/if}
 	<form class="field" onsubmit={(e) => (e.preventDefault(), create())}>
 		<span class="label">{t('shell.workspace.create.name')}</span>
 		<TextField bind:value={name} placeholder={t('shell.workspace.create.namePlaceholder')} />

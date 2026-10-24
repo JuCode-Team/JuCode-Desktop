@@ -40,7 +40,9 @@ export function hostSession(
 
 // Commands the GUI sends to a session's engine.
 export type Op =
-	| { op: 'user_message'; content: string; images?: string[] }
+	/** `files`: attachments other than images, each engine's own way (the
+	 *  daemon); a daemon from before them ignores the field. */
+	| { op: 'user_message'; content: string; images?: string[]; files?: string[] }
 	| { op: 'command'; input: string }
 	/** A queued message into the running turn: `index`, negative from the last. */
 	| { op: 'steer'; index?: number }
@@ -442,6 +444,8 @@ export type JucodeModel = {
 	reasoning_efforts?: string[];
 	/** What the model is called for people; absent: the id. */
 	display_name?: string;
+	/** Callable, but not offered in pickers (the gateway's per-model flag). */
+	hidden?: boolean;
 	/** The window range through each of the account's groups, by group id. */
 	group_context_windows?: Record<string, { context_window: number; max_context_window: number }>;
 };
@@ -673,6 +677,9 @@ export interface ProviderInfo {
 		max_context_window?: number;
 		max_output_tokens?: number;
 		reasoning_efforts?: string[];
+		/** The gateway keeps it callable but out of model pickers (a CLI
+		 *  that predates the flag omits it: shown). */
+		hidden?: boolean;
 	}[];
 }
 export function listProviders(): Promise<ProviderInfo[]> {
@@ -734,16 +741,6 @@ export function startScreenRecording(): Promise<void> {
 }
 export function stopScreenRecording(): Promise<string> {
 	return invoke('stop_screen_recording');
-}
-export interface VideoInfo {
-	path: string;
-	duration: number;
-	width: number;
-	height: number;
-	frames: string[];
-}
-export function processVideo(path: string, maxFrames?: number): Promise<VideoInfo> {
-	return invoke('process_video', { path, maxFrames });
 }
 
 // Speech-to-text via the ASR provider selected in config.json. Keys remain in

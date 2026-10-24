@@ -39,3 +39,12 @@ export function costText(estimate: number, billing?: BillingCost | null): string
 	if (billing.unpriced_requests) parts.push(t('chat.costUnknown'));
 	return parts.join(' · ') || '—';
 }
+
+/** The figure to show under the composer, two decimals: the settled points,
+ *  else the estimate (costText says it all, for the tooltip). */
+export function costShort(estimate: number, billing?: BillingCost | null): string {
+	if (billing?.gateway_cost != null) return t('chat.costSettled', { cost: billing.gateway_cost.toFixed(2) });
+	const usd = billing?.estimated_cost_usd ?? (estimate > 0 ? estimate : null);
+	if (usd !== null) return t('chat.costEstimate', { cost: usd.toFixed(2) });
+	return billing?.pending_requests ? t('chat.costPending') : '—';
+}

@@ -2,7 +2,6 @@
 // This is not an availability list or an onboarding model selection.
 export const DEFAULT_MODELS = [
 	'gpt-6.1-sol',
-	'codex-auto-review',
 	'gpt-6-astra',
 	'gpt-6-sol',
 	'gpt-6-luna',

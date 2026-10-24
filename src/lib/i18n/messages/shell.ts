@@ -30,8 +30,11 @@ const shell = {
 			checkpoint: '回退到历史回合'
 		},
 		modelGroup: {
-			jucode: 'JuCode 内置',
-			byok: '自定义 / BYOK'
+			other: '其他'
+		},
+		drop: {
+			title: '松开以添加到对话',
+			count: '{n} 个文件'
 		},
 		toolSwitch: {
 			toJucode: '已切换到 JuCode，正在重启引擎…',
@@ -130,8 +133,7 @@ const shell = {
 		workspace: {
 			create: {
 				title: '新建工作区',
-				hint: '工作区是最高一级的分区，用来隔开互不相关的工作，比如公司和个人。切换工作区会换掉整个侧栏和其中的会话。一天切换两三次正合适；同一件事的几个项目放在同一个工作区里更顺手。',
-				many: '已经有 {n} 个工作区。工作区太多会让切换变频繁，先确认这些工作确实需要彼此隔开。',
+				hint: '用来隔开互不相关的工作，比如公司和个人。',
 				name: '名称',
 				namePlaceholder: '比如：公司、个人、开源',
 				move: '从当前工作区移入的项目（可不选）',
@@ -149,7 +151,17 @@ const shell = {
 			deleteConfirm: '删除工作区「{name}」？其中的项目布局与会话标签将被移除（对话记录仍保留在引擎侧）。',
 			cannotDeleteDefault: '默认工作区不能删除。',
 			defaultBadge: '默认工作区（不可删除）',
-			alerts: '{n} 个会话待处理'
+			alerts: '{n} 个会话待处理',
+			sessions: '{n} 个会话',
+			projects: '{n} 个项目',
+			idle: '没有进行中的会话',
+			more: '还有 {n} 个',
+			kind: {
+				input: '待你处理',
+				failed: '失败',
+				done: '已完成',
+				running: '运行中'
+			}
 		},
 		// shared chrome editor (workspace tabs, session tabs, project folders, agents)
 		chrome: {
@@ -788,8 +800,11 @@ const shell = {
 			checkpoint: 'Rewind to a turn'
 		},
 		modelGroup: {
-			jucode: 'JuCode built-in',
-			byok: 'Custom / BYOK'
+			other: 'Other'
+		},
+		drop: {
+			title: 'Drop to add to the chat',
+			count: '{n} files'
 		},
 		toolSwitch: {
 			toJucode: 'Switched to JuCode, restarting engine…',
@@ -888,8 +903,7 @@ const shell = {
 		workspace: {
 			create: {
 				title: 'New workspace',
-				hint: 'A workspace is the top-level partition, for work that should stay apart, such as a job and personal projects. Switching workspaces swaps the whole sidebar and its sessions. Two or three switches a day is about right; several projects of the same work fit better in one workspace.',
-				many: 'There are already {n} workspaces. More workspaces mean more switching, so check that this work really needs to stay apart.',
+				hint: 'Keeps unrelated work apart, such as a job and personal projects.',
 				name: 'Name',
 				namePlaceholder: 'e.g. Work, Personal, Open source',
 				move: 'Projects to move in from the current workspace (optional)',
@@ -907,7 +921,17 @@ const shell = {
 			deleteConfirm: 'Delete workspace "{name}"? Its project layout and session tabs are removed (conversations remain on the engine side).',
 			cannotDeleteDefault: 'The default workspace cannot be deleted.',
 			defaultBadge: 'Default workspace (cannot be deleted)',
-			alerts: '{n} sessions need you'
+			alerts: '{n} sessions need you',
+			sessions: '{n} sessions',
+			projects: '{n} projects',
+			idle: 'Nothing going on',
+			more: '{n} more',
+			kind: {
+				input: 'Needs you',
+				failed: 'Failed',
+				done: 'Finished',
+				running: 'Running'
+			}
 		},
 		// shared chrome editor (workspace tabs, session tabs, project folders, agents)
 		chrome: {
