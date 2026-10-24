@@ -644,7 +644,7 @@
 {#snippet summaryOf(summary: TurnSummary)}
 	{#if summary.children.length}<ChildSessions sessions={summary.children} onOpen={onOpenSession} />{/if}
 	{#if summary.edited.length}<EditedFiles files={summary.edited} {root} {onFile} onOpen={onOpenEdited} />{/if}
-	{#if summary.artifacts.length}<ArtifactCards files={summary.artifacts} onOpen={onFile} {onReveal} />{/if}
+	{#if summary.artifacts.length}<ArtifactCards files={summary.artifacts} onOpen={onFile} {onReveal} load={loadImage} />{/if}
 	{#each summary.proposals as p (p.id)}
 		<ScheduleProposal proposal={p} created={scheduleCreated?.(p.id) ?? false} onCreate={onSchedule} />
 	{/each}

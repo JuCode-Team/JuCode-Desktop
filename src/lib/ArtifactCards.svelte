@@ -1,7 +1,8 @@
 <script lang="ts">
 	// The deliverables the agent presented (`present_files`), as cards: a
 	// click opens the file, the folder button shows it in the file manager,
-	// a right-click offers the chat's file menu (data-file).
+	// a right-click offers the chat's file menu (data-file). Images and
+	// videos show above their cards.
 	import FileIcon from '@lucide/svelte/icons/file';
 	import FilePlayIcon from '@lucide/svelte/icons/file-play';
 	import FileImageIcon from '@lucide/svelte/icons/file-image';
@@ -14,6 +15,8 @@
 	import GlobeIcon from '@lucide/svelte/icons/globe';
 	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
 	import IconButton from '$lib/ui/IconButton.svelte';
+	import ArtifactMedia from '$lib/ArtifactMedia.svelte';
+	import { isTauri } from '@tauri-apps/api/core';
 	import { pathExt } from '$lib/fileRefs';
 	import { isMac } from '$lib/shortcuts';
 	import type { Artifact } from '$lib/turnSummary';
@@ -22,12 +25,15 @@
 	let {
 		files,
 		onOpen,
-		onReveal
+		onReveal,
+		load
 	}: {
 		files: Artifact[];
 		onOpen?: (path: string) => void;
 		/** Absent where the file manager can't be reached (the remote page). */
 		onReveal?: (path: string) => void;
+		/** Reads a file on the engine's computer (the remote page). */
+		load?: (path: string) => Promise<string>;
 	} = $props();
 
 	const KINDS: [RegExp, typeof FileIcon][] = [
@@ -42,11 +48,25 @@
 		[/^(json|ya?ml|toml|xml|js|ts|py|rs|go|sh)$/, FileCodeIcon]
 	];
 	const iconOf = (path: string) => KINDS.find(([re]) => re.test(pathExt(path)))?.[1] ?? FileIcon;
+	/** The kinds both the webview and the daemon's `fs_image` take. */
+	const IMAGE = /^(png|jpe?g|gif|webp)$/;
+	const VIDEO = /^(mp4|m4v|webm|mov)$/;
+	const images = $derived(files.filter((f) => IMAGE.test(pathExt(f.path))).map((f) => f.path));
+	const media = $derived(files.filter((f) => IMAGE.test(pathExt(f.path)) || VIDEO.test(pathExt(f.path))));
 	const nameOf = (path: string) => path.split(/[\\/]/).pop() || path;
 	const size = (n: number) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`);
 	const revealLabel = isMac() ? 'chat.fileMenu.revealMac' : /Windows/.test(navigator.userAgent) ? 'chat.fileMenu.revealWin' : 'chat.fileMenu.revealLinux';
 </script>
 
+<!-- Read by the desktop, or through `load`; elsewhere (a phone subagent's
+     transcript) only the cards show. -->
+{#if media.length && (load || isTauri())}
+	<div class="media">
+		{#each media as f (f.path)}
+			<ArtifactMedia path={f.path} video={VIDEO.test(pathExt(f.path))} {load} group={images} />
+		{/each}
+	</div>
+{/if}
 <div class="artifacts" class:single={files.length === 1}>
 	{#each files as f (f.path)}
 		{@const Icon = iconOf(f.path)}
@@ -66,6 +86,12 @@
 </div>
 
 <style>
+	.media {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		margin-top: 12px;
+	}
 	.artifacts {
 		display: grid;
 		grid-template-columns: repeat(2, minmax(0, 1fr));
