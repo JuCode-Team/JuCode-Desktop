@@ -24,6 +24,7 @@
 	import InboxIcon from '@lucide/svelte/icons/inbox';
 	import InfoIcon from '@lucide/svelte/icons/info';
 	import PcCaseIcon from '@lucide/svelte/icons/pc-case';
+	import SmartphoneIcon from '@lucide/svelte/icons/smartphone';
 	import LogInIcon from '@lucide/svelte/icons/log-in';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import PlusIcon from '@lucide/svelte/icons/plus';
@@ -72,6 +73,7 @@
 	import BackendSection from './BackendSection.svelte';
 	import AcpSection from './AcpSection.svelte';
 	import DaemonSection from './DaemonSection.svelte';
+	import RemoteSection from './RemoteSection.svelte';
 	import McpSection from './McpSection.svelte';
 	import ImportSection from './ImportSection.svelte';
 	import PermissionRulesSection from './PermissionRulesSection.svelte';
@@ -116,6 +118,7 @@
 		general: SettingsIcon,
 		appearance: PaletteIcon,
 		account: CircleUserIcon,
+		remote: SmartphoneIcon,
 		usage: ChartColumnIcon,
 		voice: MicIcon,
 		providers: UnplugIcon,
@@ -925,8 +928,10 @@
 					<AcpSection />
 				{:else if current === 'import'}
 					<ImportSection {onAddFolders} />
+				{:else if current === 'remote'}
+					<RemoteSection onLogin={() => !loggingIn && login()} {loggingIn} />
 				{:else if current === 'daemon'}
-					<DaemonSection onLogin={() => !loggingIn && login()} {loggingIn}>
+					<DaemonSection>
 						<SettingsSection title={t('settings.behavior.titles')}>
 							<SettingsRow id="title-model" title={t('settings.behavior.titleModel')} description={t('settings.behavior.titleModelHint')}>
 								<div class="w-lg">

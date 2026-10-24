@@ -6,6 +6,7 @@ export type SectionKey =
 	| 'general'
 	| 'appearance'
 	| 'account'
+	| 'remote'
 	| 'usage'
 	| 'voice'
 	| 'providers'
@@ -22,7 +23,7 @@ export type SectionKey =
 // Grouped by what a setting applies to: the app itself, every coding agent,
 // or only sessions run by the JuCode CLI engine (its ~/.jucode/config.json).
 export const GROUPS: { key: string; sections: SectionKey[] }[] = [
-	{ key: 'app', sections: ['general', 'appearance', 'account', 'usage', 'voice'] },
+	{ key: 'app', sections: ['general', 'appearance', 'account', 'remote', 'usage', 'voice'] },
 	{ key: 'agents', sections: ['agents', 'acp', 'daemon', 'market', 'import'] },
 	{ key: 'jucode', sections: ['providers', 'models', 'mcp', 'network'] },
 	{ key: 'about', sections: ['updates'] }
@@ -109,8 +110,8 @@ export const ROWS: SearchRow[] = [
 	{ section: 'daemon', id: 'app-tools-present', titleKey: 'settings.appTools.presentFiles', descKey: 'settings.appTools.presentFilesHint' },
 	{ section: 'daemon', id: 'app-tools-schedule', titleKey: 'settings.appTools.proposeSchedule', descKey: 'settings.appTools.proposeScheduleHint' },
 	{ section: 'daemon', id: 'app-tools-sessions', titleKey: 'settings.appTools.sessions', descKey: 'settings.appTools.sessionsHint' },
-	{ section: 'daemon', id: 'relay', titleKey: 'settings.backend.relayToggle', descKey: 'settings.backend.relayHint' },
-	{ section: 'daemon', id: 'devices', titleKey: 'settings.backend.devices', descKey: 'settings.backend.devicesHint' },
+	{ section: 'remote', id: 'relay', titleKey: 'settings.backend.relayToggle', descKey: 'settings.backend.relayHint' },
+	{ section: 'remote', id: 'devices', titleKey: 'settings.backend.devices', descKey: 'settings.backend.devicesHint' },
 	{ section: 'updates', id: 'app-version', titleKey: 'settings.update.currentVersion', descKey: 'settings.update.groupLabel' }
 ];
 

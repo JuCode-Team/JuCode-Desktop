@@ -1,19 +1,12 @@
 <script lang="ts">
 	// Settings → 所有智能体 → 后台服务: what the local jucode daemon does for
-	// every agent's sessions — naming them (the caller's snippet), the JuCode
-	// tools it gives them, and remote access from a phone or the web (signed
-	// in to the JuCode account: `onLogin` starts the app's sign-in).
+	// every agent's sessions — naming them (the caller's snippet) and the JuCode
+	// tools it gives them. Remote access has its own page (RemoteSection).
 	import type { Snippet } from 'svelte';
-	import { t } from '$lib/i18n';
 	import AppToolsSection from './AppToolsSection.svelte';
-	import DevicePairing from './DevicePairing.svelte';
-	import SettingsSection from './SettingsSection.svelte';
 
-	let { children, onLogin, loggingIn = false }: { children?: Snippet; onLogin: () => void; loggingIn?: boolean } = $props();
+	let { children }: { children?: Snippet } = $props();
 </script>
 
 {@render children?.()}
 <AppToolsSection />
-<SettingsSection id="remote" title={t('settings.backend.remoteGroup')} description={t('settings.backend.remoteGroupHint')}>
-	<DevicePairing {onLogin} {loggingIn} />
-</SettingsSection>
