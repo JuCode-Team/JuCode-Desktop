@@ -1,5 +1,5 @@
 <script lang="ts">
-	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import CircleDashedIcon from '@lucide/svelte/icons/circle-dashed';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import XIcon from '@lucide/svelte/icons/x';
@@ -159,10 +159,11 @@
 <div class="tool" class:framed class:err={isError || !!errorText}>
 	<button class="head" class:static={isRead} onclick={() => !isRead && (collapsed = !collapsed)}>
 		<span class="st">
-			{#if running}<LoaderCircleIcon size={14} class="spin" />{:else if isError || errorText}<XIcon size={14} class="bad" />{:else}<CheckIcon size={14} class="good" />{/if}
+			{#if running}<CircleDashedIcon size={14} />{:else if isError || errorText}<XIcon size={14} class="bad" />{:else}<CheckIcon size={14} class="good" />{/if}
 		</span>
-		<span class="verb">{verb}</span>
-		{#if target}<span class="target">{target}</span>{/if}
+		<!-- Running: a light passes over what it does, nothing louder. -->
+		<span class="verb" class:shimmer-text={running}>{verb}</span>
+		{#if target}<span class="target" class:shimmer-text={running}>{target}</span>{/if}
 		{#if subagent}<span class="by" title={t('chat.bySubagent', { name: subagent })}>{subagent}</span>{/if}
 		{#if exitCode !== null && exitCode !== 0}
 			<span class="exit bad">exit {exitCode}</span>

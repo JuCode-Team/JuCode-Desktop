@@ -210,7 +210,7 @@ export class SessionStore {
 			!(e instanceof DaemonError) &&
 			chat.daemonRetries < DAEMON_RETRY_DELAYS.length
 		) {
-			if (chat.daemonRetries === 0) chat.messages.push({ kind: 'system', text: t('shell.daemonReconnecting') });
+			if (chat.daemonRetries === 0) chat.messages.push({ kind: 'system', text: t('shell.daemonReconnecting'), flow: { type: 'reconnect' } });
 			const delay = DAEMON_RETRY_DELAYS[chat.daemonRetries++]!;
 			setTimeout(() => {
 				const live = this.allSessions.find((x) => x.id === s.id);
@@ -284,7 +284,7 @@ export class SessionStore {
 		}
 		try {
 			await worktreeRestore(wt.mainRepoPath, path, wt.branch);
-			s.chat.messages.push({ kind: 'system', text: t('chat.worktree.restored', { name: wt.slug }) });
+			s.chat.messages.push({ kind: 'system', text: t('chat.worktree.restored', { name: wt.slug }), flow: { type: 'worktree' } });
 		} catch (e) {
 			s.chat.messages.push({ kind: 'error', text: t('chat.worktree.gone', { name: wt.slug, msg: String(e) }) });
 			s.cwd = undefined;
@@ -568,15 +568,18 @@ export class SessionStore {
 	async #makeWorktree(s: Session, project: Project, base: string): Promise<boolean> {
 		const first = s.chat.messages.find((m) => m.kind === 'user');
 		const text = first?.kind === 'user' ? first.text : '';
-		const note = { kind: 'system' as const, text: t('chat.worktree.creating') };
-		s.chat.messages.push(note);
+		s.chat.messages.push({ kind: 'system', text: t('chat.worktree.creating'), flow: { type: 'worktree' } });
+		// The state's own copy: what is pushed is wrapped, so only it compares equal.
+		const note = s.chat.messages[s.chat.messages.length - 1];
 		const named = SessionStore.nameWorktree && text ? await Promise.race([SessionStore.nameWorktree(text).catch(() => ''), new Promise<string>((r) => setTimeout(() => r(''), 8000))]) : '';
 		const slug = slugifyTaskName(named) || `task-${Date.now().toString(36)}`;
 		try {
 			const wt = await worktreeCreate(project.path, slug, base, prefs.worktreeFromOrigin);
 			s.cwd = wt.path;
 			s.worktree = { isWorktree: true, mainRepoPath: project.path, branch: wt.branch, baseBranch: wt.base, slug: wt.slug };
-			s.chat.messages = s.chat.messages.map((m) => (m === note ? { kind: 'system', text: t('chat.worktree.created', { name: wt.slug, branch: wt.branch, base: wt.base }) } : m));
+			s.chat.messages = s.chat.messages.map((m) =>
+				m === note ? { kind: 'system', text: t('chat.worktree.created', { name: wt.slug, branch: wt.branch, base: wt.base }), flow: { type: 'worktree' } } : m
+			);
 			SessionStore.onWorktree?.(s, project);
 			return true;
 		} catch (e) {
@@ -1185,7 +1188,7 @@ export class SessionStore {
 			: reason
 				? t('shell.autoRestartingWhy', { reason })
 				: t('shell.autoRestarting');
-		if (spend) s.chat.messages.push({ kind: 'system', text });
+		if (spend) s.chat.messages.push({ kind: 'system', text, flow: { type: 'restart' } });
 		// The daemon reopens the session's conversation. A resume target the
 		// engine can't find ("No conversation found …") makes it exit at once,
 		// which would crash-loop re-resuming the same doomed id; when the engine
@@ -1301,7 +1304,7 @@ export class SessionStore {
 		}
 		s.chat.switching = true;
 		s.chat.engineState = 'connecting';
-		s.chat.messages.push({ kind: 'system', text: t('shell.switchingTo', { provider: provider.id, model }) });
+		s.chat.messages.push({ kind: 'system', text: t('shell.switchingTo', { provider: provider.id, model }), flow: { type: 'switch' } });
 		try {
 			await closeSession(id);
 			if (this.#gone(s)) return;
@@ -1354,7 +1357,8 @@ export class SessionStore {
 		s.chat.engineState = 'connecting';
 		s.chat.messages.push({
 			kind: 'system',
-			text: mode === 'jucode' ? t('shell.toolSwitch.toJucode') : t('shell.toolSwitch.toSystem')
+			text: mode === 'jucode' ? t('shell.toolSwitch.toJucode') : t('shell.toolSwitch.toSystem'),
+			flow: { type: 'switch' }
 		});
 		try {
 			await closeSession(id);
@@ -1446,13 +1450,13 @@ export class SessionStore {
 		// A message sent again goes with its files (an image message is not
 		// sent again: `plain`).
 		const send = (text: string, hidden: boolean, files?: string[]) => {
-			c.messages.push({ kind: 'system', text: note });
+			c.messages.push({ kind: 'system', text: note, flow: { type: 'retry' } });
 			if (hidden) c.autoContinue(text);
 			else c.optimisticUser(text, undefined, true, files);
 			dispatch(id, { op: 'user_message', content: text, ...(files?.length ? { files } : {}) });
 		};
 		if (s.backendId === 'jucode') {
-			c.messages.push({ kind: 'system', text: note });
+			c.messages.push({ kind: 'system', text: note, flow: { type: 'retry' } });
 			dispatch(id, { op: 'continue' });
 			return;
 		}

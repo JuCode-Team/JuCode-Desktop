@@ -870,9 +870,9 @@
 			<button class="qsteer" onclick={onStop}>{t('chat.modeApplyNow')}</button>
 		</div>
 	{/if}
-	<!-- What runs, on top of the box it can be stopped from. -->
-	{#if chat.busy || runTasks}
-		<RunStatus {chat} tasks={runTasks} tasksOpen={chat.tasksOpen} {onTasks} {onStop} />
+	<!-- Work handed off (background tasks, subagents), on top of the box. -->
+	{#if runTasks}
+		<RunStatus tasks={runTasks} tasksOpen={chat.tasksOpen} {onTasks} />
 	{/if}
 	<div class="composer" onfocusout={onComposerFocusOut}>
 		{#if input === '' && !chat.busy && !currentQ && !chat.suggestion && !trayMode && !chat.pendingMessages.length}

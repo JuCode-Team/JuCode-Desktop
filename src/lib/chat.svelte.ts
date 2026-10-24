@@ -71,6 +71,20 @@ export interface CallTiming {
 	since: number;
 }
 
+/** A step the conversation takes that the user should see where it happens:
+ *  the context compacted (`before` → `after` tokens, `after` once the next
+ *  usage says), a reply stopped, another model or provider, the engine
+ *  restarting or reconnecting, a retry, background work done, a worktree, a
+ *  deferred action. */
+export type Flow = {
+	type: 'compacting' | 'compacted' | 'interrupted' | 'fallback' | 'switch' | 'restart' | 'reconnect' | 'retry' | 'task' | 'worktree' | 'action';
+	before?: number;
+	after?: number;
+};
+
+/** A note marking a step of the course (see Flow). */
+type FlowNote = { kind: 'system'; text: string; flow: Flow };
+
 export type Msg =
 	/** `at`: when it was sent, ms (absent: not known, e.g. an old transcript). */
 	| { kind: 'user'; text: string; state?: SendState; images?: string[]; files?: string[]; at?: number }
@@ -105,7 +119,9 @@ export type Msg =
 			startedAt?: number;
 			endedAt?: number;
 	  }
-	| { kind: 'system'; text: string }
+	/** A note. With `flow` it marks a step of the conversation's own course
+	 *  (shown in it, as a divider); without, engine chatter for the notices. */
+	| { kind: 'system'; text: string; flow?: Flow }
 	| { kind: 'error'; text: string }
 	/** A plan the engine proposes in plan mode (`proposed_plan`): `text` is
 	 *  its Markdown; status pending / approved / revising. */
@@ -629,6 +645,10 @@ export class ChatState {
 	switching = false;
 
 	#assistantIdx = -1;
+	/** The divider of a compaction under way, and of the last one done until
+	 *  the next usage gives its size after. */
+	#compacting: FlowNote | null = null;
+	#compacted: FlowNote | null = null;
 	#reasoningIdx = -1;
 	/** The live per-request timer (see CallTiming); null between requests. */
 	call = $state<CallTiming | null>(null);
@@ -759,6 +779,10 @@ export class ChatState {
 	#endTurn() {
 		const stopped = this.#stopped;
 		this.#stopped = false;
+		// A turn the user stopped says so where it stopped, once.
+		const last = this.messages[this.messages.length - 1];
+		if (stopped && this.#turnStart !== null && !(last?.kind === 'system' && last.flow?.type === 'interrupted'))
+			this.messages.push({ kind: 'system', text: '', flow: { type: 'interrupted' } });
 		if (this.#turnStart !== null) this.turnEndedAt = Date.now();
 		this.#collapseReasoning();
 		if (this.#sending?.state !== 'failed') this.#setSend(null);
@@ -916,7 +940,7 @@ export class ChatState {
 
 	get statusLog(): string[] {
 		const out: string[] = [];
-		for (const m of this.messages) if (m.kind === 'system') out.push(m.text);
+		for (const m of this.messages) if (m.kind === 'system' && !m.flow) out.push(m.text);
 		return out;
 	}
 
@@ -1394,6 +1418,10 @@ export class ChatState {
 				break;
 			case 'context_usage':
 				this.contextTokens = num(ev.tokens);
+				if (this.#compacted && this.contextTokens > 0) {
+					this.#compacted.flow.after = this.contextTokens;
+					this.#compacted = null;
+				}
 				if (typeof ev.cost === 'number') {
 					this.cost = ev.cost;
 					this.#engineCost = true;
@@ -1475,7 +1503,7 @@ export class ChatState {
 					.map((it): Msg | null => {
 						const role = str(it.role);
 						if (role === 'user' && str(it.content) === AUTO_CONTINUE)
-							return { kind: 'system', text: t('chat.autoRetry.resumed') };
+							return { kind: 'system', text: t('chat.autoRetry.resumed'), flow: { type: 'retry' } };
 						// When it was said, if the engine knows (`at`, ms).
 						const at = typeof it.at === 'number' ? { at: it.at } : {};
 						if (role === 'user') {
@@ -1565,15 +1593,28 @@ export class ChatState {
 			case 'compaction_progress':
 				this.compactionTokens = num(ev.output_tokens);
 				break;
-			case 'compaction_end':
+			case 'compaction_end': {
 				this.compactionTokens = 0;
 				this.#cacheWatch.reset();
-				this.messages.push({ kind: 'system', text: 'context compacted' });
+				// The divider the start put in, else one now (engines that only
+				// report the end); its size after comes with the next usage.
+				let marker = this.#compacting;
+				if (!marker) {
+					this.messages.push({ kind: 'system', text: '', flow: { type: 'compacted', before: this.contextTokens || undefined } });
+					// The state's own copy, so later changes show.
+					marker = this.messages[this.messages.length - 1] as FlowNote;
+				}
+				this.#compacting = null;
+				marker.flow.type = 'compacted';
+				this.#compacted = marker;
 				// An automatic compaction ends mid-turn and the turn carries on;
 				// only the turn's closing status would otherwise clear "compacting".
 				if (this.engineState === 'compacting') this.engineState = 'streaming';
 				break;
+			}
 			case 'compaction_failed':
+				if (this.#compacting) this.messages = this.messages.filter((m) => m !== this.#compacting);
+				this.#compacting = null;
 				this.messages.push({ kind: 'error', text: `compaction failed: ${str(ev.error)}` });
 				if (this.engineState === 'compacting') this.engineState = 'streaming';
 				break;
@@ -1770,6 +1811,7 @@ export class ChatState {
 			case 'task_done':
 				this.messages.push({
 					kind: 'system',
+					flow: { type: 'task' },
 					text: t('chat.taskDone', {
 						kind: taskKindLabel(str(ev.kind)),
 						status: t(`chat.taskStatus.${['completed', 'failed', 'stopped'].includes(str(ev.status)) ? str(ev.status) : 'completed'}`),
@@ -1798,6 +1840,7 @@ export class ChatState {
 			case 'model_fallback':
 				this.messages.push({
 					kind: 'system',
+					flow: { type: 'fallback' },
 					text: t('chat.modelFallback', { from: str(ev.from), to: str(ev.to), reason: fallbackReason(str(ev.reason)) })
 				});
 				break;
@@ -1931,6 +1974,11 @@ export class ChatState {
 			case 'compaction_start':
 				this.engineState = 'compacting';
 				this.compactionTokens = 0;
+				if (!this.#compacting) {
+					this.messages.push({ kind: 'system', text: '', flow: { type: 'compacting', before: this.contextTokens || undefined } });
+					// The state's own copy, so later changes show.
+					this.#compacting = this.messages[this.messages.length - 1] as FlowNote;
+				}
 				break;
 			case 'status': {
 				const msg = str(ev.message);
@@ -1973,12 +2021,14 @@ export class ChatState {
 			case 'action_deferred':
 				this.messages.push({
 					kind: 'system',
+					flow: { type: 'action' },
 					text: t('chat.actionDeferred', { name: str(ev.name), summary: str(ev.summary) })
 				});
 				break;
 			case 'action_decided':
 				this.messages.push({
 					kind: 'system',
+					flow: { type: 'action' },
 					text: t(ev.decision === 'allow' ? 'chat.actionAllowed' : 'chat.actionDenied', {
 						id: str(ev.id)
 					})

@@ -93,6 +93,7 @@
 	import { revealItemInDir } from '@tauri-apps/plugin-opener';
 	import ScheduleDialog from '$lib/ScheduleDialog.svelte';
 	import { daemonState } from '$lib/daemonState.svelte';
+	import CallTimer from '$lib/CallTimer.svelte';
 	import type { ScheduleDraft } from '$lib/schedules';
 	import type { EditedFile, Proposal } from '$lib/turnSummary';
 	import { turnBase } from '$lib/editor/turnBase';
@@ -1447,6 +1448,13 @@
 <svelte:window onkeydown={onWindowKey} onfocus={() => isActive && refreshGitBranch()} />
 
 
+<!-- The running turn, quietly, under the conversation: how long so far. -->
+{#snippet turnClock()}
+	{#if chat.busy && chat.turnStartedAt}
+		<div class="turn-clock" role="status"><LoaderCircleIcon size={12} class="spin" /><CallTimer since={chat.turnStartedAt} /></div>
+	{/if}
+{/snippet}
+
 <div class="chatpane">
 	<div class="chatcol" style:--chat-w="{chatW}px" style:--chat-pad="{chatPad}px">
 		{#if showFind}
@@ -1483,7 +1491,7 @@
 		<main bind:this={scroller} onscroll={onScroll} onwheel={onWheel}>
 			<!-- Pressing inside the conversation (opening a card, selecting text) stops following the end: what was pressed stays under the pointer instead of being pushed up as the reply grows. -->
 			<div bind:this={contentEl} onpointerdowncapture={() => (atBottom = false)} oncontextmenu={onFileMenu} role="presentation">
-				<MessageList bind:this={messageList} bind:mark messages={chat.messages} follow={() => atBottom} busy={turnOpen} foldTurns={prefs.foldTurns} {streamingMsg} {streamingReasoning} call={chat.call} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} onEdit={editMessage} onCite={citeText} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} traceOf={traceOf} agents={allAgents} onOpenAgent={openAgent} onPlan={planAction} {planMode} onOpenPlan={(id) => planPages.open(session.id, id)} root={workDir || ''} onReveal={revealFile} onSchedule={scheduleFrom} scheduleCreated={(id) => daemonState.schedules.some((s) => s.origin === id)} onOpenSession={openChild} onOpenEdited={openEdited} onFork={canFork ? (keep) => (forkAt = keep) : undefined} />
+				<MessageList bind:this={messageList} bind:mark messages={chat.messages} follow={() => atBottom} busy={turnOpen} foldTurns={prefs.foldTurns} {streamingMsg} {streamingReasoning} call={chat.call} retry={chat.retry} autoRetry={chat.autoRetry} onAutoRetryNow={() => autoRetry.now(chat)} onAutoRetryCancel={() => autoRetry.cancel(chat)} {findActive} {scroller} tail={turnClock} onEdit={editMessage} onCite={citeText} onRewind={rewindToMessage} onFile={openChatFile} onDismiss={(m) => (chat.messages = chat.messages.filter((x) => x !== m))} backend={chat.backendId} onErrorAction={fixError} traceOf={traceOf} agents={allAgents} onOpenAgent={openAgent} onPlan={planAction} {planMode} onOpenPlan={(id) => planPages.open(session.id, id)} root={workDir || ''} onReveal={revealFile} onSchedule={scheduleFrom} scheduleCreated={(id) => daemonState.schedules.some((s) => s.origin === id)} onOpenSession={openChild} onOpenEdited={openEdited} onFork={canFork ? (keep) => (forkAt = keep) : undefined} />
 			</div>
 			{#if proposing}
 				<ScheduleDialog preset={proposing} projects={store.workspaceProjects} onClose={() => (proposing = null)} />
@@ -1779,6 +1787,15 @@
 			width: auto;
 			border-left: none;
 		}
+	}
+	.turn-clock {
+		display: inline-flex;
+		align-self: flex-start;
+		align-items: center;
+		gap: 6px;
+		padding: 2px;
+		color: var(--dim2);
+		animation: fade var(--t-med) var(--ease-out);
 	}
 	.jump {
 		position: absolute;

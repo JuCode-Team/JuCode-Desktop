@@ -341,6 +341,22 @@ body {
 	color: transparent !important;
 	animation: sweep 3.2s linear infinite !important;
 }
+/* Work going on (a running tool): a quiet light passes over the text. */
+.shimmer-text {
+	background: linear-gradient(90deg, var(--dim) 0%, var(--dim) 35%, var(--text) 50%, var(--dim) 65%, var(--dim) 100%);
+	background-size: 250% 100%;
+	-webkit-background-clip: text;
+	background-clip: text;
+	color: transparent !important;
+	animation: sweep 2.4s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+	.shimmer-text {
+		animation: none;
+		background: none;
+		color: var(--dim) !important;
+	}
+}
 @keyframes fade {
 	from {
 		opacity: 0;

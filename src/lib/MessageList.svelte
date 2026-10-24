@@ -24,7 +24,7 @@
 	import { timeline, type Block, type Item } from '$lib/timeline';
 	import { motionMs, T_MED } from '$lib/ui/motion';
 	import Indicator from '$lib/Indicator.svelte';
-	import CallTimer from '$lib/CallTimer.svelte';
+	import FlowMarker from '$lib/FlowMarker.svelte';
 	import RetryNotice from '$lib/RetryNotice.svelte';
 	import ErrorNotice from '$lib/ErrorNotice.svelte';
 	import type { ErrorAction } from '$lib/errorInfo';
@@ -465,8 +465,9 @@
 
 	// Skip empty placeholders (e.g. an assistant message before its first delta).
 	function hasContent(m: Msg): boolean {
-		// Meta/status notices render in the collapsible status strip, not inline.
-		if (m.kind === 'system') return false;
+		// Steps of the conversation's course show in it; other notes go to the
+		// collapsible status strip.
+		if (m.kind === 'system') return !!m.flow;
 		// present_files / propose_schedule show in the turn's summary instead;
 		// a subagent's calls in its own conversation (its card opens it), as
 		// in t3code, so they neither interleave with this one nor fold into it.
@@ -541,12 +542,13 @@
 			<div class="ucol">
 				<!-- One line: the bubble is pre-wrap, so template whitespace would show. -->
 				<div class="bubble" class:pending={m.state === 'sending'}>{#if m.images?.length}<div class="uimgs">{#each m.images as p (p)}<UserImage path={p} load={loadImage} group={m.images} />{/each}</div>{/if}{#if m.files?.length}<div class="ufiles">{#each m.files as f (f)}<button class="utoken ufile" title={f} data-file={f} onclick={() => onFile?.(f)}><FileTextIcon size={12} />{fileName(f)}</button>{/each}</div>{/if}{#each userBlocks(m.text) as block, b (b)}{#if block.quote}<span class="uquote">{block.text}</span>{:else}<span class="utext">{#each userSegments(block.text) as seg, j (j)}{#if seg.image}<span class="utoken">{t('chat.imageToken', { n: seg.image })}</span>{:else if seg.file}<button class="utoken ufile" title={seg.file} data-file={seg.file} onclick={() => onFile?.(seg.file!)}><FileTextIcon size={12} />{fileName(seg.file)}</button>{:else}{seg.text}{/if}{/each}</span>{/if}{/each}</div>
-				{#if m.state}
+				<!-- Sending and undelivered only: once it is through, the clock under
+				     the conversation says how long the turn takes. -->
+				{#if m.state === 'sending' || m.state === 'failed'}
 					{#key m.state}
 						<div class="sendstate {m.state}" in:fade={{ duration: 160 }}>
 							{#if m.state === 'failed'}<CircleAlertIcon size={14} />{:else}<span class="sdot"></span>{/if}
 							<span>{t(`chat.send.${m.state}`)}</span>
-							{#if call && (m.state === 'connecting' || m.state === 'waiting')}<CallTimer since={call.since} />{/if}
 						</div>
 					{/key}
 				{/if}
@@ -604,6 +606,8 @@
 		<SubagentCard name={m.name} callId={m.callId} output={m.output} args={m.args} running={m.running} isError={m.isError} rows={agents} onOpen={onOpenAgent} />
 	{:else if m.kind === 'plan'}
 		<PlanCard id={m.id} title={m.title} text={m.text} status={m.status} actionable={m === lastShown} defaultMode={planMode} onAction={onPlan} onOpen={onOpenPlan} />
+	{:else if m.kind === 'system' && m.flow}
+		<FlowMarker flow={m.flow} text={m.text} />
 	{:else if m.kind === 'error'}
 		<ErrorNotice text={m.text} {backend} onAction={onErrorAction} onDismiss={onDismiss ? () => onDismiss(m) : undefined} />
 	{/if}
@@ -690,9 +694,6 @@
 		font-size: var(--fs-xs);
 		cursor: pointer;
 		transition: background var(--t-fast) var(--ease-out);
-	}
-	.cite button + button {
-		border-left: 1px solid var(--border);
 	}
 	.cite.below {
 		transform: translateX(-50%);

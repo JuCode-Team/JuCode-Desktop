@@ -340,16 +340,39 @@ describe('ChatState.handle', () => {
 		expect(c.modelCatalogEffort).toBe('high');
 	});
 
-	it('collects meta notices into statusLog, keeping them out of the bubble stream', () => {
+	it('collects engine notes into statusLog; steps of the course stay in the conversation', () => {
 		const c = new ChatState();
 		c.handle({ type: 'user_message', content: 'hi' });
-		c.handle({ type: 'compaction_end' });
+		c.handle({ type: 'info', message: 'stderr: warn' });
+		c.handle({ type: 'info', message: 'stderr: warn 2' });
 		c.handle({ type: 'compaction_end' });
 		c.handle({ type: 'error', message: 'boom' });
-		// statusLog holds only the system/meta notices…
-		expect(c.statusLog.length).toBe(2);
-		// …while user + error stay as bubbles in messages.
-		expect(c.messages.map((m) => m.kind)).toEqual(['user', 'system', 'system', 'error']);
+		// statusLog holds only the engine's notes…
+		expect(c.statusLog).toEqual(['stderr: warn', 'stderr: warn 2']);
+		// …the compaction marks the conversation, user + error stay as bubbles.
+		expect(c.messages.map((m) => (m.kind === 'system' ? (m.flow?.type ?? 'note') : m.kind))).toEqual(['user', 'note', 'note', 'compacted', 'error']);
+	});
+
+	it('marks a compaction with the context before and after, and a stop once', () => {
+		const c = new ChatState();
+		c.handle({ type: 'context_usage', tokens: 968_000 });
+		c.handle({ type: 'compaction_start' });
+		const marker = () => c.messages.find((m) => m.kind === 'system' && m.flow);
+		expect(marker()).toMatchObject({ flow: { type: 'compacting', before: 968_000 } });
+		c.handle({ type: 'compaction_end' });
+		c.handle({ type: 'context_usage', tokens: 25_900 });
+		expect(marker()).toMatchObject({ flow: { type: 'compacted', before: 968_000, after: 25_900 } });
+		// A later usage leaves it as it was.
+		c.handle({ type: 'context_usage', tokens: 40_000 });
+		expect(marker()).toMatchObject({ flow: { after: 25_900 } });
+
+		// Stopped by the user (any engine), or reported interrupted: marked once.
+		c.handle({ type: 'connecting' });
+		c.stopping();
+		c.handle({ type: 'status', message: 'ready' });
+		c.handle({ type: 'connecting' });
+		c.handle({ type: 'status', message: 'interrupted' });
+		expect(c.messages.filter((m) => m.kind === 'system' && m.flow?.type === 'interrupted')).toHaveLength(1);
 	});
 
 	it('leaves the compacting phase when a mid-turn compaction ends', () => {
@@ -800,7 +823,7 @@ describe('claude session extras', () => {
 		c.handle({ type: 'background_tasks', tasks: [] });
 		c.handle({ type: 'task_done', task_id: 'w1', kind: 'local_workflow', status: 'completed', summary: 'Review done' });
 		expect(c.bgTasks).toEqual([]);
-		expect(c.messages.at(-1)).toEqual({ kind: 'system', text: '多智能体编排已完成：Review done' });
+		expect(c.messages.at(-1)).toEqual({ kind: 'system', flow: { type: 'task' }, text: '多智能体编排已完成：Review done' });
 		c.handle({ type: 'task_output', task_id: 'b1', output: 'ok', truncated: true });
 		expect(c.taskOutputs.b1).toEqual({ output: 'ok', truncated: true, error: '' });
 	});
@@ -826,7 +849,7 @@ describe('claude session extras', () => {
 		setLocale('zh');
 		const c = new ChatState();
 		c.handle({ type: 'model_fallback', from: 'Opus 5.5', to: 'Sonnet 5.5', reason: 'overloaded' });
-		expect(c.messages.at(-1)).toEqual({ kind: 'system', text: '模型已从 Opus 5.5 切换到 Sonnet 5.5（原模型过载）' });
+		expect(c.messages.at(-1)).toEqual({ kind: 'system', flow: { type: 'fallback' }, text: '模型已从 Opus 5.5 切换到 Sonnet 5.5（原模型过载）' });
 		c.handle({ type: 'subagent_lifecycle', path: 'a1', label: 'Scan auth', status: 'running', message: 'Reading' });
 		expect(c.subagents.a1).toMatchObject({ status: 'running', message: 'Reading', label: 'Scan auth' });
 		c.handle({ type: 'tool_start', call_id: 't2', name: 'read', subagent: 'Scan auth' });

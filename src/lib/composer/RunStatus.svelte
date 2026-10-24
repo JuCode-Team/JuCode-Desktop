@@ -1,57 +1,40 @@
 <script lang="ts">
 	import InfoIcon from '@lucide/svelte/icons/info';
 	import { t } from '$lib/i18n';
-	import Indicator from '$lib/Indicator.svelte';
-	import { withShortcut } from '$lib/shortcuts';
-	import { parseToolOutput, toolTarget, toolVerb } from '$lib/toolSummary';
-	import type { ChatState } from '$lib/chat.svelte';
 
-	// The strip on top of the composer while something runs: the turn's stage
-	// (Indicator: what it works on, its time), else the background work left
-	// going; on the right the background tasks' panel and Stop.
+	// The strip on top of the composer while work the session handed off goes
+	// on (background tasks, subagents, a plan's steps), with their panel. The
+	// turn itself shows in the conversation (a running tool's card, the clock
+	// under it), not here.
 	let {
-		chat,
-		tasks = '',
+		tasks,
 		tasksOpen = false,
-		onTasks,
-		onStop
+		onTasks
 	}: {
-		chat: ChatState;
-		/** The background work, as the strip names it ('' none). */
-		tasks?: string;
+		/** The background work, as the strip names it. */
+		tasks: string;
 		tasksOpen?: boolean;
 		onTasks?: () => void;
-		onStop: () => void;
 	} = $props();
-
-	// The conversation's own tool call still running (not a subagent's).
-	const tool = $derived.by(() => {
-		if (chat.phase !== 'tool') return '';
-		for (let i = chat.messages.length - 1; i >= 0; i--) {
-			const m = chat.messages[i]!;
-			if (m.kind === 'tool' && m.running && !m.subagent) return `${toolVerb(m.name)} ${toolTarget(m.name, parseToolOutput(m.output))}`.trim();
-		}
-		return '';
-	});
 </script>
 
-<div class="shelf" role="status">
-	{#if chat.busy}
-		<Indicator phase={chat.phase ?? 'working'} call={chat.call} tokens={chat.compactionTokens} detail={tool} since={chat.turnStartedAt} />
-		{#if tasks}<span class="also">· {tasks}</span>{/if}
-	{:else}
-		<span class="bg"><span class="dot"></span><span class="label">{tasks}</span></span>
-	{/if}
+<!-- The whole strip opens the panel, not only its icon. -->
+<svelte:element
+	this={onTasks ? 'button' : 'div'}
+	class="shelf"
+	class:on={tasksOpen}
+	role={onTasks ? undefined : 'status'}
+	onclick={onTasks}
+	aria-expanded={onTasks ? tasksOpen : undefined}
+	title={onTasks ? t('dock.agents.title') : undefined}
+>
+	<span class="dot"></span>
+	<span class="label" aria-live="polite">{tasks}</span>
 	<span class="grow"></span>
-	{#if tasks && onTasks}
-		<button class="icon" class:on={tasksOpen} onclick={onTasks} aria-expanded={tasksOpen} aria-label={t('dock.agents.title')} title={t('dock.agents.title')}>
-			<InfoIcon size={15} />
-		</button>
+	{#if onTasks}
+		<span class="icon" aria-hidden="true"><InfoIcon size={15} /></span>
 	{/if}
-	{#if chat.busy}
-		<button class="stop" onclick={onStop} title={withShortcut(t('chat.stopTitle'), 'stop')}>{t('chat.stopHint')}</button>
-	{/if}
-</div>
+</svelte:element>
 
 <style>
 	/* Tucked under the composer's top edge, its corners rounded above. */
@@ -61,13 +44,29 @@
 		align-items: center;
 		gap: 8px;
 		min-width: 0;
+		width: calc(100% - 28px);
 		margin: 0 14px -12px;
 		padding: 6px 10px 18px 14px;
 		border: 1px solid var(--border);
 		border-bottom: none;
 		border-radius: var(--r) var(--r) 0 0;
 		background: color-mix(in oklab, var(--panel) 55%, var(--bg));
+		color: inherit;
+		font: inherit;
+		text-align: left;
 		animation: shelf-in var(--t-med) var(--ease-out);
+		transition: background var(--t-fast) var(--ease-out);
+	}
+	button.shelf {
+		cursor: pointer;
+	}
+	button.shelf:hover,
+	button.shelf.on {
+		background: color-mix(in oklab, var(--panel) 80%, var(--bg));
+	}
+	button.shelf:focus-visible {
+		outline: 2px solid var(--brand);
+		outline-offset: -2px;
 	}
 	@keyframes shelf-in {
 		from {
@@ -75,31 +74,7 @@
 			transform: translateY(6px);
 		}
 	}
-	.shelf > :global(.ind) {
-		min-width: 0;
-		flex-shrink: 1;
-	}
-	.also,
-	.label {
-		min-width: 0;
-		overflow: hidden;
-		color: var(--dim);
-		font-size: var(--fs-xs);
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	.bg {
-		display: inline-flex;
-		align-items: center;
-		gap: 8px;
-		min-width: 0;
-		padding: 4px 2px;
-	}
-	.bg .label {
-		color: var(--text);
-		font-weight: 500;
-	}
-	/* Background work: the dot breathes slowly. */
+	/* Work going on elsewhere: the dot breathes slowly. */
 	.dot {
 		width: 7px;
 		height: 7px;
@@ -114,38 +89,34 @@
 			transform: scale(0.75);
 		}
 	}
+	.label {
+		min-width: 0;
+		overflow: hidden;
+		padding: 4px 0;
+		color: var(--text);
+		font-size: var(--fs-xs);
+		font-weight: 500;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
 	.grow {
 		flex: 1;
 	}
-	.icon,
-	.stop {
+	.icon {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
 		flex-shrink: 0;
+		width: 26px;
 		height: 26px;
-		border: none;
 		border-radius: 7px;
-		background: none;
 		color: var(--dim);
-		font: inherit;
-		font-size: var(--fs-xs);
-		cursor: pointer;
 		transition:
 			background var(--t-fast) var(--ease-out),
 			color var(--t-fast) var(--ease-out);
 	}
-	.icon {
-		width: 26px;
-	}
-	.stop {
-		padding: 0 8px;
-		color: var(--text);
-		font-weight: 500;
-	}
-	.icon:hover,
-	.icon.on,
-	.stop:hover {
+	.shelf:hover .icon,
+	.shelf.on .icon {
 		background: var(--surface2);
 		color: var(--text);
 	}

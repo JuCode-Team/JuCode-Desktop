@@ -412,6 +412,11 @@ const chat = {
 		phaseTool: '执行工具',
 		phaseCompacting: '压缩上下文',
 		phaseWorking: '处理中',
+		flow: {
+			compacting: '正在压缩上下文',
+			compacted: '上下文已压缩',
+			interrupted: '已中断'
+		},
 		stopHint: '停止'
 	},
 	en: {
@@ -825,6 +830,11 @@ const chat = {
 		phaseTool: 'Running tool',
 		phaseCompacting: 'Compacting context',
 		phaseWorking: 'Working',
+		flow: {
+			compacting: 'Compacting context',
+			compacted: 'Context compacted',
+			interrupted: 'Interrupted'
+		},
 		stopHint: 'to stop'
 	}
 };

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import CircleDashedIcon from '@lucide/svelte/icons/circle-dashed';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import XIcon from '@lucide/svelte/icons/x';
@@ -97,13 +97,13 @@
 	<div class="card">
 		<button class="head" class:open onclick={onToggle}>
 			<span class="st">
-				{#if running}<LoaderCircleIcon size={14} class="spin" />{:else if anyFailed}<XIcon size={14} class="bad" />{:else}<CheckIcon size={14} class="good" />{/if}
+				{#if running}<CircleDashedIcon size={14} />{:else if anyFailed}<XIcon size={14} class="bad" />{:else}<CheckIcon size={14} class="good" />{/if}
 			</span>
 			{#if work}
-				<span class="work">{work}</span>
+				<span class="work" class:shimmer-text={running}>{work}</span>
 			{:else if latest}
-				<span class="verb">{toolVerb(latest.name)}</span>
-				<span class="target">{toolTarget(latest.name, parseToolOutput(latest.output))}</span>
+				<span class="verb" class:shimmer-text={running}>{toolVerb(latest.name)}</span>
+				<span class="target" class:shimmer-text={running}>{toolTarget(latest.name, parseToolOutput(latest.output))}</span>
 			{/if}
 			<span class="grow"></span>
 			{#if stat}<DiffStat {...stat} live={running} />{/if}
