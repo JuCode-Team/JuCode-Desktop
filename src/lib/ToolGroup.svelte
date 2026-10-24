@@ -88,7 +88,7 @@
 </script>
 
 {#snippet call(x: Tool, framed: boolean)}
-	<ToolCard name={x.name} output={x.output} running={x.running} isError={x.isError} subagent={x.subagent} trace={traceOf?.(x) ?? undefined} startedAt={x.startedAt} endedAt={x.endedAt} {now} {framed} />
+	<ToolCard name={x.name} output={x.output} running={x.running} isError={x.isError} subagent={x.subagent} trace={traceOf?.(x) ?? undefined} startedAt={x.startedAt} endedAt={x.endedAt} {now} {framed} {onFile} />
 {/snippet}
 
 {#if run.length === 1 && latest}

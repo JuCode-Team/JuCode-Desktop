@@ -9,6 +9,7 @@
 	import { diffStat, parseToolOutput, toolTarget, toolVerb, unwrapShell } from '$lib/toolSummary';
 	import DiffStat from '$lib/DiffStat.svelte';
 	import { fmtDur } from '$lib/turnStats';
+	import { fileHref } from '$lib/fileRefs';
 
 	let {
 		name,
@@ -20,7 +21,8 @@
 		startedAt,
 		endedAt,
 		now = 0,
-		framed = false
+		framed = false,
+		onFile
 	}: {
 		name: string;
 		output: string;
@@ -37,6 +39,8 @@
 		now?: number;
 		/** The call is a tool card of its own (a run of one call). */
 		framed?: boolean;
+		/** Opens a file in the app's viewer (a path, with `#L<line>`). */
+		onFile?: (href: string) => void;
 	} = $props();
 
 	const took = $derived(startedAt ? Math.max(0, (endedAt ?? (running ? now : startedAt)) - startedAt) : null);
@@ -121,7 +125,18 @@
 		n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`;
 
 	// Read cards stay a single line — the header names the file; the contents add noise.
+	// The row opens the file it read, where the reading started.
 	const isRead = $derived(name === 'read' && !errorText);
+	const readHref = $derived.by(() => {
+		const path = s(parsed?.path);
+		if (!isRead || !path || !onFile) return '';
+		const line = typeof parsed?.line === 'number' && parsed.line > 0 ? (parsed.line as number) : undefined;
+		return fileHref({ path, line });
+	});
+	function onHead() {
+		if (readHref) onFile?.(readHref);
+		else if (!isRead) collapsed = !collapsed;
+	}
 
 	// Only render inline images for a whitelist of raster MIME types. SVG is
 	// deliberately excluded: it can embed <script> and run in a data: URL.
@@ -157,7 +172,7 @@
 {/snippet}
 
 <div class="tool" class:framed class:err={isError || !!errorText}>
-	<button class="head" class:static={isRead} onclick={() => !isRead && (collapsed = !collapsed)}>
+	<button class="head" class:static={isRead && !readHref} class:opens={!!readHref} onclick={onHead} title={readHref ? t('chat.openReadFile') : undefined}>
 		<span class="st">
 			{#if running}<CircleDashedIcon size={14} />{:else if isError || errorText}<XIcon size={14} class="bad" />{:else}<CheckIcon size={14} class="good" />{/if}
 		</span>
@@ -241,6 +256,11 @@
 	}
 	.head.static {
 		cursor: default;
+	}
+	/* A Read row: what it read is a link to the file. */
+	.head.opens:hover .target {
+		text-decoration: underline;
+		text-underline-offset: 3px;
 	}
 	.chev {
 		display: inline-flex;
