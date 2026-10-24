@@ -122,6 +122,8 @@ export class DaemonSync {
 	#seen = new Set<string>();
 	/** The list being sent, until the daemon answers. */
 	#sending: Promise<void> | null = null;
+	/** The daemon's list being asked for (see `push`). */
+	#loading: Promise<void> | null = null;
 
 	/** `ready`: the desktop's project tree is restored and not being swapped
 	 *  (a list applied before would be merged with an empty tree). */
@@ -179,14 +181,36 @@ export class DaemonSync {
 		const local = this.local();
 		const target = base ? rebase(local, base, remote) : union(remote, local);
 		if (remote.length > 0 && canonical(local) !== canonical(target)) this.#apply(target);
-		this.push();
+		this.#pushQuietly();
+	}
+
+	/** A push no one waits for: a refusal is logged (a new session that needs
+	 *  the list waits on `push` itself and shows it). */
+	#pushQuietly() {
+		this.push().catch((e) => console.warn('workspaces not saved to the daemon:', e));
+	}
+
+	/** Asks the daemon for its list, applied as if it had sent it. A page
+	 *  made anew on a live connection (a dev hot update) never gets the list
+	 *  the daemon sends when a client connects; a refused save is followed by
+	 *  the list it was refused against. */
+	#load(): Promise<void> {
+		this.#loading ??= daemon
+			.request({ op: 'workspaces' })
+			.then((reply) => this.handle(reply))
+			.finally(() => (this.#loading = null));
+		return this.#loading;
 	}
 
 	/** Sends the desktop's list when it differs from the daemon's; resolves
-	 *  once the daemon has answered (the list it has, or another client's
-	 *  newer one). */
+	 *  once the daemon has it (rejects with why it refused it). Without the
+	 *  daemon's list yet, it is asked for first. */
 	push(): Promise<void> {
-		if (this.#rev < 0) return Promise.resolve();
+		if (this.#rev < 0) {
+			// Not ready: the list is held and pushed once the tree is (flush).
+			if (!this.ready()) return Promise.resolve();
+			return this.#load().then(() => this.#sending ?? undefined);
+		}
 		const local = this.local();
 		const key = canonical(local);
 		if (key === this.#remoteKey) return this.#sending ?? Promise.resolve();
@@ -195,9 +219,13 @@ export class DaemonSync {
 			.request({ op: 'workspaces_set', rev: this.#rev, workspaces: local })
 			.then(
 				(reply) => this.handle(reply),
-				() => {
-					// Another client saved first; its broadcast brings the new list.
+				(e) => {
 					this.#remoteKey = '';
+					// Another client saved first: merge its list and send again.
+					// (Not waiting on this very send, still the one in `#sending`.)
+					if (/stale workspaces/.test(String(e)))
+						return this.#load().then(() => (this.#sending !== sending ? (this.#sending ?? undefined) : undefined));
+					throw e;
 				}
 			)
 			.finally(() => {

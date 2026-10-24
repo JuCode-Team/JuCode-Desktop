@@ -708,7 +708,7 @@
 		untrack(() => sync.flush());
 		void sync.local();
 		// Coalesce bursts of edits (a restore, a drag) into one save.
-		const timer = setTimeout(() => sync.push(), 600);
+		const timer = setTimeout(() => sync.push().catch((e) => console.warn('workspaces not saved to the daemon:', e)), 600);
 		return () => clearTimeout(timer);
 	});
 	$effect(() => {

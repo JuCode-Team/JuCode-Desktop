@@ -35,12 +35,58 @@ async function setup() {
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
+/** A project added on the desktop (through the sync's own store). */
+function addProject(sync: InstanceType<typeof DaemonSync>, _ws: unknown, id = 'p2') {
+	(sync as unknown as { store: InstanceType<typeof SessionStore> }).store.projects.push({ id, name: id, path: `/w/${id}`, sessions: [] });
+}
+
 beforeEach(() => {
 	vi.clearAllMocks();
 	desktopOf.mockReturnValue(undefined);
 });
 
 describe('DaemonSync', () => {
+	it('asks for the daemon\'s list when it has none (a page made anew on a live connection)', async () => {
+		const { sync, workspaces } = await setup();
+		const ws = workspaces.workspaces[0];
+		request.mockImplementation((op) =>
+			Promise.resolve(op.op === 'workspaces' ? { type: 'workspaces', rev: 7, workspaces: [{ id: ws.id, name: ws.name, is_default: true, projects: [] }] } : {})
+		);
+		await sync.push();
+		expect(request.mock.calls.map((c) => c[0].op)).toEqual(['workspaces', 'workspaces_set']);
+		const sent = request.mock.calls[1][0] as { rev: number; workspaces: { projects: { id: string }[] }[] };
+		expect(sent.rev).toBe(7);
+		expect(sent.workspaces[0].projects.map((p) => p.id)).toEqual(['p1']);
+		request.mockImplementation(() => Promise.resolve({}));
+	});
+
+	it('merges and sends again when another client saved first, and passes on other refusals', async () => {
+		const { sync, workspaces } = await setup();
+		const ws = workspaces.workspaces[0];
+		const list = (rev: number) => ({ type: 'workspaces', rev, workspaces: [{ id: ws.id, name: ws.name, is_default: true, projects: [] }] });
+		sync.handle(list(1));
+		await flush();
+		request.mockReset();
+		let refused = false;
+		request.mockImplementation((op) => {
+			if (op.op === 'workspaces') return Promise.resolve(list(2));
+			if (!refused) {
+				refused = true;
+				return Promise.reject(new Error('stale workspaces (rev 1, current 2)'));
+			}
+			return Promise.resolve({});
+		});
+		addProject(sync, workspaces);
+		await sync.push();
+		const sets = request.mock.calls.filter((c) => c[0].op === 'workspaces_set').map((c) => c[0].rev);
+		expect(sets).toEqual([1, 2]);
+
+		request.mockImplementation((op) => (op.op === 'workspaces_set' ? Promise.reject(new Error('project paths must be absolute')) : Promise.resolve({})));
+		addProject(sync, workspaces, 'p3');
+		await expect(sync.push()).rejects.toThrow('project paths must be absolute');
+		request.mockImplementation(() => Promise.resolve({}));
+	});
+
 	it('gives an empty daemon the desktop list, then stays quiet while they agree', async () => {
 		const { sync, workspaces } = await setup();
 		sync.handle({ type: 'workspaces', rev: 0, workspaces: [] });
