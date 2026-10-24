@@ -1346,6 +1346,8 @@
 
 	// A conversation the engine has (not a draft's) forks from a reply, here
 	// or in a worktree of its own (ForkDialog).
+	// Nothing said yet: the welcome and the composer sit in the middle.
+	const fresh = $derived(!(chat.booting && chat.engineState !== 'exited') && chat.messages.length === 0 && !chat.busy);
 	const canFork = $derived(caps(chat).fork && !!chat.sessionId && !session.draft);
 	let forkAt = $state<number | null>(null);
 
@@ -1456,7 +1458,7 @@
 {/snippet}
 
 <div class="chatpane">
-	<div class="chatcol" style:--chat-w="{chatW}px" style:--chat-pad="{chatPad}px">
+	<div class="chatcol" class:fresh style:--chat-w="{chatW}px" style:--chat-pad="{chatPad}px">
 		{#if showFind}
 			<FindBar
 				bind:value={findInput}
@@ -1506,7 +1508,7 @@
 					<span class="spawn-spin"><LoaderCircleIcon size={28} class="spin" /></span>
 					<p class="welcome-tip">{t('shell.spawning')}</p>
 				</div>
-			{:else if chat.messages.length === 0 && !chat.busy}
+			{:else if fresh}
 				<div class="welcome">
 					{#if session.draft && !project?.chats}<NewSessionPicker {store} {session} />{:else}<p class="welcome-tip">{t('shell.welcomeTip')}</p>{/if}
 					<div class="welcome-hints">
@@ -1964,6 +1966,15 @@
 		/* Full width, so the scrollbar sits at the pane's edge; the padding
 		   centres the column. */
 		padding-inline: max(var(--chat-pad), calc((100% - var(--chat-w)) / 2));
+	}
+	/* The composer in the middle of the pane, the welcome just above it: the
+	   space left is split between the conversation and a spacer below. */
+	.chatcol.fresh::after {
+		content: '';
+		flex: 1 1 0;
+	}
+	.chatcol.fresh .welcome {
+		margin: auto auto 0;
 	}
 	.welcome {
 		margin: auto;

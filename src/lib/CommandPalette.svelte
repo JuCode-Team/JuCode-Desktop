@@ -106,7 +106,7 @@
 	// curated ones, which already cover the common /model, /tree, /resume… verbs).
 	const actions = $derived.by<Action[]>(() => {
 		const curated: Action[] = [
-			{ id: 'new-session', label: t('shell.cmd.newSession'), keys: shortcutLabel('newSession'), icon: PlusIcon, keywords: t('shell.cmd.newSessionKw'), disabled: !hasProject, run: wrap(onNewSession) },
+			{ id: 'new-session', label: t('shell.cmd.newSession'), keys: shortcutLabel('newSession'), icon: PlusIcon, keywords: t('shell.cmd.newSessionKw'), run: wrap(onNewSession) },
 			{ id: 'new-project', label: t('shell.cmd.newProject'), icon: FolderPlusIcon, keywords: t('shell.cmd.newProjectKw'), run: wrap(onNewProject) },
 			{ id: 'new-task', label: t('shell.cmd.newTask'), hint: t('shell.cmd.newTaskHint'), icon: GitForkIcon, keywords: t('shell.cmd.newTaskKw'), disabled: !canNewTask, run: wrap(onNewTask) },
 			{ id: 'model', label: t('shell.cmd.model'), keys: shortcutLabel('model'), icon: CpuIcon, keywords: t('shell.cmd.modelKw'), cap: 'modelPicker', run: wrap(() => onRun('/model')) },

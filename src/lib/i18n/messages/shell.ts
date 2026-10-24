@@ -682,6 +682,11 @@ const shell = {
 		paletteSearch: '搜索命令或操作…',
 		paletteEmpty: '没有匹配的命令',
 		paletteFoot: '↑↓ 选择 · Enter 执行 · Esc 关闭',
+		projectPick: {
+			label: '新对话的项目',
+			search: '搜索项目…',
+			foot: '↑↓ 选择 · Enter 打开 · Esc 关闭'
+		},
 		cmd: {
 			tuiHint: '在引擎自己的终端界面中继续，退出后回到这里',
 			tuiKw: 'tui cli 终端 命令行 terminal',
@@ -1452,6 +1457,11 @@ const shell = {
 		paletteSearch: 'Search commands or actions…',
 		paletteEmpty: 'No matching commands',
 		paletteFoot: '↑↓ Navigate · Enter Run · Esc Close',
+		projectPick: {
+			label: 'Project for the new conversation',
+			search: 'Search projects…',
+			foot: '↑↓ Navigate · Enter Open · Esc Close'
+		},
 		cmd: {
 			tuiHint: 'Continue in the engine’s own terminal UI; quit it to come back',
 			tuiKw: 'tui cli terminal command line',

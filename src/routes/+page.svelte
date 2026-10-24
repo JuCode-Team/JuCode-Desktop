@@ -91,6 +91,7 @@
 	import Sidebar from '$lib/Sidebar.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import CommandPalette from '$lib/CommandPalette.svelte';
+	import ProjectPickDialog from '$lib/ProjectPickDialog.svelte';
 	import ShortcutsDialog from '$lib/ShortcutsDialog.svelte';
 	import { matches } from '$lib/shortcuts';
 	import DeskPage from '$lib/DeskPage.svelte';
@@ -374,6 +375,16 @@
 	function looseCwd(p: Project) {
 		return p.loose ? (activeCwd ?? store.workspaceProjects[0]?.path) : undefined;
 	}
+	/** A new conversation, from any of its entries (⌘N, the title bar, the
+	 *  palette, the tray, the sidebar): its project is asked first, with the
+	 *  one the entry belongs to (else the active one) picked. */
+	let pickingProject = $state<{ current?: string } | null>(null);
+	function askProject(p?: Project) {
+		pickingProject = { current: p?.id ?? activeProject?.id };
+	}
+	function pickProject(p: Project | null) {
+		newSession(p ?? store.looseGroup());
+	}
 	function pickTuiBackend(backend: BackendId) {
 		const p = tuiPick;
 		tuiPick = null;
@@ -496,8 +507,7 @@
 	/** The title bar's + menu: a new conversation, or a tool beside. */
 	function addFromTitle(key: string) {
 		if (key !== 'chat') return openSide(key);
-		const p = activeProject ?? store.shownProjects[0];
-		if (p) newSession(p);
+		askProject();
 	}
 
 	/** The approval mode a plan runs in once approved: the one before plan mode. */
@@ -1131,7 +1141,7 @@
 		if (matches(e, 'zoomOut')) return act(() => stepZoom(-1));
 		if (matches(e, 'zoomReset')) return act(() => stepZoom(0));
 		if (matches(e, 'find') && chat) return act(() => pane?.toggleFind());
-		if (matches(e, 'newSession')) return act(() => activeProject && newSession(activeProject));
+		if (matches(e, 'newSession')) return act(() => askProject());
 		if (matches(e, 'settings')) return act(() => !showSettings && openSettings());
 		if (matches(e, 'sidebar')) return act(toggleSidebar);
 		if (matches(e, 'audit')) return act(toggleAudit);
@@ -1331,11 +1341,8 @@
 					browser.handleEvent(p);
 				}
 			});
-			// 托盘菜单「新建会话」：在当前项目（或第一个项目）里开新会话。
-			const untray = await listen('tray-new-session', () => {
-				const p = store.activeProject ?? store.shownProjects[0];
-				if (p) newSession(p);
-			});
+			// 托盘菜单「新建会话」：先选项目，再开新会话。
+			const untray = await listen('tray-new-session', () => askProject());
 			// Quitting (tray menu, Cmd+Q): save the workspaces first; the app
 			// waits for this (see begin_quit in src-tauri).
 			const unquit = await listen('app-quit', async () => {
@@ -1525,7 +1532,7 @@
 				openProject={shownProject?.id ?? null}
 				onNewProject={addProject}
 				onNewTask={newTask}
-				onNewSession={(p) => newSession(p)}
+				onNewSession={(p) => askProject(p)}
 				onNewChat={() => store.newChat()}
 				onDeleteSession={removeSession}
 				onCloseProject={removeProject}
@@ -1846,6 +1853,17 @@
 		</Modal>
 	{/if}
 
+	{#if pickingProject}
+		<ProjectPickDialog
+			projects={store.workspaceProjects.filter((p) => !p.stale)}
+			current={pickingProject.current}
+			loose={!!(activeCwd ?? store.workspaceProjects[0]?.path)}
+			onPick={pickProject}
+			onOpenFolder={addProject}
+			onClose={() => (pickingProject = null)}
+		/>
+	{/if}
+
 	{#if showPalette}
 		<CommandPalette
 			{chat}
@@ -1854,7 +1872,7 @@
 			panelOptions={panelKeys.map((k) => ({ key: k, label: t(`dock.tabs.${k}`) }))}
 			onClose={() => (showPalette = false)}
 			onRun={runCommand}
-			onNewSession={() => activeProject && newSession(activeProject)}
+			onNewSession={() => askProject()}
 			onNewProject={addProject}
 			onNewTask={() => newTask(activeProject)}
 			onSettings={() => openSettings()}
