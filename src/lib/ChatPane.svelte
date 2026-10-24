@@ -2075,4 +2075,11 @@
 		padding: 8px 10px;
 		word-break: break-all;
 	}
+	/* macOS: the plan revision's cancel first, as the window's close button. */
+	:global(:root[data-os='macos']) .rv-x {
+		order: -1;
+	}
+	:global(:root[data-os='macos']) .revising {
+		padding: 5px 12px 5px 6px;
+	}
 </style>

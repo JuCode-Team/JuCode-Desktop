@@ -36,7 +36,7 @@
 	<span class="findcount">{value.trim() ? (hitCount ? `${Math.min(activeIndex + 1, hitCount)}/${hitCount}` : t('shell.findNoResult')) : ''}</span>
 	<IconButton size="sm" onclick={onPrev} label={t('shell.findPrev')} disabled={!hitCount}><ChevronUpIcon size={16} /></IconButton>
 	<IconButton size="sm" onclick={onNext} label={t('shell.findNext')} disabled={!hitCount}><ChevronDownIcon size={16} /></IconButton>
-	<IconButton size="sm" onclick={onClose} label={t('common.close')}><XIcon size={16} /></IconButton>
+	<span class="close"><IconButton size="sm" onclick={onClose} label={t('common.close')}><XIcon size={16} /></IconButton></span>
 </div>
 
 <style>
@@ -69,5 +69,12 @@
 		flex-shrink: 0;
 		min-width: 36px;
 		text-align: right;
+	}
+	.close {
+		display: inline-flex;
+	}
+	/* macOS: close first, as the window's own close button. */
+	:global(:root[data-os='macos']) .close {
+		order: -1;
 	}
 </style>

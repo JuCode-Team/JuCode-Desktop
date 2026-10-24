@@ -135,4 +135,11 @@
 		color: var(--text);
 		background: color-mix(in oklab, var(--text) 8%, transparent);
 	}
+	/* macOS: close first, as the window's own close button. */
+	:global(:root[data-os='macos']) .notice {
+		padding: 10px 14px 10px 8px;
+	}
+	:global(:root[data-os='macos']) .close {
+		order: -1;
+	}
 </style>

@@ -148,4 +148,11 @@
 			transition: none;
 		}
 	}
+	/* macOS: close first, as the window's own close button. */
+	:global(:root[data-os='macos']) .toast {
+		padding: 8px 14px 8px 10px;
+	}
+	:global(:root[data-os='macos']) .close {
+		order: -1;
+	}
 </style>

@@ -101,4 +101,8 @@
 		gap: 6px;
 		color: var(--dim2);
 	}
+	/* macOS: close first, as the window's own close button. */
+	:global(:root[data-os='macos']) .x {
+		order: -1;
+	}
 </style>

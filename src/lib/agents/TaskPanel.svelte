@@ -186,7 +186,7 @@
 			<span class="title">{t('dock.agents.title')}</span>
 		{/if}
 		<span class="grow"></span>
-		{#if onClose}<button class="icon" onclick={onClose} title={t('dock.agents.close')} aria-label={t('dock.agents.close')}><XIcon size={14} /></button>{/if}
+		{#if onClose}<button class="icon close" onclick={onClose} title={t('dock.agents.close')} aria-label={t('dock.agents.close')}><XIcon size={14} /></button>{/if}
 	</div>
 
 	{#if chat.agentFocus}
@@ -613,5 +613,12 @@
 	.empty span {
 		font-size: var(--fs-xs);
 		line-height: 1.6;
+	}
+	/* macOS: close first, as the window's own close button. */
+	:global(:root[data-os='macos']) .top {
+		padding: 0 16px 0 10px;
+	}
+	:global(:root[data-os='macos']) .close {
+		order: -1;
 	}
 </style>

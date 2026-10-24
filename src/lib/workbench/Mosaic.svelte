@@ -755,4 +755,11 @@
 	.mo-empty-btn:hover :global(svg) {
 		color: var(--text);
 	}
+	/* macOS: a tab's close button before its name, as in Safari. */
+	:global(:root[data-os='macos']) .ltab {
+		padding: 0 12px 0 6px;
+	}
+	:global(:root[data-os='macos']) .lclose {
+		order: -1;
+	}
 </style>

@@ -121,4 +121,9 @@
 		left: 16px;
 		right: 16px;
 	}
+	/* macOS: close at the left, as the window's own close button. */
+	:global(:root[data-os='macos']) .close {
+		right: auto;
+		left: 14px;
+	}
 </style>

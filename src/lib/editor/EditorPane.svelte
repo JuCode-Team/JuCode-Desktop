@@ -733,4 +733,11 @@
 	.eempty span {
 		font-size: var(--fs-xs);
 	}
+	/* macOS: a tab's close button before its name, as in Safari. */
+	:global(:root[data-os='macos']) .etab {
+		padding: 4px 10px 4px 5px;
+	}
+	:global(:root[data-os='macos']) .etab > :global(.ib) {
+		order: -1;
+	}
 </style>

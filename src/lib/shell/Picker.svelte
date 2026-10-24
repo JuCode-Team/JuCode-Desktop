@@ -58,7 +58,7 @@
 	{#if anchored}
 		<div class="modal-head">
 			<span>{title}</span>
-			<IconButton onclick={onClose} label="close"><XIcon size={16} /></IconButton>
+			<span class="close"><IconButton onclick={onClose} label="close"><XIcon size={16} /></IconButton></span>
 		</div>
 	{/if}
 	{#if chat.picker?.kind === 'model' && activeModel}
@@ -263,5 +263,17 @@
 		font-size: var(--fs-2xs);
 		font-family: var(--font-mono);
 		text-align: center;
+	}
+	.close {
+		display: inline-flex;
+	}
+	/* macOS: close first, the title after it. */
+	:global(:root[data-os='macos']) .modal-head {
+		justify-content: flex-start;
+		gap: 8px;
+		padding-left: 10px;
+	}
+	:global(:root[data-os='macos']) .close {
+		order: -1;
 	}
 </style>

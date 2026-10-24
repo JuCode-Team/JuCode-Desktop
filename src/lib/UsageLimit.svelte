@@ -157,4 +157,8 @@
 	.x:hover {
 		color: var(--text);
 	}
+	/* macOS: close first, as the window's own close button. */
+	:global(:root[data-os='macos']) .x {
+		order: -1;
+	}
 </style>

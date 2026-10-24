@@ -203,7 +203,7 @@
 						</div>
 					{/if}
 				</div>
-				<IconButton onclick={stopPairing} label={t('common.close')}><XIcon size={14} /></IconButton>
+				<span class="close"><IconButton onclick={stopPairing} label={t('common.close')}><XIcon size={14} /></IconButton></span>
 			</div>
 		</SettingsRow>
 	{/if}
@@ -343,5 +343,13 @@
 		color: var(--dim2);
 		font-size: var(--fs-xs);
 		font-family: var(--font-mono);
+	}
+	.close {
+		display: inline-flex;
+		align-self: flex-start;
+	}
+	/* macOS: close first, as the window's own close button. */
+	:global(:root[data-os='macos']) .close {
+		order: -1;
 	}
 </style>

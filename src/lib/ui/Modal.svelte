@@ -179,4 +179,11 @@
 		gap: 8px;
 		padding: 0 22px 20px;
 	}
+	/* macOS: close first, as the window's own close button. */
+	:global(:root[data-os='macos']) .head {
+		padding: 16px 22px 4px 16px;
+	}
+	:global(:root[data-os='macos']) .x {
+		order: -1;
+	}
 </style>

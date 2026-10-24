@@ -176,4 +176,13 @@
 	.pitem + .pitem {
 		border-top: 1px solid var(--hairline);
 	}
+	/* macOS: close first, the title after it. */
+	:global(:root[data-os='macos']) .phead {
+		justify-content: flex-start;
+		gap: 6px;
+		padding: 8px 12px 8px 8px;
+	}
+	:global(:root[data-os='macos']) .pclose {
+		order: -1;
+	}
 </style>

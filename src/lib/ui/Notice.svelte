@@ -91,4 +91,8 @@
 	.x:hover {
 		opacity: 1;
 	}
+	/* macOS: close first, as the window's own close button. */
+	:global(:root[data-os='macos']) .x {
+		order: -1;
+	}
 </style>

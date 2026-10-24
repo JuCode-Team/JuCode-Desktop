@@ -91,7 +91,7 @@
 						{#if actual}<Minimize2Icon size={16} />{:else}<Maximize2Icon size={16} />{/if}
 					</button>
 				{/if}
-				<button class="ctl" onclick={() => imageViewer.close()} aria-label={t('common.close')} title={t('common.close')}><XIcon size={16} /></button>
+				<button class="ctl close" onclick={() => imageViewer.close()} aria-label={t('common.close')} title={t('common.close')}><XIcon size={16} /></button>
 			</header>
 			<!-- A click beside the image closes; on it, switches the size. -->
 			<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
@@ -242,5 +242,13 @@
 	}
 	.next {
 		right: 14px;
+	}
+	/* macOS: close first, as the window's own close button. */
+	:global(:root[data-os='macos']) header {
+		padding-left: 12px;
+		padding-right: 20px;
+	}
+	:global(:root[data-os='macos']) .close {
+		order: -1;
 	}
 </style>

@@ -83,7 +83,7 @@
 				<h2>{t('settings.marketplace.title')}</h2>
 				<p>{t('settings.marketplace.subtitle')}</p>
 			</div>
-			<IconButton onclick={onClose} label="close"><XIcon size={16} /></IconButton>
+			<span class="close"><IconButton onclick={onClose} label="close"><XIcon size={16} /></IconButton></span>
 		</div>
 
 		<div class="toolbar">
@@ -336,5 +336,17 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+	.close {
+		display: inline-flex;
+	}
+	/* macOS: close first, the title after it. */
+	:global(:root[data-os='macos']) .head {
+		justify-content: flex-start;
+		gap: 10px;
+		padding-left: 12px;
+	}
+	:global(:root[data-os='macos']) .close {
+		order: -1;
 	}
 </style>

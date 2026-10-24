@@ -148,4 +148,8 @@
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
 	}
+	/* macOS: close first, as the window's own close button. */
+	:global(:root[data-os='macos']) .x {
+		order: -1;
+	}
 </style>
