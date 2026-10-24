@@ -14,7 +14,7 @@
 	import ScheduleDialog from '$lib/ScheduleDialog.svelte';
 	import ScheduleUsage from '$lib/ScheduleUsage.svelte';
 	import { daemonState } from '$lib/daemonState.svelte';
-	import { engineLabel, summary, type Schedule } from '$lib/schedules';
+	import { engineLabel, MAX_FAILURES, summary, type Schedule } from '$lib/schedules';
 	import { acpPresets, type AcpPreset } from '$lib/protocol';
 	import { onMount } from 'svelte';
 	import { t } from '$lib/i18n';
@@ -97,13 +97,14 @@
 				{s.name}
 				{#if last?.status === 'running'}<span class="working">{t('shell.schedule.statusRunning')}</span>
 				{:else if last?.status === 'waiting'}<span class="needs">{t('shell.schedule.statusWaiting')}</span>
-				{:else if last?.status === 'failed'}<span class="failed">{t('shell.schedule.statusFailed')}</span>{/if}
+				{:else if last?.status === 'background'}<span class="working">{t('shell.schedule.statusBackground')}</span>
+				{:else if last?.status === 'failed'}<span class="failed">{s.enabled && (s.failures ?? 0) > 1 ? t('shell.schedule.failuresInRow', { n: s.failures! }) : t('shell.schedule.statusFailed')}</span>{/if}
 			</div>
 			<div class="meta">
 				<span>{summary(s)}</span>
 				<span>
 					·
-					{#if !s.enabled}{t('shell.schedule.off')}
+					{#if !s.enabled}{(s.failures ?? 0) >= MAX_FAILURES ? t('shell.schedule.stoppedAfter', { n: s.failures! }) : t('shell.schedule.off')}
 					{:else if s.next_run_at}{t('shell.schedule.next', { time: when(s.next_run_at) })}
 					{:else}{t('shell.schedule.done')}{/if}
 				</span>

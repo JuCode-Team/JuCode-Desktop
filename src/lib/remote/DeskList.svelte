@@ -11,7 +11,7 @@
 	import DeskClosed from '$lib/DeskClosed.svelte';
 	import NotifyToggle from './NotifyToggle.svelte';
 	import { useDaemonState } from '$lib/daemonScope';
-	import { summary, type Schedule } from '$lib/schedules';
+	import { MAX_FAILURES, summary, type Schedule } from '$lib/schedules';
 	import { t } from '$lib/i18n';
 	import { when } from '$lib/time';
 
@@ -47,6 +47,8 @@
 		const last = s.last_run;
 		if (last?.status === 'running') return t('shell.schedule.statusRunning');
 		if (last?.status === 'waiting') return t('shell.schedule.statusWaiting');
+		if (last?.status === 'background') return t('shell.schedule.statusBackground');
+		if (!s.enabled && (s.failures ?? 0) >= MAX_FAILURES) return t('shell.schedule.stoppedAfter', { n: s.failures! });
 		if (last?.status === 'failed') return t('shell.schedule.statusFailed');
 		if (!s.enabled) return t('shell.schedule.off');
 		return s.next_run_at ? t('shell.schedule.next', { time: when(s.next_run_at) }) : t('shell.schedule.done');

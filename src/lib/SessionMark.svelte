@@ -6,6 +6,7 @@
 	import HandIcon from '@lucide/svelte/icons/hand';
 	import MessageCircleMoreIcon from '@lucide/svelte/icons/message-circle-more';
 	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
+	import LayersIcon from '@lucide/svelte/icons/layers';
 	import { t } from '$lib/i18n';
 	import type { SessionStatus } from '$lib/sessionStatus';
 	import { describeError, stripEngineHint } from '$lib/errorInfo';
@@ -30,6 +31,10 @@
 {:else if status?.kind === 'running'}
 	<span class="mark running" title={t('shell.status.running')} aria-label={t('shell.status.running')}>
 		<LoaderCircleIcon {size} class="spin" />
+	</span>
+{:else if status?.kind === 'background'}
+	<span class="mark running" title={t('shell.status.background')} aria-label={t('shell.status.background')}>
+		<LayersIcon {size} />
 	</span>
 {:else if status?.kind === 'unread'}
 	<span class="mark unread" title={t('shell.unread')} aria-label={t('shell.unread')}></span>

@@ -1,9 +1,10 @@
 <script lang="ts">
-	// What a scheduled task's runs cost, one row per run session.
+	// A scheduled task's runs, one row per run session: how each went and
+	// what it cost.
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
 	import { daemonState } from '$lib/daemonState.svelte';
-	import { usageCost, type ScheduleUsage, type ScheduleUsageTotals } from '$lib/schedules';
+	import { runsOf, usageCost, type ScheduleRun, type ScheduleUsage, type ScheduleUsageTotals } from '$lib/schedules';
 	import { fmtTokens } from '$lib/usageStats';
 	import { t } from '$lib/i18n';
 
@@ -15,8 +16,18 @@
 	let loading = $state(false);
 	let error = $state('');
 	let refresh = $state(0);
+	const task = $derived(daemonState.schedules.find((s) => s.id === schedule));
 	/** Read again when a run starts or ends. */
-	const run = $derived(daemonState.schedules.find((s) => s.id === schedule)?.last_run);
+	const run = $derived(task?.last_run);
+	/** How each run session went, as far as the task still knows. */
+	const runs = $derived(new Map(runsOf(task ?? { last_run: null }).filter((r) => r.session).map((r) => [r.session!, r])));
+	const STATUS: Record<ScheduleRun['status'], string> = {
+		running: 'shell.schedule.statusRunning',
+		waiting: 'shell.schedule.statusWaiting',
+		background: 'shell.schedule.statusBackground',
+		done: 'shell.schedule.runDone',
+		failed: 'shell.schedule.runFailed'
+	};
 
 	$effect(() => {
 		void refresh;
@@ -53,12 +64,14 @@
 	{#if data.billing_error}<Notice tone="warn">{t('shell.schedule.billingFailed', { error: data.billing_error })}</Notice>{/if}
 	<div class="table-wrap">
 		<table>
-			<thead><tr><th>{t('shell.schedule.runSession')}</th><th>{t('shell.schedule.inputTokens')}</th><th>{t('shell.schedule.outputTokens')}</th><th>{t('shell.schedule.cost')}</th></tr></thead>
+			<thead><tr><th>{t('shell.schedule.runSession')}</th><th>{t('shell.schedule.runStatus')}</th><th>{t('shell.schedule.inputTokens')}</th><th>{t('shell.schedule.outputTokens')}</th><th>{t('shell.schedule.cost')}</th></tr></thead>
 			<tbody>
-				<tr class="total"><th>{t('shell.schedule.usageTotal')}</th><td>{fmtTokens(data.totals.input_tokens)}</td><td>{fmtTokens(data.totals.output_tokens)}</td><td>{@render costs(data.totals)}</td></tr>
+				<tr class="total"><th>{t('shell.schedule.usageTotal')}</th><td></td><td>{fmtTokens(data.totals.input_tokens)}</td><td>{fmtTokens(data.totals.output_tokens)}</td><td>{@render costs(data.totals)}</td></tr>
 				{#each sessions as row (row.session)}
+					{@const r = runs.get(row.session)}
 					<tr>
 						<td><button class="link" onclick={() => onOpenSession(row.session)}>{when(row.started_at)}</button></td>
+						<td class:failed={r?.status === 'failed'} title={r?.error ?? ''}>{r ? t(STATUS[r.status]) : row.parent ? t('shell.schedule.childSession') : ''}</td>
 						{#if row.turns}
 							<td title={t('shell.schedule.cacheTokens', { read: row.cached_input_tokens, write: row.cache_write_tokens })}>{fmtTokens(row.input_tokens)}</td>
 							<td>{fmtTokens(row.output_tokens)}</td><td>{@render costs(row)}</td>
@@ -78,6 +91,7 @@
 	th, td { padding: 7px 8px; border-bottom: 1px solid var(--hairline); vertical-align: top; }
 	th { font-weight: 500; }
 	td { font-variant-numeric: tabular-nums; }
+	td.failed { color: var(--err); }
 	.total { color: var(--text); }
 	small { display: block; font-size: var(--fs-2xs); color: var(--dim2); }
 	.link { padding: 0; border: none; background: none; font: inherit; color: var(--accent-bright); cursor: pointer; text-align: left; }

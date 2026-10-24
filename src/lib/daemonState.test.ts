@@ -57,7 +57,7 @@ describe('DaemonState', () => {
 		const state = new DaemonState();
 		const saved = await state.saveSchedule({
 			name: 'n', prompt: 'p', cwd: '/w', engine: 'claude', mode: 'auto', options: { jucode_gateway: true },
-			enabled: true, repeat: 'daily', time: '09:00', days: [], date: ''
+			enabled: true, repeat: 'daily', time: '09:00', days: [], date: '', worktree: false, budget: ''
 		});
 		expect(daemon.request).toHaveBeenLastCalledWith({
 			op: 'schedule_save',

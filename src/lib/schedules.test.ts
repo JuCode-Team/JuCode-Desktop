@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { setLocale } from './i18n';
-import { engineLabel, summary, toWire, upsert, validate, usageCost, type Schedule, type ScheduleDraft, type ScheduleUsageTotals } from './schedules';
+import { engineLabel, runsOf, summary, toWire, upsert, validate, usageCost, type Schedule, type ScheduleDraft, type ScheduleUsageTotals } from './schedules';
 
 const draft = (over: Partial<ScheduleDraft> = {}): ScheduleDraft => ({
 	name: 'Check',
@@ -14,6 +14,8 @@ const draft = (over: Partial<ScheduleDraft> = {}): ScheduleDraft => ({
 	time: '11:00',
 	days: [],
 	date: '',
+	worktree: false,
+	budget: '',
 	...over
 });
 
@@ -75,10 +77,28 @@ describe('schedule wire shape', () => {
 			options: {},
 			enabled: true,
 			repeat: 'daily',
-			time: '11:00'
+			time: '11:00',
+			worktree: false,
+			budget: null
 		});
 		expect(toWire(draft({ id: 'sch-1', repeat: 'weekly', days: [5, 1] }))).toMatchObject({ id: 'sch-1', days: [1, 5] });
 		expect(toWire(draft({ repeat: 'once', date: '2026-10-02' })).date).toBe('2026-10-02');
+		expect(toWire(draft({ budget: ' 2.5 ', worktree: true }))).toMatchObject({ budget: 2.5, worktree: true });
+	});
+
+	it('takes a budget above zero or none', () => {
+		setLocale('zh');
+		expect(validate(draft({ budget: '0' }))).toBe('花费上限要大于 0');
+		expect(validate(draft({ budget: 'abc' }))).toBe('花费上限要大于 0');
+		expect(validate(draft({ budget: '1.5' }))).toBeNull();
+		expect(validate(draft({ budget: '' }))).toBeNull();
+	});
+
+	it('lists the latest run first, then the earlier ones', () => {
+		const run = (session: string) => ({ at: 0, session, status: 'done' as const, error: null });
+		expect(runsOf({ last_run: run('b'), history: [run('a')] }).map((r) => r.session)).toEqual(['b', 'a']);
+		// An older daemon sends no history.
+		expect(runsOf({ last_run: null }).length).toBe(0);
 	});
 
 	it('runs a built-in ACP agent by its id alone, and lists it by name', () => {

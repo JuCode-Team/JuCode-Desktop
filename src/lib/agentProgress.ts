@@ -290,8 +290,9 @@ const runningCount = (rows: Pick<AgentRow, 'state'>[], commands: number) =>
 	rows.filter((r) => r.state === 'running' || r.state === 'queued').length + commands;
 
 /** How many background tasks run, as the tasks entry counts them: subagents
- *  and Workflows running or queued, and background commands. They go on
- *  after the turn ends, and the session counts as working while they do. */
+ *  and Workflows running or queued, and background commands. Those still
+ *  going after the turn ends are the session's background state, not its
+ *  work (sessionStatus). */
 export function runningTasks(c: Pick<RowInput, 'subagents'> & { agentRuns: RowInput['runs']; bgTasks: { id: string; kind: string }[] }): number {
 	return runningCount(agentRows({ runs: c.agentRuns, subagents: c.subagents }), backgroundCommands(c.bgTasks, c.subagents).length);
 }
@@ -307,8 +308,9 @@ export function shortElapsed(ms: number): string {
 
 /** Work the turn handed off is still going: a subagent running or queued,
  *  or a background agent or workflow. Its result comes back to the
- *  conversation, which then goes on, so the turn is not over yet (its work
- *  stays unfolded). Background commands (a dev server) do not count. */
+ *  conversation, which then goes on, so the turn stays unfolded (it does not
+ *  make the session working: sessionStatus). Background commands (a dev
+ *  server) do not count. */
 export function handedOffWork(rows: Pick<AgentRow, 'state'>[], bgTasks: { kind: string }[]): boolean {
 	return rows.some((r) => r.state === 'running' || r.state === 'queued') || bgTasks.some((x) => /^local_(agent|workflow)/.test(x.kind));
 }

@@ -207,7 +207,7 @@ describe('background tasks entry', () => {
 });
 
 describe('handed-off work', () => {
-	it('keeps the turn open while a subagent or background agent runs, not for a background command', () => {
+	it('keeps the turn unfolded while a subagent or background agent runs, not for a background command', () => {
 		expect(handedOffWork([{ state: 'running' }], [])).toBe(true);
 		expect(handedOffWork([{ state: 'queued' }], [])).toBe(true);
 		expect(handedOffWork([{ state: 'done' }, { state: 'failed' }], [])).toBe(false);

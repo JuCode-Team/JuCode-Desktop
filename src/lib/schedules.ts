@@ -17,7 +17,8 @@ export interface ScheduleUsageTotals extends UsageTokens {
 
 export interface ScheduleUsage {
 	totals: ScheduleUsageTotals;
-	sessions: (ScheduleUsageTotals & { session: string; started_at: number | null })[];
+	/** A session a run started (`start_session`) names it as `parent`. */
+	sessions: (ScheduleUsageTotals & { session: string; started_at: number | null; parent?: string })[];
 	billing_error?: string;
 }
 
@@ -36,12 +37,13 @@ export type ScheduleEngine = 'jucode' | 'claude' | 'codex' | 'acp';
 /** Permission modes, as the daemon names them for every engine. */
 export type ScheduleMode = 'ask' | 'edits' | 'auto' | 'all';
 
-/** The latest run: `waiting` for an approval, `failed` with `error`. */
+/** A run: `waiting` for an approval, `failed` with `error`. */
 export interface ScheduleRun {
 	/** ms */
 	at: number;
 	session: string | null;
-	status: 'running' | 'waiting' | 'done' | 'failed';
+	/** `background`: its turn ended; background work it left going runs. */
+	status: 'running' | 'waiting' | 'background' | 'done' | 'failed';
 	error: string | null;
 }
 
@@ -71,7 +73,20 @@ export interface Schedule {
 	skipped: number;
 	/** The agent proposal it was created from (`propose_schedule`). */
 	origin?: string | null;
+	/** Runs start in a git worktree of their own. Absent from an older
+	 *  daemon, which has none of these four. */
+	worktree?: boolean;
+	/** What one run may cost: gateway points through the JuCode gateway,
+	 *  estimated USD otherwise; null: no limit. */
+	budget?: number | null;
+	/** Runs failed in a row; at MAX_FAILURES the daemon switches it off. */
+	failures?: number;
+	/** The runs before `last_run`, newest first. */
+	history?: ScheduleRun[];
 }
+
+/** Failures in a row after which the daemon switches a task off. */
+export const MAX_FAILURES = 3;
 
 /** What `schedule_save` takes: no id creates one. */
 export type ScheduleDraft = Pick<Schedule, 'name' | 'prompt' | 'engine' | 'mode' | 'options' | 'enabled' | 'repeat' | 'time'> & {
@@ -81,6 +96,9 @@ export type ScheduleDraft = Pick<Schedule, 'name' | 'prompt' | 'engine' | 'mode'
 	cwd: string;
 	days: number[];
 	date: string;
+	worktree: boolean;
+	/** The budget as typed: '' for none. */
+	budget: string;
 };
 
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -89,10 +107,11 @@ const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 /** The draft as `schedule_save` expects it: `days` and `date` only where
  *  they apply. */
 export function toWire(d: ScheduleDraft): Record<string, unknown> {
-	const { days, date, id, ...rest } = d;
+	const { days, date, id, budget, ...rest } = d;
 	return {
 		...(id ? { id } : {}),
 		...rest,
+		budget: budget.trim() ? Number(budget) : null,
 		name: d.name.trim(),
 		prompt: d.prompt.trim(),
 		...(d.repeat === 'weekly' ? { days: [...days].sort((a, b) => a - b) } : {}),
@@ -113,7 +132,9 @@ export function toDraft(s: Schedule): ScheduleDraft {
 		repeat: s.repeat,
 		time: s.time,
 		days: s.days ?? [],
-		date: s.date ?? ''
+		date: s.date ?? '',
+		worktree: s.worktree ?? false,
+		budget: s.budget ? String(s.budget) : ''
 	};
 }
 
@@ -124,6 +145,7 @@ export function validate(d: ScheduleDraft, now = new Date()): string | null {
 	if (!d.prompt.trim()) return t('shell.schedule.errPrompt');
 	if (d.enabled && !d.cwd) return t('shell.schedule.errCwd');
 	if (!TIME.test(d.time)) return t('shell.schedule.errTime');
+	if (d.budget.trim() && !(Number(d.budget) > 0)) return t('shell.schedule.errBudget');
 	if (d.repeat === 'weekly' && (d.days.length === 0 || d.days.some((x) => !Number.isInteger(x) || x < 0 || x > 6)))
 		return t('shell.schedule.errDays');
 	if (d.repeat === 'once') {
@@ -181,6 +203,11 @@ export function engineLabel(s: Pick<Schedule, 'engine' | 'options'>, presets: { 
 	if (s.engine !== 'acp') return BACKEND_LABELS[s.engine];
 	const agent = String(s.options?.agent ?? '');
 	return presets.find((p) => p.id === agent)?.name ?? (agent || BACKEND_LABELS.acp);
+}
+
+/** Its runs, newest first: the latest, then the earlier ones. */
+export function runsOf(s: Pick<Schedule, 'last_run' | 'history'>): ScheduleRun[] {
+	return [...(s.last_run ? [s.last_run] : []), ...(s.history ?? [])];
 }
 
 /** Insert or replace by id. */

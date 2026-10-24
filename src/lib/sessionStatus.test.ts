@@ -20,16 +20,19 @@ describe('sessionStatus', () => {
 		expect(sessionStatus(c)).toEqual({ kind: 'input', ask: 'answer' });
 	});
 
-	it('stays running while background tasks the turn left run', () => {
+	it('has background tasks the turn left running apart from working', () => {
 		const c = new ChatState();
 		c.engineState = 'ready';
 		c.unseen = true;
 		c.handle({ type: 'background_tasks', tasks: [{ id: 'b1', kind: 'local_bash', description: 'npm run dev' }] });
+		expect(sessionStatus(c)?.kind).toBe('background');
+		c.engineState = 'streaming';
 		expect(sessionStatus(c)?.kind).toBe('running');
+		c.engineState = 'ready';
 		c.handle({ type: 'background_tasks', tasks: [] });
 		expect(sessionStatus(c)?.kind).toBe('unread');
 		c.handle({ type: 'agent_runs', workflows: [], agents: [{ id: 'a1', state: 'running' }] });
-		expect(sessionStatus(c)?.kind).toBe('running');
+		expect(sessionStatus(c)?.kind).toBe('background');
 		c.handle({ type: 'agent_runs', workflows: [], agents: [{ id: 'a1', state: 'completed' }] });
 		expect(sessionStatus(c)?.kind).toBe('unread');
 	});

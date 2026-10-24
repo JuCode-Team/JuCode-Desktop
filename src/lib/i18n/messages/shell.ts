@@ -17,7 +17,8 @@ const shell = {
 			schedule: {
 				failed: '定时任务失败：{name}',
 				waiting: '定时任务等待审批：{name}',
-				skipped: '定时任务跳过一次：{name}'
+				skipped: '定时任务跳过一次：{name}',
+				stopped: '定时任务已停用：{name}'
 			}
 		},
 
@@ -190,7 +191,7 @@ const shell = {
 		showLess: '收起',
 		awaitShort: '待确认',
 		unread: '有新回复',
-		status: { approve: '待确认', answer: '待回答', running: '运行中', failed: '运行失败' },
+		status: { approve: '待确认', answer: '待回答', running: '运行中', background: '后台任务运行中', failed: '运行失败' },
 		updateShort: '可更新',
 		newChat: '新对话',
 
@@ -585,7 +586,7 @@ const shell = {
 		},
 		schedule: {
 			title: '定时任务',
-			boardHint: '按时把一段提示词发给新会话，在指定目录、后端和权限下运行。每次运行都是一个普通会话，失败或等待审批时会通知你。',
+			boardHint: '按时把一段提示词发给新会话，在指定目录、后端和权限下运行。每次运行都是一个普通会话，失败或等待审批时会通知你。运行期间电脑不会自动休眠，合上盖子仍会休眠。',
 			cwd: '运行目录',
 			noCwd: '未选择目录',
 			engine: '后端',
@@ -594,7 +595,21 @@ const shell = {
 			askWaits: '无人看着时，Claude Code、Codex 和 ACP 智能体会一直等你审批，之后的运行都会跳过。',
 			statusRunning: '运行中',
 			statusWaiting: '等待审批',
+			statusBackground: '后台任务运行中',
+			childSession: '子会话',
 			statusFailed: '上次失败',
+			stoppedAfter: '连续失败 {n} 次，已自动停用',
+			failuresInRow: '已连续失败 {n} 次',
+			worktree: '在独立 worktree 中运行',
+			worktreeHint: '每次运行新建一个 git worktree 和分支，不改动运行目录里的文件。没有留下改动的运行，归档时会自动清理。',
+			budget: '单次花费上限',
+			budgetPlaceholder: '不限',
+			budgetHint: '走 JuCode 网关按积分计，其他按估算美元计。超过后停止这次运行。网关费用同步有延迟，可能略超。',
+			errBudget: '花费上限要大于 0',
+			optionsOutdated: '已保存，但这台电脑上的 JuCode 版本较旧，不支持独立 worktree 和花费上限，运行时不会生效。升级后再保存一次。',
+			runStatus: '状态',
+			runDone: '完成',
+			runFailed: '失败',
 			outdated: '这台电脑上的 JuCode 版本较旧，升级后才能在这里查看定时任务。',
 			errCwd: '请选择运行目录',
 			add: '添加定时任务',
@@ -623,7 +638,7 @@ const shell = {
 			delete: '删除',
 			deleteTitle: '删除定时任务「{name}」？',
 			deleteMessage: '已经运行过的会话会保留。',
-			usage: '花费记录',
+			usage: '运行记录',
 			usageHint: '按运行会话统计（含后续追问）；复用同一会话时合并。实际费用已含分组倍率，估算美元费用单独列出。',
 			billedCost: '实际 {cost} 积分',
 			estimatedCost: '估算 ${cost}',
@@ -820,7 +835,8 @@ const shell = {
 			schedule: {
 				failed: 'Scheduled task failed: {name}',
 				waiting: 'Scheduled task waits for approval: {name}',
-				skipped: 'Scheduled task skipped a run: {name}'
+				skipped: 'Scheduled task skipped a run: {name}',
+				stopped: 'Scheduled task switched off: {name}'
 			}
 		},
 
@@ -993,7 +1009,7 @@ const shell = {
 		showLess: 'Show less',
 		awaitShort: 'Needs you',
 		unread: 'New reply',
-		status: { approve: 'Approve', answer: 'Answer', running: 'Running', failed: 'Failed' },
+		status: { approve: 'Approve', answer: 'Answer', running: 'Running', background: 'Background tasks running', failed: 'Failed' },
 		updateShort: 'Update',
 		newChat: 'New chat',
 
@@ -1388,7 +1404,7 @@ const shell = {
 		},
 		schedule: {
 			title: 'Scheduled tasks',
-			boardHint: 'A prompt sent to a new session at set times, in a folder, on a backend and in a permission mode. Each run is an ordinary session; you hear of it when it fails or waits for approval.',
+			boardHint: 'A prompt sent to a new session at set times, in a folder, on a backend and in a permission mode. Each run is an ordinary session; you hear of it when it fails or waits for approval. While a run works the computer does not go to sleep on its own; closing the lid still sleeps it.',
 			cwd: 'Folder',
 			noCwd: 'No folder',
 			engine: 'Backend',
@@ -1397,7 +1413,21 @@ const shell = {
 			askWaits: 'With nobody watching, Claude Code, Codex and ACP agents wait for your approval, and later runs are skipped.',
 			statusRunning: 'Running',
 			statusWaiting: 'Waiting for approval',
+			statusBackground: 'Background tasks running',
+			childSession: 'Started by the run',
 			statusFailed: 'Last run failed',
+			stoppedAfter: 'Switched off after {n} failures in a row',
+			failuresInRow: '{n} failures in a row',
+			worktree: 'Run in a worktree of its own',
+			worktreeHint: 'Each run gets a new git worktree and branch, so the files in the folder stay as they are. A run that left nothing there is cleaned up when archived.',
+			budget: 'Cost limit per run',
+			budgetPlaceholder: 'None',
+			budgetHint: 'Points through the JuCode gateway, estimated USD otherwise. A run past it stops. Gateway costs arrive a little late, so a run may go slightly over.',
+			errBudget: 'The cost limit must be above 0',
+			optionsOutdated: 'Saved, but JuCode on this computer is older and has no worktree or cost limit, so runs will not use them. Update it and save again.',
+			runStatus: 'Status',
+			runDone: 'Done',
+			runFailed: 'Failed',
 			outdated: 'JuCode on this computer is older; update it to see scheduled tasks here.',
 			errCwd: 'Pick a folder to run in',
 			add: 'Add scheduled task',
@@ -1426,7 +1456,7 @@ const shell = {
 			delete: 'Delete',
 			deleteTitle: 'Delete scheduled task "{name}"?',
 			deleteMessage: 'Sessions from earlier runs stay.',
-			usage: 'Usage and cost',
+			usage: 'Runs',
 			usageHint: 'Per run session, including follow-ups; reused sessions are combined. Settled costs include group multipliers. USD estimates are separate.',
 			billedCost: 'Settled {cost} points',
 			estimatedCost: 'Estimated ${cost}',

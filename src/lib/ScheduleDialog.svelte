@@ -52,6 +52,8 @@
 					time: '09:00',
 					days: [1],
 					date: '',
+					worktree: false,
+					budget: '',
 					...preset
 				}
 	);
@@ -70,6 +72,11 @@
 	/** The daemon's built-in ACP agents (its own request; none if it fails). */
 	let presets = $state<AcpPreset[]>([]);
 	const agentPreset = $derived(pick.startsWith('acp:') ? presets.find((p) => `acp:${p.id}` === pick) : undefined);
+	/** An older daemon keeps no worktree or budget: offered only when it
+	 *  lists them (a new task: when no task says otherwise). */
+	const runOptions = $derived(
+		schedule ? schedule.worktree !== undefined : daemonState.schedules.every((s) => s.worktree !== undefined)
+	);
 	let busy = $state(false);
 	let error = $state('');
 	let nameEl = $state<HTMLInputElement | null>(null);
@@ -153,6 +160,12 @@
 			const saved = await daemonState.saveSchedule(next);
 			// Saved: trying again changes this task rather than adding one.
 			draft.id = saved.id;
+			// An older daemon kept neither (it had no task to tell by).
+			if ((next.worktree || next.budget.trim()) && saved.worktree === undefined) {
+				error = t('shell.schedule.optionsOutdated');
+				busy = false;
+				return;
+			}
 			if (run) {
 				await daemonState.runSchedule(saved.id);
 				toast.success(t('shell.schedule.started', { name: saved.name }));
@@ -253,6 +266,17 @@
 		</div>
 	{/if}
 
+	{#if runOptions}
+		<div class="row">
+			<span class="label">{t('shell.schedule.worktree')}<small>{t('shell.schedule.worktreeHint')}</small></span>
+			<Switch bind:checked={draft.worktree} label={t('shell.schedule.worktree')} />
+		</div>
+		<label class="field">
+			<span>{t('shell.schedule.budget')}</span>
+			<input inputmode="decimal" bind:value={draft.budget} placeholder={t('shell.schedule.budgetPlaceholder')} />
+			<small>{t('shell.schedule.budgetHint')}</small>
+		</label>
+	{/if}
 
 	{#if error}<Notice>{error}</Notice>{/if}
 	{#snippet footer()}
@@ -303,6 +327,16 @@
 		justify-content: space-between;
 		gap: 12px;
 		font-size: var(--fs-sm);
+	}
+	.label {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
+	}
+	small {
+		font-size: var(--fs-xs);
+		color: var(--dim2);
 	}
 	.days {
 		display: flex;

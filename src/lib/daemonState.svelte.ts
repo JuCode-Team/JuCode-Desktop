@@ -31,6 +31,12 @@ export interface DaemonSessionView {
 	project?: string | null;
 	/** Running a turn (newer daemons; missing: unknown). */
 	busy?: boolean;
+	/** Background work its turn left going runs: not a turn (newer daemons). */
+	background?: boolean;
+	/** The session that started it (`start_session`), if one did. */
+	parent?: string | null;
+	/** The git worktree the daemon made for it (a scheduled run's). */
+	worktree?: { repo: string; path: string; branch: string; base: string; slug: string; gone?: boolean } | null;
 }
 
 /** A tool call an unwatched session deferred for the user to decide. */
@@ -53,7 +59,7 @@ export type Closed<T> = T & { closed_by: string; closed_reason: string; closed_a
 export interface ScheduleEvent {
 	schedule: string;
 	name: string;
-	kind: 'failed' | 'waiting' | 'skipped';
+	kind: 'failed' | 'stopped' | 'waiting' | 'skipped';
 	detail: string;
 	/** The run's session; empty when it never started. */
 	session: string;
