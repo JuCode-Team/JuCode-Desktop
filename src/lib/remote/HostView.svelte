@@ -1,9 +1,9 @@
 <script lang="ts">
 	import ActiveIcon from '$lib/icons/ActiveIcon.svelte';
-	// One paired computer on the remote page: its lists (sessions, what
-	// waits for the user) and the pages opened over it, or, until its daemon has accepted this device,
-	// a connecting / pair-again screen. The page keeps one mounted per
-	// computer and hides all but the shown one, so each keeps its open pages
+	// One connected computer on the remote page: its lists (sessions,
+	// what waits for the user) and the pages opened over it, or, until its daemon has accepted this device,
+	// a connecting / waiting-for-approval / refused screen. The page keeps
+	// one mounted per computer and hides all but the shown one, so each keeps its open pages
 	// and their sessions keep streaming while another computer is shown.
 	import { cubicOut } from 'svelte/easing';
 	import { untrack, type Component, type Snippet } from 'svelte';
@@ -17,7 +17,6 @@
 	import DeskList from './DeskList.svelte';
 	import DeskItemScreen from './DeskItemScreen.svelte';
 	import Button from '$lib/ui/Button.svelte';
-	import Notice from '$lib/ui/Notice.svelte';
 	import { t } from '$lib/i18n';
 	import Projects from './Projects.svelte';
 	import ProjectScreen from './ProjectScreen.svelte';
@@ -37,13 +36,13 @@
 		resizer,
 		chatHref,
 		onAdd,
-		onForget,
-		onRepair
+		onRequest,
+		onCancel
 	}: {
 		conn: HostConnection;
 		/** The computer's name. */
 		name: string;
-		/** Its name on session pages, when several computers are paired. */
+		/** Its name on session pages, when several computers are connected. */
 		hostName?: string;
 		/** Another computer is shown. */
 		hidden: boolean;
@@ -63,9 +62,11 @@
 		resizer: Snippet;
 		/** Opens pairing (to scan this computer's code again). */
 		onAdd: () => void;
-		onForget: (ask?: boolean) => void;
-		/** LAN: pair this device again. */
-		onRepair: () => void;
+		/** Asks the computer again to let this device in. */
+		onRequest: () => void;
+		/** Closes this connection (cancels a waiting request) and goes back
+		 *  to the computer list. */
+		onCancel: () => void;
 	} = $props();
 	/* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -200,14 +201,15 @@
 	{#if conn.relayError?.fatal}
 		<div class="pair">
 			<div class="corner">{@render switcher()}</div>
-			<span class="hero warn"><QrCodeIcon size={28} /></span>
-			<h1>{t('shell.remote.relayFatalTitle')}</h1>
-			<p>
-				{conn.relayError.kind === 'pair-invalid' ? t('shell.remote.relayPairInvalid') : t('shell.remote.relayRevoked')}
-			</p>
+			<span class="hero warn"><MonitorIcon size={28} /></span>
+			<h1>{name}</h1>
+			<p>{t(conn.state.text)}</p>
 			<div class="actions">
-				<Button variant="primary" onclick={onAdd}><QrCodeIcon size={16} /> {t('shell.remote.scanQr')}</Button>
-				<Button variant="ghost" onclick={() => onForget(false)}>{t('shell.remote.forget')}</Button>
+				{#if conn.relayError.kind !== 'not-yours'}
+					<Button variant="primary" onclick={onRequest}>{t('shell.remote.requestConnect')}</Button>
+					<Button onclick={onAdd}><QrCodeIcon size={16} /> {t('shell.remote.scanQr')}</Button>
+				{/if}
+				<Button variant="ghost" onclick={onCancel}>{t('shell.remote.back')}</Button>
 			</div>
 		</div>
 	{:else if !ready}
@@ -218,7 +220,7 @@
 			</span>
 			<h1>{name}</h1>
 			{#key conn.state.text}<p class="status">{t(conn.state.text)}</p>{/key}
-			<div class="actions"><Button variant="ghost" size="sm" onclick={() => onForget()}>{t('shell.remote.forget')}</Button></div>
+			<div class="actions"><Button variant="ghost" size="sm" onclick={onCancel}>{conn.waiting ? t('common.cancel') : t('shell.remote.back')}</Button></div>
 		</div>
 	{:else}
 		<aside class="side">
@@ -245,14 +247,6 @@
 				</div>
 			{/if}
 			<main>
-				{#if conn.kind === 'lan' && conn.daemonState.status === 'unreachable'}
-					<!-- The daemon served this page, so a failing connection most likely
-					     means this device's token was revoked; offer to pair again. -->
-					<div class="refused">
-						<div class="refused-msg"><Notice tone="warn">{t('shell.remote.refused')}</Notice></div>
-						<Button size="sm" onclick={onRepair}>{t('shell.remote.repair')}</Button>
-					</div>
-				{/if}
 				<!-- Both tabs stay mounted so a switch keeps their scroll and
 				     folded state; the shown one fades in. -->
 				<div class="tabbody" hidden={tab !== 'projects'}>
@@ -561,17 +555,6 @@
 		font-family: var(--font-sans);
 		font-size: var(--fs-xl);
 		font-weight: 600;
-	}
-	.refused {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		margin-bottom: 12px;
-		animation: rise var(--t-med) var(--ease-out);
-	}
-	.refused-msg {
-		flex: 1;
-		min-width: 0;
 	}
 	nav {
 		position: fixed;

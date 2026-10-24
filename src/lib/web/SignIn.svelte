@@ -4,6 +4,9 @@
 	import { t } from '$lib/i18n';
 	import Button from '$lib/ui/Button.svelte';
 
+	/** What signing in is for, in place of the chat's line. */
+	let { hint }: { hint?: string } = $props();
+
 	let going = $state(false);
 	function signIn() {
 		going = true;
@@ -15,7 +18,7 @@
 	<div class="card">
 		<div class="brand">{t('web.brand')}</div>
 		<h1>{t('web.signIn.title')}</h1>
-		<p>{t('web.signIn.hint')}</p>
+		<p>{hint ?? t('web.signIn.hint')}</p>
 		<Button variant="primary" full disabled={going} onclick={signIn}>{going ? t('web.signIn.working') : t('web.signIn.button')}</Button>
 	</div>
 </div>

@@ -1,17 +1,15 @@
 // One computer the remote page is connected to: its own daemon connection
-// (through the relay, or over the LAN with a device token), with its own
-// reconnect backoff, daemon state, projects and open-session routes. The
-// page keeps one per paired computer, all live at once, and gives each
-// computer's view its own through context.
+// through the relay, with its own reconnect backoff, daemon state, projects
+// and open-session routes. The page keeps one per connected computer, all
+// live at once, and gives each computer's view its own through context.
 
 import { getContext, setContext } from 'svelte';
 import { DaemonClient, type DaemonEndpoint, type SocketLike } from '$lib/daemon';
 import { DaemonState } from '$lib/daemonState.svelte';
-import { resubscribe } from './push';
 import { provideDaemonState } from '$lib/daemonScope';
-import { deviceKey, hostStaticKey, type RelayHost } from '$lib/relay/pairing';
+import { RELAY_URL, deviceKey, markPaired, unmarkPaired } from '$lib/relay/pairing';
+import { fromBase64Url } from '$lib/relay/noise';
 import { RelaySocket, type RelayError, type RelayErrorKind } from '$lib/relay/socket';
-import { deviceName, remoteEndpoint } from '$lib/remote';
 import { RemoteProjects } from './store.svelte';
 import { loadLists, saveLists } from './cache';
 import type { DaemonSessionView } from '$lib/daemonState.svelte';
@@ -24,8 +22,6 @@ type Lists = {
 	workspaces: WorkspaceView[];
 };
 
-/** The id of the LAN connection (relay computers use their host id). */
-export const LAN_ID = 'lan';
 /** How long a connection that looks up has to answer when the page wakes. */
 const WAKE_PING_MS = 5000;
 
@@ -33,21 +29,30 @@ type Route = { onFrame: (raw: string) => void; onExit: () => void; onIdleClose?:
 
 export type ConnectionTone = 'ok' | 'wait' | 'off';
 
+/** Why a refused connection is down, as an i18n key. */
+const REFUSED: Partial<Record<RelayErrorKind, string>> = {
+	'not-yours': 'shell.remote.notYours',
+	'pair-invalid': 'shell.remote.relayPairInvalid',
+	revoked: 'shell.remote.relayRevoked',
+	'no-desktop': 'shell.remote.noDesktop',
+	denied: 'shell.remote.denied',
+	expired: 'shell.remote.expired',
+	'requests-busy': 'shell.remote.requestsBusy'
+};
+
 /** How a connection is doing: a tone for its dot, a sentence (`text`) and a
- *  short label (`short`), both i18n keys. */
+ *  short label (`short`), both i18n keys. `waiting`: a connect request is
+ *  waiting for the computer's answer. */
 export function connectionState(
-	kind: 'relay' | 'lan',
 	status: DaemonState['status'],
-	error: RelayErrorKind | undefined
+	error: RelayErrorKind | undefined,
+	waiting = false
 ): { tone: ConnectionTone; text: string; short: string } {
 	if (status === 'on') return { tone: 'ok', text: 'shell.remote.relayConnected', short: 'shell.remote.relayConnected' };
-	if (kind === 'lan')
-		return status === 'unreachable'
-			? { tone: 'off', text: 'shell.remote.disconnected', short: 'shell.remote.disconnected' }
-			: { tone: 'wait', text: 'shell.remote.connecting', short: 'shell.remote.connecting' };
-	if (!error) return { tone: 'wait', text: 'shell.remote.relayConnecting', short: 'shell.remote.connecting' };
-	if (error === 'pair-invalid' || error === 'revoked')
-		return { tone: 'off', text: 'shell.remote.relayFatalTitle', short: 'shell.remote.relayFatalTitle' };
+	const refused = error && REFUSED[error];
+	if (refused) return { tone: 'off', text: refused, short: 'shell.remote.refusedShort' };
+	if (waiting) return { tone: 'wait', text: 'shell.remote.requestWaiting', short: 'shell.remote.requestWaitingShort' };
+	if (!error || error === 'restarting') return { tone: 'wait', text: 'shell.remote.relayConnecting', short: 'shell.remote.connecting' };
 	if (error === 'offline') return { tone: 'off', text: 'shell.remote.relayOffline', short: 'shell.remote.hostOffline' };
 	if (error === 'busy') return { tone: 'off', text: 'shell.remote.relayBusy', short: 'shell.remote.disconnected' };
 	return { tone: 'off', text: 'shell.remote.relayNetwork', short: 'shell.remote.disconnected' };
@@ -55,12 +60,13 @@ export function connectionState(
 
 export class HostConnection {
 	readonly id: string;
-	readonly kind: 'relay' | 'lan';
 	readonly daemon: DaemonClient;
 	readonly daemonState: DaemonState;
 	readonly projects: RemoteProjects;
-	/** Why the last relay connection failed (relay only). */
+	/** Why the last relay connection failed. */
 	relayError = $state<RelayError | null>(null);
+	/** A connect request is waiting for the computer's answer. */
+	waiting = $state(false);
 	/** The daemon accepted this device at least once since the page opened. */
 	everConnected = $state(false);
 	/** Frames and exits of the sessions open on this computer, by client id. */
@@ -72,12 +78,10 @@ export class HostConnection {
 
 	constructor(
 		id: string,
-		kind: 'relay' | 'lan',
 		endpoint: () => Promise<DaemonEndpoint>,
 		openSocket: (url: string) => SocketLike
 	) {
 		this.id = id;
-		this.kind = kind;
 		this.daemon = new DaemonClient(endpoint, (url) => {
 			if (this.#stopped) throw new Error('connection stopped');
 			this.#socket = openSocket(url);
@@ -85,7 +89,6 @@ export class HostConnection {
 		});
 		this.daemonState = new DaemonState(this.daemon);
 		this.projects = new RemoteProjects(this.daemon, this.daemonState);
-		this.everConnected = kind === 'lan';
 		// What this phone saw last shows until the computer is reached.
 		const kept = loadLists<Lists>(id);
 		if (kept) {
@@ -95,46 +98,68 @@ export class HostConnection {
 		}
 	}
 
-	/** A paired computer through the relay; `pair` goes along until its
-	 *  daemon accepts this device once. */
-	static relay(host: RelayHost, pair?: string): HostConnection {
+	/** A computer of the account through the relay, checked against its
+	 *  static key from the account (`staticPub`). `token` gives the account's
+	 *  access token for each connection. Until the daemon accepts this device
+	 *  once, the first connection carries `pair` (a code), or `request` asks
+	 *  the computer's user to let it in. */
+	static relay(
+		computer: { host_id: string; static_pub: string },
+		token: (refresh?: boolean) => Promise<string>,
+		name: string,
+		admit: { pair?: string; request?: boolean } = {}
+	): HostConnection {
 		const device = deviceKey();
-		const name = deviceName();
+		const hostStatic = fromBase64Url(computer.static_pub);
+		let { pair, request } = admit;
+		let bearer = '';
+		// A browser cannot see the relay's HTTP 401: a socket that fails
+		// before the daemon answers gets one fresh token, so a revoked login
+		// signs out instead of retrying on the same token.
+		let refreshNext = false;
+		let refreshed = false;
 		const conn: HostConnection = new HostConnection(
-			host.host_id,
-			'relay',
-			async () => ({ url: host.relay, token: '' }),
+			computer.host_id,
+			async () => {
+				const refresh = refreshNext && !refreshed;
+				refreshNext = false;
+				if (refresh) refreshed = true;
+				bearer = await token(refresh);
+				return { url: RELAY_URL, token: '' };
+			},
 			() =>
 				new RelaySocket({
-					relay: host.relay,
-					hostId: host.host_id,
-					hostStatic: hostStaticKey(host),
+					relay: RELAY_URL,
+					token: bearer,
+					hostId: computer.host_id,
+					hostStatic,
 					device,
 					name,
 					pair,
+					request,
+					onWaiting: () => (conn.waiting = true),
 					onAccepted: () => {
-						pair = undefined;
+						refreshed = false;
+						pair = request = undefined;
+						conn.waiting = false;
 						conn.relayError = null;
 						conn.everConnected = true;
+						markPaired(computer.host_id);
 					},
 					onRelayError: (error) => {
 						if (conn.#stopped) return;
+						conn.waiting = false;
 						conn.relayError = error;
+						if (error.kind === 'network') refreshNext = true;
+						// The daemon no longer knows this device: not paired any more.
+						if (error.kind === 'revoked') unmarkPaired(computer.host_id);
 						if (error.fatal) conn.daemonState.stop();
+						// The server restarts: the other one takes over at once.
+						else if (error.kind === 'restarting') setTimeout(() => conn.daemonState.retryNow(), 0);
 					}
 				})
 		);
 		return conn;
-	}
-
-	/** The daemon that served this page, with this device's LAN token. */
-	static lan(token: string): HostConnection {
-		return new HostConnection(
-			LAN_ID,
-			'lan',
-			async () => remoteEndpoint(token),
-			(url) => new WebSocket(url) as unknown as SocketLike
-		);
 	}
 
 	/** Connects and keeps reconnecting, with backoff, until stopped. */
@@ -143,11 +168,6 @@ export class HostConnection {
 			this.daemonState.handle(frame);
 			this.projects.handle(frame);
 			this.#keepLists();
-		};
-		// Notifications keep reaching this phone after the computer restarts
-		// or the browser renews its subscription.
-		this.daemon.onHello = () => {
-			resubscribe(this.daemon).catch(() => {});
 		};
 		this.daemon.onDisconnect = () => {
 			// The lists stay, as last seen, until the computer is back.
@@ -203,7 +223,7 @@ export class HostConnection {
 		}, 1000);
 	}
 
-	/** Disconnects for good (the computer was forgotten or paired again). */
+	/** Disconnects for good (closing a waiting request cancels it). */
 	stop() {
 		this.#stopped = true;
 		clearTimeout(this.#saveTimer);
@@ -214,7 +234,7 @@ export class HostConnection {
 
 	/** How the connection is doing (see connectionState). */
 	get state() {
-		return connectionState(this.kind, this.daemonState.status, this.relayError?.kind);
+		return connectionState(this.daemonState.status, this.relayError?.kind, this.waiting);
 	}
 
 	/** Routes daemon frames and exits for session `id` here (`onIdleClose`:

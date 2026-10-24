@@ -1,20 +1,19 @@
 <script lang="ts">
-	// Turns on this phone's notifications (Web Push) for every paired
-	// computer: approvals that wait, scheduled runs that fail or wait.
+	// Turns on this phone's notifications (Web Push, registered with the
+	// account) from every computer of the account: approvals that wait,
+	// scheduled runs that fail or wait.
 	import BellIcon from '@lucide/svelte/icons/bell';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import { t } from '$lib/i18n';
-	import { useHost } from './connection.svelte';
 	import { enablePush, pushOn, pushSupported } from './push';
 
-	const conn = useHost();
 	const supported = pushSupported();
 	let notifying = $state(supported && pushOn());
 	let error = $state('');
 	async function turnOn() {
 		error = '';
 		try {
-			await enablePush([conn.daemon]);
+			await enablePush();
 			notifying = true;
 		} catch (e) {
 			error = e instanceof Error ? e.message : String(e);

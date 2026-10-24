@@ -1,10 +1,10 @@
 // Notifications on this phone (Web Push). The browser's subscription is
-// made with the relay's key (the relay sends the notifications, see
-// jucode-relay push.go) and handed to each paired computer, which asks the
-// relay to notify it (JuCode-CLI daemon push.rs). The service worker shows
-// them.
+// made with the server's VAPID key and registered with the account
+// (POST /v1/oauth/push/register), so every computer signed in to it can
+// notify this browser through the server. The service worker shows them.
 
-import type { DaemonClient } from '$lib/daemon';
+import { json } from '$lib/web/api';
+import { deviceName } from '$lib/web/auth.svelte';
 
 const ON = 'jucode-push-on';
 
@@ -13,9 +13,7 @@ export function pushSupported(): boolean {
 	return typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 }
 
-/** The user turned notifications on here and has not turned them off. It
- *  holds for every paired computer: one not yet subscribed gets the
- *  subscription when this phone next connects to it (`resubscribe`). */
+/** The user turned notifications on here and has not turned them off. */
 export function pushOn(): boolean {
 	try {
 		return localStorage.getItem(ON) === '1' && Notification.permission === 'granted';
@@ -29,29 +27,41 @@ function urlKey(base64: string): Uint8Array<ArrayBuffer> {
 	return Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
 }
 
-/** This browser's subscription, made on first use. */
-async function subscription(): Promise<PushSubscription> {
-	const registration = await navigator.serviceWorker.ready;
-	const existing = await registration.pushManager.getSubscription();
-	if (existing) return existing;
-	const res = await fetch('/relay/v1/push/key');
-	if (!res.ok) throw new Error(`notifications are not available (${res.status})`);
-	const { key } = (await res.json()) as { key: string };
-	return registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlKey(key) });
+function sameKey(a: ArrayBuffer | null, b: Uint8Array): boolean {
+	if (!a || a.byteLength !== b.byteLength) return false;
+	const x = new Uint8Array(a);
+	return x.every((v, i) => v === b[i]);
 }
 
-/** Asks for permission and subscribes this browser on `daemons`. */
-export async function enablePush(daemons: DaemonClient[]): Promise<void> {
-	if ((await Notification.requestPermission()) !== 'granted') throw new Error('notifications were not allowed');
+/** This browser's subscription with the server's key, made on first use. One
+ *  made with another key (the old relay's) cannot be notified: made again. */
+async function subscription(): Promise<PushSubscription> {
+	const registration = await navigator.serviceWorker.ready;
+	const { key } = await json<{ key: string }>('/v1/oauth/push/vapid-key');
+	const server = urlKey(key);
+	const existing = await registration.pushManager.getSubscription();
+	if (existing && sameKey(existing.options.applicationServerKey, server)) return existing;
+	await existing?.unsubscribe();
+	return registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: server });
+}
+
+async function register(): Promise<void> {
 	const sub = (await subscription()).toJSON();
-	await Promise.all(daemons.map((d) => d.request({ op: 'push_subscribe', subscription: sub })));
+	await json<void>('/v1/oauth/push/register', {
+		method: 'POST',
+		body: { provider: 'webpush', subscription: { endpoint: sub.endpoint, keys: sub.keys }, device_name: deviceName() }
+	});
+}
+
+/** Asks for permission and registers this browser with the account. */
+export async function enablePush(): Promise<void> {
+	if ((await Notification.requestPermission()) !== 'granted') throw new Error('notifications were not allowed');
+	await register();
 	localStorage.setItem(ON, '1');
 }
 
-/** Hands the subscription to a computer again (its connection came back;
- *  the browser may have renewed the subscription meanwhile). */
-export async function resubscribe(daemon: DaemonClient): Promise<void> {
-	if (!pushSupported() || !pushOn()) return;
-	const sub = (await subscription()).toJSON();
-	await daemon.request({ op: 'push_subscribe', subscription: sub });
+/** Registers again when the page opens: the browser may have renewed the
+ *  subscription meanwhile. */
+export async function reregister(): Promise<void> {
+	if (pushSupported() && pushOn()) await register();
 }

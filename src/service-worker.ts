@@ -35,8 +35,9 @@ sw.addEventListener('activate', (event) => {
 	);
 });
 
-// Notifications the computers send through the relay (lib/remote/push.ts):
-// `{title, body, tag, url}`. A tap opens (or focuses) the remote page.
+// Notifications the computers send through the JuCode server to the
+// account's registered browsers (lib/remote/push.ts): `{title, body, tag,
+// url}`. A tap opens (or focuses) the remote page.
 sw.addEventListener('push', (event) => {
 	let data: { title?: string; body?: string; tag?: string; url?: string } = {};
 	try {

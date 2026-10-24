@@ -21,6 +21,8 @@
 	import ModelSetup from '$lib/ModelSetup.svelte';
 	import { modelSetup } from '$lib/modelSetupState.svelte';
 	import ConfirmHost from '$lib/ui/ConfirmHost.svelte';
+	import ConnectRequestDialog from '$lib/ConnectRequestDialog.svelte';
+	import { connectRequests } from '$lib/connectRequests.svelte';
 	import { open } from '@tauri-apps/plugin-dialog';
 	import { toast } from '$lib/ui/toast.svelte';
 	import { confirm } from '$lib/ui/confirm.svelte';
@@ -155,6 +157,12 @@
 	}
 	daemonState.onAction = (a) =>
 		tell(t('shell.notify.action'), a.summary || a.name, () => openDesk('pending'));
+	// A phone or browser of the account asks to connect: the dialog shows
+	// over everything, and an OS notification while the window is elsewhere.
+	connectRequests.onRequest = (r) => {
+		chime('attention');
+		if (!document.hasFocus()) void notify(t('shell.connectRequest.notifyTitle'), t('shell.connectRequest.notifyBody', { name: r.name || t('shell.connectRequest.device') }));
+	};
 	daemonState.onScheduleEvent = (e) =>
 		tell(t(`shell.notify.schedule.${e.kind}`, { name: e.name }), e.detail, () =>
 			e.session ? openDaemonSession(e.session) : openDesk('schedules')
@@ -1218,13 +1226,17 @@
 				daemonState.handle(frame);
 				sync.handle(frame);
 				devServers.handle(frame);
+				connectRequests.handle(frame);
 			};
 			daemon.onDisconnect = () => {
+				connectRequests.open = [];
 				daemonState.disconnected();
 				sync.reset();
 				devServers.disconnected();
 			};
 			daemon.onHello = (version) => {
+				// Requests made while this window was not connected.
+				void connectRequests.sync();
 				checkDaemonVersion(version).then((outcome) => {
 					if (outcome.kind === 'restart-when-idle')
 						toast.info(t('shell.daemonUpdate.idle', { version: outcome.version }));
@@ -1376,6 +1388,7 @@
 {/if}
 <CornerNotices />
 <ConfirmHost />
+<ConnectRequestDialog />
 
 <div class="app">
 	<!-- TOP: one title bar across the window (traffic lights, sidebar toggle,

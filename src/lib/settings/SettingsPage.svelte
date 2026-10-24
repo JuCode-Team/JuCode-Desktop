@@ -926,7 +926,7 @@
 				{:else if current === 'import'}
 					<ImportSection {onAddFolders} />
 				{:else if current === 'daemon'}
-					<DaemonSection>
+					<DaemonSection onLogin={() => !loggingIn && login()} {loggingIn}>
 						<SettingsSection title={t('settings.behavior.titles')}>
 							<SettingsRow id="title-model" title={t('settings.behavior.titleModel')} description={t('settings.behavior.titleModelHint')}>
 								<div class="w-lg">

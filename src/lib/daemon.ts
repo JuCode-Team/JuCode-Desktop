@@ -51,7 +51,10 @@ const DAEMON_EVENTS = new Set([
 	'schedule_event',
 	'workspaces',
 	'dev_servers',
-	'session_reopened'
+	'session_reopened',
+	// A phone or browser of the account asks to connect (local clients only).
+	'connect_request',
+	'connect_request_closed'
 ]);
 /** Frames for one terminal's viewers (`onTerm`), unless one answers a
  *  request (`term_attached` does, when sent with an id). */

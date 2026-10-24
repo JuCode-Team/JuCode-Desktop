@@ -35,14 +35,13 @@ describe('backend settings parsing', () => {
 		expect(parsed).toEqual({
 			default: 'claude',
 			paths: { codex: '/usr/local/bin/codex' },
-			env: {},
-			remoteAddress: ''
+			env: {}
 		});
 	});
 });
 
 describe('default backend for new sessions', () => {
-	const settings: BackendSettings = { default: 'codex', paths: {}, env: {}, remoteAddress: '' };
+	const settings: BackendSettings = { default: 'codex', paths: {}, env: {} };
 
 	it("the project's last-used backend wins", () => {
 		expect(defaultBackendFor('claude', settings)).toBe('claude');
@@ -54,7 +53,7 @@ describe('default backend for new sessions', () => {
 		expect(defaultBackendFor(null, settings)).toBe('codex');
 		expect(defaultBackendFor('bogus', settings)).toBe('codex');
 		expect(
-			defaultBackendFor(undefined, { default: 'jucode', paths: {}, env: {}, remoteAddress: '' })
+			defaultBackendFor(undefined, { default: 'jucode', paths: {}, env: {} })
 		).toBe('jucode');
 	});
 });
@@ -63,7 +62,6 @@ const base = (over: Partial<BackendSettings> = {}): BackendSettings => ({
 	default: 'jucode',
 	paths: {},
 	env: {},
-	remoteAddress: '',
 	...over
 });
 

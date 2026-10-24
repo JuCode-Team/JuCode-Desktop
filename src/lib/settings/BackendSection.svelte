@@ -57,8 +57,7 @@
 			paths: Object.fromEntries(
 				Object.entries(settings.paths).filter(([, v]) => typeof v === 'string' && v.trim())
 			) as BackendSettings['paths'],
-			env: settings.env,
-			remoteAddress: settings.remoteAddress.trim()
+			env: settings.env
 		});
 	}
 

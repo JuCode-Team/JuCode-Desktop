@@ -1,51 +1,42 @@
 <script lang="ts">
-	import MessageSquareTextIcon from '@lucide/svelte/icons/message-square-text';
-	// The remote control page for a phone's browser: pair once, then the desk,
-	// the agents and their sessions. Two ways to reach a computer:
-	// - LAN: the daemon served this page; pair with a code for a device token.
-	// - Relay: the PWA at app.jucode.net; a `#pair=` link names the computer
-	//   and the connection runs end-to-end encrypted through the relay.
-	// Several computers can be paired; each keeps its own live connection and
-	// view (HostView), and the switcher in the list header picks the one shown.
-	import { onMount, type Component } from 'svelte';
+	// The remote control page of the web app (app.jucode.net/remote, signed
+	// in with the JuCode account): the account's computers, then the desk,
+	// the agents and their sessions on each. A computer is reached through
+	// the relay, end-to-end encrypted; this browser gets in once by asking
+	// the computer (its user allows it there) or with a `#pair=` link from
+	// its QR code, and connects directly from then on. Each connected
+	// computer keeps its own live connection and view (HostView), and the
+	// switcher in the list header picks the one shown.
+	import { onMount, untrack, type Component } from 'svelte';
 	import { dev } from '$app/environment';
+	import MessageSquareTextIcon from '@lucide/svelte/icons/message-square-text';
 	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import QrCodeIcon from '@lucide/svelte/icons/qr-code';
-	import MonitorIcon from '@lucide/svelte/icons/monitor';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import ChevronsUpDownIcon from '@lucide/svelte/icons/chevrons-up-down';
 	import CheckIcon from '@lucide/svelte/icons/check';
-	import PlusIcon from '@lucide/svelte/icons/plus';
+	import MonitorIcon from '@lucide/svelte/icons/monitor';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
-	import LogOutIcon from '@lucide/svelte/icons/log-out';
+	import TrashIcon from '@lucide/svelte/icons/trash';
+	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import ScrollTextIcon from '@lucide/svelte/icons/scroll-text';
 	import RotateCwIcon from '@lucide/svelte/icons/rotate-cw';
 	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
 	import SmartphoneIcon from '@lucide/svelte/icons/smartphone';
 	import DownloadIcon from '@lucide/svelte/icons/download';
-	import BellIcon from '@lucide/svelte/icons/bell';
-	import { enablePush, pushOn, pushSupported } from '$lib/remote/push';
+	import { reregister } from '$lib/remote/push';
 	import { forgetLists } from '$lib/remote/cache';
 	import { toast } from '$lib/ui/toast.svelte';
+	import { confirm } from '$lib/ui/confirm.svelte';
 	import HostView from '$lib/remote/HostView.svelte';
-	import { HostConnection, LAN_ID } from '$lib/remote/connection.svelte';
+	import { HostConnection, type ConnectionTone } from '$lib/remote/connection.svelte';
+	import { Computers, platformName, type Computer } from '$lib/remote/computers.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import Notice from '$lib/ui/Notice.svelte';
-	import Toaster from '$lib/ui/Toaster.svelte';
-	import ConfirmHost from '$lib/ui/ConfirmHost.svelte';
-	import { deviceName, forgetRemoteToken, pairDevice, remoteToken } from '$lib/remote';
-	import {
-		addHost,
-		forgetHost,
-		loadActive,
-		loadHosts,
-		parsePairLink,
-		renameHost,
-		saveActive,
-		type PairLink,
-		type RelayHost,
-		type SavedHost
-	} from '$lib/relay/pairing';
+	import PopMenu from '$lib/ui/PopMenu.svelte';
+	import { auth, deviceName } from '$lib/web/auth.svelte';
+	import { loadActive, loadPaired, pairLinkProblem, parsePairLink, saveActive, unmarkPaired, type PairLink } from '$lib/relay/pairing';
+	import { when } from '$lib/time';
 	import { t } from '$lib/i18n';
 
 	// The heavy pages (a conversation with markdown and highlighting, the file
@@ -71,17 +62,16 @@
 		import('$lib/relay/QrScanner.svelte').then((m) => (QrScanner = m.default));
 	}
 
-	/** The paired computers (relay) as stored, and a live connection to each
-	 *  of them and to the LAN daemon, when this device has its token. */
-	let hosts = $state<SavedHost[]>([]);
+	/** The account's computers, the ones this browser is paired with, and a
+	 *  live connection to each computer opened here. */
+	const computers = new Computers();
+	let paired = $state<string[]>([]);
 	let conns = $state<HostConnection[]>([]);
 	/** The computer shown. */
 	let activeId = $state<string | null>(null);
 	const active = $derived(conns.find((c) => c.id === activeId) ?? conns[0] ?? null);
 
 	let mounted = $state(false);
-	/** The relay PWA, as opposed to a page served by a daemon on the LAN. */
-	let relayOrigin = $state(false);
 	// iPhone/iPad Safari: a home-screen app has its own storage, so pairing in
 	// the browser would not carry over. Offer to add it first; the code is only
 	// used if the user chooses to stay in the browser.
@@ -110,56 +100,23 @@
 		} else installGuide = true;
 	}
 
-	/** Sends a test notification to this phone through the shown computer,
-	 *  turning notifications on first, and says which push service took it. */
-	const SERVICES: Record<string, string> = {
-		'fcm.googleapis.com': 'Google FCM',
-		'web.push.apple.com': 'Apple',
-		'updates.push.services.mozilla.com': 'Mozilla'
-	};
-	async function testPush() {
-		switchMenu = false;
-		const conn = active;
-		if (!conn) return;
-		try {
-			if (!pushSupported()) throw new Error(t(isIos() ? 'shell.remote.pushIosHint' : 'shell.remote.notifyUnsupported'));
-			if (!pushOn()) await enablePush([conn.daemon]);
-			const reply = await conn.daemon.request({ op: 'push_test' });
-			const results = (reply.results as { service: string; status?: number; error?: string }[]) ?? [];
-			if (!results.length) throw new Error(t('shell.remote.pushNone'));
-			for (const r of results) {
-				const service = SERVICES[r.service] ?? r.service;
-				if (r.status && r.status < 300)
-					toast.success(t(r.service === 'fcm.googleapis.com' ? 'shell.remote.pushSentFcm' : 'shell.remote.pushSent', { service }), { duration: 10000 });
-				else toast.error(t('shell.remote.pushFailed', { service, reason: r.error ?? String(r.status) }));
-			}
-		} catch (e) {
-			const message = e instanceof Error ? e.message : String(e);
-			toast.error(/requires session/.test(message) ? t('shell.remote.pushOld') : message);
-		}
-	}
-	/** Pairing another computer, opened from the switcher. */
-	let adding = $state(false);
-	/** LAN pairing with a code, asked for while other computers are paired. */
-	let lanPairing = $state(false);
+	/** The computer list, shown over the connected computers. */
+	let listing = $state(false);
 	/** What fills the page. */
 	const view = $derived(
 		!mounted
 			? null
 			: pendingLink || installGuide
 				? 'install'
-				: adding
-					? 'scan'
-					: lanPairing
-						? 'lan'
-						: conns.length
-							? 'app'
-							: relayOrigin
-								? 'scan'
-								: 'lan'
+				: listing || active
+					? listing || !active ? 'list' : 'app'
+					: // The paired computers connect once the list is in.
+						!computers.loaded && !computers.error && paired.length
+						? 'loading'
+						: 'list'
 	);
 	$effect(() => {
-		if (view === 'scan') loadScanner();
+		if (view === 'list') loadScanner();
 		else if (view === 'app') loadScreens();
 	});
 
@@ -178,63 +135,158 @@
 			linkError = t('shell.remote.badLink');
 			return;
 		}
-		linkError = '';
 		pasted = '';
-		addPaired(link);
+		pairWith(link);
 	}
 	function continueInBrowser() {
 		installGuide = false;
 		const link = pendingLink;
 		pendingLink = null;
-		if (link) addPaired(link);
+		if (link) pairWith(link);
 	}
-	function startAdding() {
+	function showList() {
 		switchMenu = false;
 		linkError = '';
 		pasted = '';
-		adding = true;
+		listing = true;
 	}
 
-	/** Connects to a paired computer; `pair` goes along until its daemon
-	 *  accepts this device once. A computer already connected is replaced. */
-	function connect(host: RelayHost, pair?: string) {
-		const old = conns.find((c) => c.id === host.host_id);
+	/** Connects to a computer; `admit` goes along until its daemon accepts
+	 *  this device once. A computer already connected is replaced. */
+	function connect(computer: Computer, admit: { pair?: string; request?: boolean } = {}) {
+		const old = conns.find((c) => c.id === computer.host_id);
 		old?.stop();
-		const conn = HostConnection.relay(host, pair);
+		const conn = HostConnection.relay(computer, (refresh) => auth.token(refresh), deviceName(), admit);
 		conns = old ? conns.map((c) => (c === old ? conn : c)) : [...conns, conn];
 		conn.start();
 	}
 
-	/** Adds (or, paired again, updates) a computer and shows it. */
-	function addPaired(link: PairLink) {
-		addHost(link.host);
-		hosts = loadHosts();
-		connect(link.host, link.code);
-		select(link.host.host_id);
+	/** A computer's row was picked: shown when connected, else connected to,
+	 *  asking the computer first when this browser is not paired with it. */
+	function openComputer(computer: Computer) {
+		paired = loadPaired();
+		if (!conns.some((c) => c.id === computer.host_id)) connect(computer, isPaired(computer.host_id) ? {} : { request: true });
+		select(computer.host_id);
 	}
 
-	function startLan(saved: string) {
-		conns.find((c) => c.id === LAN_ID)?.stop();
-		const conn = HostConnection.lan(saved);
-		conns = [...conns.filter((c) => c.id !== LAN_ID), conn];
-		conn.start();
+	/** Pairs with a scanned or pasted link: the computer must be the
+	 *  account's, with the key the account knows for it. */
+	function pairWith(link: PairLink) {
+		const problem = pairLinkProblem(link, computers.list);
+		const computer = computers.get(link.hostId);
+		if (problem || !computer) {
+			linkError = t(problem ?? 'shell.remote.notInAccount');
+			listing = true;
+			return;
+		}
+		linkError = '';
+		connect(computer, { pair: link.code });
+		select(computer.host_id);
+	}
+
+	/** Closes a connection (a waiting request is cancelled) and shows the list. */
+	function close(conn: HostConnection) {
+		conn.stop();
+		conns = conns.filter((c) => c !== conn);
+		showList();
 	}
 
 	function select(id: string) {
 		switchMenu = false;
-		adding = false;
-		lanPairing = false;
+		listing = false;
 		activeId = id;
 		saveActive(id);
 	}
 
-	/** A computer's name: the one given here, else 「电脑 N」; the LAN daemon
-	 *  goes by its address. */
-	function nameOf(conn: HostConnection): string {
-		if (conn.kind === 'lan') return t('shell.remote.lanComputer', { host: location.host });
-		const host = hosts.find((h) => h.host_id === conn.id);
-		return host?.name || t('shell.remote.computerN', { n: host?.seq ?? 1 });
+	/** This browser connected to the computer before (as of the last list
+	 *  refresh, which reads the marks again). */
+	const isPaired = (hostId: string) => paired.includes(hostId);
+
+	function nameOf(hostId: string): string {
+		return computers.get(hostId)?.name || t('shell.remote.computer');
 	}
+
+	/** A row's dot and state: its connection's, else whether it is online. */
+	function rowState(computer: Computer): { tone: ConnectionTone; text: string } {
+		const conn = conns.find((c) => c.id === computer.host_id);
+		if (conn) return { tone: conn.state.tone, text: t(conn.state.short) };
+		if (computer.online) return { tone: 'ok', text: t('shell.remote.online') };
+		const seen = Date.parse(computer.last_seen_at);
+		return { tone: 'off', text: Number.isFinite(seen) ? t('shell.remote.offlineSince', { time: when(seen) }) : t('shell.remote.hostOffline') };
+	}
+
+	/** The link this page was opened with, used once the list is in. */
+	let openedLink: PairLink | null = null;
+	let firstLoad = true;
+	async function refreshList() {
+		try {
+			await computers.refresh();
+		} catch {
+			return;
+		}
+		const ids = new Set(computers.list.map((c) => c.host_id));
+		// Computers removed from the account: their marks and connections go.
+		for (const id of loadPaired()) if (!ids.has(id)) unmarkPaired(id);
+		paired = loadPaired();
+		for (const conn of conns.filter((c) => !ids.has(c.id))) conn.stop();
+		conns = conns.filter((c) => ids.has(c.id));
+		if (!firstLoad) return;
+		firstLoad = false;
+		// The paired computers connect at once; the linked one with its code.
+		for (const computer of computers.list)
+			if (paired.includes(computer.host_id) && computer.host_id !== openedLink?.hostId) connect(computer);
+		activeId = loadActive();
+		const link = openedLink;
+		openedLink = null;
+		if (link && isIos() && !isStandalone()) pendingLink = link;
+		else if (link) pairWith(link);
+	}
+	// The list is fresh when shown (the list page or the switcher's menu),
+	// and every 30 s while it stays shown.
+	$effect(() => {
+		if (view !== 'list' && view !== 'loading' && !switchMenu) return;
+		untrack(() => void refreshList());
+		const timer = setInterval(() => document.visibilityState === 'visible' && void refreshList(), 30_000);
+		return () => clearInterval(timer);
+	});
+
+	async function rename(computer: Computer) {
+		switchMenu = false;
+		menuFor = null;
+		const next = prompt(t('shell.remote.renameComputerPrompt'), computer.name);
+		if (next === null) return;
+		try {
+			await computers.rename(computer.host_id, next);
+		} catch (e) {
+			toast.error(e instanceof Error ? e.message : String(e));
+		}
+	}
+
+	async function remove(computer: Computer) {
+		switchMenu = false;
+		menuFor = null;
+		const ok = await confirm({
+			title: t('shell.remote.removeComputer'),
+			message: t('shell.remote.removeComputerConfirm', { name: computer.name || t('shell.remote.computer') }),
+			confirmLabel: t('shell.remote.removeComputer'),
+			danger: true
+		});
+		if (!ok) return;
+		try {
+			await computers.remove(computer.host_id);
+		} catch (e) {
+			toast.error(e instanceof Error ? e.message : String(e));
+			return;
+		}
+		const conn = conns.find((c) => c.id === computer.host_id);
+		conn?.stop();
+		conns = conns.filter((c) => c !== conn);
+		unmarkPaired(computer.host_id);
+		paired = loadPaired();
+		forgetLists(computer.host_id);
+	}
+	/** The computer whose row menu is open. */
+	let menuFor = $state<string | null>(null);
 
 	onMount(() => {
 		embedded = inAppBrowser();
@@ -243,28 +295,12 @@
 			installPrompt = e as InstallPrompt;
 		};
 		window.addEventListener('beforeinstallprompt', onInstallPrompt);
-		const link = parsePairLink(location.href);
-		const fromQr = new URLSearchParams(location.search).get('pair');
-		if (link || fromQr || location.hash) {
-			// Keep the one-time code out of history and bookmarks.
-			history.replaceState(null, '', location.pathname);
-		}
-		relayOrigin = location.hostname === 'app.jucode.net';
-		const install = !!link && isIos() && !isStandalone();
-		hosts = loadHosts();
-		// The linked computer connects with its code below.
-		for (const host of hosts) if (install || host.host_id !== link?.host.host_id) connect(host);
-		const saved = remoteToken();
-		if (saved) startLan(saved);
-		activeId = loadActive();
-		if (install) pendingLink = link;
-		else if (link) addPaired(link);
-		else if (fromQr) {
-			lanPairing = true;
-			code = fromQr;
-			void pair();
-		}
+		openedLink = parsePairLink(location.href);
+		// Keep the one-time code out of history and bookmarks.
+		if (location.hash) history.replaceState(null, '', location.pathname);
+		paired = loadPaired();
 		mounted = true;
+		reregister().catch(() => {});
 
 		try {
 			const w = Number(localStorage.getItem(SIDE_KEY));
@@ -289,56 +325,6 @@
 	 *  connection now (see HostConnection.wake). */
 	function wakeAll() {
 		for (const conn of conns) void conn.wake();
-	}
-
-	// LAN pairing with a code shown on the desktop.
-	let code = $state('');
-	let pairing = $state(false);
-	let pairError = $state('');
-	async function pair() {
-		if (!code.trim()) return;
-		pairing = true;
-		pairError = '';
-		try {
-			await pairDevice(code, deviceName());
-			startLan(remoteToken()!);
-			select(LAN_ID);
-		} catch (e) {
-			pairError = e instanceof Error ? e.message : String(e);
-		} finally {
-			pairing = false;
-		}
-	}
-
-	/** LAN: drop this device's token and pair again with a new code. */
-	function repair() {
-		const lan = conns.find((c) => c.id === LAN_ID);
-		lan?.stop();
-		conns = conns.filter((c) => c !== lan);
-		forgetRemoteToken();
-		code = '';
-		pairError = '';
-		lanPairing = true;
-	}
-
-	function forget(conn: HostConnection, ask = true) {
-		switchMenu = false;
-		if (ask && !confirm(t('shell.remote.forgetHostConfirm', { name: nameOf(conn) }))) return;
-		conn.stop();
-		forgetHost(conn.id);
-		forgetLists(conn.id);
-		hosts = loadHosts();
-		conns = conns.filter((c) => c !== conn);
-		if (activeId === conn.id && conns.length) select(conns[0].id);
-	}
-
-	function rename(conn: HostConnection) {
-		switchMenu = false;
-		const host = hosts.find((h) => h.host_id === conn.id);
-		const next = prompt(t('shell.remote.renameComputerPrompt'), host?.name || nameOf(conn));
-		if (next === null) return;
-		renameHost(conn.id, next);
-		hosts = loadHosts();
 	}
 
 	/** Wide screens: the list on the left, the open page on the right. */
@@ -401,15 +387,12 @@
 	}
 </script>
 
-<svelte:head>
-	<title>JuCode</title>
-</svelte:head>
-
 <svelte:window onkeydown={(e) => switchMenu && e.key === 'Escape' && (switchMenu = false)} ononline={wakeAll} />
 <svelte:document onvisibilitychange={() => document.visibilityState === 'visible' && wakeAll()} />
 
 <!-- The computer switcher: the shown computer and how its connection is
-     doing; the menu switches, adds, renames and forgets computers. -->
+     doing; the menu switches between the account's computers, renames and
+     removes them, and opens the full list (with QR pairing). -->
 {#snippet switcher(foot = false)}
 	{#if active}
 		<div class="conn-wrap">
@@ -425,20 +408,21 @@
 				<span class="dot" class:pulse={active.state.tone === 'wait'}></span>
 				{#if foot}
 					<span class="conn-two">
-						<span class="conn-text">{nameOf(active)}</span>
+						<span class="conn-text">{nameOf(active.id)}</span>
 						<span class="conn-state">{t(active.state.short)}</span>
 					</span>
 					<ChevronsUpDownIcon size={14} />
 				{:else}
-					<span class="conn-text">{nameOf(active)}</span>
+					<span class="conn-text">{nameOf(active.id)}</span>
 					<ChevronDownIcon size={12} />
 				{/if}
 			</button>
 			{#if switchMenu}
+				{@const shown = computers.get(active.id)}
 				<button class="backdrop" aria-label="close menu" tabindex="-1" onclick={() => (switchMenu = false)}></button>
 				<div class="pop switch-menu" class:left={wide} role="menu">
-					{#if relayOrigin && !foot}
-						<!-- app.jucode.net: the remote computers are one part of the web app. -->
+					{#if !foot}
+						<!-- The remote computers are one part of the web app. -->
 						<a class="pop-row" role="menuitem" href="/chat" data-sveltekit-reload>
 							<span class="pop-ico"><MessageSquareTextIcon size={16} /></span>
 							<span class="pop-txt"><span class="pop-label">{t('shell.remote.backToChat')}</span></span>
@@ -446,40 +430,33 @@
 						<div class="sep"></div>
 					{/if}
 					<div class="pop-head">{t('shell.remote.computers')}</div>
-					{#each conns as conn (conn)}
+					{#each computers.list as computer (computer.host_id)}
+						{@const state = rowState(computer)}
+						{@const conn = conns.find((c) => c.id === computer.host_id)}
 						<button
 							class="pop-row two"
 							role="menuitemradio"
 							aria-checked={conn === active}
-							onclick={() => select(conn.id)}
+							onclick={() => openComputer(computer)}
 						>
-							<span class="pop-ico"><span class="dot {conn.state.tone}" class:pulse={conn.state.tone === 'wait'}></span></span>
+							<span class="pop-ico"><span class="dot {state.tone}" class:pulse={state.tone === 'wait'}></span></span>
 							<span class="pop-txt">
-								<span class="pop-label">{nameOf(conn)}</span>
-								<span class="pop-desc">{t(conn === active ? conn.state.text : conn.state.short)}</span>
+								<span class="pop-label">{computer.name || t('shell.remote.computer')}</span>
+								<span class="pop-desc">{conn === active ? t(active.state.text) : state.text}</span>
 							</span>
-							{#if conn !== active && conn.daemonState.actions.length > 0}<span class="count">{conn.daemonState.actions.length}</span>{/if}
+							{#if conn && conn !== active && conn.daemonState.actions.length > 0}<span class="count">{conn.daemonState.actions.length}</span>{/if}
 							{#if conn === active}<span class="pop-check"><CheckIcon size={16} /></span>{/if}
 						</button>
 					{/each}
 					<div class="sep"></div>
-					<button class="pop-row" role="menuitem" onclick={startAdding}>
-						<span class="pop-ico"><PlusIcon size={16} /></span>
-						<span class="pop-txt"><span class="pop-label">{t('shell.remote.addComputer')}</span></span>
+					<button class="pop-row" role="menuitem" onclick={showList}>
+						<span class="pop-ico"><MonitorIcon size={16} /></span>
+						<span class="pop-txt"><span class="pop-label">{t('shell.remote.allComputers')}</span></span>
 					</button>
-					{#if active.kind === 'relay'}
-						<button class="pop-row" role="menuitem" onclick={() => rename(active)}>
+					{#if shown}
+						<button class="pop-row" role="menuitem" onclick={() => rename(shown)}>
 							<span class="pop-ico"><PencilIcon size={16} /></span>
-							<span class="pop-txt"><span class="pop-label">{t('shell.remote.renameComputer', { name: nameOf(active) })}</span></span>
-						</button>
-						<button class="pop-row warn" role="menuitem" onclick={() => forget(active)}>
-							<span class="pop-ico"><LogOutIcon size={16} /></span>
-							<span class="pop-txt"><span class="pop-label">{t('shell.remote.forget')}</span></span>
-						</button>
-					{:else}
-						<button class="pop-row warn" role="menuitem" onclick={() => ((switchMenu = false), repair())}>
-							<span class="pop-ico"><RotateCwIcon size={16} /></span>
-							<span class="pop-txt"><span class="pop-label">{t('shell.remote.repair')}</span></span>
+							<span class="pop-txt"><span class="pop-label">{t('shell.remote.renameComputer', { name: nameOf(shown.host_id) })}</span></span>
 						</button>
 					{/if}
 					{#if canInstall}
@@ -488,10 +465,6 @@
 							<span class="pop-txt"><span class="pop-label">{t('shell.remote.install')}</span></span>
 						</button>
 					{/if}
-					<button class="pop-row" role="menuitem" onclick={testPush}>
-						<span class="pop-ico"><BellIcon size={16} /></span>
-						<span class="pop-txt"><span class="pop-label">{t('shell.remote.pushTest')}</span></span>
-					</button>
 					<button class="pop-row" role="menuitem" onclick={openLicenses}>
 						<span class="pop-ico"><ScrollTextIcon size={16} /></span>
 						<span class="pop-txt"><span class="pop-label">{t('shell.remote.licenses')}</span></span>
@@ -521,7 +494,7 @@
 
 {#snippet linkEntry()}
 	<div class="entry">
-		<Button variant="primary" disabled={scanning} onclick={openScanner}>
+		<Button disabled={scanning} onclick={openScanner}>
 			{#if scanning}<LoaderCircleIcon size={16} class="spin" />{:else}<QrCodeIcon size={16} />{/if}
 			{t('shell.remote.scanQr')}
 		</Button>
@@ -531,14 +504,6 @@
 		</form>
 		{#if linkError}<Notice>{linkError}</Notice>{/if}
 	</div>
-{/snippet}
-
-{#snippet backToApp()}
-	{#if conns.length}
-		<button class="cancel" onclick={() => ((adding = false), (lanPairing = false), (scanning = false))} aria-label={t('shell.remote.back')}>
-			<ArrowLeftIcon size={16} />
-		</button>
-	{/if}
 {/snippet}
 
 {#if scanning && QrScanner}<QrScanner onResult={acceptLink} onClose={() => (scanning = false)} />{/if}
@@ -557,32 +522,64 @@
 				<Button variant="ghost" onclick={continueInBrowser}>{installGuide && !pendingLink ? t('shell.remote.installClose') : t('shell.remote.installSkip')}</Button>
 			</div>
 		</div>
-	{:else if view === 'scan'}
+	{:else if view === 'loading'}
+		<div class="pair"><LoaderCircleIcon size={20} class="spin" /></div>
+	{:else if view === 'list'}
 		<div class="pair">
-			{@render backToApp()}
-			<span class="hero"><QrCodeIcon size={28} /></span>
-			<h1>{conns.length ? t('shell.remote.addComputer') : t('shell.remote.scanTitle')}</h1>
-			<p>{t('shell.remote.scanHint')}</p>
-			{@render linkEntry()}
-			{#if relayOrigin && !conns.length}<a class="licenses" href="/chat">{t('shell.remote.backToChat')}</a>{/if}
-			<a class="licenses" href={LICENSES_URL} target="_blank" rel="noopener">{t('shell.remote.licenses')}</a>
-		</div>
-	{:else if view === 'lan'}
-		<div class="pair">
-			{@render backToApp()}
+			{#if conns.length}
+				<button class="cancel" onclick={() => ((listing = false), (scanning = false))} aria-label={t('shell.remote.back')}>
+					<ArrowLeftIcon size={16} />
+				</button>
+			{/if}
 			<span class="hero"><MonitorIcon size={28} /></span>
-			<h1>{t('shell.remote.pairTitle')}</h1>
-			<p>{t('shell.remote.pairHint')}</p>
-			<form onsubmit={(e) => (e.preventDefault(), pair())}>
-				<label>
-					<span>{t('shell.remote.codeLabel')}</span>
-					<input class="code" bind:value={code} autocapitalize="characters" autocomplete="one-time-code" />
-				</label>
-				<Button variant="primary" disabled={!code.trim() || pairing}>
-					{#if pairing}<LoaderCircleIcon size={14} class="spin" /> {t('shell.remote.pairing')}{:else}{t('shell.remote.pair')}{/if}
-				</Button>
-			</form>
-			{#if pairError}<div class="err"><Notice>{pairError}</Notice></div>{/if}
+			<h1>{t('shell.remote.computersTitle')}</h1>
+			<p>{t('shell.remote.computersHint')}</p>
+			<div class="computers">
+				{#each computers.list as computer (computer.host_id)}
+					{@const state = rowState(computer)}
+					<div class="computer" class:menu={menuFor === computer.host_id}>
+						<button class="computer-main" onclick={() => openComputer(computer)}>
+							<span class="dot {state.tone}" class:pulse={state.tone === 'wait'}></span>
+							<span class="computer-txt">
+								<span class="computer-name">{computer.name || t('shell.remote.computer')}</span>
+								<span class="computer-desc">
+									{[platformName(computer.platform), state.text, isPaired(computer.host_id) ? t('shell.remote.paired') : ''].filter(Boolean).join(' · ')}
+								</span>
+							</span>
+							<span class="computer-act">{isPaired(computer.host_id) ? t('shell.remote.open') : t('shell.remote.connect')}</span>
+						</button>
+						<span class="more-anchor">
+							<button class="more" onclick={() => (menuFor = menuFor === computer.host_id ? null : computer.host_id)} aria-label={t('shell.remote.more')}>
+								<EllipsisIcon size={16} />
+							</button>
+							{#if menuFor === computer.host_id}
+								<PopMenu
+									placement="down-left"
+									items={[
+										{ key: 'rename', label: t('shell.remote.rename'), icon: PencilIcon },
+										// Only an offline one: a computer still signed in comes back on its own.
+										...(computer.online ? [] : [{ key: 'remove', label: t('shell.remote.removeComputer'), icon: TrashIcon, tone: 'warn' as const }])
+									]}
+									onSelect={(k) => (k === 'rename' ? rename(computer) : remove(computer))}
+									onClose={() => (menuFor = null)}
+								/>
+							{/if}
+						</span>
+					</div>
+				{:else}
+					{#if computers.loaded}
+						<p class="none">{t('shell.remote.noComputers')}</p>
+					{:else if !computers.error}
+						<p class="none"><LoaderCircleIcon size={16} class="spin" /></p>
+					{/if}
+				{/each}
+				{#if computers.error}<Notice>{t('shell.remote.listFailed', { msg: computers.error })}</Notice>{/if}
+				<button class="refresh" onclick={() => void refreshList()}><RotateCwIcon size={14} /> {t('shell.remote.refresh')}</button>
+			</div>
+			<p class="or">{t('shell.remote.scanHint')}</p>
+			{@render linkEntry()}
+			<a class="licenses" href="/chat">{t('shell.remote.backToChat')}</a>
+			<a class="licenses" href={LICENSES_URL} target="_blank" rel="noopener">{t('shell.remote.licenses')}</a>
 		</div>
 	{/if}
 	{#if embedded && view === 'app'}
@@ -593,22 +590,23 @@
 	{#each conns as conn (conn)}
 		<HostView
 			{conn}
-			name={nameOf(conn)}
-			hostName={conns.length > 1 ? nameOf(conn) : undefined}
+			name={nameOf(conn.id)}
+			hostName={conns.length > 1 ? nameOf(conn.id) : undefined}
 			hidden={view !== 'app' || conn !== active}
 			{wide}
 			{screens}
 			{switcher}
 			{resizer}
-			chatHref={relayOrigin ? '/chat' : undefined}
-			onAdd={startAdding}
-			onForget={(ask) => forget(conn, ask)}
-			onRepair={repair}
+			chatHref="/chat"
+			onAdd={showList}
+			onRequest={() => {
+				const computer = computers.get(conn.id);
+				if (computer) connect(computer, { request: true });
+			}}
+			onCancel={() => close(conn)}
 		/>
 	{/each}
 </div>
-<Toaster />
-<ConfirmHost />
 
 <style>
 	.remote {
@@ -689,6 +687,110 @@
 		line-height: 1.55;
 	}
 	.pair form,
+	/* The account's computers: one row each, the menu at its end. */
+	.computers {
+		align-self: stretch;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		margin-top: 20px;
+		text-align: left;
+	}
+	.computer {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		border-radius: var(--r);
+		transition: background var(--t-fast) var(--ease-out);
+	}
+	.computer:hover,
+	.computer.menu {
+		background: var(--surface);
+	}
+	.computer-main {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 10px;
+		border: none;
+		background: none;
+		color: var(--text);
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+	}
+	.computer-txt {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+	.computer-name {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: var(--fs-md);
+		font-weight: 500;
+	}
+	.computer-desc {
+		font-size: var(--fs-xs);
+		color: var(--dim);
+	}
+	.computer-act {
+		flex-shrink: 0;
+		font-size: var(--fs-sm);
+		color: var(--accent-bright);
+	}
+	.more-anchor {
+		position: relative;
+		display: inline-flex;
+	}
+	.more {
+		display: inline-flex;
+		padding: 6px;
+		margin-right: 4px;
+		border: none;
+		border-radius: var(--r);
+		background: none;
+		color: var(--dim);
+		cursor: pointer;
+	}
+	.more:hover {
+		background: var(--surface2);
+		color: var(--text);
+	}
+	.none {
+		margin: 8px 0;
+		color: var(--dim);
+		font-size: var(--fs-sm);
+		text-align: center;
+	}
+	.refresh {
+		align-self: flex-start;
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		margin-top: 6px;
+		padding: 6px 8px;
+		border: none;
+		border-radius: var(--r);
+		background: none;
+		color: var(--dim);
+		font: inherit;
+		font-size: var(--fs-xs);
+		cursor: pointer;
+	}
+	.refresh:hover {
+		background: var(--surface);
+		color: var(--text);
+	}
+	.pair p.or {
+		margin-top: 28px;
+		font-size: var(--fs-sm);
+	}
 	.entry {
 		align-self: stretch;
 		text-align: left;
@@ -715,33 +817,8 @@
 		gap: 12px;
 		margin-top: 20px;
 	}
-	label {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-		font-size: var(--fs-sm);
-		color: var(--dim);
-	}
-	input.code {
-		padding: 11px 12px;
-		border: 1px solid var(--border);
-		border-radius: var(--r);
-		background: var(--surface2);
-		color: var(--text);
-		font-family: var(--font-mono);
-		font-size: var(--fs-xl);
-		letter-spacing: 0.12em;
-		text-align: center;
-		text-transform: uppercase;
-		outline: none;
-		transition: border-color var(--t-fast) var(--ease-out);
-	}
 	input:focus {
 		border-color: var(--border-strong);
-	}
-	.err {
-		align-self: stretch;
-		margin-top: 12px;
 	}
 	.hero {
 		display: inline-flex;

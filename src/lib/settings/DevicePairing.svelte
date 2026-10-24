@@ -1,15 +1,16 @@
 <script lang="ts">
-	// Settings → 智能体 → 远程访问 (rows inside a SettingsSection): the relay
-	// switch and status (relay_status / relay_set), "add device" with a QR code
-	// of a one-time pairing link (pair_link; pair_start for the LAN address when
-	// the relay is off), the paired devices with revoke, and the LAN/Tailscale
-	// address as an advanced alternative.
+	// Settings → 智能体 → 远程访问 (rows inside a SettingsSection). Remote
+	// access is part of the JuCode account: signed out (relay_status
+	// `signed_in: false`), a sign-in prompt; signed in, the relay switch and
+	// status (relay_status / relay_set), "add device" with a QR code of a
+	// one-time pairing link (pair_link), and the paired devices with their
+	// kind (phone app, web, desktop) and revoke.
 	import { onDestroy, onMount } from 'svelte';
 	import SmartphoneIcon from '@lucide/svelte/icons/smartphone';
 	import XIcon from '@lucide/svelte/icons/x';
 	import CopyIcon from '@lucide/svelte/icons/copy';
 	import CheckIcon from '@lucide/svelte/icons/check';
-	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import LogInIcon from '@lucide/svelte/icons/log-in';
 	import { renderSVG } from 'uqr';
 	import Button from '$lib/ui/Button.svelte';
 	import IconButton from '$lib/ui/IconButton.svelte';
@@ -17,15 +18,23 @@
 	import Switch from '$lib/ui/Switch.svelte';
 	import { daemon } from '$lib/protocol';
 	import { t } from '$lib/i18n';
+	import { clientKind } from '$lib/connectRequests.svelte';
 	import SettingsRow from './SettingsRow.svelte';
 
 	let {
-		address = $bindable(),
-		onAddressChange
-	}: { address: string; onAddressChange: () => void } = $props();
+		onLogin,
+		loggingIn = false
+	}: {
+		/** The app's JuCode sign-in (the daemon reads the same account). */
+		onLogin: () => void;
+		loggingIn?: boolean;
+	} = $props();
 
-	type Device = { id: string; name: string; paired_at: number };
-	type RelayStatus = { enabled: boolean; connected: boolean; host?: string; url?: string };
+	/** `client`: the OAuth client it connected with (older daemons leave it out). */
+	type Device = { id: string; name: string; paired_at: number; client?: string };
+	/** `signed_in` undefined: a daemon from before account remote access
+	 *  (unknown, so the controls show). */
+	type RelayStatus = { enabled: boolean; connected: boolean; signed_in?: boolean; host?: string; url?: string };
 	let devices = $state<Device[]>([]);
 	/** The pairing on show: its code, expiry and what the QR code holds. */
 	let pairing = $state<{ code: string; expires_at: number; link: string } | null>(null);
@@ -34,13 +43,12 @@
 	let relayOn = $state(false);
 	let error = $state('');
 	let copied = $state(false);
-	let lanOpen = $state(false);
 	let now = $state(Date.now());
 	let poll: ReturnType<typeof setInterval> | null = null;
 	let tick: ReturnType<typeof setInterval> | null = null;
 	let statusPoll: ReturnType<typeof setInterval> | null = null;
 
-	const base = $derived(address.trim().replace(/\/+$/, ''));
+	const signedOut = $derived(relay?.signed_in === false);
 	const qr = $derived(pairing?.link ? renderSVG(pairing.link) : '');
 	const remaining = $derived.by(() => {
 		if (!pairing) return '';
@@ -58,6 +66,7 @@
 			relay = {
 				enabled: Boolean(reply.enabled),
 				connected: Boolean(reply.connected),
+				signed_in: typeof reply.signed_in === 'boolean' ? reply.signed_in : undefined,
 				host: typeof reply.host === 'string' ? reply.host : undefined,
 				url: typeof reply.url === 'string' ? reply.url : undefined
 			};
@@ -93,18 +102,8 @@
 
 	async function addDevice() {
 		try {
-			if (relay?.enabled) {
-				const reply = await daemon.request({ op: 'pair_link' });
-				pairing = { code: String(reply.code), expires_at: Number(reply.expires_at), link: String(reply.link) };
-			} else {
-				const reply = await daemon.request({ op: 'pair_start' });
-				const code = String(reply.code);
-				pairing = {
-					code,
-					expires_at: Number(reply.expires_at),
-					link: base ? `${base}/remote?pair=${code}` : ''
-				};
-			}
+			const reply = await daemon.request({ op: 'pair_link' });
+			pairing = { code: String(reply.code), expires_at: Number(reply.expires_at), link: String(reply.link) };
 			now = Date.now();
 			copied = false;
 			poll = setInterval(() => {
@@ -156,96 +155,78 @@
 	});
 </script>
 
-<SettingsRow id="relay" title={t('settings.backend.relayToggle')} description={t('settings.backend.relayHint')}>
-	{#snippet detail()}
-		<span class="status">
-			{#if relayError}
-				<span class="warn">{t('settings.backend.relayUnavailable', { error: relayError })}</span>
-			{:else if relay?.enabled && relay.connected}
-				<span class="dot ok"></span>{t('settings.backend.relayConnected', { host: relay.host ?? '' })}
-			{:else if relay?.enabled}
-				<span class="dot wait pulse"></span>{t('settings.backend.relayConnecting')}
-			{:else if relay}
-				<span class="dot"></span>{t('settings.backend.relayOff')}
-			{/if}
-		</span>
-	{/snippet}
-	<Switch bind:checked={relayOn} label={t('settings.backend.relayToggle')} onChange={setRelay} />
-</SettingsRow>
+{#if signedOut}
+	<SettingsRow id="relay" title={t('settings.backend.signInPrompt')}>
+		<Button size="sm" variant="primary" disabled={loggingIn} onclick={onLogin}><LogInIcon size={14} /> {loggingIn ? t('settings.account.authorizing') : t('settings.backend.signIn')}</Button>
+	</SettingsRow>
+{:else}
+	<SettingsRow id="relay" title={t('settings.backend.relayToggle')} description={t('settings.backend.relayHint')}>
+		{#snippet detail()}
+			<span class="status">
+				{#if relayError}
+					<span class="warn">{t('settings.backend.relayUnavailable', { error: relayError })}</span>
+				{:else if relay?.enabled && relay.connected}
+					<span class="dot ok"></span>{t('settings.backend.relayConnected', { host: relay.host ?? '' })}
+				{:else if relay?.enabled}
+					<span class="dot wait pulse"></span>{t('settings.backend.relayConnecting')}
+				{:else if relay}
+					<span class="dot"></span>{t('settings.backend.relayOff')}
+				{/if}
+			</span>
+		{/snippet}
+		<Switch bind:checked={relayOn} label={t('settings.backend.relayToggle')} onChange={setRelay} />
+	</SettingsRow>
 
-<SettingsRow id="devices" title={t('settings.backend.devices')} description={t('settings.backend.devicesHint')}>
-	{#if !pairing}
-		<Button size="sm" onclick={addDevice}><SmartphoneIcon size={14} /> {t('settings.backend.addDevice')}</Button>
-	{/if}
-</SettingsRow>
+	<SettingsRow id="devices" title={t('settings.backend.devices')} description={t('settings.backend.devicesHint')}>
+		{#if !pairing && relay?.enabled}
+			<Button size="sm" onclick={addDevice}><SmartphoneIcon size={14} /> {t('settings.backend.addDevice')}</Button>
+		{/if}
+	</SettingsRow>
 
-{#if pairing}
-	<SettingsRow stacked>
-		<div class="code">
-			{#if qr}
-				<!-- SVG generated locally from the daemon's pairing link, no outside input. -->
-				<div class="qr">{@html qr}</div>
-			{/if}
-			<div class="code-text">
-				{#if relay?.enabled}
+	{#if pairing}
+		<SettingsRow stacked>
+			<div class="code">
+				{#if qr}
+					<!-- SVG generated locally from the daemon's pairing link, no outside input. -->
+					<div class="qr">{@html qr}</div>
+				{/if}
+				<div class="code-text">
 					<strong>{t('settings.backend.addDevice')}</strong>
 					<span>{t('settings.backend.pairLinkScan')}</span>
-				{:else}
-					<strong>{t('settings.backend.pairCode', {
-						code: pairing.code,
-						minutes: String(Math.max(1, Math.round((pairing.expires_at - now) / 60000)))
-					})}</strong>
-					<span>{base ? t('settings.backend.pairScan', { address: base }) : t('settings.backend.pairNoAddress')}</span>
-				{/if}
-				<span class="expires">{t('settings.backend.pairExpires', { time: remaining })}</span>
-				{#if pairing.link}
-					<div class="link-row">
-						<code class="link" title={pairing.link}>{pairing.link}</code>
-						<Button size="sm" onclick={copyLink}>
-							{#if copied}<CheckIcon size={14} /> {t('settings.backend.copied')}{:else}<CopyIcon size={14} /> {t('settings.backend.copyLink')}{/if}
-						</Button>
-					</div>
-				{/if}
+					<span class="expires">{t('settings.backend.pairExpires', { time: remaining })}</span>
+					{#if pairing.link}
+						<div class="link-row">
+							<code class="link" title={pairing.link}>{pairing.link}</code>
+							<Button size="sm" onclick={copyLink}>
+								{#if copied}<CheckIcon size={14} /> {t('settings.backend.copied')}{:else}<CopyIcon size={14} /> {t('settings.backend.copyLink')}{/if}
+							</Button>
+						</div>
+					{/if}
+				</div>
+				<IconButton onclick={stopPairing} label={t('common.close')}><XIcon size={14} /></IconButton>
 			</div>
-			<IconButton onclick={stopPairing} label={t('common.close')}><XIcon size={14} /></IconButton>
+		</SettingsRow>
+	{/if}
+
+	<SettingsRow stacked>
+		<div class="devices">
+			{#if devices.length === 0}
+				<span class="none">{t('settings.backend.noDevices')}</span>
+			{/if}
+			{#each devices as device (device.id)}
+				<div class="device">
+					<SmartphoneIcon size={14} />
+					<span class="name">{device.name}</span>
+					{#if clientKind(device.client)}<span class="kind">{t(clientKind(device.client))}</span>{/if}
+					<span class="when">{new Date(device.paired_at).toLocaleDateString()}</span>
+					<Button size="sm" variant="ghost" onclick={() => revoke(device)}>{t('settings.backend.revoke')}</Button>
+				</div>
+			{/each}
+			{#if error}<Notice>{error}</Notice>{/if}
 		</div>
 	</SettingsRow>
+
 {/if}
-
-<SettingsRow stacked>
-	<div class="devices">
-		{#if devices.length === 0}
-			<span class="none">{t('settings.backend.noDevices')}</span>
-		{/if}
-		{#each devices as device (device.id)}
-			<div class="device">
-				<SmartphoneIcon size={14} />
-				<span class="name">{device.name}</span>
-				<span class="when">{new Date(device.paired_at).toLocaleDateString()}</span>
-				<Button size="sm" variant="ghost" onclick={() => revoke(device)}>{t('settings.backend.revoke')}</Button>
-			</div>
-		{/each}
-		{#if error}<Notice>{error}</Notice>{/if}
-	</div>
-</SettingsRow>
-
-<SettingsRow stacked>
-	<button class="adv" onclick={() => (lanOpen = !lanOpen)}>
-		<span class="chev" class:open={lanOpen}><ChevronRightIcon size={12} /></span>
-		{t('settings.backend.lanAdvanced')}
-	</button>
-	{#if lanOpen}
-		<div class="lan">
-			<input
-				bind:value={address}
-				aria-label={t('settings.backend.remoteLabel')}
-				placeholder={t('settings.backend.remotePlaceholder')}
-				onchange={onAddressChange}
-			/>
-			<p class="hint">{t('settings.backend.lanAdvancedHint')} {t('settings.backend.remoteHint')}</p>
-		</div>
-	{/if}
-</SettingsRow>
 
 <style>
 	.status {
@@ -354,59 +335,13 @@
 		flex: 1;
 		color: var(--text);
 	}
+	.kind {
+		color: var(--dim2);
+		font-size: var(--fs-xs);
+	}
 	.when {
 		color: var(--dim2);
 		font-size: var(--fs-xs);
 		font-family: var(--font-mono);
-	}
-	.adv {
-		display: inline-flex;
-		align-items: center;
-		gap: 5px;
-		padding: 0;
-		border: none;
-		background: none;
-		font-size: var(--fs-xs);
-		color: var(--dim);
-		cursor: pointer;
-	}
-	.adv:hover {
-		color: var(--text);
-	}
-	.chev {
-		display: inline-flex;
-		transition: transform var(--t-med) var(--ease-spring);
-	}
-	.chev.open {
-		transform: rotate(90deg);
-	}
-	.lan {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-		margin-top: 10px;
-		max-width: 480px;
-	}
-	.lan input {
-		border: 1px solid var(--border);
-		border-radius: var(--r);
-		background: var(--surface2);
-		color: var(--text);
-		font-family: var(--font-mono);
-		font-size: var(--fs-xs);
-		padding: 8px 10px;
-		outline: none;
-	}
-	.lan input::placeholder {
-		color: var(--dim2);
-	}
-	.lan input:focus {
-		border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
-	}
-	.hint {
-		margin: 0;
-		font-size: var(--fs-xs);
-		color: var(--dim2);
-		line-height: 1.5;
 	}
 </style>

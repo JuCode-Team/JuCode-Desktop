@@ -13,9 +13,6 @@ export interface BackendSettings {
 	paths: Partial<Record<BackendId, string>>;
 	/** Per-backend custom env vars, applied after the snapshot. */
 	env: Partial<Record<BackendId, Record<string, string>>>;
-	/** The address a phone uses to reach the daemon (e.g. a `tailscale serve`
-	 *  HTTPS URL); goes into the pairing QR code. */
-	remoteAddress: string;
 }
 
 const KEY = 'jucode-backend-settings';
@@ -23,8 +20,7 @@ const KEY = 'jucode-backend-settings';
 export const DEFAULT_BACKEND_SETTINGS: BackendSettings = {
 	default: 'jucode',
 	paths: {},
-	env: {},
-	remoteAddress: ''
+	env: {}
 };
 
 function freshDefaults(): BackendSettings {
@@ -92,8 +88,7 @@ export function parseBackendSettings(raw: string | null): BackendSettings {
 		return {
 			default: normalizeBackendId(v?.default),
 			paths,
-			env,
-			remoteAddress: typeof v?.remoteAddress === 'string' ? v.remoteAddress.trim() : ''
+			env
 		};
 	} catch {
 		return freshDefaults();

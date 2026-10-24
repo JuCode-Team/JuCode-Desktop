@@ -51,7 +51,7 @@ const b64url = (bytes: Uint8Array) =>
 const random = (n: number) => b64url(crypto.getRandomValues(new Uint8Array(n)));
 
 /** The browser and OS as the account's device list shows it. */
-function deviceName(): string {
+export function deviceName(): string {
 	const ua = navigator.userAgent;
 	const browser = /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : '浏览器';
 	const os = /iPhone|iPad/.test(ua) ? 'iOS' : /Android/.test(ua) ? 'Android' : /Mac OS X/.test(ua) ? 'macOS' : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : '';
@@ -82,8 +82,9 @@ class Auth {
 	signedIn = $state(read() !== null);
 	account = $state<Account | null>(null);
 
-	/** To the consent page; back at /auth/callback, then to `next`. */
-	async signIn(next = location.pathname + location.search) {
+	/** To the consent page; back at /auth/callback, then to `next` (with
+	 *  the fragment: a `#pair=` link opened while signed out pairs after). */
+	async signIn(next = location.pathname + location.search + location.hash) {
 		const verifier = random(48);
 		const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
 		const state = random(16);

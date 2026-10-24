@@ -1,7 +1,8 @@
 <script lang="ts">
 	// The web app (app.jucode.net): signed out, the sign-in page; signed in,
 	// the conversations on the left and the open one on the right. On a
-	// narrow screen the sidebar is a drawer.
+	// narrow screen the sidebar is a drawer. The remote computers (/remote)
+	// are signed in the same way but fill the page with their own layout.
 	import type { Snippet } from 'svelte';
 	import { page } from '$app/state';
 	import { auth, type Account } from '$lib/web/auth.svelte';
@@ -15,12 +16,21 @@
 	import ConfirmHost from '$lib/ui/ConfirmHost.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
 	import { shell } from '$lib/web/shell.svelte';
+	import { forgetPairing } from '$lib/relay/pairing';
 
 	let { children }: { children: Snippet } = $props();
 
+	const remote = $derived(page.url.pathname.startsWith('/remote'));
+
+	// Signed out (here or in another tab): this browser's relay device key
+	// and paired computers go with the account.
+	$effect(() => {
+		if (!auth.signedIn) forgetPairing();
+	});
+
 	// Signed in (now or in another tab): who, what to chat with, the history.
 	$effect(() => {
-		if (!auth.signedIn) return;
+		if (!auth.signedIn || remote) return;
 		json<Account>('/v1/oauth/userinfo').then(
 			(a) => (auth.account = a),
 			() => {}
@@ -36,10 +46,12 @@
 	});
 </script>
 
-<svelte:head><title>{chat.title || 'JuCode'}</title></svelte:head>
+<svelte:head><title>{(!remote && chat.title) || 'JuCode'}</title></svelte:head>
 
 {#if !auth.signedIn}
-	<SignIn />
+	<SignIn hint={remote ? t('shell.remote.signInHint') : undefined} />
+{:else if remote}
+	{@render children()}
 {:else}
 	<div class="web" class:collapsed={shell.collapsed}>
 		{#if shell.drawer}<button class="scrim" aria-label={t('web.side.collapse')} onclick={() => (shell.drawer = false)}></button>{/if}

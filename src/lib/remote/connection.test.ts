@@ -1,5 +1,8 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SocketLike } from '$lib/daemon';
+import { generateKeyPair, toBase64Url } from '$lib/relay/noise';
+import { respond } from '$lib/relay/responder.testing';
+import { loadPaired, markPaired } from '$lib/relay/pairing';
 
 // The app's shared daemon (Tauri) is never used here.
 vi.mock('$lib/protocol', () => ({ daemon: {} }));
@@ -32,7 +35,6 @@ function computer(id: string) {
 	const sockets: FakeSocket[] = [];
 	const conn = new HostConnection(
 		id,
-		'lan',
 		async () => ({ url: `ws://${id}/`, token: 't' }),
 		() => {
 			const socket = new FakeSocket();
@@ -54,21 +56,29 @@ afterEach(() => {
 
 describe('connectionState', () => {
 	it('is ok once the daemon is reached, whatever failed before', () => {
-		expect(connectionState('relay', 'on', 'offline').tone).toBe('ok');
-		expect(connectionState('lan', 'on', undefined).tone).toBe('ok');
+		expect(connectionState('on', 'offline').tone).toBe('ok');
+		expect(connectionState('on', undefined, true).tone).toBe('ok');
 	});
 
 	it('waits while connecting and says why a relay connection is down', () => {
-		expect(connectionState('relay', 'connecting', undefined)).toMatchObject({ tone: 'wait', text: 'shell.remote.relayConnecting' });
-		expect(connectionState('relay', 'unreachable', 'offline')).toMatchObject({ tone: 'off', short: 'shell.remote.hostOffline' });
-		expect(connectionState('relay', 'connecting', 'busy')).toMatchObject({ tone: 'off', text: 'shell.remote.relayBusy' });
-		expect(connectionState('relay', 'off', 'revoked')).toMatchObject({ tone: 'off', text: 'shell.remote.relayFatalTitle' });
-		expect(connectionState('relay', 'unreachable', 'network').text).toBe('shell.remote.relayNetwork');
+		expect(connectionState('connecting', undefined)).toMatchObject({ tone: 'wait', text: 'shell.remote.relayConnecting' });
+		expect(connectionState('unreachable', 'restarting')).toMatchObject({ tone: 'wait', text: 'shell.remote.relayConnecting' });
+		expect(connectionState('unreachable', 'offline')).toMatchObject({ tone: 'off', short: 'shell.remote.hostOffline' });
+		expect(connectionState('connecting', 'busy')).toMatchObject({ tone: 'off', text: 'shell.remote.relayBusy' });
+		expect(connectionState('unreachable', 'network').text).toBe('shell.remote.relayNetwork');
 	});
 
-	it('treats the LAN daemon as connecting until it is unreachable', () => {
-		expect(connectionState('lan', 'connecting', undefined).tone).toBe('wait');
-		expect(connectionState('lan', 'unreachable', undefined)).toMatchObject({ tone: 'off', text: 'shell.remote.disconnected' });
+	it('asks the user to allow on the computer while a request waits', () => {
+		expect(connectionState('connecting', undefined, true)).toMatchObject({ tone: 'wait', text: 'shell.remote.requestWaiting' });
+	});
+
+	it('says why the computer refused', () => {
+		expect(connectionState('off', 'no-desktop').text).toBe('shell.remote.noDesktop');
+		expect(connectionState('off', 'denied').text).toBe('shell.remote.denied');
+		expect(connectionState('off', 'expired').text).toBe('shell.remote.expired');
+		expect(connectionState('off', 'requests-busy').text).toBe('shell.remote.requestsBusy');
+		expect(connectionState('off', 'not-yours').text).toBe('shell.remote.notYours');
+		expect(connectionState('off', 'revoked')).toMatchObject({ tone: 'off', text: 'shell.remote.relayRevoked' });
 	});
 });
 
@@ -182,5 +192,98 @@ describe('HostConnection', () => {
 		expect(a.conn.daemonState.status).toBe('off');
 		await expect(a.conn.daemon.connect()).rejects.toThrow('connection stopped');
 		expect(a.sockets).toHaveLength(1);
+	});
+});
+
+describe('HostConnection.relay', () => {
+	const enc = new TextEncoder();
+	const dec = new TextDecoder();
+	const store = new Map<string, string>();
+
+	/** A browser WebSocket; the test plays relay + daemon. */
+	class FakeWs {
+		static all: FakeWs[] = [];
+		binaryType = 'blob';
+		sent: Uint8Array[] = [];
+		onopen: (() => void) | null = null;
+		onmessage: ((event: { data: unknown }) => void) | null = null;
+		onerror: (() => void) | null = null;
+		onclose: ((event: { code: number; reason: string }) => void) | null = null;
+		constructor(
+			readonly url: string,
+			readonly protocols: string[]
+		) {
+			FakeWs.all.push(this);
+		}
+		send(data: Uint8Array) {
+			this.sent.push(new Uint8Array(data));
+		}
+		close() {}
+	}
+
+	beforeEach(() => {
+		store.clear();
+		FakeWs.all = [];
+		vi.stubGlobal('localStorage', {
+			getItem: (k: string) => store.get(k) ?? null,
+			setItem: (k: string, v: string) => store.set(k, v),
+			removeItem: (k: string) => store.delete(k)
+		});
+		vi.stubGlobal('WebSocket', FakeWs);
+	});
+	afterEach(() => vi.unstubAllGlobals());
+
+	const HOST = 'H'.repeat(22);
+	const host = generateKeyPair();
+
+	/** Opens the relay socket the connection made and answers its hello
+	 *  with `reply` as the daemon; returns what the device said. */
+	async function answer(reply: object): Promise<Record<string, unknown>> {
+		await vi.waitFor(() => expect(FakeWs.all).toHaveLength(1));
+		const ws = FakeWs.all[0];
+		ws.onopen?.();
+		let hello: Record<string, unknown> = {};
+		const r = respond(host, ws.sent[0], (payload) => {
+			hello = JSON.parse(dec.decode(payload));
+			return enc.encode(JSON.stringify(reply));
+		});
+		ws.onmessage?.({ data: r.msg2.slice().buffer });
+		return hello;
+	}
+
+	function open(admit: { pair?: string; request?: boolean }) {
+		const conn = HostConnection.relay({ host_id: HOST, static_pub: toBase64Url(host.pub) }, async () => 'tok', 'Chrome', admit);
+		started.push(conn);
+		conn.start();
+		return conn;
+	}
+
+	it('asks the computer, waits for its answer and marks it paired once allowed', async () => {
+		const conn = open({ request: true });
+		const hello = await answer({ ok: true });
+		expect(FakeWs.all[0].url).toBe(`wss://api.jucode.net/v1/relay/connect?host=${HOST}`);
+		expect(FakeWs.all[0].protocols).toEqual(['jucode-relay', 'jucode-bearer.tok']);
+		expect(hello).toEqual({ name: 'Chrome', request: true });
+		expect(conn.everConnected).toBe(true);
+		expect(conn.waiting).toBe(false);
+		expect(loadPaired()).toEqual([HOST]);
+	});
+
+	it('stops on a refusal and says why', async () => {
+		const conn = open({ request: true });
+		await answer({ ok: false, error: 'no_desktop' });
+		expect(conn.relayError?.kind).toBe('no-desktop');
+		expect(conn.daemonState.status).toBe('off');
+		expect(conn.state.text).toBe('shell.remote.noDesktop');
+		expect(loadPaired()).toEqual([]);
+	});
+
+	it('forgets the paired mark when the computer no longer knows the device', async () => {
+		markPaired(HOST);
+		const conn = open({});
+		const hello = await answer({ ok: false, error: 'not paired' });
+		expect(hello).toEqual({ name: 'Chrome' });
+		expect(conn.relayError?.kind).toBe('revoked');
+		expect(loadPaired()).toEqual([]);
 	});
 });
