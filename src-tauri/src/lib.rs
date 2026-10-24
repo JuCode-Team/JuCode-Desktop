@@ -259,9 +259,6 @@ fn ensure_daemon(bin_override: Option<&str>, env: &[(String, String)]) -> Result
     Err("jucode daemon did not start in time".to_string())
 }
 
-/// Whether this app run already checked the daemon for staleness.
-static DAEMON_CHECKED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
 /// Why the daemon listening now should be replaced, if it should: its program
 /// was removed (an uninstall or package upgrade) or rewritten after it started
 /// (a reinstall at the same path). Either way it keeps running old code
@@ -326,31 +323,29 @@ fn parse_etime(text: &str) -> Option<std::time::Duration> {
     Some(std::time::Duration::from_secs(days * 86_400 + secs))
 }
 
-/// Replace a stale daemon (see `stale_daemon`) once per app run: SIGTERM lets
-/// it end its tool commands and exit; a fresh one starts from the current
-/// program. Hosted sessions reopen from their saved state.
-fn replace_stale_daemon() {
-    if DAEMON_CHECKED.swap(true, std::sync::atomic::Ordering::SeqCst) {
-        return;
-    }
-    // A release build compares versions with the daemon instead and lets it
-    // restart once idle (daemon.ts); this check is for development builds.
+/// A development build found the daemon stale (see `stale_daemon`); the
+/// page asks it to restart once no session is running (`daemon_stale`).
+static DAEMON_STALE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Notes a stale daemon for the page. It is not ended here: SIGTERM would cut
+/// off every running turn (the Claude Code and Codex processes end with it),
+/// so it restarts once idle, as after a release update (daemonVersion.ts).
+fn note_stale_daemon() {
+    // A release build compares versions with the daemon instead.
     if app_cli::path().is_some() {
         return;
     }
     #[cfg(unix)]
-    if let Some((pid, reason)) = stale_daemon() {
-        eprintln!("jucode daemon is stale ({reason}); restarting it");
-        let _ = Command::new("kill")
-            .args(["-TERM", &pid.to_string()])
-            .status();
-        for _ in 0..50 {
-            if !daemon_listening() {
-                break;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(100));
-        }
+    if let Some((_, reason)) = stale_daemon() {
+        eprintln!("jucode daemon is stale ({reason}); it restarts once idle");
+        DAEMON_STALE.store(true, std::sync::atomic::Ordering::SeqCst);
     }
+}
+
+/// Whether the daemon was found stale since the page last asked.
+#[tauri::command]
+fn daemon_stale() -> bool {
+    DAEMON_STALE.swap(false, std::sync::atomic::Ordering::SeqCst)
 }
 
 /// The local daemon's address and token, starting it first when needed.
@@ -368,7 +363,7 @@ fn daemon_endpoint(
         Some(env) => backend::validate_env(env)?,
         None => Vec::new(),
     };
-    replace_stale_daemon();
+    note_stale_daemon();
     ensure_daemon(bin_override.as_deref(), &env)?;
     let path = jucode_dir().join("daemon").join("token");
     let token = std::fs::read_to_string(&path)
@@ -3745,6 +3740,7 @@ pub fn run() {
             native_import::native_sessions,
             app_cli::install_cli_command,
             app_cli::app_cli_version,
+            daemon_stale,
             about_app,
             open_logs_folder,
             app_cli::replace_daemon,

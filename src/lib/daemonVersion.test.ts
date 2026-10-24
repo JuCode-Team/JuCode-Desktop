@@ -6,10 +6,18 @@ vi.mock('./protocol', () => ({ daemon: { request } }));
 
 import { checkDaemonVersion } from './daemonVersion';
 
+let stale = false;
+
 /** The app ships `bundled`; replace_daemon succeeds unless told otherwise. */
 function app(bundled: string | null, replace: () => Promise<void> = () => Promise.resolve()) {
 	invoke.mockImplementation((cmd: string) =>
-		cmd === 'app_cli_version' ? Promise.resolve(bundled) : cmd === 'replace_daemon' ? replace() : Promise.reject()
+		cmd === 'app_cli_version'
+			? Promise.resolve(bundled)
+			: cmd === 'replace_daemon'
+				? replace()
+				: cmd === 'daemon_stale'
+					? Promise.resolve(stale)
+					: Promise.reject()
 	);
 }
 
@@ -17,6 +25,7 @@ describe('checkDaemonVersion', () => {
 	beforeEach(() => {
 		invoke.mockReset();
 		request.mockReset();
+		stale = false;
 	});
 
 	it('leaves a daemon of the bundled version, and development builds, alone', async () => {
@@ -34,6 +43,15 @@ describe('checkDaemonVersion', () => {
 		expect(request).toHaveBeenCalledWith({ op: 'restart_when_idle' });
 		expect(await checkDaemonVersion('0.4.0')).toEqual({ kind: 'current' });
 		expect(request).toHaveBeenCalledOnce();
+	});
+
+	it('asks a development build\'s stale daemon to restart once idle, never ending it', async () => {
+		app(null);
+		stale = true;
+		request.mockResolvedValue({});
+		expect(await checkDaemonVersion('0.4.28')).toEqual({ kind: 'restart-when-idle', version: '' });
+		expect(request).toHaveBeenCalledWith({ op: 'restart_when_idle' });
+		expect(invoke).not.toHaveBeenCalledWith('replace_daemon');
 	});
 
 	it('replaces a daemon too old to restart itself', async () => {

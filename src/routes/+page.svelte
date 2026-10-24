@@ -1301,7 +1301,7 @@
 				void connectRequests.sync();
 				checkDaemonVersion(version).then((outcome) => {
 					if (outcome.kind === 'restart-when-idle')
-						toast.info(t('shell.daemonUpdate.idle', { version: outcome.version }));
+						toast.info(outcome.version ? t('shell.daemonUpdate.idle', { version: outcome.version }) : t('shell.daemonUpdate.idleRebuilt'));
 					else if (outcome.kind === 'failed') toast.error(t('shell.daemonUpdate.failed', { error: outcome.error }));
 				});
 			};
