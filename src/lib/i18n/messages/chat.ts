@@ -412,6 +412,13 @@ const chat = {
 		phaseTool: '执行工具',
 		phaseCompacting: '压缩上下文',
 		phaseWorking: '处理中',
+		cut: {
+			marker: '引擎中途退出，这一轮没有完成',
+			notice: '上一轮因引擎退出或后台服务重启而中断',
+			continue: '继续',
+			dismiss: '忽略',
+			note: '继续被中断的一轮'
+		},
 		flow: {
 			compacting: '正在压缩上下文',
 			compacted: '上下文已压缩',
@@ -830,6 +837,13 @@ const chat = {
 		phaseTool: 'Running tool',
 		phaseCompacting: 'Compacting context',
 		phaseWorking: 'Working',
+		cut: {
+			marker: 'The engine stopped mid-turn; this turn did not finish',
+			notice: 'The last turn stopped because the engine exited or the background service restarted',
+			continue: 'Continue',
+			dismiss: 'Dismiss',
+			note: 'Continuing the interrupted turn'
+		},
 		flow: {
 			compacting: 'Compacting context',
 			compacted: 'Context compacted',

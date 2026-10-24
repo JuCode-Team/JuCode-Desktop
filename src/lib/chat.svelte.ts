@@ -395,6 +395,10 @@ export class ChatState {
 	autoRetry = $state<RetryState | null>(null);
 	/** Automatic retries since the user last sent a message. */
 	autoRetries = 0;
+	/** The engine went away mid-turn (it crashed, or the daemon restarted):
+	 *  the turn is over, and the user may continue it. `started`: the engine
+	 *  had begun it (else its message never got there). */
+	cutTurn = $state<{ started: boolean } | null>(null);
 	/** The engine's last turn is an automatic "continue" (no bubble of its own). */
 	lastTurnAuto = false;
 	/** Where the messages of that turn start. */
@@ -907,6 +911,7 @@ export class ChatState {
 	/** A turn's timer and totals start (idempotent within the turn). */
 	#startTurn() {
 		if (this.#turnStart !== null) return;
+		this.cutTurn = null;
 		this.#turnStart = Date.now();
 		this.turnStartedAt = this.#turnStart;
 		this.turnEndedAt = 0;
@@ -1051,6 +1056,28 @@ export class ChatState {
 			if (m?.kind === 'reasoning') m.collapsed = true;
 			this.#reasoningIdx = -1;
 		}
+	}
+
+	/** The engine is gone (see `cutTurn`): a turn it was running ends here,
+	 *  with everything it ran, since nothing is left to finish it. Returns
+	 *  whether there was one. */
+	cutShort(): boolean {
+		const started = this.#turnStart !== null;
+		if (!started && this.#sending === null && !this.busy) return false;
+		this.retry = null;
+		this.pendingApproval = null;
+		this.#endTurn();
+		this.#resetCurrent();
+		const now = Date.now();
+		for (const m of this.messages)
+			if (m.kind === 'tool' && m.running) {
+				m.running = false;
+				m.endedAt ??= now;
+			}
+		for (const a of Object.values(this.subagents)) a.endedAt ??= now;
+		this.messages.push({ kind: 'system', text: t('chat.cut.marker'), flow: { type: 'reconnect' } });
+		this.cutTurn = { started };
+		return true;
 	}
 
 	/** Clear the running flag on any tool card still marked running once a turn

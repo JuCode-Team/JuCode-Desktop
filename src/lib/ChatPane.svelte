@@ -266,6 +266,13 @@
 		}
 	}
 
+	/** Continues a turn the engine's exit cut short (ChatState.cutTurn). */
+	function continueCut() {
+		const cut = chat.cutTurn;
+		chat.cutTurn = null;
+		if (cut) void store.retryTurn(session.id, t('chat.cut.note'), cut.started);
+	}
+
 	// An error notice's fix button.
 	function fixError(action: ErrorAction) {
 		if (action === 'restart') store.restartSession(session.id, true);
@@ -1537,6 +1544,16 @@
 					</div>
 				</div>
 			{/if}
+			{#if chat.cutTurn && chat.engineState !== 'exited' && !chat.busy}
+				<!-- The engine went away mid-turn and is back: pick the turn up. -->
+				<div class="approval-wrap" in:paneIn out:paneOut>
+					<div class="cutturn" role="status">
+						<span class="ct-text">{t('chat.cut.notice')}</span>
+						<Button variant="ghost" size="sm" onclick={() => (chat.cutTurn = null)}>{t('chat.cut.dismiss')}</Button>
+						<Button variant="primary" size="sm" onclick={continueCut}>{t('chat.cut.continue')}</Button>
+					</div>
+				</div>
+			{/if}
 			<!-- Agent questions render in the composer tray; the card keeps plain
 			     tool approvals (commands, edits, plans). -->
 			{#if chat.pendingApproval && !chat.pendingApproval.questions?.length}
@@ -1864,6 +1881,21 @@
 		font-size: var(--fs-sm);
 		color: var(--err);
 		font-weight: 500;
+	}
+	.cutturn {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 8px 10px 8px 14px;
+		background: var(--panel);
+		border: 1px solid var(--border);
+		border-radius: var(--r);
+	}
+	.ct-text {
+		flex: 1;
+		min-width: 0;
+		font-size: var(--fs-sm);
+		color: var(--dim);
 	}
 
 	.revising {

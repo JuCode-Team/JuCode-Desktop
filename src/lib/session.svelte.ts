@@ -1249,6 +1249,9 @@ export class SessionStore {
 			s.chat.switching = false;
 			return;
 		}
+		// A turn it was running is over: the user may continue it once the
+		// engine is back (ChatPane).
+		s.chat.cutShort();
 		s.chat.engineState = 'exited';
 		// Until an engine is back (automatically, or by the restart button once
 		// the budget is spent), what the user sends waits for it.

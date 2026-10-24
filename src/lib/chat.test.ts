@@ -37,6 +37,25 @@ describe('ChatState.handle', () => {
 		}
 	});
 
+	it('ends a turn the engine left mid-way, for the user to continue', () => {
+		const c = new ChatState();
+		c.handle({ type: 'user_message', content: 'build it' });
+		c.handle({ type: 'connecting' });
+		c.handle({ type: 'tool_start', call_id: 't1', name: 'bash', args: '{"command":"make"}' });
+		expect(c.busy).toBe(true);
+		expect(c.cutShort()).toBe(true);
+		expect(c.cutTurn).toEqual({ started: true });
+		expect(c.messages.some((m) => m.kind === 'tool' && m.running)).toBe(false);
+		expect(c.messages.at(-1)).toMatchObject({ kind: 'system', flow: { type: 'reconnect' } });
+		// Nothing was running: nothing to continue.
+		const idle = new ChatState();
+		expect(idle.cutShort()).toBe(false);
+		expect(idle.cutTurn).toBeNull();
+		// The next turn clears the offer.
+		c.handle({ type: 'connecting' });
+		expect(c.cutTurn).toBeNull();
+	});
+
 	it('keeps a just-sent message that the arriving snapshot does not have yet', () => {
 		const c = new ChatState();
 		c.optimisticUser('first');
